@@ -41,7 +41,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<{
   await runMigrations(db)
 
   // Start server (Bun native serve; the compiled RTWiki.exe embeds the Bun runtime)
-  const server = Bun.serve({
+  const server = await Bun.serve({
     fetch: app.fetch,
     port: 8080,
     hostname: '127.0.0.1'
