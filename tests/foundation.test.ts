@@ -41,7 +41,7 @@ function freePort(): number {
   const s = Bun.serve({ port: 0, fetch: () => new Response('ok') })
   const p = s.port
   s.stop()
-  return p
+  return p!
 }
 
 describe('resolveRuntimePaths', () => {
@@ -287,7 +287,7 @@ describe('launcher', () => {
       opened = url
     }
     await launchBrowser('http://127.0.0.1:8080/', fakeLauncher)
-    expect(opened).toBe('http://127.0.0.1:8080/')
+    expect(opened as string).toBe('http://127.0.0.1:8080/')
   })
 
   it('rejects non-loopback URLs', async () => {

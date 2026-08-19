@@ -50,7 +50,7 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
 
     const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get(MIGRATION_NAME)
     if (!existing) {
-      db.run('INSERT INTO _migrations (name) VALUES (?)', MIGRATION_NAME)
+      db.run('INSERT INTO _migrations (name) VALUES (?)', [MIGRATION_NAME])
       logger.info('Migration applied', { event: 'migration', name: MIGRATION_NAME })
     } else {
       logger.info('Migration already applied', {

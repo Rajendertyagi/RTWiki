@@ -4,7 +4,7 @@ import { createLogger, type Logger } from './logging/index.js'
 import { initDatabase, closeDatabase, checkIntegrity, type Database } from './database/index.js'
 import { runMigrations } from './database/migrations.js'
 import { launchBrowser, type Launcher } from './launcher.js'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 export interface BootstrapOptions {
@@ -40,7 +40,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   const writeTest = join(paths.dataDir, '.write-test')
   try {
     await Bun.write(writeTest, 'test')
-    await Bun.delete(writeTest)
+    rmSync(writeTest, { force: true })
   } catch {
     logger.error('Data directory is not writable', { event: 'startup', action: 'abort' })
     throw new Error('RTWiki data directory is not writable')
