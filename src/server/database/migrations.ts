@@ -3,7 +3,7 @@ import { logger } from '../logging/index.js'
 
 export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void> {
   // Create migrations tracking table
-  db.execute(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS _migrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
@@ -12,7 +12,7 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
   `)
 
   // Create pages table
-  db.execute(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS pages (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL DEFAULT '',
@@ -25,7 +25,7 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
   `)
 
   // Create search index table
-  db.execute(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS search_index (
       page_id TEXT PRIMARY KEY,
       title TEXT NOT NULL DEFAULT '',
@@ -35,7 +35,7 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
   `)
 
   // Create FTS5 virtual table
-  db.execute(`
+  db.run(`
     CREATE VIRTUAL TABLE IF NOT EXISTS search_index_fts USING fts5(
       title, content,
       content='search_index',
@@ -46,7 +46,7 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
   // Mark migration as applied
   const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get('001_create_pages')
   if (!existing) {
-    db.execute('INSERT INTO _migrations (name) VALUES (?)', '001_create_pages')
+    db.run('INSERT INTO _migrations (name) VALUES (?)', '001_create_pages')
     logger.info('Migration "001_create_pages" applied successfully')
   } else {
     logger.info('Migration "001_create_pages" already applied, skipping')
