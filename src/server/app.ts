@@ -44,7 +44,13 @@ app.get(HEALTH_PATH, (c) => {
         503
       )
     }
-    return c.json({ status: 'ok', app: 'RTWiki', version: '0.1.0', db: { ready: true }, time: timestamp })
+    return c.json({
+      status: 'ok',
+      app: 'RTWiki',
+      version: '0.1.0',
+      db: { ready: true },
+      time: timestamp
+    })
   } catch {
     return c.json(
       { status: 'error', app: 'RTWiki', version: '0.1.0', db: { ready: false }, time: timestamp },

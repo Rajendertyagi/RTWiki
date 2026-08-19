@@ -42,7 +42,10 @@ export function checkIntegrity(): boolean {
   const rows = db.query('PRAGMA integrity_check').all() as Array<Record<string, string>>
   const ok = rows.length === 1 && rows[0]?.integrity_check === 'ok'
   if (!ok) {
-    logger.error('Database integrity check failed', { event: 'db_integrity', detail: JSON.stringify(rows) })
+    logger.error('Database integrity check failed', {
+      event: 'db_integrity',
+      detail: JSON.stringify(rows)
+    })
   }
   return ok
 }

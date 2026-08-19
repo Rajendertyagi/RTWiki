@@ -53,7 +53,11 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
       db.run('INSERT INTO _migrations (name) VALUES (?)', MIGRATION_NAME)
       logger.info('Migration applied', { event: 'migration', name: MIGRATION_NAME })
     } else {
-      logger.info('Migration already applied', { event: 'migration', name: MIGRATION_NAME, skipped: true })
+      logger.info('Migration already applied', {
+        event: 'migration',
+        name: MIGRATION_NAME,
+        skipped: true
+      })
     }
 
     db.run('COMMIT')

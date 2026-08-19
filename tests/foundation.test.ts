@@ -12,7 +12,7 @@ import {
 import {
   initDatabase,
   closeDatabase,
-  getDb,
+  type getDb,
   getDatabasePath,
   checkIntegrity,
   type getDb

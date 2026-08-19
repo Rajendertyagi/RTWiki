@@ -41,12 +41,24 @@ export class Logger {
     this.write('error', message, context)
     // Mirror errors to stderr for interactive debugging without polluting the log file's JSONL stream.
     // eslint-disable-next-line no-console
-    console.error(this.toLine({ timestamp: new Date().toISOString(), level: 'error', message, ...(context ?? {}) }))
+    console.error(
+      this.toLine({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message,
+        ...(context ?? {})
+      })
+    )
   }
 
   private write(level: LogLevel, message: string, context?: LogContext): void {
     if (this.closed) return
-    const line = this.toLine({ timestamp: new Date().toISOString(), level, message, ...(context ?? {}) })
+    const line = this.toLine({
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      ...(context ?? {})
+    })
     this.buffer.push(line)
     if (this.buffer.length >= this.bufferSize) {
       void this.flush()

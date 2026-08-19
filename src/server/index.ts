@@ -31,13 +31,19 @@ async function runSmokeTest(): Promise<number> {
 
     const healthRes = await app.fetch(new Request('http://127.0.0.1:8080/health'))
     if (healthRes.status !== 200) {
-      logger.error('Smoke test failed: health endpoint not ok', { event: 'smoke', status: healthRes.status })
+      logger.error('Smoke test failed: health endpoint not ok', {
+        event: 'smoke',
+        status: healthRes.status
+      })
       return 1
     }
 
     const rootRes = await app.fetch(new Request('http://127.0.0.1:8080/'))
     if (rootRes.status !== 200) {
-      logger.error('Smoke test failed: frontend root not served', { event: 'smoke', status: rootRes.status })
+      logger.error('Smoke test failed: frontend root not served', {
+        event: 'smoke',
+        status: rootRes.status
+      })
       return 1
     }
 
@@ -49,7 +55,10 @@ async function runSmokeTest(): Promise<number> {
     logger.info('Smoke test passed', { event: 'smoke' })
     return 0
   } catch (err) {
-    logger.error('Smoke test error', { event: 'smoke', error: err instanceof Error ? err.message : String(err) })
+    logger.error('Smoke test error', {
+      event: 'smoke',
+      error: err instanceof Error ? err.message : String(err)
+    })
     return 1
   } finally {
     if (runtime) await runtime.shutdown()
@@ -74,7 +83,10 @@ async function main(): Promise<void> {
     try {
       await runtime.shutdown()
     } catch (err) {
-      runtime.logger.error('Shutdown error', { event: 'shutdown', error: err instanceof Error ? err.message : String(err) })
+      runtime.logger.error('Shutdown error', {
+        event: 'shutdown',
+        error: err instanceof Error ? err.message : String(err)
+      })
     }
     process.exit(0)
   }
@@ -88,6 +100,9 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   const logger = createLogger(resolveRuntimePaths().logPath)
-  logger.error('Fatal startup failure', { event: 'startup', error: err instanceof Error ? err.message : String(err) })
+  logger.error('Fatal startup failure', {
+    event: 'startup',
+    error: err instanceof Error ? err.message : String(err)
+  })
   process.exit(1)
 })
