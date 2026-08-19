@@ -1,4 +1,4 @@
-import { getDb } from "./index.js"
+import type { getDb } from "./index.js"
 import { logger } from "../logging/index.js"
 
 export async function runMigrations(

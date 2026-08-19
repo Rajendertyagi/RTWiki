@@ -1,5 +1,3 @@
-import { dirname, resolve } from "path"
-
 export interface AppConfig {
   name: string
   version: string
@@ -17,12 +15,20 @@ export interface AppConfig {
   maxRequestSize: number
 }
 
-export function createConfig(baseDir: string): AppConfig {
+export interface CreateConfigOverrides {
+  host?: string
+  port?: number
+}
+
+export function createConfig(
+  baseDir: string,
+  overrides: CreateConfigOverrides = {},
+): AppConfig {
   return {
     name: "RTWiki",
     version: "0.1.0",
-    host: "127.0.0.1",
-    port: 8080,
+    host: overrides.host ?? "127.0.0.1",
+    port: overrides.port ?? 8080,
     apiPrefix: "/api",
     healthPath: "/health",
     frontendDistDir: joinPaths(baseDir, "dist", "web"),

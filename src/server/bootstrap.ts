@@ -1,7 +1,7 @@
 import { serve } from 'hono/node-server'
 import { app } from './app.js'
 import { resolveRuntimePaths } from './config/index.js'
-import { createLogger, Logger } from './logging/index.js'
+import { createLogger, type Logger } from './logging/index.js'
 import { initDatabase, closeDatabase } from './database/index.js'
 import { runMigrations } from './database/migrations.js'
 import { mkdirSync, existsSync } from 'node:fs'

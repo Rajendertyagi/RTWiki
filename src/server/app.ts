@@ -29,21 +29,21 @@ app.get(HEALTH_PATH, () => {
   try {
     const db = getDb()
     db.query('SELECT 1').get()
-    return {
+    return c.json({
       status: 'ok' as const,
       app: 'RTWiki',
       version: '0.1.0',
       db: { ready: true },
       time: new Date().toISOString(),
-    }
+    })
   } catch {
-    return {
+    return c.json({
       status: 'error' as const,
       app: 'RTWiki',
       version: '0.1.0',
       db: { ready: false },
       time: new Date().toISOString(),
-    }
+    })
   }
 })
 

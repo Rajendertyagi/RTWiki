@@ -11,21 +11,15 @@
     "rules": {
       "recommended": true,
       "correctness": {
-        "all": true,
         "noUnusedVariables": "error",
         "noUndeclaredDependencies": "off",
-        "noNodejsModules": "off"
+        "noNodejsModules": "error"
       },
       "suspicious": {
-        "all": true,
         "noExplicitAny": "error"
       },
-      "complexity": {
-        "all": true
-      },
       "style": {
-        "all": true,
-        "useImportType": "off",
+        "useImportType": "error",
         "noUnusedTemplateLiteral": "off"
       }
     }
@@ -41,6 +35,18 @@
   "organizeImports": {
     "enabled": false
   },
+  "overrides": [
+    {
+      "includes": ["src/server/**", "tests/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "off"
+          }
+        }
+      }
+    }
+  ],
   "files": {
     "ignore": [
       "node_modules/",
