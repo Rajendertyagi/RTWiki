@@ -1,5 +1,4 @@
 import { HEALTH_PATH } from "@rtwiki/shared/constants"
-import type { HealthResponse } from "@rtwiki/shared/contracts/health"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { getDb } from "../database/index.js"

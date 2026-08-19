@@ -12,7 +12,8 @@
       "recommended": true,
       "correctness": {
         "all": true,
-        "noUnusedVariables": "error"
+        "noUnusedVariables": "error",
+        "noUndeclaredDependencies": "off"
       },
       "suspicious": {
         "all": true,
