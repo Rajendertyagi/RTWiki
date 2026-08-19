@@ -15,7 +15,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<{
   logger: Logger
   paths: ReturnType<typeof resolveRuntimePaths>
   shutdown: () => Promise<void>
-> {
+}> {
   const paths = resolveRuntimePaths()
   const loggerInstance = options.logger ?? createLogger(paths.logPath)
 

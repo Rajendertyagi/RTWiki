@@ -26,7 +26,9 @@ declare const process: {
   version: string
   cwd(): string
   exit(code?: number): never
+  // biome-ignore lint/suspicious/noExplicitAny: minimal Node shim; listener arg types unavailable without @types/node
   on(event: string, listener: (...args: any[]) => void): void
+  // biome-ignore lint/suspicious/noExplicitAny: minimal Node shim; listener arg types unavailable without @types/node
   off(event: string, listener: (...args: any[]) => void): void
   stdout: { write(data: string): boolean }
   stderr: { write(data: string): boolean }
