@@ -1,57 +1,65 @@
 import { HEALTH_PATH } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import { getDb } from './database/index.js'
+import { getDb, checkIntegrity } from './database/index.js'
 import { logger } from './logging/index.js'
+import { resolveRuntimePaths } from './config/index.js'
+import { serveStatic } from './static.js'
+
+// Strict, self-only policy. The SPA is bundled and served from the same origin,
+// so no external scripts/styles/images/CDNs are permitted. Mantine injects inline
+// styles at runtime, hence 'unsafe-inline' is limited to style-src.
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'"
+].join('; ')
 
 export const app = new Hono<{ Variables: { db: ReturnType<typeof getDb> } }>()
 
-// Security headers
+// Security headers applied to every response (including static assets).
 app.use('*', async (c, next) => {
   await next()
-  c.header('X-Content-Type-Options', 'nosniff')
-  c.header('X-Frame-Options', 'DENY')
-  c.header('Referrer-Policy', 'no-referrer')
+  c.res.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY)
+  c.res.headers.set('X-Content-Type-Options', 'nosniff')
+  c.res.headers.set('X-Frame-Options', 'DENY')
+  c.res.headers.set('Referrer-Policy', 'no-referrer')
+  c.res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
 })
 
-// CORS for localhost dev
-app.use(
-  '/api/*',
-  cors({
-    origin: ['http://127.0.0.1:*'],
-    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowHeaders: ['Content-Type']
-  })
-)
-
-// Health endpoint
+// Health endpoint. Only reports healthy once the database is initialized,
+// migrations have run, and the integrity check passes.
 app.get(HEALTH_PATH, (c) => {
+  const timestamp = new Date().toISOString()
   try {
     const db = getDb()
     db.query('SELECT 1').get()
-    return c.json({
-      status: 'ok' as const,
-      app: 'RTWiki',
-      version: '0.1.0',
-      db: { ready: true },
-      time: new Date().toISOString()
-    })
+    if (!checkIntegrity()) {
+      return c.json(
+        { status: 'error', app: 'RTWiki', version: '0.1.0', db: { ready: false }, time: timestamp },
+        503
+      )
+    }
+    return c.json({ status: 'ok', app: 'RTWiki', version: '0.1.0', db: { ready: true }, time: timestamp })
   } catch {
-    return c.json({
-      status: 'error' as const,
-      app: 'RTWiki',
-      version: '0.1.0',
-      db: { ready: false },
-      time: new Date().toISOString()
-    })
+    return c.json(
+      { status: 'error', app: 'RTWiki', version: '0.1.0', db: { ready: false }, time: timestamp },
+      503
+    )
   }
 })
 
-// Error handler
+// Serve the built frontend. Registered after API routes so /api/* and /health
+// are never treated as files. Same-origin; no CORS needed.
+app.use('/*', serveStatic({ root: resolveRuntimePaths().frontendDistDir }))
+
 app.onError((err, c) => {
-  logger.error(`Unhandled error: ${err.message}`)
+  logger.error('Unhandled error', { event: 'http_error', error: err.message })
   return c.json({ error: 'Internal server error' }, 500)
 })
 
-// Not found handler
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

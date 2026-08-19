@@ -19,7 +19,7 @@
       "@rtwiki/server/*": ["src/server/*"],
       "@rtwiki/web/*": ["src/web/*"]
     },
-    "types": ["vite/client"]
+    "types": ["bun", "node", "vite/client"]
   },
   "include": ["src", "tests"],
   "exclude": ["node_modules", "dist"]

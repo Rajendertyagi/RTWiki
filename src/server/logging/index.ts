@@ -2,80 +2,77 @@ import { resolveRuntimePaths } from '../config/index.js'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
-interface LogEntry {
+export type LogContext = Record<string, unknown>
+
+interface LogLine {
   timestamp: string
   level: LogLevel
   message: string
-  module?: string
+  [key: string]: unknown
 }
 
+/**
+ * Structured logger that writes one JSON object per line (JSONL).
+ *
+ * Lines never contain absolute filesystem paths or secrets; callers pass a
+ * small structured `context` (an `event` name plus non-sensitive fields).
+ */
 export class Logger {
   private readonly logPath: string
   private readonly stream: ReturnType<typeof Bun.file>
-  private buffer: LogEntry[] = []
+  private buffer: string[] = []
   private readonly bufferSize = 100
+  private closed = false
 
   constructor(logPath: string) {
     this.logPath = logPath
     this.stream = Bun.file(logPath)
   }
 
-  info(message: string, module?: string): void {
-    this.write({
-      timestamp: new Date().toISOString(),
-      level: 'info',
-      message,
-      module
-    })
+  info(message: string, context?: LogContext): void {
+    this.write('info', message, context)
   }
 
-  warn(message: string, module?: string): void {
-    this.write({
-      timestamp: new Date().toISOString(),
-      level: 'warn',
-      message,
-      module
-    })
+  warn(message: string, context?: LogContext): void {
+    this.write('warn', message, context)
   }
 
-  error(message: string, module?: string): void {
-    this.write({
-      timestamp: new Date().toISOString(),
-      level: 'error',
-      message,
-      module
-    })
-    console.error(`[${this.formatTimestamp()}] [ERROR] ${message}`)
+  error(message: string, context?: LogContext): void {
+    this.write('error', message, context)
+    // Mirror errors to stderr for interactive debugging without polluting the log file's JSONL stream.
+    // eslint-disable-next-line no-console
+    console.error(this.toLine({ timestamp: new Date().toISOString(), level: 'error', message, ...(context ?? {}) }))
   }
 
-  private write(entry: LogEntry): void {
-    this.buffer.push(entry)
+  private write(level: LogLevel, message: string, context?: LogContext): void {
+    if (this.closed) return
+    const line = this.toLine({ timestamp: new Date().toISOString(), level, message, ...(context ?? {}) })
+    this.buffer.push(line)
     if (this.buffer.length >= this.bufferSize) {
-      this.flush()
+      void this.flush()
     }
-    const line = this.formatLine(entry)
+    // eslint-disable-next-line no-console
     console.log(line)
+  }
+
+  private toLine(entry: LogLine): string {
+    return JSON.stringify(entry)
   }
 
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return
-    const lines = this.buffer.map((e) => this.formatLine(e)).join('\n')
+    const lines = `${this.buffer.join('\n')}\n`
     this.buffer = []
     try {
-      await this.stream.write(`${lines}\n`)
+      await this.stream.write(lines)
     } catch {
-      // Log file may not be writable; silently skip to avoid crashing the app
+      // Log destination may be unwritable (e.g. read-only media); never crash the app over logging.
     }
   }
 
-  private formatLine(entry: LogEntry): string {
-    return `[${entry.timestamp}] [${entry.level.toUpperCase()}]${
-      entry.module ? ` [${entry.module}]` : ''
-    } ${entry.message}`
-  }
-
-  private formatTimestamp(): string {
-    return new Date().toISOString()
+  async close(): Promise<void> {
+    await this.flush()
+    this.closed = true
   }
 }
 
@@ -83,6 +80,5 @@ export function createLogger(logPath: string): Logger {
   return new Logger(logPath)
 }
 
-// Single application-wide logger instance. Paths are derived from the
-// executable location (portable layout) via the shared config module.
+// Application-wide logger. Path is derived from the portable layout via the shared config module.
 export const logger = createLogger(resolveRuntimePaths().logPath)
