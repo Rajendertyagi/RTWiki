@@ -34,14 +34,11 @@
       "trailingCommas": "none"
     }
   },
-  "json": {
-    "enabled": false
-  },
   "organizeImports": {
     "enabled": false
   },
   "files": {
-    "ignores": [
+    "ignore": [
       "node_modules/",
       "dist/",
       "bun.lock",
@@ -49,7 +46,8 @@
       "package.json",
       "tsconfig.json",
       "vite.config.ts",
-      "vitest.config.ts"
+      "vitest.config.ts",
+      "biome.json"
     ]
   }
 }
