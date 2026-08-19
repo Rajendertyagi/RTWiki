@@ -121,9 +121,9 @@ This document defines measurable, observable pass/fail criteria for the MVP. Eac
 
 | ID | Criterion | Pass Condition |
 |----|----------|---------------|
-| AC-056 | The downloadable artifact is a `.zip` file containing an `.exe` and all runtime assets. | Extracting the zip shows a single executable and a `data/` directory template. |
+| AC-056 | The downloadable artifact is a `.zip` file containing an `.exe` and all runtime assets. | Extracting the zip shows a single executable. The `data/` and `logs/` directories are absent from the fresh ZIP; they are created automatically on first launch. |
 | AC-057 | Running the `.exe` starts the application without requiring any installed runtime. | The application launches and opens in the default browser. No error about missing Bun, Node, or .NET is shown. |
-| AC-058 | The application stores user data outside the executable directory. | After first run, a `data/` directory exists in `%LOCALAPPDATA%\RTWiki` (or the configured path), not beside the `.exe`. |
+| AC-058 | The application stores all mutable data beside the executable. | After first run, a `data/` directory and a `logs/` directory exist beside the `.exe`, containing `rtwiki.sqlite`, `attachments/`, `backups/`, and `rtwiki.log` respectively. No data is written to `%LOCALAPPDATA%` or any other system directory. |
 
 ## 14. Non-Functional Targets
 

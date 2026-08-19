@@ -141,7 +141,7 @@ Heavy features are lazy-loaded to keep the initial bundle small:
 
 ## 6. Windows Executable Bundling
 
-Frontend assets (the built `dist/` folder from Vite) are bundled alongside the backend executable in the final Windows artifact. The user downloads and extracts a single `.zip` and runs the `.exe`. Mutable data (`data/`, `logs/`) remains outside the executable directory. See [ADR-005](adr/ADR-005-portable-data-layout.md) for the data layout decision.
+Frontend assets (the built `dist/` folder from Vite) are bundled alongside the backend executable in the final Windows artifact. The user downloads and extracts a single `.zip` and runs the `.exe`. Mutable data (`data/`, `logs/`) lives inside the extracted folder beside the executable. See [ADR-005](adr/ADR-005-portable-data-layout.md) for the data layout decision.
 
 ## 7. Cross-References
 

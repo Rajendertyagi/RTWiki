@@ -28,7 +28,7 @@ RTWiki uses the following technology stack for the backend:
 | Database | **Bun SQLite** (`bun:sqlite`) | Built-in SQLite binding for Bun. No separate server process. File-based database stored in the user's data directory. |
 | ORM | **Drizzle ORM** (pinned stable version) | Type-safe query builder with schema definitions. Generates parameterized queries automatically. Supports SQLite dialect including FTS5. |
 
-The database file is stored at `<data_directory>/rtwiki.db`. SQLite WAL (Write-Ahead Logging) mode is enabled for crash safety.
+The database file is stored at `<exe_directory>/data/rtwiki.sqlite`. SQLite WAL (Write-Ahead Logging) mode is enabled for crash safety. The WAL and SHM files remain in the same `data/` directory.
 
 ## Alternatives Considered
 

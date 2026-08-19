@@ -52,17 +52,26 @@ The following are **explicitly prohibited** as globals:
 
 ## 4. Configuration
 
-A single `config` object is loaded at application startup from environment variables with documented defaults.
+A single `config` object is loaded at application startup. The executable directory is resolved once at startup and all paths are derived from it. No environment-variable override exists for the data directory.
 
 ```typescript
 // Example structure (not implementation)
+const exeDir = getExecutableDirectory(); // resolved once, cached
+
 const config = {
   server: {
     port: Number(env.PORT) || 8080,
     host: env.HOST || "127.0.0.1",   // localhost by default
   },
   data: {
-    directory: env.RTWIKI_DATA_DIR || getDefaultDataDirectory(),
+    directory: path.join(exeDir, "data"),
+    database: "rtwiki.sqlite",
+    attachments: "attachments",
+    backups: "backups",
+  },
+  logs: {
+    directory: path.join(exeDir, "logs"),
+    filename: "rtwiki.log",
   },
   attachments: {
     maxFileSizeBytes: Number(env.MAX_ATTACHMENT_SIZE) || 50 * 1024 * 1024,
@@ -153,7 +162,7 @@ All styles are defined in Mantine theme tokens, CSS modules, or Emotion styled-c
 | Functions | `camelCase` | `createPage()`, `sanitizeHtml()` |
 | Components | `PascalCase` | `PageList`, `BlockEditor` |
 | Database tables | `snake_case` | `page_tags`, `search_index` |
-| Environment variables | `UPPER_SNAKE_CASE` | `RTWIKI_DATA_DIR`, `PORT` |
+| Environment variables | `UPPER_SNAKE_CASE` | `PORT`, `HOST`, `MAX_ATTACHMENT_SIZE` |
 
 ## 10. Module Size and Cohesion
 
