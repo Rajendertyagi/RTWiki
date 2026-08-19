@@ -31,10 +31,7 @@ All HTML input — whether pasted from a browser, imported from a file, or enter
 
 ### 2.2 Mermaid Security Mode
 
-Mermaid diagrams are rendered in strict security mode:
-- JavaScript execution inside diagram code is disabled.
-- Only the subset of Mermaid syntax supported by `@blocknote/diagram-block` is allowed.
-- External resource loading (`href`, `src`) is blocked.
+Mermaid diagrams use the documented default `securityLevel: "strict"`, which encodes HTML tags in diagram text and disables click functionality. RTWiki separately blocks unauthorized external-resource loading through its CSP, sanitization, asset, and network policies. Only the subset of Mermaid syntax supported by `@blocknote/diagram-block` is allowed.
 
 ### 2.3 Paste Handler
 

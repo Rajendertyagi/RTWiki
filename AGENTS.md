@@ -152,7 +152,7 @@ Preserve the security model in [Security](docs/SECURITY.md):
 
 - **Localhost-only** binding by default (`127.0.0.1`); never bind `0.0.0.0` unless explicitly authorized.
 - **DOMPurify** sanitization for all imported/pasted HTML before it reaches the editor or database.
-- **Mermaid strict security mode** (no script execution, no external resource loading).
+- Use Mermaid's documented default `securityLevel: "strict"` to encode HTML tags in diagram text and disable click functionality. Enforce broader sanitization and external-resource restrictions through RTWiki's CSP, asset, and network policies.
 - Extension, MIME, and size **validation** for attachments; safe generated filenames; path-traversal protection.
 - No execution of uploaded documents; serve attachments as static content only.
 - No arbitrary scripts from pasted HTML.
