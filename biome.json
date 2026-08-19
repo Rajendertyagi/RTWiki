@@ -41,6 +41,15 @@
     "enabled": false
   },
   "files": {
-    "ignores": ["node_modules/", "dist/", "bun.lock", ".workbuddy-ai/"]
+    "ignores": [
+      "node_modules/",
+      "dist/",
+      "bun.lock",
+      ".workbuddy-ai/",
+      "package.json",
+      "tsconfig.json",
+      "vite.config.ts",
+      "vitest.config.ts"
+    ]
   }
 }
