@@ -1,0 +1,13 @@
+export const APP_NAME = 'RTWiki' as const
+export const API_PREFIX = '/api' as const
+export const HEALTH_PATH = '/health' as const
+export const DATABASE_FILENAME = 'rtwiki.sqlite' as const
+export const ATTACHMENTS_DIR = 'attachments' as const
+export const BACKUPS_DIR = 'backups' as const
+export const LOGS_DIR = 'logs' as const
+export const LOG_FILENAME = 'rtwiki.log' as const
+export const DEFAULT_HOST = '127.0.0.1' as const
+export const DEFAULT_PORT = 8080 as const
+export const MAX_REQUEST_SIZE = 100 * 1024 * 1024 as const
+export const PROVISIONAL_AUTOSAVE_DEBOUNCE_MS = 2000 as const
+export const PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024 as const
