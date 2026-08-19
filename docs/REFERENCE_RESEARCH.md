@@ -70,3 +70,13 @@ The diagram library used for Mermaid diagrams and mind maps (ADR-003). RTWiki re
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
 - [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — the import contract that applies these lessons
+
+## Security References
+
+These official sources inform how RTWiki safely renders rich AI-generated and custom HTML content (see ADR-007):
+
+- [MDN: iframe srcdoc security](https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/srcdoc) — `srcdoc` injects HTML into a frame from the parent document; untrusted content must be strongly isolated, or it can reach the parent context.
+- [MDN: CSP sandbox directive](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/sandbox) — a Content-Security-Policy `sandbox` adds a further restriction layer on what framed content is allowed to do.
+- [DOMPurify](https://github.com/cure53/DOMPurify) — provides HTML/SVG/MathML sanitization. Sanitization is one layer and does **not** replace iframe sandboxing and CSP.
+
+Arbitrary custom JavaScript must never run in RTWiki's main application context.
