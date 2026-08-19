@@ -4,9 +4,9 @@ A lightweight, offline-first personal knowledge workspace for a family user. RTW
 
 ## Status
 
-**Phase 0 — Planning & Documentation: Complete**
+**Planning approved — implementation not started**
 
-All design decisions, architecture, data model, security requirements, development standards, acceptance criteria, and roadmap have been documented in the `docs/` folder. Implementation can begin once the owner reviews and approves the proposed technology choices.
+All design decisions, architecture, data model, security requirements, development standards, and acceptance criteria have been documented in the `docs/` folder. The approved technology choices are recorded in the Architecture Decision Records. Implementation can begin once the owner gives the go-ahead.
 
 ## Key Requirements
 
@@ -19,6 +19,8 @@ All design decisions, architecture, data model, security requirements, developme
 - **Autosave, undo/redo, backup and restore**
 - **Light and dark themes**
 - **Portable Windows executable** — download and run; no install process required
+- **No audio or video support**
+- **No cloud or AI features**
 
 Full requirements are documented in [PRODUCT_REQUIREMENTS.md](docs/PRODUCT_REQUIREMENTS.md).
 
@@ -29,13 +31,15 @@ Full requirements are documented in [PRODUCT_REQUIREMENTS.md](docs/PRODUCT_REQUI
 | Runtime | Bun |
 | Backend | Hono |
 | Database | SQLite (Bun SQLite) with FTS5 |
-| ORM | Drizzle ORM (pinned stable version) |
+| ORM | Drizzle ORM |
 | Frontend | React with TypeScript, Vite |
 | Editor | BlockNote (with `@blocknote/math-block` and `@blocknote/diagram-block`) |
 | UI Library | Mantine UI |
 | HTML Sanitization | DOMPurify |
 | Icons | Tabler Icons React |
 | Build / CI | GitHub Actions on `windows-latest` |
+
+Exact stable versions for all dependencies will be selected and pinned during the implementation phase. Major versions will never float. Compatibility between React, BlockNote, Mantine, and Vite takes priority over selecting the newest version.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and the ADRs for details.
 
@@ -63,7 +67,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and the ADRs for details.
 
 - [ADR Index](docs/adr/README.md)
 - [ADR-001: Browser-first Local Application](docs/adr/ADR-001-browser-first-local-application.md) — **Accepted**
-- [ADR-002: Bun, Hono, and SQLite](docs/adr/ADR-002-bun-hono-sqlite.md) — **Proposed**
-- [ADR-003: React, BlockNote, and Mantine](docs/adr/ADR-003-react-blocknote-mantine.md) — **Proposed**
-- [ADR-004: Canonical BlockNote JSON Format](docs/adr/ADR-004-canonical-block-json-format.md) — **Proposed**
+- [ADR-002: Bun, Hono, and SQLite](docs/adr/ADR-002-bun-hono-sqlite.md) — **Accepted**
+- [ADR-003: React, BlockNote, and Mantine](docs/adr/ADR-003-react-blocknote-mantine.md) — **Accepted**
+- [ADR-004: Canonical BlockNote JSON Format](docs/adr/ADR-004-canonical-block-json-format.md) — **Accepted**
 - [ADR-005: Portable Data Layout Beside the Executable](docs/adr/ADR-005-portable-data-layout.md) — **Accepted**

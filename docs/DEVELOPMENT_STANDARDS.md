@@ -56,7 +56,7 @@ A single `config` object is loaded at application startup. The executable direct
 
 ```typescript
 // Example structure (not implementation)
-const exeDir = getExecutableDirectory(); // resolved once, cached
+const exeDir = getExecutableDirectory(); // resolved once, cached at startup
 
 const config = {
   server: {
@@ -82,6 +82,8 @@ const config = {
   },
 };
 ```
+
+**Provisional defaults** — The autosave debounce interval (`2000 ms`) and maximum attachment size (`50 MB`) are provisional defaults. They are defined once in the centralized configuration object and may be adjusted after MVP usability testing. Changing them must not require modifying multiple modules.
 
 All modules import from this object. No module reads environment variables directly.
 

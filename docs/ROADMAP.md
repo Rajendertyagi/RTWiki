@@ -1,6 +1,6 @@
 # Roadmap
 
-This document outlines the planned feature rollout for RTWiki beyond the MVP. It is a target sequence, not a commitment to specific dates. Phases are ordered by dependency and user value.
+This document outlines the planned feature rollout for RTWiki beyond the MVP. It is a target sequence, not a commitment to specific dates. Phases are ordered by dependency and user value. Only features approved by the owner are included here.
 
 ## Phase 0: Planning & Documentation (Current)
 
@@ -33,18 +33,18 @@ After the MVP is accepted, Phase 2 focuses on hardening and quality improvements
 | Keyboard shortcut reference | In-app help panel listing all keyboard shortcuts |
 | Performance optimization | Virtualized page list, debounced search input, lazy-loaded heavy components |
 
-## Phase 3: LAN and Multi-Device Access
+## Phase 3: LAN Access from Other Devices
 
-This phase adds the capability for family members to access their wiki from phones and tablets on the same home network. This requires an explicit opt-in configuration change (see [ADR-001](adr/ADR-001-browser-first-local-application.md)).
+This phase adds the capability for family members to open and read the same shared workspace from phones and tablets on the home network. The user accesses the application through their device's browser by navigating to the PC's LAN address. This requires an explicit opt-in configuration change (see [ADR-001](adr/ADR-001-browser-first-local-application.md)).
+
+LAN access means reading and editing the same workspace from another device. It does **not** imply real-time collaborative editing, separate user accounts, or cloud synchronization.
 
 | Feature | Description |
 |---------|------------|
 | LAN server mode | Optional binding to `0.0.0.0` with a configurable port |
 | Mobile-responsive layout | Touch-friendly block editing, collapsed sidebar, larger touch targets |
-| Real-time collaboration | WebSocket-based live editing with conflict resolution (Operational Transformation or CRDT) |
-| Conflict resolution UI | When two devices edit the same page, present a merge dialog to the user |
 
-**Note:** Real-time collaboration is explicitly deferred from the MVP (see [MVP_SCOPE.md](MVP_SCOPE.md)). Phase 3 is a significant engineering effort and is placed here only because the architecture must support it from the start.
+**Note:** Real-time collaboration is not planned. If multiple users edit the same page simultaneously from different devices, the last save wins with no conflict resolution. This is acceptable for the intended family-use scenario.
 
 ## Phase 4: Visual Mind Map Editor
 
@@ -56,46 +56,28 @@ This phase replaces static Mermaid mind maps with a fully interactive visual edi
 | Sync with page content | Changes in the mind-map editor update the corresponding page blocks and vice versa |
 | Export mind map as image | PNG/SVG export of the current mind-map view |
 
-## Phase 5: Advanced Export Formats
+## Phase 5: Export Format Evaluation
 
-This phase adds output formats for sharing and archiving.
+This phase evaluates whether to add output formats for sharing and archiving. The owner will decide which, if any, to implement.
 
 | Feature | Description |
 |---------|------------|
-| PDF export | Single-page or whole-workspace PDF export with proper formatting |
-| DOCX export | Microsoft Word-compatible export |
-| ODT export | LibreOffice-compatible export |
+| PDF export evaluation | Single-page or whole-workspace PDF export with proper formatting |
+| DOCX export evaluation | Microsoft Word-compatible export |
+| ODT export evaluation | LibreOffice-compatible export |
 | Print stylesheet | Clean print layout for individual pages |
 
-## Phase 6: Media Support
+## Phase 6: Native Desktop Wrapper Evaluation
 
-This phase adds audio and video block types.
+This phase evaluates whether a native desktop wrapper would provide sufficient value to justify the additional build complexity. The browser-first approach remains the default distribution method.
 
-| Feature | Description |
-|---------|------------|
-| Audio block | Embed and play audio files (MP3, WAV) within a page |
-| Video block | Embed and play video files (MP4, WebM) within a page |
-| Video thumbnail generation | Auto-generate a thumbnail frame from uploaded videos |
+| Consideration | Description |
+|---------------|------------|
+| Wrapper evaluation | Assess Electron, Tauri, or similar options against the browser-first approach |
+| System tray integration | Native tray icon, keyboard shortcuts, file associations |
+| Native menus and dialogs | OS-native window chrome and file-picker dialogs |
 
-## Phase 7: Cloud Sync (Optional)
-
-This phase adds optional cloud synchronization for users who want to access their wiki from multiple PCs. This is the only phase that introduces an external dependency, and it must remain opt-in so that offline-only users are unaffected.
-
-| Feature | Description |
-|---------|------------|
-| Encrypted cloud sync | End-to-end encrypted sync to a user-provided cloud storage backend |
-| Conflict resolution | Automatic resolution of edits made on different machines |
-| Selective sync | Choose which pages to sync (useful for large workspaces) |
-
-## Phase 8: AI Integration (Optional)
-
-This phase adds optional AI-assisted features. Like cloud sync, this must be opt-in and must not affect offline operation.
-
-| Feature | Description |
-|---------|------------|
-| AI-assisted page generation | Generate a draft page from a topic prompt using a local or cloud AI model |
-| AI summarization | Summarize a page's content with one click |
-| Smart tag suggestions | Suggest relevant tags based on page content |
+The outcome of this evaluation may result in no wrapper being adopted, a lightweight wrapper being adopted, or further evaluation in a later phase.
 
 ## Decision Points
 

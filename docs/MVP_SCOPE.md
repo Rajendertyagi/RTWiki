@@ -48,16 +48,14 @@ The following capabilities are **explicitly excluded** from the MVP. They may ap
 
 | Deferred Feature | Reason for Deferral |
 |-----------------|---------------------|
-| React Flow visual mind-map editor | Complex; Mermaid mind maps cover the MVP use case |
-| Native desktop wrapper (Electron, Tauri, Electrobun) | Browser-first approach is simpler and sufficient for MVP |
-| LAN / mobile access | Requires explicit configuration change; out of scope for initial release |
-| Accounts, profiles, authentication, permissions | Single shared workspace is the MVP model |
-| Real-time collaboration | Multi-user concurrency is a significant engineering effort |
-| Advanced page-version interface | Versioning is supported internally; a history UI is a later phase |
-| PDF, DOCX, ODT export | Export is an output format; keeping the MVP focused on creation |
-| Audio and video support | Excluded by requirement R-025 |
-| Cloud sync | Directly contradicts the offline-first principle |
-| AI integration | External API dependency; contradicts offline requirement |
+| React Flow visual mind-map editor | Complex; Mermaid mind maps cover the MVP use case. Evaluated in a later phase. |
+| Native desktop wrapper (Electron, Tauri, Electrobun) | Browser-first approach is simpler and sufficient for MVP. Evaluated in a later phase. |
+| LAN / mobile access | Requires explicit configuration change; out of scope for initial release. Planned for a later phase. |
+| Accounts, profiles, authentication, permissions | Single shared workspace is the MVP model. Not planned. |
+| Real-time collaboration | Multi-user concurrency is a significant engineering effort. Not planned. |
+| Advanced page-version interface | Versioning is supported internally; a history UI is a later phase. |
+| PDF, DOCX, ODT export | Export is an output format; keeping the MVP focused on creation. Evaluated in a later phase. |
+| Audio and video support | Explicitly out of scope. Not planned. |
 
 ## Cross-References
 

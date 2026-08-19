@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | **Proposed** |
+| **Status** | **Accepted** |
 | **Date** | 2026-08-19 |
 | **Deciders** | Project Owner, Lead Developer |
 | **Supersedes** | — |
@@ -25,10 +25,12 @@ RTWiki uses the following technology stack for the backend:
 |-------|-----------|------|
 | Runtime | **Bun** | JavaScript/TypeScript runtime and package manager. Provides fast startup, built-in test runner, and native TypeScript support. |
 | Backend Framework | **Hono** | Lightweight HTTP framework for Bun. Provides routing, middleware, and a clean API. Supports streaming and has a small bundle size. |
-| Database | **Bun SQLite** (`bun:sqlite`) | Built-in SQLite binding for Bun. No separate server process. File-based database stored in the user's data directory. |
-| ORM | **Drizzle ORM** (pinned stable version) | Type-safe query builder with schema definitions. Generates parameterized queries automatically. Supports SQLite dialect including FTS5. |
+| Database | **Bun SQLite** (`bun:sqlite`) | Built-in SQLite binding for Bun. No separate server process. File-based database stored beside the executable. |
+| ORM | **Drizzle ORM** | Type-safe query builder with schema definitions. Generates parameterized queries automatically. Supports SQLite dialect including FTS5. |
 
 The database file is stored at `<exe_directory>/data/rtwiki.sqlite`. SQLite WAL (Write-Ahead Logging) mode is enabled for crash safety. The WAL and SHM files remain in the same `data/` directory.
+
+Exact stable versions for Bun, Hono, Bun SQLite, and Drizzle ORM will be selected and pinned during the implementation phase, based on mutual compatibility and the requirements of this ADR.
 
 ## Alternatives Considered
 

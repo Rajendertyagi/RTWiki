@@ -133,7 +133,7 @@ A simple key-value store for application-level configuration that the user can c
 
 ### 3.8 Backups
 
-Each backup record points to a ZIP archive on disk. The archive path is relative to the data directory. The `rtwiki_version` column records the application version at backup time, enabling the restore path to reject archives from incompatible versions.
+Each backup record points to a ZIP archive on disk. The archive path is relative to the data directory (`data/backups/`). The `rtwiki_version` column records the application version at backup time, enabling the restore path to reject archives from incompatible versions. Backups include the database and attachments but exclude log files.
 
 ## 4. Deletion and Recycle-Bin Behaviour
 

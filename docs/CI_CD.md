@@ -52,8 +52,16 @@ This document describes the planned GitHub Actions workflow for RTWiki. It speci
 
 ```
 - Run: bun run test:unit
-- Coverage threshold: minimum 80% line coverage on new code.
-- Fails if coverage drops below threshold.
+- Tests are mandatory for the following areas:
+  - Database migrations and persistence
+  - Autosave and recovery from interrupted saves
+  - Backup creation and restore
+  - HTML and Markdown import and sanitization
+  - Attachment validation and path safety
+  - API validation and error handling
+- Coverage is collected and reported.
+- A global failure percentage will only be introduced after a meaningful baseline exists.
+- High line coverage must not replace behavioural acceptance tests.
 ```
 
 ### Stage 6: Integration Tests
@@ -96,17 +104,27 @@ This document describes the planned GitHub Actions workflow for RTWiki. It speci
 - Run: bun run package
 - Packages the executable and all assets into a versioned .zip artifact.
 - Artifact naming convention: RTWiki-{version}-windows-x64.zip
-- Version is read from package.json or git tag.
+- Version is read from the lockfile or git tag.
 ```
 
-### Stage 11: Upload Build Artifact
+### Stage 11: Portable Artifact Smoke Test
+
+```
+- Extract the .zip artifact to a temporary directory.
+- Run the .exe and verify it starts without errors.
+- Verify that data/ and logs/ directories are created automatically on first launch.
+- Verify the browser opens and the application is reachable.
+- Fails the pipeline if the executable does not start or the directories are not created.
+```
+
+### Stage 12: Upload Build Artifact
 
 ```
 - Upload the .zip artifact to GitHub Actions artifacts.
 - Artifact is available for 90 days on non-release runs.
 ```
 
-### Stage 12: GitHub Release (tags only)
+### Stage 13: GitHub Release (tags only)
 
 ```
 - Create a GitHub Release with the packaged artifact attached.
@@ -128,6 +146,7 @@ The pipeline fails on any of the following conditions:
 | Frontend build | Pipeline fails |
 | Backend build | Pipeline fails |
 | Windows executable build | Pipeline fails (non-tag PRs only; tag builds continue to package) |
+| Portable artifact smoke test | Pipeline fails |
 | Bundle size regression > 20% | Warning (does not fail, but alerts the team) |
 
 ## 5. Artifacts

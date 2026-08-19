@@ -7,9 +7,9 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | ID | Title | Status |
 |----|-------|--------|
 | [ADR-001](ADR-001-browser-first-local-application.md) | Browser-First Local Application | **Accepted** |
-| [ADR-002](ADR-002-bun-hono-sqlite.md) | Bun, Hono, and SQLite | **Proposed** |
-| [ADR-003](ADR-003-react-blocknote-mantine.md) | React, BlockNote, and Mantine | **Proposed** |
-| [ADR-004](ADR-004-canonical-block-json-format.md) | Canonical BlockNote JSON Format | **Proposed** |
+| [ADR-002](ADR-002-bun-hono-sqlite.md) | Bun, Hono, and SQLite | **Accepted** |
+| [ADR-003](ADR-003-react-blocknote-mantine.md) | React, BlockNote, and Mantine | **Accepted** |
+| [ADR-004](ADR-004-canonical-block-json-format.md) | Canonical BlockNote JSON Format | **Accepted** |
 | [ADR-005](ADR-005-portable-data-layout.md) | Portable Data Layout Beside the Executable | **Accepted** |
 
 ## How to Read an ADR

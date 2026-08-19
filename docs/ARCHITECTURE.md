@@ -8,34 +8,23 @@ RTWiki follows a **simple modular monolith** pattern. There is a single applicat
 
 ## 2. High-Level Component Diagram
 
-```
-┌─────────────────────────────────────────────────┐
-│                  Browser (User)                  │
-│  ┌──────────────┐    ┌──────────────────────┐   │
-│  │  React UI    │    │  BlockNote Editor    │   │
-│  │  (Mantine)   │    │  (drag, slash, format)│   │
-│  └──────┬───────┘    └──────────┬───────────┘   │
-│         │                       │                │
-│         └───────────┬───────────┘                │
-│                     │  REST API (JSON)           │
-└─────────────────────┼───────────────────────────┘
-                      │
-              ┌───────▼────────┐
-              │   Hono Backend  │
-              │   (Bun runtime) │
-              ├───────┬────────┬──────────────┐
-              │       │        │              │
-      ┌───────▼┐ ┌────▼───┐ ┌─▼──────┐ ┌────▼────┐
-      │ API    │ │App     │ │Search  │ │Attach-  │
-      │Routes  │ │Services│ │Engine  │ │ments    │
-      └───────┘ └────┬───┘ └────────┘ └─────────┘
-                   ┌──▼──────────────────┐
-                   │  SQLite (Bun SQLit) │
-                   │  + FTS5 extension   │
-                   └─────────────────────┘
-                   ┌─────────────────────┐
-                   │  Drizzle ORM        │
-                   └─────────────────────┘
+```mermaid
+graph TD
+    B[Browser] -->|REST API / JSON| H[Hono Backend]
+    H --> HR[API Routes]
+    H --> AS[Application Services]
+    H --> SE[Search Engine]
+    H --> AT[Attachments]
+    H --> BK[Backup and Restore]
+    AS --> DB[(SQLite)]
+    SE --> DB
+    AT --> FS[(Filesystem)]
+    BK --> FS
+    DB --> FS
+    style B fill:#e1f5fe
+    style H fill:#fff3e0
+    style DB fill:#e8f5e9
+    style FS fill:#fce4ec
 ```
 
 ## 3. Layer Boundaries
@@ -44,11 +33,12 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 ### 3.1 Web UI (Frontend)
 
-- **Technology:** React 18 + TypeScript, Vite, Mantine UI, Tabler Icons React
+- **Technology:** React + TypeScript, Vite, Mantine UI, Tabler Icons React
 - **Responsibility:** Render the application shell, navigation, and editor. Handle user interactions and display data from the API.
 - **Inputs:** REST API responses (JSON).
 - **Outputs:** User actions (create, update, delete, search, upload).
 - **Constraints:** No server-side rendering. No direct database access. All API calls go through a single typed client module.
+- **Version policy:** The React version will be selected and pinned during the implementation phase to be compatible with the selected stable BlockNote, Mantine, and Vite versions. Major versions must never float. Compatibility takes priority over selecting the newest version.
 
 ### 3.2 Editor
 
@@ -107,7 +97,7 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 - **Technology:** ZIP archive containing the SQLite database, attachments directory, and metadata
 - **Responsibility:**
-  - **Create:** Lock the database, copy files into a ZIP archive, write metadata JSON.
+  - **Create:** Lock the database, copy files into a ZIP archive, write metadata JSON. Logs are excluded.
   - **Restore:** Validate the archive (checksum or internal manifest), verify it was created by a compatible version, extract to a temporary location, run integrity checks, then replace the live data.
 - **Constraint:** Restore is rejected if the archive is corrupted, tampered with, or from an incompatible version.
 
@@ -118,14 +108,17 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 ### 3.10 Configuration
 
-- **Responsibility:** Central typed configuration object loaded once at startup. Values come from environment variables with documented defaults.
+- **Responsibility:** Central typed configuration object loaded once at startup. The executable directory is resolved once and all paths are derived from it. No environment-variable override exists for the data directory.
+- **Provisional defaults** (defined once, may be adjusted after MVP usability testing):
+  - Autosave debounce: `2000 ms`
+  - Maximum attachment size: `50 MB`
 - **Constraint:** No hardcoded ports, paths, limits, colours, or environment-specific values scattered across modules. All values are read from the config object.
 - **Example:** `config.server.port`, `config.data.directory`, `config.attachments.maxFileSize`
 
 ### 3.11 Logging
 
 - **Responsibility:** Structured logging (JSON lines) for errors, warnings, and operational events. Log entries must never contain sensitive page content.
-- **Constraint:** No secrets, no user-provided page content, and no attachment data in logs.
+- **Constraint:** No secrets, no user-provided page content, and no attachment data in logs. Log files use rotation and retention limits so they cannot grow indefinitely.
 
 ## 4. Canonical Data Format
 
@@ -141,7 +134,7 @@ Heavy features are lazy-loaded to keep the initial bundle small:
 
 ## 6. Windows Executable Bundling
 
-Frontend assets (the built `dist/` folder from Vite) are bundled alongside the backend executable in the final Windows artifact. The user downloads and extracts a single `.zip` and runs the `.exe`. Mutable data (`data/`, `logs/`) lives inside the extracted folder beside the executable. See [ADR-005](adr/ADR-005-portable-data-layout.md) for the data layout decision.
+Frontend assets (the built `dist/` folder from Vite) are bundled alongside the backend executable in the final Windows artifact. The user downloads and extracts a single `.zip` and runs the `.exe`. Mutable data (`data/`, `logs/`) lives inside the extracted folder beside the executable. The `data/` and `logs/` directories are absent from the fresh ZIP and are created automatically on first launch. See [ADR-005](adr/ADR-005-portable-data-layout.md) for the data layout decision.
 
 ## 7. Cross-References
 

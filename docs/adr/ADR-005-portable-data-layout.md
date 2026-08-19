@@ -114,10 +114,9 @@ Application logs are stored under `logs/rtwiki.log`. Log files use rotation (by 
 
 | Alternative | Reason for Rejection |
 |------------|---------------------|
-| `%LOCALAPPDATA%\RTWiki` | Standard Windows location, but data is separated from the executable. Moving the application folder leaves data behind, breaking the portable guarantee. |
+| `%LOCALAPPDATA%\RTWiki` | Standard Windows location, but data is separated from the executable. Moving the application folder leaves data behind, breaking the portable guarantee. Silent fallback to this location is prohibited. |
 | User's home directory (`%USERPROFILE%\RTWiki`) | Same portability problem as LOCALAPPDATA. Also more visible to the user, which increases the chance of accidental deletion. |
 | Registry-based data path | Requires an installer and administrative privileges. Contradicts the portable, no-install requirement. |
-| `RTWIKI_DATA_DIR` environment variable override | Allows power users to relocate data, but introduces a second source of truth and creates confusion for non-technical users. The owner's requirement is that data stays beside the executable by design, not by configuration. |
 
 ## Consequences
 
@@ -134,7 +133,7 @@ Application logs are stored under `logs/rtwiki.log`. Log files use rotation (by 
 - Antivirus software may occasionally flag an executable writing to its own directory. This is uncommon but possible.
 
 **Neutral:**
-- No environment variable override means no escape hatch for advanced users who want data on a different drive. This is intentional — the owner's requirement is portable-by-design, not configurable-by-override.
+- There is no environment-variable escape hatch. This is intentional — the owner's requirement is portable-by-design, not configurable-by-override.
 
 ## Risks
 
