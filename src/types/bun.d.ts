@@ -18,7 +18,7 @@ declare module 'bun:sqlite' {
     constructor(path: string)
     pragma(source: string): unknown
     query<T = Record<string, unknown>>(
-      sql: string,
+      sql: string
     ): {
       get: (...params: unknown[]) => T | undefined
       all: (...params: unknown[]) => T[]
