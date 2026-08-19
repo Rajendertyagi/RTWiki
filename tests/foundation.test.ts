@@ -146,7 +146,7 @@ describe('database migrations', () => {
     // Deleting the parent must cascade to search_index.
     db.run("DELETE FROM pages WHERE id = 'p1'")
     const orphan = db.query('SELECT page_id FROM search_index WHERE page_id = ?').get('p1')
-    expect(orphan).toBeUndefined()
+    expect(orphan).toBeNull()
   })
 
   it('passes integrity check', () => {
