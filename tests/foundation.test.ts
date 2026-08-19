@@ -282,12 +282,12 @@ describe('logger', () => {
 
 describe('launcher', () => {
   it('opens via injected launcher for loopback URL', async () => {
-    let opened: string | null = null
+    let opened = ''
     const fakeLauncher: Launcher = (url) => {
       opened = url
     }
     await launchBrowser('http://127.0.0.1:8080/', fakeLauncher)
-    expect(opened as string).toBe('http://127.0.0.1:8080/')
+    expect(opened).toBe('http://127.0.0.1:8080/')
   })
 
   it('rejects non-loopback URLs', async () => {
