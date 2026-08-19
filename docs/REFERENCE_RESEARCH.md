@@ -14,7 +14,7 @@ This document records the comparable tools and libraries researched while shapin
 | TiddlyWiki | Single-file wiki | Borrowed: portable single-artifact philosophy; rejected tiddler JS-in-core. |
 | Wiki.js | Node wiki (server) | Rejected server model; kept the clean docs structure. |
 | BlockNote | Block editor library | Adopted as the editor (ADR-003); native custom blocks are L1. |
-| Mermaid | Diagram library | Adopted for diagrams/mind maps (ADR-003); strict security mode for script prevention (SECURITY.md); network isolation provided by RTWiki's own CSP layer. |
+| Mermaid | Diagram library | Adopted for diagrams/mind maps (ADR-003); strict mode encodes HTML tags and disables clicks, while RTWiki provides broader isolation through its own security controls (SECURITY.md). |
 
 ## Tool Notes
 
@@ -52,7 +52,7 @@ The block editor RTWiki adopts (ADR-003). Its custom-block API is the foundation
 
 ### Mermaid
 Official site: [Mermaid](https://mermaid.js.org) (source: [github.com/mermaid-js/mermaid](https://github.com/mermaid-js/mermaid))
-The diagram library used for Mermaid diagrams and mind maps (ADR-003). Mermaid's `securityLevel: "strict"` (the documented default) encodes HTML tags in diagram text and disables click functionality, preventing script injection within diagram content. External resource loading is prevented by RTWiki's own CSP and network restrictions, not by Mermaid itself. (Mermaid also documents a separate `securityLevel: "sandbox"` mode that renders in a sandboxed iframe — currently in beta — but RTWiki relies on its own CSP layer.)
+The diagram library used for Mermaid diagrams and mind maps (ADR-003). RTWiki configures Mermaid's `securityLevel: "strict"`, the documented default, which encodes HTML tags in diagram text and disables click functionality. This is one library-level security control; RTWiki independently enforces sanitization, CSP, iframe isolation where required, and network restrictions. Mermaid also documents a separate `securityLevel: "sandbox"` mode that renders inside a sandboxed iframe and is currently described as beta.
 
 ## Lessons Applied
 
