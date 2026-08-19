@@ -1,0 +1,58 @@
+# node_modules/
+# Bun / npm / yarn dependency caches
+.bun/
+.pnpm-store/
+
+# Build and distribution outputs
+dist/
+build/
+out/
+.target/
+.release/
+
+# Coverage and cache
+coverage/
+.nyc_output/
+.vite/
+.eslintcache
+tsconfig.tsbuildinfo
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Environment files (keep the example only)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Runtime data (created by the application at startup)
+data/
+
+# Compiled executables and packaged artifacts
+*.exe
+*.msi
+*.zip
+*.tar.gz
+*.nupkg
+release/
+
+# Windows-generated files
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# IDE and editor settings (optional — keep if team uses them)
+# .vscode/
+# .idea/
+
+# OS metadata
+.DS_Store
+Thumbs.db
