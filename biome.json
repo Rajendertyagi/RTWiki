@@ -34,7 +34,8 @@
     "formatter": {
       "quoteStyle": "double",
       "trailingCommas": "none"
-    }
+    },
+    "globals": ["Bun"]
   },
   "organizeImports": {
     "enabled": false
