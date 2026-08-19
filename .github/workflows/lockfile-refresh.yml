@@ -2,8 +2,13 @@ name: Lockfile Refresh
 
 # TEMPORARY workflow. It regenerates bun.lock on GitHub (never locally), then the
 # resulting bun.lock is downloaded and committed, after which this file is deleted.
+# The `push` trigger is only so this branch-only workflow can be run on GitHub
+# (workflow_dispatch is not addressable for non-default branches via the API).
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/mvp-foundation
 
 permissions:
   contents: read
