@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { integer, json, sqliteTable, text } from 'drizzle-orm/bun-sqlite'
+import { integer, json, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const pages = sqliteTable('pages', {
   id: text('id')

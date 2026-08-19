@@ -25,7 +25,7 @@ app.use(
 )
 
 // Health endpoint
-app.get(HEALTH_PATH, () => {
+app.get(HEALTH_PATH, (c) => {
   try {
     const db = getDb()
     db.query('SELECT 1').get()

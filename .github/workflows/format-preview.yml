@@ -51,18 +51,23 @@ jobs:
           retention-days: 7
 
       - name: Lint (report only)
+        if: always()
         run: bun run lint
 
       - name: Typecheck
+        if: always()
         run: bun run typecheck
 
       - name: Tests
+        if: always()
         run: bun run test
 
       - name: Build web
+        if: always()
         run: bun run build:web
 
       - name: Build server
+        if: always()
         run: bun run build:server
 
       - name: Write summary

@@ -1,4 +1,4 @@
-import { joinPaths } from '../config/index.js'
+import { resolveRuntimePaths } from '../config/index.js'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -82,3 +82,7 @@ export class Logger {
 export function createLogger(logPath: string): Logger {
   return new Logger(logPath)
 }
+
+// Single application-wide logger instance. Paths are derived from the
+// executable location (portable layout) via the shared config module.
+export const logger = createLogger(resolveRuntimePaths().logPath)
