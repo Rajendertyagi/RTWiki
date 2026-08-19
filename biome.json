@@ -34,7 +34,7 @@
     "formatter": {
       "quoteStyle": "single",
       "trailingCommas": "none",
-      "semicolons": false
+      "semicolons": "off"
     },
     "globals": ["Bun"]
   },
