@@ -22,7 +22,9 @@
         "all": true
       },
       "style": {
-        "all": true
+        "all": true,
+        "useImportType": "off",
+        "noUnusedTemplateLiteral": "off"
       }
     }
   },
@@ -33,6 +35,9 @@
     }
   },
   "json": {
+    "enabled": false
+  },
+  "organizeImports": {
     "enabled": false
   },
   "files": {
