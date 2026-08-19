@@ -1,10 +1,10 @@
-import { HEALTH_PATH } from "@rtwiki/shared/constants"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { getDb } from "../database/index.js"
 import { logger } from "../logging/index.js"
+import { HEALTH_PATH } from "@rtwiki/shared/constants"
 
-export const app = new Hono<{ Variables: { db: ReturnType<typeof getDb> } }>()
+export const app = new Hono<{ variables: { db: ReturnType<typeof getDb> } }>()
 
 // Security headers
 app.use("*", async (c, next) => {

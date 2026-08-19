@@ -13,7 +13,8 @@
       "correctness": {
         "all": true,
         "noUnusedVariables": "error",
-        "noUndeclaredDependencies": "off"
+        "noUndeclaredDependencies": "off",
+        "noNodejsModules": "off"
       },
       "suspicious": {
         "all": true,

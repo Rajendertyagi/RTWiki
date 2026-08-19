@@ -4,8 +4,8 @@ import { resolveRuntimePaths } from "./config/index.js"
 import { createLogger, Logger } from "./logging/index.js"
 import { initDatabase, closeDatabase } from "./database/index.js"
 import { runMigrations } from "./database/migrations.js"
-import { joinPaths } from "node:path"
-import { existsSync, mkdirSync } from "node:fs"
+import { mkdirSync, existsSync } from "node:fs"
+import { join } from "node:path"
 
 export interface BootstrapOptions {
   logger?: Logger
@@ -25,10 +25,10 @@ export async function bootstrap(
   // Create required directories
   ensureDirectory(paths.dataDir)
   ensureDirectory(paths.logDir)
-  ensureDirectory(joinPaths(paths.exeDir, "dist", "web"))
+  ensureDirectory(join(paths.exeDir, "dist", "web"))
 
   // Check writability
-  const testFile = joinPaths(paths.dataDir, ".write-test")
+  const testFile = join(paths.dataDir, ".write-test")
   try {
     Bun.write(testFile, "test")
     Bun.delete(testFile)
