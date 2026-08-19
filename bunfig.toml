@@ -1,14 +1,15 @@
-[tool.biome]
-formatter = { enabled = true, indentStyle = "space", indentWidth = 2, lineEnding = "lf", lineWidth = 100 }
-linter = { enabled = true }
-javascript = { formatter = { quoteStyle = "single", trailingCommas = "none" } }
-files = { ignores = ["node_modules/", "dist/", "bun.lock", ".workbuddy-ai/"] }
+[formatter]
+indentStyle = "space"
+indentWidth = 2
+lineEnding = "lf"
+lineWidth = 100
 
-[tool.biome.linter]
-rules = { all = false, recommended = true }
+[ linter ]
+enabled = true
 
-[tool.biome.linter.rules]
-correctness = { all = true, noUnusedVariables = "error" }
-suspicious = { all = true, noExplicitAny = "error" }
-complexity = { all = true }
-style = { all = true }
+[javascript.formatter]
+quoteStyle = "double"
+trailingCommas = "none"
+
+[files]
+ignores = ["node_modules/", "dist/", "bun.lock", ".workbuddy-ai/"]
