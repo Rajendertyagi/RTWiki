@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { rmSync, mkdirSync } from 'node:fs'
