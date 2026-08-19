@@ -241,7 +241,10 @@ describe('static serving', () => {
 
 describe('logger', () => {
   it('writes valid JSONL lines with no paths or secrets', async () => {
-    const file = join(tmpdir(), `rtwiki-log-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`)
+    const file = join(
+      tmpdir(),
+      `rtwiki-log-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
+    )
     const log = new Logger(file)
     log.info('started', { event: 'init' })
     log.warn('careful', { event: 'warn' })
@@ -262,7 +265,10 @@ describe('logger', () => {
   })
 
   it('flush is safe to call repeatedly and after close', async () => {
-    const file = join(tmpdir(), `rtwiki-log2-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`)
+    const file = join(
+      tmpdir(),
+      `rtwiki-log2-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
+    )
     const log = new Logger(file)
     log.info('one', { event: 'x' })
     await log.flush()
