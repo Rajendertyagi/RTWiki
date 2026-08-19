@@ -3,14 +3,14 @@
 // At runtime Bun provides the real implementations; these declarations only
 // satisfy the TypeScript compiler for the small subset of the Bun API used.
 
-declare namespace Bun {
-  interface BunFile {
-    write(data: string | ArrayBuffer | Uint8Array): Promise<number>
-  }
+interface BunFile {
+  write(data: string | ArrayBuffer | Uint8Array): Promise<number>
+}
 
-  function file(path: string): BunFile
-  function write(path: string, data: string): Promise<number>
-  function delete(path: string): Promise<void>
+declare const Bun: {
+  file(path: string): BunFile
+  write(path: string, data: string): Promise<number>
+  delete(path: string): Promise<void>
 }
 
 declare module 'bun:sqlite' {
