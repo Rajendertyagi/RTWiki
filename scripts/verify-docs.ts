@@ -243,15 +243,94 @@ function isTempFile(name: string): boolean {
   return TEMP_SUFFIXES.some((s) => name.endsWith(s));
 }
 
-/** Split a raw link target into { path, fragment } (fragment may be empty). */
-function splitTarget(raw: string): { path: string; fragment: string } {
+/** Parsed components of a Markdown link target. */
+interface SplitTarget {
+  /** Filesystem path portion (after stripping query string and fragment). */
+  readonly path: string;
+  /** Heading fragment (after `#`); everything after the first `#` per URL semantics. */
+  readonly fragment: string;
+  /** Query string (after `?`, before `#`); intentionally unused for local-file resolution. */
+  readonly query: string;
+}
+
+/**
+ * Split a raw link target into path / fragment / query.
+ *
+ * URL fragment semantics: the first `#` begins the fragment, and everything
+ * after it belongs to the fragment (even a literal `?`). A `?` that appears
+ * before any `#` begins the query string and is stripped from the path.
+ * URL-encoded `%3F` / `%23` are NOT split here — they are decoded later by
+ * `safeDecode` so an encoded delimiter stays part of the filename.
+ */
+function splitTarget(raw: string): SplitTarget {
   let s = raw.trim();
   // strip an optional "title" part:  path "title"
   const titleMatch = s.match(/^(\S+)(?:\s+"[^"]*")?\s*$/);
   if (titleMatch) s = titleMatch[1];
+
+  let fragment = "";
   const hashIdx = s.indexOf("#");
-  if (hashIdx === -1) return { path: s, fragment: "" };
-  return { path: s.slice(0, hashIdx), fragment: s.slice(hashIdx + 1) };
+  if (hashIdx !== -1) {
+    fragment = s.slice(hashIdx + 1);
+    s = s.slice(0, hashIdx);
+  }
+  let query = "";
+  const qIdx = s.indexOf("?");
+  if (qIdx !== -1) {
+    query = s.slice(qIdx + 1);
+    s = s.slice(0, qIdx);
+  }
+  return { path: s, fragment, query };
+}
+
+/**
+ * Mask inline-code spans on a single line with spaces, preserving length so
+ * that reported line numbers stay accurate and columns are not shifted.
+ *
+ * - Ordinary single-backtick spans and longer matching backtick runs are masked.
+ * - Escaped backticks (`\``) are treated as literal text, not delimiters.
+ * - An unmatched backtick leaves the rest of the line untouched (no crash).
+ * - Tilde fences are intentionally ignored here (handled by fence analysis).
+ *
+ * The result is safe to run the link/reference regexes against: anything inside
+ * a code span (including link-like text) is blanked out, while real links
+ * outside the span are left intact.
+ */
+function maskInlineCode(line: string): string {
+  if (!line.includes("`")) return line;
+  const chars = line.split("");
+  const n = line.length;
+  let i = 0;
+  while (i < n) {
+    if (line[i] === "\\" && i + 1 < n && line[i + 1] === "`") {
+      i += 2; // escaped backtick -> literal, not a delimiter
+      continue;
+    }
+    if (line[i] === "`") {
+      let j = i;
+      while (j < n && line[j] === "`") j++;
+      const openLen = j - i;
+      // find the first run of '`' whose length >= openLen (the closing delimiter)
+      let k = j;
+      let closeStart = -1;
+      while (k < n) {
+        if (line[k] === "\\") { k += 2; continue; }
+        if (line[k] !== "`") { k += 1; continue; }
+        let r = k;
+        while (r < n && line[r] === "`") r++;
+        if (r - k >= openLen) { closeStart = k; break; }
+        k = r;
+      }
+      if (closeStart === -1) { i = j; continue; } // unmatched: leave as-is
+      let r = closeStart;
+      while (r < n && line[r] === "`") r++;
+      for (let p = i; p < r; p++) chars[p] = " ";
+      i = r;
+      continue;
+    }
+    i++;
+  }
+  return chars.join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +343,60 @@ interface MdFile {
   readonly text: string;
   readonly lines: ReadonlyArray<string>;
   readonly insideFence: ReadonlyArray<boolean>;
+  readonly fenceBlocks: ReadonlyArray<FenceBlock>;
   readonly headingSlugs: Set<string>;
+}
+
+/** A detected fenced code block. `closeLine === -1` means unclosed at EOF. */
+interface FenceBlock {
+  readonly char: "`" | "~";
+  readonly openLen: number;
+  readonly openLine: number;
+  readonly closeLine: number;
+  readonly hasContent: boolean;
+}
+
+const FENCE_OPEN_RE: RegExp = /^ {0,3}(`{3,}|~{3,})/;
+const FENCE_CLOSE_RE: RegExp = /^ {0,3}(`{3,}|~{3,})\s*$/;
+
+/**
+ * Parse fenced code blocks for a file. Returns:
+ *  - `inside`: per-line flag (true for fence delimiter lines and their content),
+ *  - `blocks`: every fence with its open/close lines and whether it has content.
+ *
+ * Implements CommonMark-ish fence rules: an opening run of >= 3 of one char
+ * (` or ~) with up to 3 leading spaces; a closing fence uses the same char and
+ * is at least as long as the opening; a different fence char never closes.
+ */
+function analyzeFences(lines: ReadonlyArray<string>): { inside: boolean[]; blocks: FenceBlock[] } {
+  const inside: boolean[] = new Array(lines.length).fill(false);
+  const blocks: FenceBlock[] = [];
+  let cur: { char: "`" | "~"; openLen: number; openLine: number; hasContent: boolean } | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!cur) {
+      const m = line.match(FENCE_OPEN_RE);
+      if (m) {
+        const fence = m[1];
+        cur = { char: fence[0] as "`" | "~", openLen: fence.length, openLine: i, hasContent: false };
+        inside[i] = true; // opening delimiter line is skipped
+      }
+      continue;
+    }
+    const close = line.match(FENCE_CLOSE_RE);
+    if (close && close[1][0] === cur.char && close[1].length >= cur.openLen) {
+      inside[i] = true; // closing delimiter line is skipped
+      blocks.push({ char: cur.char, openLen: cur.openLen, openLine: cur.openLine, closeLine: i, hasContent: cur.hasContent });
+      cur = null;
+      continue;
+    }
+    inside[i] = true; // content line
+    if (line.trim().length > 0) cur.hasContent = true;
+  }
+  if (cur) {
+    blocks.push({ char: cur.char, openLen: cur.openLen, openLine: cur.openLine, closeLine: -1, hasContent: cur.hasContent });
+  }
+  return { inside, blocks };
 }
 
 async function walkMarkdown(dir: string, out: string[]): Promise<void> {
@@ -283,23 +415,23 @@ async function walkMarkdown(dir: string, out: string[]): Promise<void> {
 
 function analyzeFile(abs: string, rel: string, text: string): MdFile {
   const lines = text.split(/\r?\n/);
-  const insideFence: boolean[] = new Array(lines.length).fill(false);
   const headingTexts: string[] = [];
-  let inFence = false;
+  const fenceRes = analyzeFences(lines);
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^\s*(```|~~~)/.test(line)) {
-      inFence = !inFence;
-      insideFence[i] = true; // the delimiter line itself is "inside" (skipped)
-      continue;
-    }
-    insideFence[i] = inFence;
-    if (!inFence) {
-      const hm = line.match(/^#{1,6}\s+(.*)$/);
+    if (!fenceRes.inside[i]) {
+      const hm = lines[i].match(/^#{1,6}\s+(.*)$/);
       if (hm) headingTexts.push(hm[1].trim());
     }
   }
-  return { abs, rel, text, lines, insideFence, headingSlugs: buildHeadingSlugSet(headingTexts) };
+  return {
+    abs,
+    rel,
+    text,
+    lines,
+    insideFence: fenceRes.inside,
+    fenceBlocks: fenceRes.blocks,
+    headingSlugs: buildHeadingSlugSet(headingTexts),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -318,10 +450,19 @@ interface LinkRef {
 function checkFile(file: MdFile, root: string, byRel: ReadonlyMap<string, MdFile>): void {
   const refDefs = new Map<string, LinkRef>();
 
+  // --- fence structure: unclosed or empty fenced code blocks ---
+  for (const b of file.fenceBlocks) {
+    if (b.closeLine === -1) {
+      fail(file.rel, b.openLine + 1, "fence-unclosed", `fenced code block opened at line ${b.openLine + 1} is not closed before end of file`);
+    } else if (!b.hasContent) {
+      fail(file.rel, b.openLine + 1, "fence-empty", `fenced code block opened at line ${b.openLine + 1} contains no non-whitespace content`);
+    }
+  }
+
   // --- reference definitions: collect + detect duplicates ---
   for (let i = 0; i < file.lines.length; i++) {
     if (file.insideFence[i]) continue;
-    const m = file.lines[i].match(REF_DEF_RE);
+    const m = maskInlineCode(file.lines[i]).match(REF_DEF_RE);
     if (m) {
       const label = m[2].toLowerCase();
       if (refDefs.has(label)) {
@@ -335,7 +476,7 @@ function checkFile(file: MdFile, root: string, byRel: ReadonlyMap<string, MdFile
   // --- inline links, images, reference usages ---
   for (let i = 0; i < file.lines.length; i++) {
     if (file.insideFence[i]) continue;
-    const line = file.lines[i];
+    const line = maskInlineCode(file.lines[i]);
 
     for (const m of line.matchAll(INLINE_LINK_RE)) {
       processTarget(file, root, byRel, m[3], i + 1);
