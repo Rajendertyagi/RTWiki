@@ -75,6 +75,7 @@ jobs:
         shell: pwsh
 
       - name: Report artifact
+        if: always()
         run: |
           $zip = Get-Item RTWiki.zip
           $exe = Get-Item "$env:RUNNER_TEMP\rtwiki-smoke\dist\RTWiki.exe"
