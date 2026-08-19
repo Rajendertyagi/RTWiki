@@ -67,7 +67,10 @@ jobs:
           $extract = "$env:RUNNER_TEMP\rtwiki-smoke"
           Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
           Expand-Archive -Path RTWiki.zip -DestinationPath $extract
-          $p = Start-Process -FilePath "$extract\dist\RTWiki.exe" -ArgumentList "--smoke-test" -Wait -PassThru -WorkingDirectory $extract
+          $p = Start-Process -FilePath "$extract\dist\RTWiki.exe" -ArgumentList "--smoke-test" -Wait -PassThru -WorkingDirectory $extract -RedirectStandardOutput "$extract\smoke.out.txt" -RedirectStandardError "$extract\smoke.err.txt"
+          Write-Host "=== STDOUT ==="; Get-Content "$extract\smoke.out.txt" -ErrorAction SilentlyContinue
+          Write-Host "=== STDERR ==="; Get-Content "$extract\smoke.err.txt" -ErrorAction SilentlyContinue
+          Write-Host "=== RTWiki LOG ==="; Get-Content "$extract\dist\logs\rtwiki.log" -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
         shell: pwsh
 
