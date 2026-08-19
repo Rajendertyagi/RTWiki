@@ -110,7 +110,7 @@ describe("database migrations", () => {
     await runMigrations(db)
 
     const result = db
-      .query(`SELECT name FROM _migrations WHERE name = ?`)
+      .query("SELECT name FROM _migrations WHERE name = ?")
       .get("001_create_pages")
     expect(result).toBeDefined()
   })
@@ -119,7 +119,7 @@ describe("database migrations", () => {
     await runMigrations(db)
     await runMigrations(db)
 
-    const results = db.query(`SELECT name FROM _migrations`).all() as {
+    const results = db.query("SELECT name FROM _migrations").all() as {
       name: string
     }[]
     const names = results.map((r) => r.name)

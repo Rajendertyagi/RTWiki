@@ -11,5 +11,8 @@ enabled = true
 quoteStyle = "double"
 trailingCommas = "none"
 
+[json]
+enabled = false
+
 [files]
 ignores = ["node_modules/", "dist/", "bun.lock", ".workbuddy-ai/"]
