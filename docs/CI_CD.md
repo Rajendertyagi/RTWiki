@@ -57,6 +57,8 @@ This document describes the planned GitHub Actions workflow for RTWiki. It speci
   - Autosave and recovery from interrupted saves
   - Backup creation and restore
   - HTML and Markdown import and sanitization
+  - Note-package (`.rtwiki.zip`) import, validation, transactional write, and rollback
+  - Custom-content sandbox isolation (no same-origin, no network, no parent DOM)
   - Attachment validation and path safety
   - API validation and error handling
 - Coverage is collected and reported.
@@ -174,6 +176,8 @@ If future phases require signing or publishing credentials, they will be added a
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — the rules the pipeline enforces
 - [ARCHITECTURE.md](ARCHITECTURE.md) — what is built and packaged
 - [ROADMAP.md](ROADMAP.md) — future phases that may add pipeline stages
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
 
 ## 8. Implemented Quality Gates
 
@@ -181,7 +185,7 @@ The first implemented, runnable quality gate is the documentation verifier:
 
 - **Workflow:** [`.github/workflows/docs-quality.yml`](../.github/workflows/docs-quality.yml) — runs on pull requests, pushes to `main`, and manual dispatch.
 - **Script:** [`scripts/verify-docs.ts`](../scripts/verify-docs.ts) — a dependency-free Bun script (requires Bun 1.3.14).
-- **Checks:** Markdown link integrity, document structure, required-file presence, ADR status and index entries, project-status line, portable-layout rules, and requirement-ID integrity.
+- **Checks:** Markdown link integrity, document structure, required-file presence, ADR status and index entries (all seven ADRs), project-status line, portable-layout rules, and requirement-ID integrity. The verifier also validates the new `AI_CONTENT_IMPORT.md` and `REFERENCE_RESEARCH.md` documents and the [ADR-006](adr/ADR-006-rich-content-and-import-contract.md)/[ADR-007](adr/ADR-007-sandboxed-custom-content.md) records.
 - The verifier runs in CI without `bun install` and without any third-party packages.
 
 All other stages in sections 3–6 (format, lint, type-check, tests, builds, packaging) remain planned until implementation begins.

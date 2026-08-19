@@ -20,7 +20,7 @@ The question is: what format should be stored in the database as the canonical r
 
 ## Decision
 
-**BlockNote JSON is the canonical saved format.** Every page's `content` column stores a BlockNote JSON document. HTML and Markdown are converted to and from BlockNote JSON at the API boundary — they are never stored directly in the database.
+**BlockNote JSON is the canonical saved format.** Every page's `content` column stores a **versioned, RTWiki-extended BlockNote JSON** document. HTML and Markdown are converted to and from BlockNote JSON at the API boundary — they are never stored directly in the database. Rich structures are represented as **typed custom blocks** (cards, tabs, callouts, grids, formulas, diagrams) defined in the block registry. This decision is extended, not reversed, by [ADR-006](ADR-006-rich-content-and-import-contract.md).
 
 The data flow is:
 
@@ -35,6 +35,8 @@ User input (editor / paste / import / source mode)
 ```
 
 When HTML or Markdown is imported, the conversion happens immediately and only the resulting BlockNote JSON is persisted. When exporting (future phase), BlockNote JSON is converted back to the target format.
+
+When converting rich HTML or Markdown to canonical JSON is **not lossless**, the original rich-HTML source is **retained** (in `pages.content_html_fallback`) so no content is silently lost. **Unknown or unrecognized block types are preserved, not deleted** — they are stored and rendered with a safe fallback, and flagged for review. BlockNote JSON remains the single source of truth for rendering and search; this decision is extended, not reversed, by [ADR-006](ADR-006-rich-content-and-import-contract.md) and [ADR-007](ADR-007-sandboxed-custom-content.md).
 
 ## Alternatives Considered
 
@@ -75,3 +77,12 @@ This decision should be revisited if:
 - BlockNote changes its JSON schema in a way that makes migration impractical.
 - A requirement emerges that necessitates storing raw HTML (e.g., preserving exact third-party HTML formatting).
 - Performance testing shows that BlockNote JSON is significantly larger or slower to process than an alternative format.
+
+## Cross-References
+
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — canonical format decision
+- [DATA_MODEL.md](../DATA_MODEL.md) — entities that store BlockNote JSON
+- [DEVELOPMENT_STANDARDS.md](../DEVELOPMENT_STANDARDS.md) — coding standards
+- [SECURITY.md](../SECURITY.md) — sanitization at the boundary
+- [ADR-006](ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](ADR-007-sandboxed-custom-content.md) — sandboxed custom content

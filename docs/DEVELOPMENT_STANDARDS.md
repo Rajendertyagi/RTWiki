@@ -195,9 +195,23 @@ All styles are defined in Mantine theme tokens, CSS modules, or Emotion styled-c
 | `eval()` or `Function()` constructors | Security risk |
 | Direct filesystem access outside services | Bypasses validation and logging |
 
+## 14. Modular Block and Extension Architecture
+
+Rich content is implemented as a set of cooperating modules discovered through registries, not through central switch statements.
+
+- **Block registry.** Every rich block type (cards, tabs, callouts, grids, formulas, diagrams, images, and any future type) is owned by its own module declaring a unique type id, a schema (Zod/BlockNote), an editor component, a viewer/renderer, a parser (source → block), a serializer (block → source), and an optional unknown-block fallback.
+- **Single composition root.** One module reads all registries (block, import adapter, export adapter, renderer/editor, sanitization policy, asset storage, theme/token, package validator, schema migrator, and a future AI-provider adapter) and wires the editor, renderer, import pipeline, and search extractor together.
+- **No central switch over block types.** Dispatch is performed by looking up registry metadata by type id; do not add `if/else` or `switch` ladders keyed on block type.
+- **Lifecycle rules (continue accepted practice).** One configuration object, one database connection/lifecycle manager, one structured logger. Editor instances are scoped to the active page; services use explicit dependencies (no hidden globals).
+- **Custom content isolation.** Custom HTML/CSS/JS (L3) is rendered only in a sandbox that has no same-origin, database, or filesystem access and no network egress. Active content is off by default. No custom script may run in the main application context.
+- **Import is centralized.** All entry paths (paste, drop, file, localhost API) go through one import pipeline; do not add parallel import code.
+
 ## Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — layer boundaries these standards govern
 - [SECURITY.md](SECURITY.md) — security-specific standards
 - [CI_CD.md](CI_CD.md) — automated checks that enforce these standards
 - [DATA_MODEL.md](DATA_MODEL.md) — naming conventions for database entities
+- [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content

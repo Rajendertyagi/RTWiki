@@ -49,10 +49,13 @@ Before writing or changing anything, every agent must:
 - Prefer the **smallest complete change** that satisfies the task.
 - Avoid speculative abstractions and "future-proofing" not requested.
 - Avoid unrelated formatting or dependency updates.
-- Do **not** add accounts, cloud sync, AI integration, audio, video, or real-time collaboration.
+- Do **not** add accounts, cloud sync, real-time collaboration, audio, or video. Receiving AI-generated content offline is a core capability; a built-in AI chat is a future optional phase that must not require the network.
 - Do **not** introduce a native desktop wrapper (Electron/Tauri/Electrobun) or LAN mode during the MVP unless explicitly authorized.
 - Do **not** silently replace an accepted library or architecture decision.
 - Record any legitimate architecture change through a new ADR.
+- Treat rich AI-generated content as a core capability: native custom blocks, a versioned `rt-*` HTML vocabulary, and sandboxed custom HTML/CSS/JS. Custom JavaScript runs only in an isolated sandbox, never in the main application context.
+- Route every content import (paste, drop, file, or localhost API) through one shared, centralized import pipeline; do not add parallel import paths.
+- Never silently lose content during import. Preserve unknown blocks and retain the original rich-HTML source when conversion is not lossless; surface warnings instead of dropping data.
 
 ## 5. Define Once, Reuse Everywhere
 
@@ -94,6 +97,7 @@ The agent must:
 - Keep clear **frontend, API, service, and persistence** boundaries.
 - Share schemas and types between frontend and backend.
 - Treat **BlockNote JSON** as the canonical page storage; HTML and Markdown are conversion formats only (see [ADR-004](docs/adr/ADR-004-canonical-block-json-format.md)).
+- Use a **modular block architecture**: each rich block type is owned by its own module (type id, schema, editor, viewer, parser, serializer) registered in a block registry. A single composition root wires the registries together; avoid central switch statements over block types (see [ADR-006](docs/adr/ADR-006-rich-content-and-import-contract.md)).
 - Lazy-load heavy diagram/math features.
 - Add no unnecessary framework or infrastructure.
 - Pin **stable, compatible** dependency versions in the lockfile; **no floating major versions** (see [Development standards](docs/DEVELOPMENT_STANDARDS.md)).
@@ -152,6 +156,7 @@ Preserve the security model in [Security](docs/SECURITY.md):
 - Extension, MIME, and size **validation** for attachments; safe generated filenames; path-traversal protection.
 - No execution of uploaded documents; serve attachments as static content only.
 - No arbitrary scripts from pasted HTML.
+- Custom HTML/CSS/JS supplied in a note-package runs only inside an isolated sandbox (iframe) with no same-origin, database, or filesystem access and no network egress (see [ADR-007](docs/adr/ADR-007-sandboxed-custom-content.md)).
 - Enforce request and upload limits.
 - Set security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`, `Referrer-Policy`, `Cache-Control`).
 - Enable SQLite foreign keys and integrity checks; wrap multi-step operations in transactions.
@@ -214,7 +219,7 @@ Do **not** weaken or bypass a failed quality gate.
 - Add or update an **ADR** for architectural decisions.
 - Never mark implementation complete when only documentation exists.
 - Run the permanent documentation verifier whenever documentation or Markdown links change: `bun scripts/verify-docs.ts` (runs automatically in CI — see [CI/CD](docs/CI_CD.md)).
-- Authoritative references: [Product requirements](docs/PRODUCT_REQUIREMENTS.md), [MVP scope](docs/MVP_SCOPE.md), [Architecture](docs/ARCHITECTURE.md), [Data model](docs/DATA_MODEL.md), [Development standards](docs/DEVELOPMENT_STANDARDS.md), [Security](docs/SECURITY.md), [CI/CD](docs/CI_CD.md), [Roadmap](docs/ROADMAP.md), [Acceptance criteria](docs/ACCEPTANCE_CRITERIA.md), [ADR index](docs/adr/README.md).
+- Authoritative references: [Product requirements](docs/PRODUCT_REQUIREMENTS.md), [MVP scope](docs/MVP_SCOPE.md), [Architecture](docs/ARCHITECTURE.md), [Data model](docs/DATA_MODEL.md), [Development standards](docs/DEVELOPMENT_STANDARDS.md), [Security](docs/SECURITY.md), [CI/CD](docs/CI_CD.md), [Roadmap](docs/ROADMAP.md), [Acceptance criteria](docs/ACCEPTANCE_CRITERIA.md), [AI content import](docs/AI_CONTENT_IMPORT.md), [Reference research](docs/REFERENCE_RESEARCH.md), [ADR index](docs/adr/README.md). See also [ADR-006](docs/adr/ADR-006-rich-content-and-import-contract.md) and [ADR-007](docs/adr/ADR-007-sandboxed-custom-content.md).
 
 ## 14. Completion-Report Protocol
 

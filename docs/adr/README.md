@@ -11,6 +11,8 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-003](ADR-003-react-blocknote-mantine.md) | React, BlockNote, and Mantine | **Accepted** |
 | [ADR-004](ADR-004-canonical-block-json-format.md) | Canonical BlockNote JSON Format | **Accepted** |
 | [ADR-005](ADR-005-portable-data-layout.md) | Portable Data Layout Beside the Executable | **Accepted** |
+| [ADR-006](ADR-006-rich-content-and-import-contract.md) | Rich-Content Model and Note-Package Import Contract | **Accepted** |
+| [ADR-007](ADR-007-sandboxed-custom-content.md) | Sandboxed Custom HTML/CSS/JS | **Accepted** |
 
 ## How to Read an ADR
 

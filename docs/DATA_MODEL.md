@@ -7,7 +7,7 @@ This document describes the logical and physical data model for RTWiki. It defin
 - **UUIDs for all primary keys.** Human-readable IDs are not needed and UUIDs avoid collisions when data is later merged from backups.
 - **UTC timestamps on all time fields.** Stored as `TEXT` in ISO 8601 format (`YYYY-MM-DDTHH:MM:SS.sssZ`) for SQLite compatibility and sortability.
 - **Soft delete everywhere.** No row is ever physically removed from the core tables. A `deleted_at` column marks rows as deleted; a recycle-bin cleanup job handles permanent removal.
-- **BlockNote JSON as the canonical content format.** Page content is stored as a JSON blob, never as raw HTML or Markdown.
+- **BlockNote JSON as the canonical content format.** Page content is stored as a versioned, RTWiki-extended BlockNote JSON document (never raw HTML or Markdown). Rich structures use typed custom blocks; when conversion from a source is not lossless, the original rich-HTML source is retained; unknown block types are preserved, not deleted.
 - **FTS5 for search.** A dedicated virtual table indexes searchable text derived from page content.
 
 ## 2. Entity Diagram (Textual)
@@ -83,7 +83,9 @@ The central entity. Each row represents one wiki page.
 |--------|------|-------------|
 | `id` | UUID | Surrogate primary key. Generated client-side or server-side as a UUID v4. |
 | `title` | TEXT | Human-readable page title. Required, trimmed, max 200 characters. |
-| `content` | JSON | Canonical BlockNote JSON document. `NULL` is not permitted for active pages. |
+| `content` | JSON | Canonical RTWiki-extended BlockNote JSON document. `NULL` is not permitted for active pages. |
+| `content_schema_version` | TEXT | Version string of the RTWiki-extended BlockNote schema used by `content`; enables migration on startup. |
+| `content_html_fallback` | TEXT | Nullable original rich-HTML source retained when conversion to canonical JSON was not lossless. Never the primary view; used for recovery and review. |
 | `created_at` | TEXT | ISO 8601 UTC timestamp of creation. |
 | `updated_at` | TEXT | ISO 8601 UTC timestamp of last content change. |
 | `deleted_at` | TEXT | `NULL` for active pages. Set on soft delete. |
@@ -125,7 +127,7 @@ The `search_index` table is a SQLite FTS5 virtual table. It is kept in sync auto
 - On page `INSERT` or `UPDATE`: extract plain text from the BlockNote JSON content, upsert the row.
 - On page soft-delete: delete the corresponding row from the FTS5 table.
 
-**Content extraction:** The extractor walks the BlockNote JSON tree and collects text from text blocks, heading blocks, list items, table cells, and code blocks. It skips image URLs, attachment paths, and embedded script content.
+**Content extraction:** The extractor walks the BlockNote JSON tree (including typed custom blocks such as cards, tabs, callouts, and grids) and collects text from text blocks, heading blocks, list items, table cells, code blocks, and custom-block text. It skips image URLs, attachment paths, and embedded script content.
 
 ### 3.7 Settings
 
@@ -150,3 +152,6 @@ Each backup record points to a ZIP archive on disk. The archive path is relative
 - [SECURITY.md](SECURITY.md) — attachment safety and path-traversal prevention
 - [DATA_MODEL.md](DATA_MODEL.md) — this document
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — naming conventions and migration rules
+- [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content

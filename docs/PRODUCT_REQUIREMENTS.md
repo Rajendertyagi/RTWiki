@@ -81,10 +81,45 @@ This document captures all confirmed requirements for RTWiki. It is the single a
 | R-038 | No secrets (API keys, tokens, passwords) may be committed to the Git repository. |
 | R-039 | Error messages presented to the user must be meaningful and understandable by a non-technical person. |
 
+## 9. Rich-Content Import & AI-Generated Notes
+
+RTWiki is built to receive rich study notes produced by external AI tools. The application ingests that content through a single shared pipeline (paste, file drop, file import, or a localhost-only API) and stores it as canonical BlockNote JSON. Content may use one of three richness levels: native RTWiki custom blocks (L1), a versioned RTWiki `rt-*` HTML vocabulary (L2), or sandboxed custom HTML/CSS/JS (L3). See [AI Content Import](AI_CONTENT_IMPORT.md), [ADR-006](adr/ADR-006-rich-content-and-import-contract.md), and [ADR-007](adr/ADR-007-sandboxed-custom-content.md).
+
+| # | Requirement |
+|---|------------|
+| R-040 | The application must support a local AI-generated note workflow: an external AI tool produces a rich page that RTWiki imports, validates, previews, and stores as canonical BlockNote JSON without requiring a network. |
+| R-041 | All content entry paths — paste, file drop, file import, and the localhost import API — must share one centralized import pipeline (adapter → validation → sanitize → asset localization → convert → preview → canonical JSON → transactional save). |
+| R-042 | The application must support a native rich-content block model (L1): first-class BlockNote custom blocks for cards, tabs, callouts, grids, formulas, Mermaid diagrams, and images. |
+| R-043 | The application must support a versioned RTWiki HTML vocabulary (L2, `rt-*` elements and attributes) for rich structures that map to native blocks or are preserved as sanitized HTML. |
+| R-044 | The application must support optional per-page custom HTML/CSS/JS (L3) rendered in an isolated sandbox (iframe) with no same-origin access to the application. |
+| R-045 | The application must provide a RTWiki note-package (`.rtwiki.zip`) as the preferred interchange format for AI-generated pages, containing a manifest, content, optional HTML/CSS/JS, and assets. |
+| R-046 | The note-package manifest must declare a schema `version` and a list of pages; the importer must validate the manifest before any content is written. |
+| R-047 | Import must localize referenced images and assets into `data/attachments/` and rewrite references to the localized storage path. |
+| R-048 | Import must be transactional: either all pages and assets are written, or none. A failed import must not leave partial data behind. |
+| R-049 | Import must support rollback: a failed or rejected import must not alter existing pages; the prior workspace state must remain intact. |
+| R-050 | The importer must reject packages that exceed configured size limits (ZIP-bomb protection) and must prevent path traversal in archive entry names. |
+| R-051 | Cards must be supported as a first-class nested container block (L1) that groups related blocks. |
+| R-052 | Tabs must be supported as a first-class container block (L1) with switchable panels. |
+| R-053 | Callouts must be supported as a first-class block with a type/severity and inline content. |
+| R-054 | Grids (multi-column responsive layout) must be supported as a first-class block (L1). |
+| R-055 | Mathematical formulas must render via `@blocknote/math-block` (inline and block). |
+| R-056 | Mermaid diagrams, including mind maps, must render via `@blocknote/diagram-block`. |
+| R-057 | When conversion of rich HTML/Markdown to canonical JSON is not lossless, the original rich-HTML source must be retained alongside the canonical JSON so no content is silently lost. |
+| R-058 | Unknown or unrecognized block types must be preserved (stored) rather than deleted; they must render with a safe fallback and be flagged for review. |
+| R-059 | Per-page custom CSS must be scoped (encapsulated) so it cannot affect the rest of the application; it must not apply outside the page that defines it. |
+| R-060 | Per-page custom JavaScript must run only inside a sandboxed iframe; it must have no same-origin, database, or filesystem access and no network egress. |
+| R-061 | The application must show a preview of imported content before saving, displaying the sanitized output and any warnings (unknown blocks, stripped scripts). |
+| R-062 | Imported custom content (CSS/JS) must be disableable by a user setting; active content (scripts) must be off by default and toggleable. |
+| R-063 | The application must not depend on any external AI service or network at runtime; receiving AI-generated content occurs only through local files or the localhost import API. |
+
 ## Cross-References
 
-- [MVP_SCOPE.md](MVP_SCOPE.md) — what is included in the three-day MVP
+- [MVP_SCOPE.md](MVP_SCOPE.md) — what is included in the milestone plan
 - [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) — measurable pass/fail criteria for each requirement
 - [ROADMAP.md](ROADMAP.md) — planned expansion beyond the MVP
 - [SECURITY.md](SECURITY.md) — security requirements that protect these capabilities
 - [DATA_MODEL.md](DATA_MODEL.md) — the data structures that implement these requirements
+- [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and shared import pipeline
+- [REFERENCE_RESEARCH.md](REFERENCE_RESEARCH.md) — comparable tools and libraries researched
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
