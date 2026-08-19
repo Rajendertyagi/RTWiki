@@ -35,7 +35,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
 
   ensureDirectory(paths.dataDir)
   ensureDirectory(paths.logDir)
-  ensureDirectory(join(paths.exeDir, 'dist', 'web'))
+  ensureDirectory(paths.frontendDistDir)
 
   const writeTest = join(paths.dataDir, '.write-test')
   try {
