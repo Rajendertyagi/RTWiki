@@ -11,6 +11,9 @@ async function main(): Promise<void> {
 
   process.on("SIGINT", () => void handleSignal("SIGINT"))
   process.on("SIGTERM", () => void handleSignal("SIGTERM"))
+
+  // Keep the process alive
+  await new Promise<void>(() => {})
 }
 
 main().catch((err) => {
