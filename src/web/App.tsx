@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from 'react'
 import {
   Container,
   Title,
@@ -10,15 +10,11 @@ import {
   Center,
   Loader,
   Alert,
-  Group,
-} from "@mantine/core"
-import {
-  IconCheck,
-  IconAlertCircle,
-  IconRefresh,
-} from "@tabler/icons-react"
-import { checkHealth, type HealthStatus } from "./services/api.js"
-import { STATUS_TEXT } from "./config/index.js"
+  Group
+} from '@mantine/core'
+import { IconCheck, IconAlertCircle, IconRefresh } from '@tabler/icons-react'
+import { checkHealth, type HealthStatus } from './services/api.js'
+import { STATUS_TEXT } from './config/index.js'
 
 interface HealthState {
   status: HealthStatus | null
@@ -28,7 +24,7 @@ interface HealthState {
 export function App(): JSX.Element {
   const [state, setState] = useState<HealthState>({
     status: null,
-    error: null,
+    error: null
   })
   const abortRef = useRef<AbortController | null>(null)
 
@@ -43,8 +39,8 @@ export function App(): JSX.Element {
         }
       })
       .catch((err: Error) => {
-        if (!controller.signal.aborted && err.name !== "AbortError") {
-          setState({ status: "error", error: err.message })
+        if (!controller.signal.aborted && err.name !== 'AbortError') {
+          setState({ status: 'error', error: err.message })
         }
       })
 
@@ -59,12 +55,10 @@ export function App(): JSX.Element {
     abortRef.current = controller
 
     checkHealth(controller.signal)
-      .then((result) =>
-        setState({ status: result.status, error: null }),
-      )
+      .then((result) => setState({ status: result.status, error: null }))
       .catch((err: Error) => {
-        if (err.name !== "AbortError") {
-          setState({ status: "error", error: err.message })
+        if (err.name !== 'AbortError') {
+          setState({ status: 'error', error: err.message })
         }
       })
   }
@@ -86,12 +80,9 @@ export function App(): JSX.Element {
             </Center>
           )}
 
-          {state.status === "ok" && (
+          {state.status === 'ok' && (
             <Stack gap="sm" align="center">
-              <IconCheck
-                color="var(--mantine-color-green-6)"
-                size={48}
-              />
+              <IconCheck color="var(--mantine-color-green-6)" size={48} />
               <Title order={3} ta="center">
                 {STATUS_TEXT.ready}
               </Title>
@@ -104,7 +95,7 @@ export function App(): JSX.Element {
             </Stack>
           )}
 
-          {state.status === "error" && (
+          {state.status === 'error' && (
             <Stack gap="sm" align="center">
               <Alert
                 icon={<IconAlertCircle />}

@@ -1,13 +1,13 @@
-import { Database } from "bun:sqlite"
-import { joinPaths } from "../config/index.js"
-import { logger } from "../logging/index.js"
+import { Database } from 'bun:sqlite'
+import { joinPaths } from '../config/index.js'
+import { logger } from '../logging/index.js'
 
 let dbInstance: Database | null = null
 let dbPath: string | null = null
 
 export function getDatabasePath(dataDir: string): string {
   if (dbPath) return dbPath
-  dbPath = joinPaths(dataDir, "rtwiki.sqlite")
+  dbPath = joinPaths(dataDir, 'rtwiki.sqlite')
   return dbPath
 }
 
@@ -15,8 +15,8 @@ export function initDatabase(dataDir: string): Database {
   const path = getDatabasePath(dataDir)
   const sqlite = new Database(path)
 
-  sqlite.pragma("foreign_keys = ON")
-  sqlite.pragma("journal_mode = WAL")
+  sqlite.pragma('foreign_keys = ON')
+  sqlite.pragma('journal_mode = WAL')
 
   dbInstance = sqlite
   logger.info(`Database initialized at ${path}`)
@@ -25,7 +25,7 @@ export function initDatabase(dataDir: string): Database {
 
 export function getDb(): Database {
   if (!dbInstance) {
-    throw new Error("Database not initialized. Call initDatabase() first.")
+    throw new Error('Database not initialized. Call initDatabase() first.')
   }
   return dbInstance
 }
@@ -35,6 +35,6 @@ export async function closeDatabase(): Promise<void> {
     dbInstance.close()
     dbInstance = null
     dbPath = null
-    logger.info("Database connection closed")
+    logger.info('Database connection closed')
   }
 }

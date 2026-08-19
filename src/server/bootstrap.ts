@@ -11,9 +11,7 @@ export interface BootstrapOptions {
   logger?: Logger
 }
 
-export async function bootstrap(
-  options: BootstrapOptions = {},
-): Promise<{
+export async function bootstrap(options: BootstrapOptions = {}): Promise<{
   server: Awaited<ReturnType<typeof serve>>
   logger: Logger
   paths: ReturnType<typeof resolveRuntimePaths>
@@ -34,7 +32,7 @@ export async function bootstrap(
     Bun.delete(testFile)
   } catch {
     loggerInstance.error(
-      `RTWiki cannot write to its data folder at ${paths.dataDir}. Please move the RTWiki folder to a writable location such as Documents or Desktop, then try again.`,
+      `RTWiki cannot write to its data folder at ${paths.dataDir}. Please move the RTWiki folder to a writable location such as Documents or Desktop, then try again.`
     )
     process.exit(1)
   }
@@ -47,7 +45,7 @@ export async function bootstrap(
   const server = serve({
     fetch: app.fetch,
     port: 8080,
-    hostname: '127.0.0.1',
+    hostname: '127.0.0.1'
   })
 
   loggerInstance.info('RTWiki v0.1.0 starting on http://127.0.0.1:8080')

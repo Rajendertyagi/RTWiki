@@ -20,8 +20,8 @@ app.use(
   cors({
     origin: ['http://127.0.0.1:*'],
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowHeaders: ['Content-Type'],
-  }),
+    allowHeaders: ['Content-Type']
+  })
 )
 
 // Health endpoint
@@ -34,7 +34,7 @@ app.get(HEALTH_PATH, () => {
       app: 'RTWiki',
       version: '0.1.0',
       db: { ready: true },
-      time: new Date().toISOString(),
+      time: new Date().toISOString()
     })
   } catch {
     return c.json({
@@ -42,7 +42,7 @@ app.get(HEALTH_PATH, () => {
       app: 'RTWiki',
       version: '0.1.0',
       db: { ready: false },
-      time: new Date().toISOString(),
+      time: new Date().toISOString()
     })
   }
 })

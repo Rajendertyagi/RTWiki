@@ -1,6 +1,6 @@
-import { joinPaths } from "../config/index.js"
+import { joinPaths } from '../config/index.js'
 
-export type LogLevel = "info" | "warn" | "error"
+export type LogLevel = 'info' | 'warn' | 'error'
 
 interface LogEntry {
   timestamp: string
@@ -23,27 +23,27 @@ export class Logger {
   info(message: string, module?: string): void {
     this.write({
       timestamp: new Date().toISOString(),
-      level: "info",
+      level: 'info',
       message,
-      module,
+      module
     })
   }
 
   warn(message: string, module?: string): void {
     this.write({
       timestamp: new Date().toISOString(),
-      level: "warn",
+      level: 'warn',
       message,
-      module,
+      module
     })
   }
 
   error(message: string, module?: string): void {
     this.write({
       timestamp: new Date().toISOString(),
-      level: "error",
+      level: 'error',
       message,
-      module,
+      module
     })
     console.error(`[${this.formatTimestamp()}] [ERROR] ${message}`)
   }
@@ -59,21 +59,19 @@ export class Logger {
 
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return
-    const lines = this.buffer.map((e) => this.formatLine(e)).join("\n")
+    const lines = this.buffer.map((e) => this.formatLine(e)).join('\n')
     this.buffer = []
     try {
-      await this.stream.write(lines + "\n")
+      await this.stream.write(`${lines}\n`)
     } catch {
       // Log file may not be writable; silently skip to avoid crashing the app
     }
   }
 
   private formatLine(entry: LogEntry): string {
-    return (
-      `[${entry.timestamp}] [${entry.level.toUpperCase()}]` +
-      (entry.module ? ` [${entry.module}]` : "") +
-      ` ${entry.message}`
-    )
+    return `[${entry.timestamp}] [${entry.level.toUpperCase()}]${
+      entry.module ? ` [${entry.module}]` : ''
+    } ${entry.message}`
   }
 
   private formatTimestamp(): string {

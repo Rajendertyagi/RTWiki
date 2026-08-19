@@ -4,10 +4,15 @@ import { MantineProvider } from '@mantine/core'
 import { theme } from './theme/index.js'
 import { App } from './App.js'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root')
+if (!rootElement) {
+  throw new Error('RTWiki: root element #root not found in index.html')
+}
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <MantineProvider theme={theme}>
       <App />
     </MantineProvider>
-  </React.StrictMode>,
+  </React.StrictMode>
 )

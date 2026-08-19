@@ -13,9 +13,9 @@ export const theme = createTheme({
       '#1c70ff',
       '#0d63fb',
       '#0058eb',
-      '#004fd9',
-    ],
+      '#004fd9'
+    ]
   },
   fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  defaultRadius: 'md',
+  defaultRadius: 'md'
 })

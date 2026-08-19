@@ -1,9 +1,7 @@
-import type { getDb } from "./index.js"
-import { logger } from "../logging/index.js"
+import type { getDb } from './index.js'
+import { logger } from '../logging/index.js'
 
-export async function runMigrations(
-  db: ReturnType<typeof getDb>,
-): Promise<void> {
+export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void> {
   // Create migrations tracking table
   db.execute(`
     CREATE TABLE IF NOT EXISTS _migrations (
@@ -46,11 +44,9 @@ export async function runMigrations(
   `)
 
   // Mark migration as applied
-  const existing = db
-    .query("SELECT id FROM _migrations WHERE name = ?")
-    .get("001_create_pages")
+  const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get('001_create_pages')
   if (!existing) {
-    db.execute("INSERT INTO _migrations (name) VALUES (?)", "001_create_pages")
+    db.execute('INSERT INTO _migrations (name) VALUES (?)', '001_create_pages')
     logger.info('Migration "001_create_pages" applied successfully')
   } else {
     logger.info('Migration "001_create_pages" already applied, skipping')
