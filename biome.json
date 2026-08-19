@@ -32,8 +32,9 @@
   },
   "javascript": {
     "formatter": {
-      "quoteStyle": "double",
-      "trailingCommas": "none"
+      "quoteStyle": "single",
+      "trailingCommas": "none",
+      "semicolons": false
     },
     "globals": ["Bun"]
   },
