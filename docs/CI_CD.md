@@ -174,3 +174,14 @@ If future phases require signing or publishing credentials, they will be added a
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — the rules the pipeline enforces
 - [ARCHITECTURE.md](ARCHITECTURE.md) — what is built and packaged
 - [ROADMAP.md](ROADMAP.md) — future phases that may add pipeline stages
+
+## 8. Implemented Quality Gates
+
+The first implemented, runnable quality gate is the documentation verifier:
+
+- **Workflow:** [`.github/workflows/docs-quality.yml`](../.github/workflows/docs-quality.yml) — runs on pull requests, pushes to `main`, and manual dispatch.
+- **Script:** [`scripts/verify-docs.ts`](../scripts/verify-docs.ts) — a dependency-free Bun script (requires Bun 1.3.14).
+- **Checks:** Markdown link integrity, document structure, required-file presence, ADR status and index entries, project-status line, portable-layout rules, and requirement-ID integrity.
+- The verifier runs in CI without `bun install` and without any third-party packages.
+
+All other stages in sections 3–6 (format, lint, type-check, tests, builds, packaging) remain planned until implementation begins.

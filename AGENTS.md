@@ -213,6 +213,7 @@ Do **not** weaken or bypass a failed quality gate.
 - Keep terminology consistent across documents.
 - Add or update an **ADR** for architectural decisions.
 - Never mark implementation complete when only documentation exists.
+- Run the permanent documentation verifier whenever documentation or Markdown links change: `bun scripts/verify-docs.ts` (runs automatically in CI — see [CI/CD](docs/CI_CD.md)).
 - Authoritative references: [Product requirements](docs/PRODUCT_REQUIREMENTS.md), [MVP scope](docs/MVP_SCOPE.md), [Architecture](docs/ARCHITECTURE.md), [Data model](docs/DATA_MODEL.md), [Development standards](docs/DEVELOPMENT_STANDARDS.md), [Security](docs/SECURITY.md), [CI/CD](docs/CI_CD.md), [Roadmap](docs/ROADMAP.md), [Acceptance criteria](docs/ACCEPTANCE_CRITERIA.md), [ADR index](docs/adr/README.md).
 
 ## 14. Completion-Report Protocol
