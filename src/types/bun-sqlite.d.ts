@@ -11,16 +11,21 @@ declare module 'bun:sqlite' {
   export class Database {
     constructor(path: string, options?: unknown)
     exec(source: string): void
-    run(
-      source: string,
-      ...params: unknown[]
-    ): { lastInsertRowid: number; changes: number }
+    run(source: string, ...params: unknown[]): { lastInsertRowid: number; changes: number }
     query<T = unknown>(
       source: string,
-    ): { get(...params: unknown[]): T | null; all(...params: unknown[]): T[]; run(...params: unknown[]): unknown }
+    ): {
+      get(...params: unknown[]): T | null
+      all(...params: unknown[]): T[]
+      run(...params: unknown[]): unknown
+    }
     prepare<T = unknown>(
       source: string,
-    ): { get(...params: unknown[]): T | null; all(...params: unknown[]): T[]; run(...params: unknown[]): unknown }
+    ): {
+      get(...params: unknown[]): T | null
+      all(...params: unknown[]): T[]
+      run(...params: unknown[]): unknown
+    }
     close(): void
   }
 }
