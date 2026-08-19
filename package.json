@@ -8,7 +8,7 @@
     "dev:web": "vite",
     "build": "bun run build:web && bun run build:server",
     "build:web": "vite build",
-    "build:server": "bun build src/server/index.ts --compile --outfile dist/RTWiki.exe --target windows-x64",
+    "build:server": "bun build src/server/index.ts --compile --outfile dist/RTWiki.exe --target=bun-windows-x64",
     "start": "bun run src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "format:check": "biome check --no-errors-on-unmatched .",

@@ -105,6 +105,7 @@ export function joinPaths(...parts: string[]): string {
 }
 
 export function dirname(path: string): string {
-  const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return lastSlash >= 0 ? path.slice(0, lastSlash) : '.'
+  const normalized = path.replace(/\\/g, '/')
+  const lastSlash = normalized.lastIndexOf('/')
+  return lastSlash >= 0 ? normalized.slice(0, lastSlash) : '.'
 }

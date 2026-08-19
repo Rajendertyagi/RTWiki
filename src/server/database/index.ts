@@ -15,8 +15,8 @@ export function initDatabase(dataDir: string): Database {
   const path = getDatabasePath(dataDir)
   const sqlite = new Database(path)
 
-  sqlite.pragma('foreign_keys = ON')
-  sqlite.pragma('journal_mode = WAL')
+  sqlite.exec('PRAGMA foreign_keys = ON')
+  sqlite.exec('PRAGMA journal_mode = WAL')
 
   dbInstance = sqlite
   logger.info(`Database initialized at ${path}`)
