@@ -34,8 +34,7 @@ export async function bootstrap(
     Bun.delete(testFile)
   } catch {
     loggerInstance.error(
-      `RTWiki cannot write to its data folder at ${paths.dataDir}. ` +
-        `Please move the RTWiki folder to a writable location such as Documents or Desktop, then try again.`,
+      `RTWiki cannot write to its data folder at ${paths.dataDir}. Please move the RTWiki folder to a writable location such as Documents or Desktop, then try again.`,
     )
     process.exit(1)
   }

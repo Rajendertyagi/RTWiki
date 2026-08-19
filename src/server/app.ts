@@ -1,9 +1,9 @@
-import { Hono } from "hono"
-import { cors } from "hono/cors"
-import { logger } from "../logging/index.js"
-import { getDb } from "../database/index.js"
 import { HEALTH_PATH } from "@rtwiki/shared/constants"
 import type { HealthResponse } from "@rtwiki/shared/contracts/health"
+import { Hono } from "hono"
+import { cors } from "hono/cors"
+import { getDb } from "../database/index.js"
+import { logger } from "../logging/index.js"
 
 export const app = new Hono<{ Variables: { db: ReturnType<typeof getDb> } }>()
 

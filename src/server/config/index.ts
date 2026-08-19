@@ -1,4 +1,4 @@
-import { APP_NAME } from "@rtwiki/shared/constants"
+import { dirname, resolve } from "path"
 
 export interface AppConfig {
   name: string
@@ -19,7 +19,7 @@ export interface AppConfig {
 
 export function createConfig(baseDir: string): AppConfig {
   return {
-    name: APP_NAME,
+    name: "RTWiki",
     version: "0.1.0",
     host: "127.0.0.1",
     port: 8080,
