@@ -4,7 +4,7 @@ name: Build and Package
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/mvp-foundation']
     paths:
       - 'src/**'
       - 'tests/**'
@@ -70,7 +70,7 @@ jobs:
     name: Package Windows Artifact
     runs-on: windows-latest
     needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/mvp-foundation') || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4 # v4.1.1
         with:
