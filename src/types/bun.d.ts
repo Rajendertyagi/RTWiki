@@ -7,10 +7,20 @@ interface BunFile {
   write(data: string | ArrayBuffer | Uint8Array): Promise<number>
 }
 
+interface Server {
+  stop(): void
+  close(): void
+}
+
 declare const Bun: {
   file(path: string): BunFile
   write(path: string, data: string): Promise<number>
   delete(path: string): Promise<void>
+  serve(options: {
+    fetch: (req: Request) => Response | Promise<Response>
+    port?: number
+    hostname?: string
+  }): Server | Promise<Server>
 }
 
 declare module 'bun:sqlite' {

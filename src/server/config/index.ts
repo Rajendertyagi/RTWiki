@@ -90,7 +90,7 @@ function getBaseDirectory(): string {
   // Development: use import.meta.dirname (Bun/Node ESM)
   // This gives the directory of the module that calls this function
   if (typeof import.meta !== 'undefined' && 'dirname' in import.meta) {
-    return (import.meta as { dirname: string }).dirname
+    return (import.meta as unknown as { dirname: string }).dirname
   }
 
   // Fallback: should not reach here in normal operation

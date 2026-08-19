@@ -15,7 +15,7 @@ import {
   type getDb
 } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
-import { app as createApp } from '../src/server/app.js'
+import { app } from '../src/server/app.js'
 
 function makeTempDir(): string {
   const dir = join(tmpdir(), `rtwiki-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
@@ -123,7 +123,7 @@ describe('database migrations', () => {
 
 describe('app factory', () => {
   it('creates app without binding a network port', () => {
-    const appInstance = createApp()
+    const appInstance = app
     expect(appInstance).toBeDefined()
     expect(typeof appInstance.fetch).toBe('function')
   })

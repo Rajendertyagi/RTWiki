@@ -12,7 +12,7 @@ interface LogEntry {
 export class Logger {
   private readonly logPath: string
   private readonly stream: ReturnType<typeof Bun.file>
-  private readonly buffer: LogEntry[] = []
+  private buffer: LogEntry[] = []
   private readonly bufferSize = 100
 
   constructor(logPath: string) {

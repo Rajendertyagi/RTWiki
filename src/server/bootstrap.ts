@@ -1,4 +1,3 @@
-import { serve } from 'hono/node-server'
 import { app } from './app.js'
 import { resolveRuntimePaths } from './config/index.js'
 import { createLogger, type Logger } from './logging/index.js'
@@ -12,11 +11,11 @@ export interface BootstrapOptions {
 }
 
 export async function bootstrap(options: BootstrapOptions = {}): Promise<{
-  server: Awaited<ReturnType<typeof serve>>
+  server: Awaited<ReturnType<typeof Bun.serve>>
   logger: Logger
   paths: ReturnType<typeof resolveRuntimePaths>
   shutdown: () => Promise<void>
-}> {
+> {
   const paths = resolveRuntimePaths()
   const loggerInstance = options.logger ?? createLogger(paths.logPath)
 
@@ -41,8 +40,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<{
   const db = initDatabase(paths.dataDir)
   await runMigrations(db)
 
-  // Start server
-  const server = serve({
+  // Start server (Bun native serve; the compiled RTWiki.exe embeds the Bun runtime)
+  const server = Bun.serve({
     fetch: app.fetch,
     port: 8080,
     hostname: '127.0.0.1'
