@@ -36,7 +36,7 @@ User input (editor / paste / import / source mode)
 
 When HTML or Markdown is imported, the conversion happens immediately and only the resulting BlockNote JSON is persisted. When exporting (future phase), BlockNote JSON is converted back to the target format.
 
-When converting rich HTML or Markdown to canonical JSON is **not lossless**, the original rich-HTML source is **retained** (in `pages.content_html_fallback`) so no content is silently lost. **Unknown or unrecognized block types are preserved, not deleted** — they are stored and rendered with a safe fallback, and flagged for review. BlockNote JSON remains the single source of truth for rendering and search; this decision is extended, not reversed, by [ADR-006](ADR-006-rich-content-and-import-contract.md) and [ADR-007](ADR-007-sandboxed-custom-content.md).
+When converting rich HTML or Markdown to canonical JSON is **not lossless**, the original rich-HTML source is **retained** as a typed `richHtml` block inside `pages.content` so no content is silently lost. **Unknown or unrecognized block types are preserved, not deleted** — they are stored and rendered with a safe fallback, and flagged for review. BlockNote JSON remains the single source of truth for rendering and search; this decision is extended, not reversed, by [ADR-006](ADR-006-rich-content-and-import-contract.md) and [ADR-007](ADR-007-sandboxed-custom-content.md).
 
 ## Alternatives Considered
 

@@ -38,7 +38,7 @@ The MVP implements every requirement in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIR
 | AI note workflow | Import of AI-generated rich pages via paste and the `.rtwiki.zip` note-package (R-040, R-045, R-046) |
 | Note-package import | Manifest validation, transactional write, rollback, ZIP-bomb and path-traversal protection (R-045, R-046, R-048, R-049, R-050) |
 | Asset localization | Images and assets rewritten into `data/attachments/` (R-047) |
-| Lossless handling | Preview before save, retain rich-HTML fallback source, preserve unknown blocks (R-057, R-058, R-061) |
+| Lossless handling | Preview before save, retain the original rich-HTML source as a `richHtml` block inside `pages.content`, preserve unknown blocks (R-057, R-058, R-061) |
 
 ### Milestone 3: Search, Hardening, Sandbox & Packaging
 
@@ -71,7 +71,7 @@ The following capabilities are **explicitly excluded** from the MVP. They may ap
 | PDF, DOCX, ODT export | Export is an output format; keeping the MVP focused on creation. Evaluated in a later phase. |
 | Audio and video support | Explicitly out of scope. Not planned. |
 | Global JS plugins / marketplace | Per-page sandboxed JS is the MVP boundary; trusted-global customization and a marketplace are future, disabled-by-default capabilities (see [ADR-007](adr/ADR-007-sandboxed-custom-content.md)). |
-| Cloud AI chat / local-model inference | Receiving AI-generated content is in scope; a built-in chat is a future, network-free phase (see [ROADMAP.md](ROADMAP.md)). |
+| Built-in AI chat (future, optional) | Receiving AI-generated content is in scope; a built-in chat is a future optional phase. Providers (a local model or an explicitly-selected cloud provider) are opt-in; RTWiki core has no AI dependency (see [ROADMAP.md](ROADMAP.md)). |
 | Cloud sync | Not planned. The workspace is a single portable local store. |
 
 ## Cross-References

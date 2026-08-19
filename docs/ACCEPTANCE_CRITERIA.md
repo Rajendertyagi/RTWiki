@@ -151,7 +151,7 @@ These criteria validate the rich-content model (native blocks, `rt-*` HTML, and 
 | AC-071 | A note-package with an invalid or missing manifest is rejected. | The application shows a clear error and writes no partial data. |
 | AC-072 | A failed import rolls back completely. | After a failed import, all previously existing pages remain unchanged and intact. |
 | AC-073 | Unknown block types are preserved, not deleted. | An unrecognized block is stored, rendered with a safe fallback, and flagged for review. |
-| AC-074 | Non-lossless conversions retain the original rich HTML. | The original HTML is retained and available for review; no content is silently dropped. |
+| AC-074 | Non-lossless conversions store the original rich HTML as a `richHtml` block inside `pages.content`. | The original HTML is stored as a `richHtml` block inside `pages.content` and is available for review; no content is silently dropped. |
 | AC-075 | Per-page custom CSS is isolated. | Custom CSS on one page does not change the appearance of the rest of the application. |
 | AC-076 | Per-page custom JavaScript runs only in a sandbox. | Custom JS executes only inside an iframe and cannot reach the parent application's same-origin context, database, or filesystem. |
 | AC-077 | The sandbox makes no network connections. | A packet capture shows zero outbound connections from sandboxed custom content. |
@@ -163,7 +163,7 @@ These criteria validate the rich-content model (native blocks, `rt-*` HTML, and 
 | AC-083 | All imported content renders fully offline. | With the network disabled, native blocks, `rt-*` HTML, and sandboxed content all render correctly. |
 | AC-084 | Blocks are added via registry, not a central switch. | A new block type can be added by registering a module without editing a central switch statement. |
 | AC-085 | Schema migrations run on startup without data loss. | Pages authored under an older `content_schema_version` migrate automatically and render correctly. |
-| AC-086 | The app has no AI or network dependency at runtime. | All features work with no external AI service or network; AI-generated content arrives only via local files or the localhost API. |
+| AC-086 | The RTWiki core app has no AI or network dependency at runtime. | All core features work with no external AI service or network; AI-generated content arrives only via local files or the localhost API. A future optional AI chat may add a provider adapter (local model or explicitly-selected cloud provider, opt-in); the core app still works without it. |
 
 ## Cross-References
 

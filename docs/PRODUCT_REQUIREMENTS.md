@@ -104,13 +104,13 @@ RTWiki is built to receive rich study notes produced by external AI tools. The a
 | R-054 | Grids (multi-column responsive layout) must be supported as a first-class block (L1). |
 | R-055 | Mathematical formulas must render via `@blocknote/math-block` (inline and block). |
 | R-056 | Mermaid diagrams, including mind maps, must render via `@blocknote/diagram-block`. |
-| R-057 | When conversion of rich HTML/Markdown to canonical JSON is not lossless, the original rich-HTML source must be retained alongside the canonical JSON so no content is silently lost. |
+| R-057 | When conversion of rich HTML/Markdown to canonical JSON is not lossless, the original rich-HTML source must be stored as a typed `richHtml` block inside `pages.content` (see [AI Content Import](AI_CONTENT_IMPORT.md)) so no content is silently lost. |
 | R-058 | Unknown or unrecognized block types must be preserved (stored) rather than deleted; they must render with a safe fallback and be flagged for review. |
 | R-059 | Per-page custom CSS must be scoped (encapsulated) so it cannot affect the rest of the application; it must not apply outside the page that defines it. |
 | R-060 | Per-page custom JavaScript must run only inside a sandboxed iframe; it must have no same-origin, database, or filesystem access and no network egress. |
 | R-061 | The application must show a preview of imported content before saving, displaying the sanitized output and any warnings (unknown blocks, stripped scripts). |
 | R-062 | Imported custom content (CSS/JS) must be disableable by a user setting; active content (scripts) must be off by default and toggleable. |
-| R-063 | The application must not depend on any external AI service or network at runtime; receiving AI-generated content occurs only through local files or the localhost import API. |
+| R-063 | The RTWiki core application must not depend on any external AI service or network at runtime; receiving AI-generated content occurs only through local files or the localhost import API. A future optional AI chat may use either a local-model adapter (offline) or an explicitly-selected cloud provider (opt-in, with disclosure of what is sent and no committed credentials); the core app and all offline features work without any AI or network. |
 
 ## Cross-References
 

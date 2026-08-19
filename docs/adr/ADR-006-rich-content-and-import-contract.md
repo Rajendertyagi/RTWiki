@@ -34,7 +34,7 @@ The preferred interchange format for AI-generated pages is the **RTWiki note-pac
 
 - `manifest.json` — schema `version`, package metadata, and a list of pages.
 - `content.json` — canonical BlockNote JSON per page (L1 preferred).
-- `page.html` — optional rich-HTML source per page (L2 fallback retained when conversion is not lossless).
+- `page.html` — optional rich-HTML source per page; on import, non-lossless HTML is stored as a `richHtml` block inside `pages.content` (L2 fallback).
 - `style.css` — optional per-page scoped CSS (L3).
 - `script.js` — optional per-page sandboxed JS (L3).
 - `assets/` — images and other binary assets, localized to `data/attachments/` on import.
@@ -87,7 +87,7 @@ Block types, import adapters, export adapters, renderers/editors, sanitization p
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
 | Malicious package (ZIP bomb, path traversal) | Low | Size limits before parse; manifest validation; canonical-path confinement (see [SECURITY.md](../SECURITY.md)). |
-| Non-lossless conversion drops content | Medium | Retain original rich-HTML source; preserve unknown blocks; show preview warnings. |
+| Non-lossless conversion drops content | Medium | Retain original rich-HTML source as a `richHtml` block; preserve unknown blocks; show preview warnings. |
 | Sandbox escape | Low | Strict `sandbox` attributes + CSP; no same-origin; no network; reviewed against [ADR-007](ADR-007-sandboxed-custom-content.md). |
 | Schema drift between AI tool and app | Medium | Declared `schemaVersion`; startup migrator; reject incompatible versions. |
 
@@ -96,12 +96,12 @@ Block types, import adapters, export adapters, renderers/editors, sanitization p
 This decision should be revisited if:
 - A fundamentally better rich-content interchange format emerges that the `rt-*` vocabulary cannot express.
 - The security model for L3 custom content proves impractical on the Windows portable target.
-- The owner decides to support cloud AI chat (would require a new ADR and an explicit decision — see [ROADMAP.md](../ROADMAP.md)).
+- The owner decides to support a built-in AI chat (local-model or explicitly-selected cloud-provider adapter); would require a new ADR and an explicit decision — see [ROADMAP.md](../ROADMAP.md).
 
 ## Cross-References
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — import pipeline, block registry, and canonical format
-- [DATA_MODEL.md](../DATA_MODEL.md) — `content`, `content_schema_version`, `content_html_fallback`
+- [DATA_MODEL.md](../DATA_MODEL.md) — `content`, `content_schema_version`, and the `richHtml` block (stored inside `content`)
 - [DEVELOPMENT_STANDARDS.md](../DEVELOPMENT_STANDARDS.md) — modular block architecture rules
 - [SECURITY.md](../SECURITY.md) — sanitization and sandbox security
 - [AI_CONTENT_IMPORT.md](../AI_CONTENT_IMPORT.md) — full note-package and pipeline contract

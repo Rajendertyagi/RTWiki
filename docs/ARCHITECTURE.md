@@ -175,7 +175,7 @@ The canonical format is a **versioned, RTWiki-extended BlockNote JSON schema**:
 
 - Each `content` document carries a schema `version` so migrations can be applied on startup.
 - Rich structures use **typed custom blocks** (cards, tabs, callouts, grids, formulas, diagrams) defined in the block registry.
-- When a source (rich HTML/Markdown) cannot be converted losslessly, the original rich-HTML source is **retained** alongside the canonical JSON so no content is silently lost.
+- When a source (rich HTML/Markdown) cannot be converted losslessly, the original rich-HTML source is stored as a typed `richHtml` block inside `pages.content` so no content is silently lost.
 - **Unknown or unrecognized block types are preserved**, not deleted. They are stored and rendered with a safe fallback, and flagged for review.
 
 ## 5. Lazy Loading

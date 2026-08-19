@@ -21,7 +21,7 @@ All design decisions, architecture, data model, security requirements, developme
 - **Light and dark themes**
 - **Portable Windows executable** — download and run; no install process required
 - **No audio or video support**
-- **No cloud dependency or network-required AI features** — the app receives AI-generated content offline; an optional local AI chat is a future, network-free phase (see [Roadmap](docs/ROADMAP.md))
+- **No cloud dependency or network-required AI features** — the app receives AI-generated content offline; the RTWiki core has no AI dependency. A future optional AI chat may use either a local-model adapter (offline) or an explicitly-selected cloud provider (opt-in, with disclosure of what is sent); see [Roadmap](docs/ROADMAP.md)
 
 Full requirements are documented in [PRODUCT_REQUIREMENTS.md](docs/PRODUCT_REQUIREMENTS.md).
 

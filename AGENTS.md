@@ -49,13 +49,13 @@ Before writing or changing anything, every agent must:
 - Prefer the **smallest complete change** that satisfies the task.
 - Avoid speculative abstractions and "future-proofing" not requested.
 - Avoid unrelated formatting or dependency updates.
-- Do **not** add accounts, cloud sync, real-time collaboration, audio, or video. Receiving AI-generated content offline is a core capability; a built-in AI chat is a future optional phase that must not require the network.
+- Do **not** add accounts, cloud sync, real-time collaboration, audio, or video. Receiving AI-generated content offline is a core capability; RTWiki core has no AI dependency. A built-in AI chat is a future optional phase with provider-neutral adapters — a local-model adapter may run offline, and a cloud-provider adapter may be used only with explicit opt-in and disclosure of what is sent. It is not part of the MVP.
 - Do **not** introduce a native desktop wrapper (Electron/Tauri/Electrobun) or LAN mode during the MVP unless explicitly authorized.
 - Do **not** silently replace an accepted library or architecture decision.
 - Record any legitimate architecture change through a new ADR.
 - Treat rich AI-generated content as a core capability: native custom blocks, a versioned `rt-*` HTML vocabulary, and sandboxed custom HTML/CSS/JS. Custom JavaScript runs only in an isolated sandbox, never in the main application context.
 - Route every content import (paste, drop, file, or localhost API) through one shared, centralized import pipeline; do not add parallel import paths.
-- Never silently lose content during import. Preserve unknown blocks and retain the original rich-HTML source when conversion is not lossless; surface warnings instead of dropping data.
+- Never silently lose content during import. Preserve unknown blocks and store the original rich-HTML source as a `richHtml` block inside `pages.content` when conversion is not lossless; surface warnings instead of dropping data.
 
 ## 5. Define Once, Reuse Everywhere
 

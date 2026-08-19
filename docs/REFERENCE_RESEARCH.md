@@ -1,6 +1,6 @@
 # Reference Research
 
-This document records the comparable tools and libraries researched while shaping RTWiki's rich-content architecture. The goal was to learn how other local-first and block-based knowledge tools handle rich AI-generated content, custom HTML/CSS/JS, and offline storage — and to adopt patterns that fit RTWiki's offline, localhost-only, no-account constraints. Official project sites are listed as plain text so they are easy to find; they are not runtime dependencies.
+This document records the comparable tools and libraries researched while shaping RTWiki's rich-content architecture. The goal was to learn how other local-first and block-based knowledge tools handle rich AI-generated content, custom HTML/CSS/JS, and offline storage — and to adopt patterns that fit RTWiki's offline, localhost-only, no-account constraints. Official project sites are linked below; they are not runtime dependencies.
 
 ## Summary
 
@@ -19,39 +19,39 @@ This document records the comparable tools and libraries researched while shapin
 ## Tool Notes
 
 ### Outline
-Official site: https://www.getoutline.com
+Official site: [Outline](https://www.getoutline.com)
 A polished team wiki with a strong block editor. It is fundamentally a hosted/server product with accounts, which conflicts with RTWiki's offline, no-account model. RTWiki adopts the *idea* of frictionless block editing but not the deployment model.
 
 ### TriliumNext
-Official site: https://triliumnext.eu  (source: github.com/TriliumNext/Trilium)
+Official site: [TriliumNext](https://triliumnext.eu) (source: [github.com/TriliumNext/Trilium](https://github.com/TriliumNext/Trilium))
 A local-first, offline-capable knowledge base with deeply nested notes, rich content, and user scripts. It validates the "rich AI notes live happily on one local machine" approach. RTWiki mirrors its offline-first stance and avoids its optional sync.
 
 ### SiYuan
-Official site: https://b3log.org/siyuan
+Official site: [SiYuan](https://b3log.org/siyuan)
 A local-first, block-based workspace that supports custom widgets and JavaScript. Its widget model informed RTWiki's L3 sandboxed custom content (ADR-007): custom code is permitted but isolated, never in the main application context.
 
 ### AFFiNE
-Official site: https://affine.pro
+Official site: [AFFiNE](https://affine.pro)
 A local-first workspace built around blocks and a canvas. It reinforces treating blocks (not documents or Markdown) as the canonical unit. RTWiki follows this for L1 native blocks and rejects AFFiNE's cloud collaboration features.
 
 ### SilverBullet
-Official site: https://silverbullet.md
+Official site: [SilverBullet](https://silverbullet.md)
 A local-first, Markdown-centric notebook with pluggable JavaScript. Its plug-in/registry pattern reinforced RTWiki's modular registry and composition-root design (DEVELOPMENT_STANDARDS.md). RTWiki deliberately does **not** adopt Markdown as the primary rich format — it is a fallback only.
 
 ### TiddlyWiki
-Official site: https://tiddlywiki.com
+Official site: [TiddlyWiki](https://tiddlywiki.com)
 A single-file, portable wiki. It strongly validates RTWiki's portable-artifact goal (ADR-005): the whole workspace travels as one file/folder. RTWiki avoids TiddlyWiki's pattern of allowing arbitrary JS inside the core document.
 
 ### Wiki.js
-Official site: https://js.wiki
+Official site: [Wiki.js](https://js.wiki)
 A capable Node.js wiki, but server/deployment-oriented. RTWiki keeps Wiki.js's clear documentation structure as inspiration but stays localhost-only and account-free.
 
 ### BlockNote
-Official site: https://www.blocknotejs.org  (source: github.com/TypeCellOS/BlockNote)
+Official site: [BlockNote](https://www.blocknotejs.org) (source: [github.com/TypeCellOS/BlockNote](https://github.com/TypeCellOS/BlockNote))
 The block editor RTWiki adopts (ADR-003). Its custom-block API is the foundation for L1 native blocks (cards, tabs, callouts, grids, formulas, diagrams). BlockNote JSON is the canonical storage format (ADR-004).
 
 ### Mermaid
-Official site: https://mermaid.js.org  (source: github.com/mermaid-js/mermaid)
+Official site: [Mermaid](https://mermaid.js.org) (source: [github.com/mermaid-js/mermaid](https://github.com/mermaid-js/mermaid))
 The diagram library used for Mermaid diagrams and mind maps (ADR-003). RTWiki renders Mermaid in strict security mode with no script execution and no external resource loading (SECURITY.md).
 
 ## Lessons Applied

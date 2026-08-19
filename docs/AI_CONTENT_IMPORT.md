@@ -14,6 +14,19 @@ RTWiki is designed first and foremost to receive AI-generated rich pages. An ext
 | L2 | Versioned `rt-*` HTML | RTWiki-defined HTML vocabulary for structures mapped to native blocks or preserved as sanitized HTML. |
 | L3 | Sandboxed custom HTML/CSS/JS | Per-page custom content rendered only in an isolated sandbox (see [ADR-007](adr/ADR-007-sandboxed-custom-content.md)). |
 
+### 2.1 Canonical `richHtml` Block (Non-Lossless Storage)
+
+When arbitrary HTML/CSS/JS cannot be converted losslessly to native blocks, it is stored as a typed `richHtml` block **inside** `pages.content` — the single canonical document. It is never a separate database column and never a second canonical format. The block carries:
+
+- `originalHtml` — the original rich-HTML source, preserved verbatim.
+- `cssSource` / `assetId` — scoped CSS source or a reference to a localized attachment in `data/attachments/`.
+- `jsSource` / `assetId` — sandboxed JS source or a reference to a localized attachment.
+- `sandboxPolicyVersion` — version of the sandbox policy applied (see [ADR-007](adr/ADR-007-sandboxed-custom-content.md)).
+- `contentSchemaVersion` — version of the RTWiki-extended BlockNote schema.
+- `validation` — sanitization/validation metadata (e.g., whether scripts were stripped, unknown blocks preserved).
+
+Binary assets stay in `data/attachments/`. Search derives sanitized text from `pages.content`, but the search index is not the canonical store.
+
 ## 3. The RTWiki Note-Package (`.rtwiki.zip`)
 
 The preferred interchange format is a ZIP archive with this layout:
@@ -59,7 +72,7 @@ Canonical RTWiki-extended BlockNote JSON. One document per page, using typed cus
 
 ### 3.3 `page.html` (optional)
 
-The original rich-HTML source retained when conversion to canonical JSON was **not lossless**. Never the primary view; used for recovery and review.
+The original rich-HTML source that could not be converted losslessly. On import it is stored as a typed `richHtml` block inside `pages.content` (see §2.1); never the primary view, used for recovery and review.
 
 ### 3.4 `style.css` / `script.js` (optional, L3)
 
@@ -105,7 +118,7 @@ adapter → validation → sanitize → asset localization → convert → previ
 | Transactional import | All pages/assets are written, or none. A failed import leaves existing pages unchanged. |
 | Rollback | A failed or rejected import does not alter existing pages; the prior workspace state stays intact. |
 | Unknown-block preservation | Unrecognized block types are stored (not deleted) and rendered with a safe fallback, flagged for review. |
-| Rich-HTML fallback | When conversion is not lossless, the original HTML is retained in `pages.content_html_fallback`. |
+| Rich-HTML fallback | When conversion is not lossless, the original HTML is stored as a typed `richHtml` block inside `pages.content` (see §2.1) — not in a separate column. |
 | No silent loss | Warnings are surfaced in the preview; content is never dropped without a visible flag. |
 | Image localization | Imported images are stored under `data/attachments/` and references rewritten; they render offline. |
 | Preview before save | The user sees sanitized output and warnings before the import is committed. |
@@ -116,8 +129,8 @@ See [SECURITY.md](SECURITY.md) for the threat model and enforcement details.
 
 Imported content is stored as described in [DATA_MODEL.md](DATA_MODEL.md):
 
-- `pages.content` — RTWiki-extended BlockNote JSON (versioned via `content_schema_version`).
-- `pages.content_html_fallback` — nullable original rich-HTML source retained for non-lossless conversions.
+- `pages.content` — RTWiki-extended BlockNote JSON (versioned via `content_schema_version`). It is the single canonical page document.
+- `pages.content` (richHtml block) — for non-lossless conversions, the original rich-HTML source (with scoped CSS/JS source or asset id, sandbox-policy version, and validation metadata) is stored as a typed `richHtml` block inside the canonical JSON, not a separate column.
 - `attachments` — localized images under `data/attachments/`.
 
 ## 7. Localhost Import API
@@ -145,7 +158,7 @@ This endpoint is **documented now and implemented in the MVP** as a target; it i
 | Asset localization | R-047 | AC-070 |
 | Transactional / rollback | R-048, R-049 | AC-072 |
 | ZIP-bomb / path traversal | R-050 | AC-071 (implicit) |
-| Unknown-block / HTML fallback | R-057, R-058 | AC-073, AC-074 |
+| Unknown-block / non-lossless (richHtml block) | R-057, R-058 | AC-073, AC-074 |
 | Scoped CSS / JS sandbox | R-059, R-060 | AC-075–AC-078 |
 | Active-content disable | R-062 | AC-079 |
 | API schema / idempotency | R-041, R-063 | AC-080, AC-081 |
@@ -154,7 +167,7 @@ This endpoint is **documented now and implemented in the MVP** as a target; it i
 ## 9. Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — import pipeline and block registry
-- [DATA_MODEL.md](DATA_MODEL.md) — `content`, `content_schema_version`, `content_html_fallback`
+- [DATA_MODEL.md](DATA_MODEL.md) — `content`, `content_schema_version`, and the `richHtml` block (stored inside `content`)
 - [SECURITY.md](SECURITY.md) — sanitization and sandbox security
 - [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md) — requirements R-040–R-063
 - [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) — criteria AC-063–AC-086

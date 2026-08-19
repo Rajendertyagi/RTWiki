@@ -81,17 +81,20 @@ The outcome of this evaluation may result in no wrapper being adopted, a lightwe
 
 ## Phase 7: Optional AI Chat and Page Generation
 
-This phase adds an **optional, local** AI chat and page-generation assistant. It is explicitly **not** a cloud or network feature: the assistant may be driven by an external AI tool that the owner runs, or by a locally hosted model, but RTWiki itself must not require the internet to function.
+This phase adds an **optional** AI chat and page-generation assistant. RTWiki core has **no AI dependency**: all current features work offline without any AI or network. The assistant is a future, opt-in capability.
 
 - Receiving AI-generated content is already a core capability (Phases 0–1). This phase adds a conversational surface that helps the owner draft and refine pages, then imports the result through the same shared pipeline.
-- An optional local-model backend (e.g., a model the owner runs on the same PC) may be supported, but it is deferred beyond the MVP.
-- Cloud AI providers, accounts, and network-dependent chat are **out of scope**. If ever considered, they require a new ADR and an explicit owner decision.
+- A future **local-model adapter** may run entirely offline on the owner's PC (no network required).
+- A future **cloud-provider adapter** may also be supported: it requires explicit opt-in, clear disclosure of what is sent, no automatic transmission, and no committed credentials. An external provider may require its own account; RTWiki itself still has no account system.
+- Both adapters register in the composition root (see [ADR-006](adr/ADR-006-rich-content-and-import-contract.md)) and use the same rich-content contract. AI must preview changes before applying them.
+- Cloud sync remains **not planned**. No vendor is hard-coded; the AI chat is not part of the MVP.
 
 | Feature | Description |
 |---------|------------|
-| Local AI chat panel | Optional side panel that drafts or edits page content and imports it through the shared pipeline |
+| AI chat panel (optional) | Optional side panel that drafts or edits page content and imports it through the shared pipeline |
 | Page generation from prompt | Produce a structured RTWiki page (native blocks where possible) and preview before save |
 | Local-model adapter (future) | Pluggable AI-provider adapter registered in the composition root; off by default |
+| Cloud-provider adapter (future, opt-in) | Pluggable adapter for an explicitly-selected cloud provider; requires opt-in, disclosure, and no committed credentials |
 
 See [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) for the import contract and [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) for the pipeline.
 
