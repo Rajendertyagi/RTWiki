@@ -11,7 +11,7 @@
     "build:server": "bun build src/server/index.ts --compile --outfile dist/RTWiki.exe --target=bun-windows-x64",
     "start": "bun run src/server/index.ts",
     "typecheck": "tsc --noEmit",
-    "format:check": "biome format --check .",
+    "format:check": "biome check --linter-enabled=false --organize-imports-enabled=false .",
     "format:fix": "biome check --write .",
     "format:write": "biome format --write .",
     "lint": "biome lint .",
