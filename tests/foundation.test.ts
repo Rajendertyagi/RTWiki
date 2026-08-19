@@ -41,7 +41,7 @@ function freePort(): number {
   const s = Bun.serve({ port: 0, fetch: () => new Response('ok') })
   const p = s.port
   s.stop()
-  return p!
+  return p as number
 }
 
 describe('resolveRuntimePaths', () => {
