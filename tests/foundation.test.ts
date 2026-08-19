@@ -14,8 +14,7 @@ import {
   closeDatabase,
   type getDb,
   getDatabasePath,
-  checkIntegrity,
-  type getDb
+  checkIntegrity
 } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import { app } from '../src/server/app.js'
