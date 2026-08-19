@@ -27,4 +27,4 @@ Each ADR follows a consistent template:
 ## Cross-References
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — the architecture document that these ADRs inform
-- [README.md](../README.md) — project overview and documentation index
+- [README.md](../../README.md) — project overview and documentation index
