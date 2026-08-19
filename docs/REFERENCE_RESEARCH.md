@@ -8,13 +8,13 @@ This document records the comparable tools and libraries researched while shapin
 |------|------|----------------------------------|
 | Outline | Team wiki (server/cloud) | Rejected the server/account model; borrowed the clean block editing ideal. |
 | TriliumNext | Local-first nested notes | Borrowed: rich content, scripts, offline-first; rejected cloud sync. |
-| SiYuan | Local-first block workspace | Borrowed: block model + safe custom widgets; adapted the sandbox idea (ADR-007). |
+| SiYuan | Local-first block workspace | Borrowed: block model + widget extensibility; the sandbox security model was independently designed (ADR-007). |
 | AFFiNE | Local-first blocks + canvas | Borrowed: blocks as canonical unit; rejected cloud collaboration. |
 | SilverBullet | Local-first Markdown + plugs | Borrowed: plugin/registry thinking; rejected raw-Markdown-as-primary. |
 | TiddlyWiki | Single-file wiki | Borrowed: portable single-artifact philosophy; rejected tiddler JS-in-core. |
 | Wiki.js | Node wiki (server) | Rejected server model; kept the clean docs structure. |
 | BlockNote | Block editor library | Adopted as the editor (ADR-003); native custom blocks are L1. |
-| Mermaid | Diagram library | Adopted for diagrams/mind maps (ADR-003); strict security mode (SECURITY.md). |
+| Mermaid | Diagram library | Adopted for diagrams/mind maps (ADR-003); strict security mode for script prevention (SECURITY.md); network isolation provided by RTWiki's own CSP layer. |
 
 ## Tool Notes
 
@@ -28,7 +28,7 @@ A local-first, offline-capable knowledge base with deeply nested notes, rich con
 
 ### SiYuan
 Official site: [SiYuan](https://b3log.org/siyuan)
-A local-first, block-based workspace that supports custom widgets and JavaScript. Its widget model informed RTWiki's L3 sandboxed custom content (ADR-007): custom code is permitted but isolated, never in the main application context.
+A local-first, block-based workspace that supports custom widgets and JavaScript. SiYuan's widget extensibility demonstrated the value of per-block customization. RTWiki independently designed its L3 sandbox isolation (ADR-007): custom code is permitted in a per-page iframe sandbox with no same-origin access, never in the main application context.
 
 ### AFFiNE
 Official site: [AFFiNE](https://affine.pro)
@@ -52,7 +52,7 @@ The block editor RTWiki adopts (ADR-003). Its custom-block API is the foundation
 
 ### Mermaid
 Official site: [Mermaid](https://mermaid.js.org) (source: [github.com/mermaid-js/mermaid](https://github.com/mermaid-js/mermaid))
-The diagram library used for Mermaid diagrams and mind maps (ADR-003). RTWiki renders Mermaid in strict security mode with no script execution and no external resource loading (SECURITY.md).
+The diagram library used for Mermaid diagrams and mind maps (ADR-003). Mermaid's `securityLevel: "strict"` (the documented default) encodes HTML tags in diagram text and disables click functionality, preventing script injection within diagram content. External resource loading is prevented by RTWiki's own CSP and network restrictions, not by Mermaid itself. (Mermaid also documents a separate `securityLevel: "sandbox"` mode that renders in a sandboxed iframe — currently in beta — but RTWiki relies on its own CSP layer.)
 
 ## Lessons Applied
 
