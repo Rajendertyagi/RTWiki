@@ -13,11 +13,10 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
-    "baseUrl": ".",
     "paths": {
-      "@rtwiki/shared/*": ["src/shared/*"],
-      "@rtwiki/server/*": ["src/server/*"],
-      "@rtwiki/web/*": ["src/web/*"]
+      "@rtwiki/shared/*": ["./src/shared/*"],
+      "@rtwiki/server/*": ["./src/server/*"],
+      "@rtwiki/web/*": ["./src/web/*"]
     },
     "types": ["bun", "node", "vite/client"]
   },

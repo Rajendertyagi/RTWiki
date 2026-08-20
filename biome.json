@@ -8,8 +8,8 @@
   },
   "linter": {
     "enabled": true,
+    "preset": "recommended",
     "rules": {
-      "recommended": true,
       "correctness": {
         "noUnusedVariables": "error",
         "noUndeclaredDependencies": "off",
@@ -32,12 +32,9 @@
     },
     "globals": ["Bun"]
   },
-  "organizeImports": {
-    "enabled": false
-  },
   "overrides": [
     {
-      "include": ["src/server/**", "tests/**", "scripts/**"],
+      "includes": ["src/server/**", "tests/**", "scripts/**"],
       "linter": {
         "rules": {
           "correctness": {
@@ -48,16 +45,19 @@
     }
   ],
   "files": {
-    "ignore": [
-      "node_modules/",
-      "dist/",
-      "bun.lock",
-      ".workbuddy-ai/",
-      "package.json",
-      "tsconfig.json",
-      "vite.config.ts",
-      "vitest.config.ts",
-      "biome.json"
+    "ignoreUnknown": true,
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.mjs",
+      "**/*.cjs",
+      "**/*.json",
+      "**/*.jsonc",
+      "**/*.css",
+      "**/*.graphql",
+      "**/*.html"
     ]
   }
 }
