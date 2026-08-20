@@ -41,8 +41,8 @@ The following are **not** in scope for the Visual MVP:
 
 | Phase | Name | Status | Commit SHA | CI Run | Artifact |
 |-------|------|--------|------------|--------|----------|
-| 0 | Discovery and Tracker | In progress | — | — | — |
-| 1 | Page Persistence and CRUD API | Not started | — | — | — |
+| 0 | Discovery and Tracker | CI verified | 0c1010b | #71 | — |
+| 1 | Page Persistence and CRUD API | CI verified | fe8f418 | #79 | build/#79 |
 | 2 | Visual Workspace and Page Management | Not started | — | — | — |
 | 3 | Rich Note Editor and Autosave | Not started | — | — | — |
 | 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
@@ -114,19 +114,19 @@ README.md (modified — add tracker link)
 - Backend tests for CRUD, search, duplicate, soft-delete
 
 ### Acceptance Criteria
-- [ ] Migration 002 adds `page_type` column, idempotent
-- [ ] Page type enum: `rich` | `html`
-- [ ] GET /api/pages — list, search, sort by updated_at
-- [ ] POST /api/pages — create with type, title, content
-- [ ] GET /api/pages/:id — get single page
-- [ ] PATCH /api/pages/:id — update title, content, page_type
-- [ ] POST /api/pages/:id/duplicate — duplicate page
-- [ ] DELETE /api/pages/:id — soft-delete
-- [ ] All queries parameterized, no SQL in route handlers
-- [ ] API validation with Zod at boundary
-- [ ] Error responses: `{ error: string }` no paths/stacks
-- [ ] Backend tests pass
-- [ ] Existing foundation tests still pass
+- [x] Migration 002 adds `page_type` column, idempotent
+- [x] Page type enum: `rich` | `html`
+- [x] GET /api/pages — list, search, sort by updated_at
+- [x] POST /api/pages — create with type, title, content
+- [x] GET /api/pages/:id — get single page
+- [x] PATCH /api/pages/:id — update title, content, page_type
+- [x] POST /api/pages/:id/duplicate — duplicate page
+- [x] DELETE /api/pages/:id — soft-delete
+- [x] All queries parameterized, no SQL in route handlers
+- [x] API validation with Zod at boundary
+- [x] Error responses: `{ error: string }` no paths/stacks
+- [x] Backend tests pass (49/49)
+- [x] Existing foundation tests still pass (22/22)
 
 ### Planned Files
 ```
@@ -144,10 +144,16 @@ tests/pages.test.ts (new)
 
 | File | Action | Commit |
 |------|--------|--------|
-| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
-| README.md | Modified (+4 -0) | 4c80980 |
-| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
-| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
+| src/shared/contracts/pages.ts | Added | 0c1010b |
+| src/shared/contracts/errors.ts | Added | 0c1010b |
+| src/shared/schemas/pages.ts | Added | 0c1010b |
+| src/shared/constants/pages.ts | Added | 0c1010b |
+| src/server/repositories/page-repository.ts | Added | 0c1010b, fe8f418 |
+| src/server/services/page-service.ts | Added | 0c1010b |
+| src/server/routes/pages.ts | Added | 0c1010b |
+| src/server/database/migrations.ts | Modified (+21) | 0c1010b |
+| src/server/app.ts | Modified (+8) | 0c1010b |
+| tests/pages.test.ts | Added (49 tests) | 0c1010b, fe8f418 |
 
 ## Phase 2 — Visual Workspace and Page Management
 
@@ -371,8 +377,8 @@ tests/sandbox-security.test.ts (new)
 
 ## Next Phase
 
-**Phase 0 — CI verified**
+**Phase 1 — CI verified.** Awaiting owner approval to proceed to Phase 2.
 
 ## Final Verification Status
 
-Not yet started.
+Phase 0: CI verified (#71). Phase 1: CI verified (#79). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures.
