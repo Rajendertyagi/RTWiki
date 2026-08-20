@@ -1,9 +1,7 @@
 import type { getDb } from './index.js'
 import { logger } from '../logging/index.js'
 
-export async function runMigrations(
-  db: ReturnType<typeof getDb>,
-): Promise<void> {
+export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void> {
   await applyMigration(db, '001_create_pages', (db) => {
     db.run(`
       CREATE TABLE IF NOT EXISTS _migrations (
@@ -48,7 +46,7 @@ export async function runMigrations(
 async function applyMigration(
   db: ReturnType<typeof getDb>,
   name: string,
-  up: (db: ReturnType<typeof getDb>) => void,
+  up: (db: ReturnType<typeof getDb>) => void
 ): Promise<void> {
   db.run('BEGIN IMMEDIATE')
   try {
@@ -59,15 +57,13 @@ async function applyMigration(
         applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
     `)
-    const existing = db
-      .query('SELECT id FROM _migrations WHERE name = ?')
-      .get(name)
+    const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get(name)
     if (existing) {
       db.run('COMMIT')
       logger.info('Migration already applied', {
         event: 'migration',
         name,
-        skipped: true,
+        skipped: true
       })
       return
     }
@@ -77,12 +73,11 @@ async function applyMigration(
     logger.info('Migration applied', { event: 'migration', name })
   } catch (err) {
     db.run('ROLLBACK')
-    const message =
-      err instanceof Error ? err.message : String(err)
+    const message = err instanceof Error ? err.message : String(err)
     logger.error('Migration failed', {
       event: 'migration',
       name,
-      error: message,
+      error: message
     })
     throw err
   }
