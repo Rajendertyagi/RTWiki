@@ -37,7 +37,7 @@
   },
   "overrides": [
     {
-      "include": ["src/server/**", "tests/**"],
+      "include": ["src/server/**", "tests/**", "scripts/**"],
       "linter": {
         "rules": {
           "correctness": {
