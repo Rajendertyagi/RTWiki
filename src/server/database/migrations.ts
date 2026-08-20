@@ -1,16 +1,8 @@
 import type { getDb } from './index.js'
 import { logger } from '../logging/index.js'
 
-const MIGRATION_NAME = '001_create_pages'
-
-/**
- * Applies the schema in a single transaction and records the applied migration
- * in the `_migrations` table so re-running is idempotent. On any failure the
- * transaction is rolled back and the error is re-thrown.
- */
 export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void> {
-  db.run('BEGIN IMMEDIATE')
-  try {
+  await applyMigration(db, '001_create_pages', (db) => {
     db.run(`
       CREATE TABLE IF NOT EXISTS _migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +10,6 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
         applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
     `)
-
     db.run(`
       CREATE TABLE IF NOT EXISTS pages (
         id TEXT PRIMARY KEY,
@@ -30,7 +21,6 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
         version INTEGER NOT NULL DEFAULT 0
       )
     `)
-
     db.run(`
       CREATE TABLE IF NOT EXISTS search_index (
         page_id TEXT PRIMARY KEY,
@@ -39,7 +29,6 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
         FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE
       )
     `)
-
     db.run(`
       CREATE VIRTUAL TABLE IF NOT EXISTS search_index_fts USING fts5(
         title, content,
@@ -47,24 +36,41 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
         content_rowid='page_id'
       )
     `)
+  })
 
-    const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get(MIGRATION_NAME)
-    if (!existing) {
-      db.run('INSERT INTO _migrations (name) VALUES (?)', [MIGRATION_NAME])
-      logger.info('Migration applied', { event: 'migration', name: MIGRATION_NAME })
-    } else {
-      logger.info('Migration already applied', {
-        event: 'migration',
-        name: MIGRATION_NAME,
-        skipped: true
-      })
+  await applyMigration(db, '002_add_page_type', (db) => {
+    db.run("ALTER TABLE pages ADD COLUMN page_type TEXT NOT NULL DEFAULT 'rich'")
+  })
+}
+
+async function applyMigration(
+  db: ReturnType<typeof getDb>,
+  name: string,
+  up: (db: ReturnType<typeof getDb>) => void
+): Promise<void> {
+  db.run('BEGIN IMMEDIATE')
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `)
+    const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get(name)
+    if (existing) {
+      db.run('COMMIT')
+      logger.info('Migration already applied', { event: 'migration', name, skipped: true })
+      return
     }
-
+    up(db)
+    db.run('INSERT INTO _migrations (name) VALUES (?)', [name])
     db.run('COMMIT')
+    logger.info('Migration applied', { event: 'migration', name })
   } catch (err) {
     db.run('ROLLBACK')
     const message = err instanceof Error ? err.message : String(err)
-    logger.error('Migration failed', { event: 'migration', error: message })
+    logger.error('Migration failed', { event: 'migration', name, error: message })
     throw err
   }
 }

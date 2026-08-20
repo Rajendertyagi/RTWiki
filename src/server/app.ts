@@ -4,10 +4,8 @@ import { getDb, checkIntegrity } from './database/index.js'
 import { logger } from './logging/index.js'
 import { resolveRuntimePaths } from './config/index.js'
 import { serveStatic } from './static.js'
+import { createPageRoutes } from './routes/pages.js'
 
-// Strict, self-only policy. The SPA is bundled and served from the same origin,
-// so no external scripts/styles/images/CDNs are permitted. Mantine injects inline
-// styles at runtime, hence 'unsafe-inline' is limited to style-src.
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
@@ -21,7 +19,6 @@ const CONTENT_SECURITY_POLICY = [
 
 export const app = new Hono<{ Variables: { db: ReturnType<typeof getDb> } }>()
 
-// Security headers applied to every response (including static assets).
 app.use('*', async (c, next) => {
   await next()
   c.res.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY)
@@ -31,8 +28,6 @@ app.use('*', async (c, next) => {
   c.res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
 })
 
-// Health endpoint. Only reports healthy once the database is initialized,
-// migrations have run, and the integrity check passes.
 app.get(HEALTH_PATH, (c) => {
   const timestamp = new Date().toISOString()
   try {
@@ -59,8 +54,8 @@ app.get(HEALTH_PATH, (c) => {
   }
 })
 
-// Serve the built frontend. Registered after API routes so /api/* and /health
-// are never treated as files. Same-origin; no CORS needed.
+app.route('/api/pages', createPageRoutes(getDb))
+
 app.use('/*', serveStatic({ root: resolveRuntimePaths().frontendDistDir }))
 
 app.onError((err, c) => {
