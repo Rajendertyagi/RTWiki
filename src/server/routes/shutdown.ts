@@ -32,8 +32,13 @@ function isSameOrigin(req: Request): boolean {
     return false
   }
 
-  // Some same-origin GET requests omit both headers; accept only for GET.
-  return req.method === 'GET'
+  // No Origin or Referer header: accept. Non-browser clients (PowerShell,
+  // curl, test frameworks) do not send these headers. Since the server binds
+  // exclusively to 127.0.0.1, any request that reaches it is inherently local.
+  // The custom X-RTWiki-Shutdown-Token header requirement provides CSRF
+  // protection: browsers always send Origin for cross-origin requests with
+  // custom headers, and we reject non-localhost origins.
+  return true
 }
 
 // Module-level mutable state. Each bootstrap() call updates the token and
