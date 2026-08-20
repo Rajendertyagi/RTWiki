@@ -76,7 +76,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and the ADRs for details.
 
 RTWiki runs an automatic documentation check on every pull request and on every push to `main`.
 
-- **No local installation is required** — GitHub Actions runs the check for you.
+- **No local installation is required** - GitHub Actions runs the check for you.
 - Developers who have **Bun 1.3.14** installed may optionally run the same check locally:
 
   ```bash
