@@ -1,4 +1,4 @@
-import type { Database } from 'bun:sqlite'
+import type { Database, SQLQueryBindings } from 'bun:sqlite'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 
 export function createPage(
@@ -48,7 +48,7 @@ export function updatePage(
   if (!existing) return null
 
   const sets: string[] = []
-  const values: unknown[] = []
+  const values: SQLQueryBindings[] = []
 
   if (fields.title !== undefined) {
     sets.push('title = ?')
