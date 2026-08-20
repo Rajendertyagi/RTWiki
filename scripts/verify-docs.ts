@@ -52,7 +52,7 @@ const IGNORED_DIRS: ReadonlySet<string> = new Set([
   '.cache',
   'tmp',
   'temp',
-  '.tmp',
+  '.tmp'
 ])
 
 /** Temporary-file suffixes skipped during Markdown discovery. */
@@ -80,7 +80,7 @@ const REQUIRED_FILES: ReadonlyArray<string> = [
   'docs/adr/ADR-002-bun-hono-sqlite.md',
   'docs/adr/ADR-003-react-blocknote-mantine.md',
   'docs/adr/ADR-004-canonical-block-json-format.md',
-  'docs/adr/ADR-005-portable-data-layout.md',
+  'docs/adr/ADR-005-portable-data-layout.md'
 ]
 
 /** ADR metadata — single source of truth for names, paths and expected status. */
@@ -90,11 +90,23 @@ interface AdrMeta {
   readonly expectedStatus: 'Accepted'
 }
 const ADRS: ReadonlyArray<AdrMeta> = [
-  { id: 'ADR-001', path: 'docs/adr/ADR-001-browser-first-local-application.md', expectedStatus: 'Accepted' },
+  {
+    id: 'ADR-001',
+    path: 'docs/adr/ADR-001-browser-first-local-application.md',
+    expectedStatus: 'Accepted'
+  },
   { id: 'ADR-002', path: 'docs/adr/ADR-002-bun-hono-sqlite.md', expectedStatus: 'Accepted' },
-  { id: 'ADR-003', path: 'docs/adr/ADR-003-react-blocknote-mantine.md', expectedStatus: 'Accepted' },
-  { id: 'ADR-004', path: 'docs/adr/ADR-004-canonical-block-json-format.md', expectedStatus: 'Accepted' },
-  { id: 'ADR-005', path: 'docs/adr/ADR-005-portable-data-layout.md', expectedStatus: 'Accepted' },
+  {
+    id: 'ADR-003',
+    path: 'docs/adr/ADR-003-react-blocknote-mantine.md',
+    expectedStatus: 'Accepted'
+  },
+  {
+    id: 'ADR-004',
+    path: 'docs/adr/ADR-004-canonical-block-json-format.md',
+    expectedStatus: 'Accepted'
+  },
+  { id: 'ADR-005', path: 'docs/adr/ADR-005-portable-data-layout.md', expectedStatus: 'Accepted' }
 ]
 
 /** Portable-layout tokens that must be documented. */
@@ -105,7 +117,7 @@ const PORTABLE_TOKENS: ReadonlyArray<string> = [
   'attachments/',
   'backups/',
   'logs/',
-  'rtwiki.log',
+  'rtwiki.log'
 ]
 
 /** Prohibited portable-layout behaviours (documented as forbidden). */
@@ -116,7 +128,10 @@ interface PortableProhibition {
 const PORTABLE_PROHIBITIONS: ReadonlyArray<PortableProhibition> = [
   { label: 'current-working-directory path derivation', pattern: /current working directory/i },
   { label: 'silent storage fallback', pattern: /silent(?:ly)?\s+fall\s*back/i },
-  { label: 'environment-variable data-directory override', pattern: /environment[- ]variable.{0,40}data.{0,30}(?:override|directory)|RTWIKI_DATA_DIR/i },
+  {
+    label: 'environment-variable data-directory override',
+    pattern: /environment[- ]variable.{0,40}data.{0,30}(?:override|directory)|RTWIKI_DATA_DIR/i
+  }
 ]
 
 /** Exact project-status line required in the root README. */
@@ -127,7 +142,7 @@ const FORBIDDEN_STATUS_PHRASES: ReadonlyArray<string> = [
   'Planning phase complete — ready for implementation',
   'React 18',
   'RTWIKI_DATA_DIR',
-  'rtwiki.db',
+  'rtwiki.db'
 ]
 
 /** Requirement-ID patterns. */
@@ -176,7 +191,7 @@ function findRepoRoot(): string {
     dir = parent
   }
   throw new Error(
-    'Could not locate the repository root (.git not found). Run this script from inside the RTWiki repository.',
+    'Could not locate the repository root (.git not found). Run this script from inside the RTWiki repository.'
   )
 }
 
@@ -303,7 +318,7 @@ function maskInlineCode(line: string): string {
   let i = 0
   while (i < n) {
     if (line[i] === '\\' && i + 1 < n && line[i + 1] === '`') {
-      i += 2; // escaped backtick -> literal, not a delimiter
+      i += 2 // escaped backtick -> literal, not a delimiter
       continue
     }
     if (line[i] === '`') {
@@ -314,14 +329,26 @@ function maskInlineCode(line: string): string {
       let k = j
       let closeStart = -1
       while (k < n) {
-        if (line[k] === '\\') { k += 2; continue; }
-        if (line[k] !== '`') { k += 1; continue; }
+        if (line[k] === '\\') {
+          k += 2
+          continue
+        }
+        if (line[k] !== '`') {
+          k += 1
+          continue
+        }
         let r = k
         while (r < n && line[r] === '`') r++
-        if (r - k >= openLen) { closeStart = k; break; }
+        if (r - k >= openLen) {
+          closeStart = k
+          break
+        }
         k = r
       }
-      if (closeStart === -1) { i = j; continue; } // unmatched: leave as-is
+      if (closeStart === -1) {
+        i = j
+        continue
+      } // unmatched: leave as-is
       let r = closeStart
       while (r < n && line[r] === '`') r++
       for (let p = i; p < r; p++) chars[p] = ' '
@@ -379,22 +406,34 @@ function analyzeFences(lines: ReadonlyArray<string>): { inside: boolean[]; block
       if (m) {
         const fence = m[1]
         cur = { char: fence[0] as '`' | '~', openLen: fence.length, openLine: i, hasContent: false }
-        inside[i] = true; // opening delimiter line is skipped
+        inside[i] = true // opening delimiter line is skipped
       }
       continue
     }
     const close = line.match(FENCE_CLOSE_RE)
     if (close && close[1][0] === cur.char && close[1].length >= cur.openLen) {
-      inside[i] = true; // closing delimiter line is skipped
-      blocks.push({ char: cur.char, openLen: cur.openLen, openLine: cur.openLine, closeLine: i, hasContent: cur.hasContent })
+      inside[i] = true // closing delimiter line is skipped
+      blocks.push({
+        char: cur.char,
+        openLen: cur.openLen,
+        openLine: cur.openLine,
+        closeLine: i,
+        hasContent: cur.hasContent
+      })
       cur = null
       continue
     }
-    inside[i] = true; // content line
+    inside[i] = true // content line
     if (line.trim().length > 0) cur.hasContent = true
   }
   if (cur) {
-    blocks.push({ char: cur.char, openLen: cur.openLen, openLine: cur.openLine, closeLine: -1, hasContent: cur.hasContent })
+    blocks.push({
+      char: cur.char,
+      openLen: cur.openLen,
+      openLine: cur.openLine,
+      closeLine: -1,
+      hasContent: cur.hasContent
+    })
   }
   return { inside, blocks }
 }
@@ -430,7 +469,7 @@ function analyzeFile(abs: string, rel: string, text: string): MdFile {
     lines,
     insideFence: fenceRes.inside,
     fenceBlocks: fenceRes.blocks,
-    headingSlugs: buildHeadingSlugSet(headingTexts),
+    headingSlugs: buildHeadingSlugSet(headingTexts)
   }
 }
 
@@ -453,9 +492,19 @@ function checkFile(file: MdFile, root: string, byRel: ReadonlyMap<string, MdFile
   // --- fence structure: unclosed or empty fenced code blocks ---
   for (const b of file.fenceBlocks) {
     if (b.closeLine === -1) {
-      fail(file.rel, b.openLine + 1, 'fence-unclosed', `fenced code block opened at line ${b.openLine + 1} is not closed before end of file`)
+      fail(
+        file.rel,
+        b.openLine + 1,
+        'fence-unclosed',
+        `fenced code block opened at line ${b.openLine + 1} is not closed before end of file`
+      )
     } else if (!b.hasContent) {
-      fail(file.rel, b.openLine + 1, 'fence-empty', `fenced code block opened at line ${b.openLine + 1} contains no non-whitespace content`)
+      fail(
+        file.rel,
+        b.openLine + 1,
+        'fence-empty',
+        `fenced code block opened at line ${b.openLine + 1} contains no non-whitespace content`
+      )
     }
   }
 
@@ -466,7 +515,12 @@ function checkFile(file: MdFile, root: string, byRel: ReadonlyMap<string, MdFile
     if (m) {
       const label = m[2].toLowerCase()
       if (refDefs.has(label)) {
-        fail(file.rel, i + 1, 'duplicate-reference-def', `reference definition '[${m[2]}]' defined more than once`)
+        fail(
+          file.rel,
+          i + 1,
+          'duplicate-reference-def',
+          `reference definition '[${m[2]}]' defined more than once`
+        )
       } else {
         refDefs.set(label, { target: m[3], line: i + 1 })
       }
@@ -486,7 +540,12 @@ function checkFile(file: MdFile, root: string, byRel: ReadonlyMap<string, MdFile
       const refLabel = m[2].length === 0 ? text : m[2]
       const def = refDefs.get(refLabel.toLowerCase())
       if (!def) {
-        fail(file.rel, i + 1, 'undefined-reference', `link '[${text}][${refLabel}]' references an undefined definition`)
+        fail(
+          file.rel,
+          i + 1,
+          'undefined-reference',
+          `link '[${text}][${refLabel}]' references an undefined definition`
+        )
         continue
       }
       processTarget(file, root, byRel, def.target, i + 1)
@@ -499,10 +558,10 @@ function processTarget(
   root: string,
   byRel: ReadonlyMap<string, MdFile>,
   raw: string,
-  line: number,
+  line: number
 ): void {
   const lower = raw.trim().toLowerCase()
-  if (EXTERNAL_SCHEMES.some((s) => lower.startsWith(s))) return; // external: no filesystem check
+  if (EXTERNAL_SCHEMES.some((s) => lower.startsWith(s))) return // external: no filesystem check
 
   const { path, fragment } = splitTarget(raw)
   localLinksChecked++
@@ -525,14 +584,25 @@ function processTarget(
   const targetRel = relative(root, resolvedAbs).split(sep).join('/')
   const kind = pathKind(resolvedAbs)
   if (kind === 'missing') {
-    fail(file.rel, line, 'link-target-missing', `relative link '${raw}' does not resolve to a file or directory (resolved: ${targetRel || '.'})`)
+    fail(
+      file.rel,
+      line,
+      'link-target-missing',
+      `relative link '${raw}' does not resolve to a file or directory (resolved: ${targetRel || '.'})`
+    )
     return
   }
 
   if (fragment.length > 0) {
     const tgt = byRel.get(targetRel)
     if (tgt) checkAnchor(file.rel, tgt, fragment, line, raw)
-    else warn(file.rel, line, 'anchor-unresolved', `cannot read target '${targetRel}' to verify anchor '${fragment}'`)
+    else
+      warn(
+        file.rel,
+        line,
+        'anchor-unresolved',
+        `cannot read target '${targetRel}' to verify anchor '${fragment}'`
+      )
   }
 }
 
@@ -551,10 +621,15 @@ function checkAnchor(
   target: MdFile,
   fragment: string,
   line: number,
-  raw: string,
+  raw: string
 ): void {
   if (!target.headingSlugs.has(fragment)) {
-    fail(sourceRel, line, 'anchor-missing', `fragment '#${fragment}' not found in ${target.rel} (link: ${raw})`)
+    fail(
+      sourceRel,
+      line,
+      'anchor-missing',
+      `fragment '#${fragment}' not found in ${target.rel} (link: ${raw})`
+    )
   }
 }
 
@@ -573,30 +648,61 @@ function checkAgentsSpecial(agents: MdFile): void {
     if (m) seen.add(Number.parseInt(m[1], 10))
   }
   for (let n = 1; n <= 14; n++) {
-    if (!seen.has(n)) fail(agents.rel, 0, 'agents-heading-missing', `required protocol heading '## ${n}.' is missing`)
+    if (!seen.has(n))
+      fail(
+        agents.rel,
+        0,
+        'agents-heading-missing',
+        `required protocol heading '## ${n}.' is missing`
+      )
   }
 
   // no more than 300 lines
-  if (lines.length > 300) fail(agents.rel, 0, 'agents-too-long', `AGENTS.md is ${lines.length} lines (limit 300)`)
+  if (lines.length > 300)
+    fail(agents.rel, 0, 'agents-too-long', `AGENTS.md is ${lines.length} lines (limit 300)`)
 
   // no malformed ordered markers '1)'
   for (let i = 0; i < lines.length; i++) {
-    if (/^\s*\d+\)\s/.test(lines[i])) fail(agents.rel, i + 1, 'malformed-ordered', `ordered list uses '1)' style marker: ${lines[i].trim()}`)
+    if (/^\s*\d+\)\s/.test(lines[i]))
+      fail(
+        agents.rel,
+        i + 1,
+        'malformed-ordered',
+        `ordered list uses '1)' style marker: ${lines[i].trim()}`
+      )
   }
 
   // no unordered list beginning with '* '
   for (let i = 0; i < lines.length; i++) {
-    if (/^\s*\*\s+\S/.test(lines[i])) fail(agents.rel, i + 1, 'star-bullet', `unordered list uses '* ' instead of '-': ${lines[i].trim()}`)
+    if (/^\s*\*\s+\S/.test(lines[i]))
+      fail(
+        agents.rel,
+        i + 1,
+        'star-bullet',
+        `unordered list uses '* ' instead of '-': ${lines[i].trim()}`
+      )
   }
 
   // portable filesystem tree tokens present
   for (const tok of PORTABLE_TOKENS) {
-    if (!text.includes(tok)) fail(agents.rel, 0, 'portable-token-missing', `portable-layout token '${tok}' not found in AGENTS.md`)
+    if (!text.includes(tok))
+      fail(
+        agents.rel,
+        0,
+        'portable-token-missing',
+        `portable-layout token '${tok}' not found in AGENTS.md`
+      )
   }
 
   // no invalid shorthand 'docs/ADR-001'
   for (let i = 0; i < lines.length; i++) {
-    if (/docs\/ADR-\d/.test(lines[i])) fail(agents.rel, i + 1, 'shorthand-adr', `invalid shorthand ADR reference 'docs/ADR-...': ${lines[i].trim()}`)
+    if (/docs\/ADR-\d/.test(lines[i]))
+      fail(
+        agents.rel,
+        i + 1,
+        'shorthand-adr',
+        `invalid shorthand ADR reference 'docs/ADR-...': ${lines[i].trim()}`
+      )
   }
 }
 
@@ -606,7 +712,8 @@ function checkAgentsSpecial(agents: MdFile): void {
 
 function checkRequiredFiles(root: string): void {
   for (const f of REQUIRED_FILES) {
-    if (!existsSync(join(root, f))) fail('<repo>', 0, 'required-file-missing', `required tracked file not found: ${f}`)
+    if (!existsSync(join(root, f)))
+      fail('<repo>', 0, 'required-file-missing', `required tracked file not found: ${f}`)
   }
 }
 
@@ -651,7 +758,13 @@ function checkAdrConsistency(byRel: ReadonlyMap<string, MdFile>): void {
     }
     const status = adrStatus(file.text)
     if (status === null) fail(adr.path, 0, 'adr-status-missing', `no Status / status found`)
-    else if (status !== adr.expectedStatus) fail(adr.path, 0, 'adr-status-wrong', `expected status '${adr.expectedStatus}', found '${status}'`)
+    else if (status !== adr.expectedStatus)
+      fail(
+        adr.path,
+        0,
+        'adr-status-wrong',
+        `expected status '${adr.expectedStatus}', found '${status}'`
+      )
 
     // ADR index and README reference ADRs by basename (index) or full path (README).
     const base = basename(adr.path)
@@ -659,7 +772,12 @@ function checkAdrConsistency(byRel: ReadonlyMap<string, MdFile>): void {
     const index = byRel.get('docs/adr/README.md')
     if (index) {
       if (!index.text.includes(base) || !mentionsAcceptedNear(index.text, base))
-        fail('docs/adr/README.md', 0, 'adr-index-entry', `ADR index does not list '${adr.id}' as Accepted`)
+        fail(
+          'docs/adr/README.md',
+          0,
+          'adr-index-entry',
+          `ADR index does not list '${adr.id}' as Accepted`
+        )
     }
     const readme = byRel.get('README.md')
     if (readme) {
@@ -688,10 +806,20 @@ function mentionsAcceptedNear(text: string, pathFragment: string): boolean {
 function checkProjectStatus(readme: MdFile | undefined): void {
   if (!readme) return
   if (!readme.text.includes(REQUIRED_README_STATUS))
-    fail('README.md', 0, 'status-line-missing', `root README must contain exactly: '${REQUIRED_README_STATUS}'`)
+    fail(
+      'README.md',
+      0,
+      'status-line-missing',
+      `root README must contain exactly: '${REQUIRED_README_STATUS}'`
+    )
   for (const phrase of FORBIDDEN_STATUS_PHRASES) {
     if (readme.text.includes(phrase))
-      fail('README.md', 0, 'status-stale-phrase', `forbidden stale phrase found in README: '${phrase}'`)
+      fail(
+        'README.md',
+        0,
+        'status-stale-phrase',
+        `forbidden stale phrase found in README: '${phrase}'`
+      )
   }
 }
 
@@ -706,11 +834,21 @@ function checkPortableLayout(byRel: ReadonlyMap<string, MdFile>): void {
 
   for (const tok of PORTABLE_TOKENS) {
     if (!sources.some((s) => s.text.includes(tok)))
-      fail('<repo>', 0, 'portable-token-missing', `portable-layout token '${tok}' not documented in AGENTS.md or ADR-005`)
+      fail(
+        '<repo>',
+        0,
+        'portable-token-missing',
+        `portable-layout token '${tok}' not documented in AGENTS.md or ADR-005`
+      )
   }
   for (const p of PORTABLE_PROHIBITIONS) {
     if (!sources.some((s) => p.pattern.test(s.text)))
-      fail('<repo>', 0, 'portable-prohibition-missing', `portable-layout prohibition not documented: ${p.label}`)
+      fail(
+        '<repo>',
+        0,
+        'portable-prohibition-missing',
+        `portable-layout prohibition not documented: ${p.label}`
+      )
   }
 }
 
@@ -735,13 +873,25 @@ function checkIdDoc(file: MdFile | undefined, re: RegExp, prefix: string): void 
   for (const id of ids) {
     const n = (seen.get(id) ?? 0) + 1
     seen.set(id, n)
-    if (n > 1) fail(file.rel, 0, 'id-duplicate', `requirement ID '${id}' appears ${n} times (must be unique)`)
+    if (n > 1)
+      fail(
+        file.rel,
+        0,
+        'id-duplicate',
+        `requirement ID '${id}' appears ${n} times (must be unique)`
+      )
   }
   // numbering gaps -> warning (not failure)
   const numbers = ids.map((x) => Number.parseInt(x.slice(prefix.length), 10)).sort((a, b) => a - b)
   const max = numbers.length ? numbers[numbers.length - 1] : 0
   for (let n = 1; n < max; n++) {
-    if (!numbers.includes(n)) warn(file.rel, 0, 'id-gap', `no ${prefix}${String(n).padStart(3, '0')} in sequence (gap, not a failure)`)
+    if (!numbers.includes(n))
+      warn(
+        file.rel,
+        0,
+        'id-gap',
+        `no ${prefix}${String(n).padStart(3, '0')} in sequence (gap, not a failure)`
+      )
   }
 }
 
@@ -753,7 +903,7 @@ async function main(): Promise<void> {
   if (!bunVersionSatisfies(Bun.version, REQUIRED_BUN)) {
     console.error(
       `This script requires Bun >= ${REQUIRED_BUN}. Detected Bun ${Bun.version}.\n` +
-        `Install Bun ${REQUIRED_BUN} or later, then run: bun scripts/verify-docs.ts`,
+        `Install Bun ${REQUIRED_BUN} or later, then run: bun scripts/verify-docs.ts`
     )
     exit(1)
   }
@@ -787,7 +937,7 @@ async function main(): Promise<void> {
 
   // ---- reporting ----
   const filesScanned = byRel.size
-  const structuralCategories = 5; // required-files, ADR consistency, project status, portable layout, requirement-ids (per-file structure counted via filesScanned)
+  const structuralCategories = 5 // required-files, ADR consistency, project status, portable layout, requirement-ids (per-file structure counted via filesScanned)
   const structuralChecks = filesScanned + structuralCategories
 
   if (failures.length > 0) {
