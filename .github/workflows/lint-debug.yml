@@ -4,10 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [feature/dependency-compat]
-    paths:
-      - "biome.json"
-      - "**/*.ts"
-      - "**/*.tsx"
 
 permissions:
   contents: read
@@ -25,16 +21,25 @@ jobs:
           bun-version: "1.3.14"
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Run biome lint with full output
-        run: |
-          set +e
-          bunx biome lint . 2>&1 | tee /tmp/lint-verbose.txt
-          echo "EXIT=$?" >> $GITHUB_ENV
       - name: Check biome version
         run: bunx biome --version
+      - name: Check biome config
+        run: cat biome.json
+      - name: Run biome lint verbose
+        run: |
+          set +e
+          echo "=== Running biome lint ==="
+          bunx biome lint . --verbose 2>&1 || true
+          echo ""
+          echo "=== Running biome lint with --diagnostic-level ==="
+          bunx biome lint . --diagnostic-level=error 2>&1 || true
+          echo ""
+          echo "=== Checking biome.json validity ==="
+          bunx biome check biome.json 2>&1 || true
       - name: Upload lint log
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lint-debug-log
           path: /tmp/lint-verbose.txt
           retention-days: 1
+          if-no-files-found: warn
