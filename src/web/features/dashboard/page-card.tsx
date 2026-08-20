@@ -1,4 +1,4 @@
-import { Card, Group, Text, Title, Menu, ActionIcon } from '@mantine/core'
+import { Card, Group, Text, Title, Menu, ActionIcon, UnstyledButton } from '@mantine/core'
 import { IconDots, IconCopy, IconTrash } from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { UI_TEXT } from '../../config/index.js'
@@ -24,19 +24,15 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
   return (
     <Card withBorder padding="md" radius="md" className={classes.card}>
       <Group justify="space-between" gap="xs" wrap="nowrap">
-        <Title
-          order={4}
-          lineClamp={2}
+        <UnstyledButton
           onClick={() => onOpen(page.id)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') onOpen(page.id)
-          }}
           aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
+          className={classes.titleButton}
         >
-          {page.title || UI_TEXT.untitledPage}
-        </Title>
+          <Title order={4} lineClamp={2}>
+            {page.title || UI_TEXT.untitledPage}
+          </Title>
+        </UnstyledButton>
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
             <ActionIcon

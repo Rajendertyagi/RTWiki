@@ -34,3 +34,8 @@
   padding-top: var(--mantine-spacing-sm);
   border-top: 1px solid var(--mantine-color-default-border);
 }
+
+.titleButton {
+  flex: 1;
+  text-align: left;
+}
