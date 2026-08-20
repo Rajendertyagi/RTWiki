@@ -25,10 +25,7 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       const body = await c.req.json()
       const parsed = CreatePageSchema.safeParse(body)
       if (!parsed.success) {
-        return c.json(
-          { error: parsed.error.issues[0]?.message ?? 'Invalid input' },
-          400
-        )
+        return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
       }
       const db = getDbFn()
       const page = service.createPage(db, parsed.data)
@@ -59,10 +56,7 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       const body = await c.req.json()
       const parsed = UpdatePageSchema.safeParse(body)
       if (!parsed.success) {
-        return c.json(
-          { error: parsed.error.issues[0]?.message ?? 'Invalid input' },
-          400
-        )
+        return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
       }
       const db = getDbFn()
       const id = c.req.param('id')

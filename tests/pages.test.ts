@@ -7,7 +7,10 @@ import { runMigrations } from '../src/server/database/migrations.js'
 import * as service from '../src/server/services/page-service.js'
 
 function makeTempDir(): string {
-  const dir = join(tmpdir(), `rtwiki-page-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const dir = join(
+    tmpdir(),
+    `rtwiki-page-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  )
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -45,7 +48,11 @@ describe('page CRUD', () => {
   })
 
   it('creates a page with type html', () => {
-    const page = service.createPage(db, { title: 'HTML Page', pageType: 'html', content: '<div>hi</div>' })
+    const page = service.createPage(db, {
+      title: 'HTML Page',
+      pageType: 'html',
+      content: '<div>hi</div>'
+    })
     expect(page.pageType).toBe('html')
     expect(page.content).toBe('<div>hi</div>')
   })
@@ -110,13 +117,21 @@ describe('page CRUD', () => {
   })
 
   it('searches pages by content', () => {
-    service.createPage(db, { title: 'Notes', pageType: 'rich', content: 'The mitochondria is the powerhouse' })
+    service.createPage(db, {
+      title: 'Notes',
+      pageType: 'rich',
+      content: 'The mitochondria is the powerhouse'
+    })
     const result = service.listPages(db, { search: 'mitochondria' })
     expect(result.pages.some((p) => p.title === 'Notes')).toBe(true)
   })
 
   it('duplicates a page with new id and copy suffix', () => {
-    const original = service.createPage(db, { title: 'Original Page', pageType: 'rich', content: 'content here' })
+    const original = service.createPage(db, {
+      title: 'Original Page',
+      pageType: 'rich',
+      content: 'content here'
+    })
     const copy = service.duplicatePage(db, original.id)
     expect(copy).not.toBeNull()
     expect(copy!.id).not.toBe(original.id)
@@ -181,7 +196,11 @@ describe('rich-content JSON round trip', () => {
         }
       ]
     })
-    const page = service.createPage(db, { title: 'JSON Test', pageType: 'rich', content: blockNoteJson })
+    const page = service.createPage(db, {
+      title: 'JSON Test',
+      pageType: 'rich',
+      content: blockNoteJson
+    })
     const fetched = service.getPage(db, page.id)
     expect(fetched!.content).toBe(blockNoteJson)
     const parsed = JSON.parse(fetched!.content)
@@ -194,7 +213,11 @@ describe('rich-content JSON round trip', () => {
       type: 'blockContainer',
       children: [{ type: 'paragraph', content: [{ type: 'text', text: 'v1', styles: {} }] }]
     })
-    const page = service.createPage(db, { title: 'Update Test', pageType: 'rich', content: original })
+    const page = service.createPage(db, {
+      title: 'Update Test',
+      pageType: 'rich',
+      content: original
+    })
     const updatedContent = JSON.stringify({
       type: 'blockContainer',
       children: [{ type: 'paragraph', content: [{ type: 'text', text: 'v2', styles: {} }] }]
@@ -229,7 +252,11 @@ describe('HTML content round trip', () => {
       schemaVersion: 1,
       sandboxPolicyVersion: 1
     })
-    const page = service.createPage(db, { title: 'HTML Test', pageType: 'html', content: htmlContent })
+    const page = service.createPage(db, {
+      title: 'HTML Test',
+      pageType: 'html',
+      content: htmlContent
+    })
     const fetched = service.getPage(db, page.id)
     expect(fetched!.pageType).toBe('html')
     const parsed = JSON.parse(fetched!.content)

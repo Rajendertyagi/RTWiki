@@ -13,7 +13,11 @@ export function createPage(
     'INSERT INTO pages (id, title, content, page_type, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, 1)',
     [id, title, content, pageType, now, now]
   )
-  db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [id, title, content])
+  db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [
+    id,
+    title,
+    content
+  ])
   return getPageOrThrow(db, id)
 }
 
