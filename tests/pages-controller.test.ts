@@ -2,11 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Hono } from 'hono'
 import { app } from '../src/server/app.js'
 import {
   closeDatabase,
-  getDatabasePath,
   type getDb,
   initDatabase
 } from '../src/server/database/index.js'

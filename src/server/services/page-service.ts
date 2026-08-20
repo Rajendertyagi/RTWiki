@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite'
-import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
+import type { Page } from '@rtwiki/shared/contracts/pages'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
 import * as repo from '../repositories/page-repository.js'
 

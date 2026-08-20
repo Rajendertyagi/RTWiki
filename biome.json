@@ -34,7 +34,7 @@
   },
   "overrides": [
     {
-      "includes": ["src/server/**", "tests/**", "scripts/**"],
+      "includes": ["src/server/**", "tests/**", "scripts/**", "vite.config.ts"],
       "linter": {
         "rules": {
           "correctness": {

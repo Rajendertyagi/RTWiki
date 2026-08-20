@@ -18,14 +18,12 @@ interface LogLine {
  * small structured `context` (an `event` name plus non-sensitive fields).
  */
 export class Logger {
-  private readonly logPath: string
   private readonly stream: ReturnType<typeof Bun.file>
   private buffer: string[] = []
   private readonly bufferSize = 100
   private closed = false
 
   constructor(logPath: string) {
-    this.logPath = logPath
     this.stream = Bun.file(logPath)
   }
 
