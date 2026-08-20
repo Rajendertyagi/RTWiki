@@ -25,21 +25,17 @@ jobs:
         run: bunx biome --version
       - name: Check biome config
         run: cat biome.json
-      - name: Run biome lint verbose
+      - name: Run biome lint and capture output
         run: |
-          set +e
-          echo "=== Running biome lint ==="
-          bunx biome lint . --verbose 2>&1 || true
-          echo ""
-          echo "=== Running biome lint with --diagnostic-level ==="
-          bunx biome lint . --diagnostic-level=error 2>&1 || true
-          echo ""
-          echo "=== Checking biome.json validity ==="
-          bunx biome check biome.json 2>&1 || true
+          echo "=== biome lint output ===" > /tmp/lint-output.txt
+          bunx biome lint . >> /tmp/lint-output.txt 2>&1 || echo "EXIT_CODE=$?" >> /tmp/lint-output.txt
+          echo "" >> /tmp/lint-output.txt
+          echo "=== biome check output ===" >> /tmp/lint-output.txt
+          bunx biome check --linter-enabled=true . >> /tmp/lint-output.txt 2>&1 || echo "EXIT_CODE=$?" >> /tmp/lint-output.txt
+          cat /tmp/lint-output.txt
       - name: Upload lint log
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lint-debug-log
-          path: /tmp/lint-verbose.txt
+          path: /tmp/lint-output.txt
           retention-days: 1
-          if-no-files-found: warn
