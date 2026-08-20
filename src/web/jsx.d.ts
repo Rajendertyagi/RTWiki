@@ -2,16 +2,13 @@
 
 // React 19 + TypeScript 7 compatibility layer.
 // React 19 moved JSX types out of the global namespace.
-// This module Augments the global JSX namespace using React 19's exported types.
-import type * as React from 'react'
+import type { JSX as _JSX } from 'react'
 
-// Create a local alias to avoid redeclaration issues
-type _ReactJSX = typeof React extends { default: { JSX: infer T } } ? T : never
-
-// Declare the global JSX namespace
 declare global {
-  // eslint-disable-next-line no-var
-  var _jsxNamespace: _ReactJSX
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace JSX {
+    type Element = _JSX.Element
+    type ElementClass = _JSX.ElementClass
+    interface IntrinsicElements extends _JSX.IntrinsicElements {}
+  }
 }
-
-export {}
