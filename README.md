@@ -71,3 +71,16 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and the ADRs for details.
 - [ADR-003: React, BlockNote, and Mantine](docs/adr/ADR-003-react-blocknote-mantine.md) — **Accepted**
 - [ADR-004: Canonical BlockNote JSON Format](docs/adr/ADR-004-canonical-block-json-format.md) — **Accepted**
 - [ADR-005: Portable Data Layout Beside the Executable](docs/adr/ADR-005-portable-data-layout.md) — **Accepted**
+
+## Documentation Verification
+
+RTWiki runs an automatic documentation check on every pull request and on every push to `main`.
+
+- **No local installation is required** - GitHub Actions runs the check for you.
+- Developers who have **Bun 1.3.14** installed may optionally run the same check locally:
+
+  ```bash
+  bun scripts/verify-docs.ts
+  ```
+
+The verifier checks Markdown links, document structure, required files, ADR status, project status, portable-layout rules, and requirement-ID integrity. See [CI / CD](docs/CI_CD.md) for the workflow and [scripts/verify-docs.ts](scripts/verify-docs.ts) for the implementation.

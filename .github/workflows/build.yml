@@ -4,7 +4,7 @@ on:
   push:
     branches: [feature/mvp-foundation]
   pull_request:
-    branches: [feature/mvp-foundation]
+    branches: [main]
 
 # Least-privilege: this workflow only reads the repo and downloads an artifact.
 # It never pushes, never modifies itself, and never uses continue-on-error or `|| true`
