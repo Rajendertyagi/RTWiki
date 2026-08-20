@@ -1,6 +1,6 @@
 export type PageType = 'rich' | 'html'
 
-export type Page = {
+export interface Page {
   id: string
   title: string
   content: string
@@ -11,27 +11,19 @@ export type Page = {
   version: number
 }
 
-export type CreatePageRequest = {
+export interface CreatePageRequest {
   title: string
   pageType?: PageType
   content?: string
 }
 
-export type UpdatePageRequest = {
+export interface UpdatePageRequest {
   title?: string
   content?: string
   pageType?: PageType
 }
 
-export type PageListResponse = {
+export interface PageListResponse {
   pages: Page[]
   total: number
-}
-
-export type PageResponse = {
-  page: Page
-}
-
-export type DuplicatePageResponse = {
-  page: Page
 }

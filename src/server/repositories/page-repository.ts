@@ -6,20 +6,25 @@ export function createPage(
   id: string,
   title: string,
   pageType: PageType,
-  content: string
+  content: string,
 ): Page {
   const now = new Date().toISOString()
   db.run(
     'INSERT INTO pages (id, title, content, page_type, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, 1)',
-    [id, title, content, pageType, now, now]
+    [id, title, content, pageType, now, now],
   )
-  db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [id, title, content])
+  db.run(
+    'INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)',
+    [id, title, content],
+  )
   return getPageOrThrow(db, id)
 }
 
 export function getPage(db: Database, id: string): Page | null {
   const row = db
-    .query('SELECT id, title, content, page_type, created_at, updated_at, deleted_at, version FROM pages WHERE id = ? AND deleted_at IS NULL')
+    .query(
+      'SELECT id, title, content, page_type, created_at, updated_at, deleted_at, version FROM pages WHERE id = ? AND deleted_at IS NULL',
+    )
     .get(id) as Record<string, unknown> | undefined
   if (!row) return null
   return rowToPage(row)
@@ -27,14 +32,20 @@ export function getPage(db: Database, id: string): Page | null {
 
 export function getPageOrThrow(db: Database, id: string): Page {
   const page = getPage(db, id)
-  if (!page) throw new Error(`Page not found: ${id}`)
+  if (!page) {
+    throw new Error(`Page not found: ${id}`)
+  }
   return page
 }
 
 export function updatePage(
   db: Database,
   id: string,
-  fields: { title?: string; content?: string; pageType?: PageType }
+  fields: {
+    title?: string
+    content?: string
+    pageType?: PageType
+  },
 ): Page | null {
   const existing = getPage(db, id)
   if (!existing) return null
@@ -67,7 +78,7 @@ export function updatePage(
   const updated = getPageOrThrow(db, id)
   db.run(
     'INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?) ON CONFLICT(page_id) DO UPDATE SET title = ?, content = ?',
-    [id, updated.title, updated.content, updated.title, updated.content]
+    [id, updated.title, updated.content, updated.title, updated.content],
   )
 
   return updated
@@ -82,13 +93,20 @@ export function duplicatePage(db: Database, id: string): Page | null {
 
   db.run(
     'INSERT INTO pages (id, title, content, page_type, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [newId, `${source.title} - Copy`, source.content, source.pageType, now, now, source.version]
+    [
+      newId,
+      `${source.title} - Copy`,
+      source.content,
+      source.pageType,
+      now,
+      now,
+      source.version,
+    ],
   )
-  db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [
-    newId,
-    `${source.title} - Copy`,
-    source.content
-  ])
+  db.run(
+    'INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)',
+    [newId, `${source.title} - Copy`, source.content],
+  )
 
   return getPageOrThrow(db, newId)
 }
@@ -105,7 +123,7 @@ export function softDeletePage(db: Database, id: string): boolean {
 
 export function listPages(
   db: Database,
-  options: { search?: string; limit?: number; offset?: number } = {}
+  options: { search?: string; limit?: number; offset?: number } = {},
 ): { pages: Page[]; total: number } {
   const { search, limit = 50, offset = 0 } = options
 
@@ -116,7 +134,7 @@ export function listPages(
         `SELECT p.id, p.title, p.content, p.page_type, p.created_at, p.updated_at, p.deleted_at, p.version
          FROM pages p INNER JOIN search_index si ON si.page_id = p.id
          WHERE p.deleted_at IS NULL AND (si.title LIKE ? OR si.content LIKE ?)
-         ORDER BY p.updated_at DESC LIMIT ? OFFSET ?`
+         ORDER BY p.updated_at DESC LIMIT ? OFFSET ?`,
       )
       .all(`%${term}%`, `%${term}%`, limit, offset)
       .map((r) => rowToPage(r as Record<string, unknown>))
@@ -124,7 +142,7 @@ export function listPages(
     const countRow = db
       .query(
         `SELECT COUNT(*) as count FROM pages p INNER JOIN search_index si ON si.page_id = p.id
-         WHERE p.deleted_at IS NULL AND (si.title LIKE ? OR si.content LIKE ?)`
+         WHERE p.deleted_at IS NULL AND (si.title LIKE ? OR si.content LIKE ?)`,
       )
       .get(`%${term}%`, `%${term}%`) as { count: number }
 
@@ -133,14 +151,14 @@ export function listPages(
 
   const pages = db
     .query(
-      'SELECT id, title, content, page_type, created_at, updated_at, deleted_at, version FROM pages WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?'
+      'SELECT id, title, content, page_type, created_at, updated_at, deleted_at, version FROM pages WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?',
     )
     .all(limit, offset)
     .map((r) => rowToPage(r as Record<string, unknown>))
 
-  const countRow = db.query('SELECT COUNT(*) as count FROM pages WHERE deleted_at IS NULL').get() as {
-    count: number
-  }
+  const countRow = db
+    .query('SELECT COUNT(*) as count FROM pages WHERE deleted_at IS NULL')
+    .get() as { count: number }
 
   return { pages, total: countRow.count }
 }
@@ -150,10 +168,10 @@ function rowToPage(row: Record<string, unknown>): Page {
     id: row.id as string,
     title: row.title as string,
     content: row.content as string,
-    pageType: (row.page_type as string) as PageType,
+    pageType: row.page_type as string as PageType,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     deletedAt: (row.deleted_at as string) || null,
-    version: row.version as number
+    version: row.version as number,
   }
 }
