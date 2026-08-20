@@ -124,7 +124,7 @@ export function listPages(
         `SELECT p.id, p.title, p.content, p.page_type, p.created_at, p.updated_at, p.deleted_at, p.version
          FROM pages p INNER JOIN search_index si ON si.page_id = p.id
          WHERE p.deleted_at IS NULL AND (si.title LIKE ? OR si.content LIKE ?)
-         ORDER BY p.updated_at DESC LIMIT ? OFFSET ?`
+         ORDER BY p.updated_at DESC, p.rowid DESC LIMIT ? OFFSET ?`
       )
       .all(`%${term}%`, `%${term}%`, limit, offset)
       .map((r) => rowToPage(r as Record<string, unknown>))
@@ -141,7 +141,7 @@ export function listPages(
 
   const pages = db
     .query(
-      'SELECT id, title, content, page_type, created_at, updated_at, deleted_at, version FROM pages WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?'
+      'SELECT id, title, content, page_type, created_at, updated_at, deleted_at, version FROM pages WHERE deleted_at IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ? OFFSET ?'
     )
     .all(limit, offset)
     .map((r) => rowToPage(r as Record<string, unknown>))
