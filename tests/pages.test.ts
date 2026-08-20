@@ -296,4 +296,3 @@ describe('API validation', () => {
     expect(result.success).toBe(false)
   })
 })
-
