@@ -2,7 +2,6 @@ name: Format verify-docs.ts
 on:
   push:
     branches: [feature/mvp-foundation]
-    paths: [scripts/verify-docs.ts]
 
 permissions:
   contents: write
