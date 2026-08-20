@@ -1,6 +1,12 @@
 name: Generate Lockfile
 
 on:
+  push:
+    branches: [feature/dependency-compat]
+    paths:
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/generate-lockfile.yml"
   workflow_dispatch:
 
 permissions:
@@ -10,6 +16,8 @@ jobs:
   generate-lockfile:
     name: Generate bun.lock from updated package.json
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,13 +63,18 @@ jobs:
         run: |
           echo "node_modules exists: $(test -d node_modules && echo YES || echo NO)"
           echo "Bun cache exists: $(test -d .bun && echo YES || echo NO)"
-      - name: Commit and push lockfile
+      - name: Commit and push lockfile if needed
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "RTWiki"
+          git config user.email "rtwiki@rtwiki.local"
+          # Only commit if bun.lock was actually added/changed
           git add bun.lock
-          git commit -m "chore: regenerate bun.lock for BlockNote 0.54.0 + Mantine 8.3.18" || echo "No changes to commit"
-          git push
+          if git diff --cached --quiet; then
+            echo "bun.lock is already up to date, nothing to commit"
+          else
+            git commit -m "chore: regenerate bun.lock for BlockNote 0.54.0 + Mantine 8.3.18"
+            git push
+          fi
       - name: Upload install log
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
