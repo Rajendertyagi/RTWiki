@@ -1,0 +1,342 @@
+# Visual MVP Tracker
+
+This document tracks the phased implementation of RTWiki's first usable visual interface. It is the permanent source of truth for Visual MVP progress.
+
+## Purpose
+
+The Visual MVP delivers a focused vertical slice: a Windows-buildable application where the owner can open the app, create pages personally, and judge the UI. This is not the full rich-content roadmap — it is the minimum needed for visual evaluation.
+
+## Owner Decisions
+
+| Decision | Value | Date |
+|----------|-------|------|
+| Workspace starts empty | Yes — no sample Physics page, tutorial, demo note, or seeded content | 2026-08-20 |
+| Owner creates first page | Yes — owner judges the UI personally | 2026-08-20 |
+| Page types | Rich Note + Custom HTML Page | 2026-08-20 |
+| HTML editor tabs | Separate HTML, CSS, JavaScript editors | 2026-08-20 |
+| JavaScript default | Disabled by default per page | 2026-08-20 |
+| JavaScript isolation | Runs only inside isolated iframe sandbox | 2026-08-20 |
+| No custom code in main context | Custom CSS/JS never executes in RTWiki's main application context | 2026-08-20 |
+| No local Bun/Node execution | All builds and tests run on GitHub-hosted runners only | 2026-08-20 |
+| Portable artifact per phase | Every usable phase produces a portable Windows artifact where practical | 2026-08-20 |
+| UI feedback before advanced features | Owner reviews each artifact before advancing | 2026-08-20 |
+
+## Explicit Exclusions
+
+The following are **not** in scope for the Visual MVP:
+
+- AI chat / external AI provider integration
+- Cloud sync / accounts / authentication
+- Audio / video support
+- Real-time collaboration
+- LAN access
+- Export formats (PDF, DOCX, ODT)
+- Plugin marketplace
+- Native cards/tabs/formula/Mermaid custom blocks beyond BlockNote defaults
+- Global custom CSS/JS
+- Attachments beyond existing safe support
+- Recycle bin UI (soft-delete is implemented; restore UI deferred)
+
+## Phase Table
+
+| Phase | Name | Status | Commit SHA | CI Run | Artifact |
+|-------|------|--------|------------|--------|----------|
+| 0 | Discovery and Tracker | In progress | — | — | — |
+| 1 | Page Persistence and CRUD API | Not started | — | — | — |
+| 2 | Visual Workspace and Page Management | Not started | — | — | — |
+| 3 | Rich Note Editor and Autosave | Not started | — | — | — |
+| 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
+| 5 | Polish and Release Candidate | Not started | — | — | — |
+
+### Status Definitions
+
+| Status | Meaning |
+|--------|---------|
+| Not started | Phase not yet begun |
+| In progress | Actively working on this phase |
+| Implemented | Code written, committed, awaiting CI |
+| CI verified | All CI gates passed |
+| Owner approved | Owner has reviewed artifact and approved advancement |
+| Blocked | Cannot proceed; see Blockers section |
+
+## Phase 0 — Discovery and Tracker
+
+### Scope
+- Verify main SHA
+- Create feature branch
+- Read all source, docs, ADRs, package files
+- Consult official documentation for BlockNote, Mantine, DOMPurify, iframe sandbox, CSP
+- Determine current capabilities and gaps
+- Create this tracker
+- Add tracker link to README
+- Record proposed module map for Phases 1–5
+- Do **not** change application code
+
+### Acceptance Criteria
+- [ ] Main SHA verified: `06763e471fa1895064aadd61ac577b6e3c27b8b0`
+- [ ] Branch `feature/visual-mvp` created from remote main
+- [ ] All 18 source files read and understood
+- [ ] All architecture/security/data-model docs read
+- [ ] Official docs consulted for BlockNote, Mantine, DOMPurify, iframe sandbox, CSP
+- [ ] Missing dependencies identified and recorded
+- [ ] This tracker created
+- [ ] README updated with tracker link
+- [ ] Documentation Quality CI passes
+
+### Planned Files
+```
+docs/VISUAL_MVP_TRACKER.md (new)
+README.md (modified — add tracker link)
+```
+
+### Actual Files Changed
+( filled after implementation )
+
+### Known Limitations
+- BlockNote, DOMPurify, @mantine/hooks are not yet installed — added in Phase 1/3
+- Existing CI targets `feature/mvp-foundation` — trigger update deferred to Phase 1
+- `format-fix.yml` is temporary and should be cleaned up
+
+## Phase 1 — Page Persistence and CRUD API
+
+### Scope
+- Versioned migration: add `page_type TEXT NOT NULL DEFAULT 'rich'` to `pages`
+- Shared page contracts and Zod validation schemas
+- Page repository (database access module)
+- Page service (business logic)
+- Page API routes (Hono)
+- Backend tests for CRUD, search, duplicate, soft-delete
+
+### Acceptance Criteria
+- [ ] Migration 002 adds `page_type` column, idempotent
+- [ ] Page type enum: `rich` | `html`
+- [ ] GET /api/pages — list, search, sort by updated_at
+- [ ] POST /api/pages — create with type, title, content
+- [ ] GET /api/pages/:id — get single page
+- [ ] PATCH /api/pages/:id — update title, content, page_type
+- [ ] POST /api/pages/:id/duplicate — duplicate page
+- [ ] DELETE /api/pages/:id — soft-delete
+- [ ] All queries parameterized, no SQL in route handlers
+- [ ] API validation with Zod at boundary
+- [ ] Error responses: `{ error: string }` no paths/stacks
+- [ ] Backend tests pass
+- [ ] Existing foundation tests still pass
+
+### Planned Files
+```
+src/shared/contracts/pages.ts (new)
+src/shared/schemas/pages.ts (new)
+src/server/database/migrations.ts (modified — add migration 002)
+src/server/repositories/page-repository.ts (new)
+src/server/services/page-service.ts (new)
+src/server/routes/pages.ts (new)
+src/server/app.ts (modified — mount page routes)
+tests/pages.test.ts (new)
+```
+
+### Actual Files Changed
+( filled after implementation )
+
+## Phase 2 — Visual Workspace and Page Management
+
+### Scope
+- Mantine AppShell layout
+- Responsive sidebar with search, page list, new-page button, theme toggle
+- Dashboard with empty state, create buttons, page cards
+- Page-type selection dialog
+- Editor header with title, type badge, save status, rename, duplicate, delete
+- Delete confirmation modal
+- Loading/error/empty states
+- Centralized UI text dictionary and theme tokens
+- Reusable components
+- No rich editor yet, no HTML editor yet
+
+### Acceptance Criteria
+- [ ] AppShell with sidebar and main content area
+- [ ] Sidebar: logo, search, page list with type indicators, new-page button, theme toggle
+- [ ] Dashboard: empty state with "Create Rich Note" and "Create HTML Page" buttons
+- [ ] Page cards/list ordered by most recently updated
+- [ ] Search filters pages by title
+- [ ] New-page dialog with title input and type selection
+- [ ] Editor header: editable title, type badge, save status (Saving…/Saved/Error)
+- [ ] Rename, duplicate, delete actions in editor header
+- [ ] Delete confirmation modal
+- [ ] Loading and error states for all async operations
+- [ ] All strings in centralized UI text dictionary
+- [ ] All styles use Mantine theme tokens (no inline style)
+- [ ] Portable Windows artifact produced
+
+### Planned Files
+```
+src/web/App.tsx (modified — replace health dashboard with workspace)
+src/web/config/index.ts (modified — expanded UI text dictionary)
+src/web/theme/index.ts (modified — extended theme if needed)
+src/web/services/api.ts (modified — page API client)
+src/web/features/dashboard/dashboard.tsx (new)
+src/web/features/dashboard/empty-state.tsx (new)
+src/web/features/dashboard/page-card.tsx (new)
+src/web/features/pages/editor-header.tsx (new)
+src/web/features/pages/new-page-dialog.tsx (new)
+src/web/features/pages/delete-confirm-modal.tsx (new)
+src/web/components/app-shell.tsx (new)
+src/web/components/sidebar.tsx (new)
+src/web/components/save-status.tsx (new)
+src/web/components/theme-toggle.tsx (new)
+src/web/components/search-input.tsx (new)
+```
+
+### Actual Files Changed
+( filled after implementation )
+
+## Phase 3 — Rich Note Editor and Autosave
+
+### Scope
+- BlockNote-based rich editor (one instance per active page)
+- Load/store canonical BlockNote JSON
+- Editable page title
+- Autosave with centralized 2000 ms debounce
+- Saving/Saved/Error visible states
+- Safe page switching (flush/cancel pending saves)
+- Rich JSON round-trip tests
+- No sample content, no advanced custom blocks
+
+### Acceptance Criteria
+- [ ] BlockNote editor renders for rich pages
+- [ ] Headings, paragraphs, lists, code blocks, tables, blockquotes editable
+- [ ] Content stored as canonical BlockNote JSON
+- [ ] One editor instance per active page, disposed on unmount/switch
+- [ ] Title editable inline
+- [ ] Autosave debounced at 2000 ms
+- [ ] Save status: Saving… → Saved, or Error on failure
+- [ ] Switching pages flushes pending save
+- [ ] Rapid navigation does not overwrite newer content
+- [ ] Portable Windows artifact produced
+
+### Planned Files
+```
+src/web/features/rich-editor/rich-editor.tsx (new)
+src/web/features/rich-editor/use-autosave.ts (new)
+tests/rich-editor-roundtrip.test.ts (new)
+```
+
+### Actual Files Changed
+( filled after implementation )
+
+## Phase 4 — Sandboxed HTML/CSS/JavaScript Pages
+
+### Scope
+- HTML/CSS/JavaScript editor tabs
+- JavaScript disabled by default, per-page toggle
+- Live preview in sandboxed iframe
+- Full-page preview mode
+- Direct paste and .html file import
+- Shared import adapter (extract body, inline style/script, reject externals)
+- DOMPurify sanitization
+- Isolated iframe: sandbox="allow-scripts" only when JS enabled, never allow-same-origin
+- Restrictive iframe CSP: default-src 'none'
+- Escape srcdoc and script-closing sequences
+- Visible "Sandboxed preview" indicator and JS-enabled warning
+- Sandbox security tests
+
+### Acceptance Criteria
+- [ ] HTML/CSS/JS editor tabs for html-type pages
+- [ ] JavaScript disabled by default, toggle per page
+- [ ] Live preview renders in sandboxed iframe
+- [ ] Full-page preview mode available
+- [ ] Paste and .html file import work
+- [ ] Import extracts body/style/script into appropriate editors
+- [ ] External scripts/resources rejected with warning
+- [ ] DOMPurify sanitizes imported HTML
+- [ ] iframe sandbox: allow-scripts only when JS enabled
+- [ ] iframe never has allow-same-origin
+- [ ] iframe CSP: default-src 'none'
+- [ ] srcdoc escaping handles script-closing sequences
+- [ ] "Sandboxed preview" indicator visible
+- [ ] JS-enabled warning visible
+- [ ] No custom CSS/JS leaks into main RTWiki context
+- [ ] Portable Windows artifact produced
+
+### Planned Files
+```
+src/web/features/html-editor/html-editor.tsx (new)
+src/web/features/html-editor/code-editor-tab.tsx (new)
+src/web/features/html-editor/sandboxed-preview.tsx (new)
+src/web/features/html-editor/html-import.ts (new)
+src/web/features/html-editor/sandbox-document.ts (new)
+src/shared/contracts/html-content.ts (new)
+src/shared/schemas/html-content.ts (new)
+tests/html-editor.test.ts (new)
+tests/sandbox-security.test.ts (new)
+```
+
+### Actual Files Changed
+( filled after implementation )
+
+## Phase 5 — Polish and Release Candidate
+
+### Scope
+- Apply owner feedback from earlier artifacts
+- Spacing, navigation, responsive improvements
+- Accessibility: keyboard nav, focus states, labels, contrast
+- Error recovery and unsaved-changes feedback
+- Loading states refinement
+- Final modularity review
+- Dead code and placeholder removal
+- Confirm empty first-run, no sample pages, no code escapes iframe
+- Complete test/build/package/smoke pipeline
+- Final artifact
+
+### Acceptance Criteria
+- [ ] Owner feedback incorporated
+- [ ] Keyboard navigation works for all primary workflows
+- [ ] Visible focus states on all interactive elements
+- [ ] ARIA labels on icon-only buttons
+- [ ] WCAG AA contrast
+- [ ] Unsaved changes warning on page switch
+- [ ] No dead code or placeholders remain
+- [ ] Empty first-run confirmed
+- [ ] No custom code escapes iframe
+- [ ] Full CI pipeline green
+- [ ] Final artifact produced
+
+### Planned Files
+( filled during implementation )
+
+### Actual Files Changed
+( filled after implementation )
+
+## Risks and Blockers
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| BlockNote version incompatibility with Mantine 7.15 | High — editor may not render | Check peer deps before install; pin compatible version |
+| DOMPurify browser-only (needs window) | Medium — cannot sanitize server-side | Sanitize on client before save; server trusts client input |
+| Vite build output path mismatch | Medium — smoke test may fail | Align vite.config.ts outDir with CI packaging step |
+| format-fix.yml still targets old branch | Low — cosmetic | Delete or update in Phase 1 |
+| Local tree divergent (uncommitted changes) | Low — must use GitHub API exclusively | Enforced by protocol |
+
+## Known Limitations
+
+- Drizzle ORM is listed in ARCHITECTURE.md but not yet installed — raw SQL with parameterized queries used instead (consistent with existing migrations)
+- No recycle bin restore UI — soft-delete implemented, restore deferred
+- No page version history UI — version counter implemented, UI deferred
+- No attachment upload UI — infrastructure deferred
+- No backup/restore UI — infrastructure deferred
+- No full-text search UI — FTS5 infrastructure exists, search integration deferred
+- BlockNote math-block and diagram-block not yet installed — available from BlockNote defaults only
+
+## Owner Feedback
+
+( Record owner feedback after each artifact review )
+
+## Decisions Changed During Testing
+
+( Record any decisions that change based on testing results )
+
+## Next Phase
+
+**Phase 0 — In progress**
+
+## Final Verification Status
+
+Not yet started.

@@ -66,6 +66,10 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and the ADRs for details.
 - [Development Standards](docs/DEVELOPMENT_STANDARDS.md) — enforceable coding rules and conventions
 - [CI / CD](docs/CI_CD.md) — GitHub Actions workflow plan
 
+### Visual MVP
+
+- [Visual MVP Tracker](docs/VISUAL_MVP_TRACKER.md) - phased implementation progress
+
 ### Architecture Decision Records
 
 - [ADR Index](docs/adr/README.md)
