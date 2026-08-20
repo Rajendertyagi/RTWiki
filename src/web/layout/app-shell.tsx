@@ -14,8 +14,8 @@ export function AppShellLayout({ navbar, children }: AppShellLayoutProps): JSX.E
 
   return (
     <AppShell
-      header={{ height: 56 }}
-      navbar={{ width: 300, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      header={{ height: 44 }}
+      navbar={{ width: 280, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
     >
       <AppShell.Header>
@@ -27,7 +27,7 @@ export function AppShellLayout({ navbar, children }: AppShellLayoutProps): JSX.E
               hiddenFrom="sm"
               size="sm"
             />
-            <Title order={3} className={classes.headerTitle}>
+            <Title order={4} className={classes.headerTitle}>
               {UI_TEXT.appName}
             </Title>
           </Group>

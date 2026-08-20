@@ -106,12 +106,6 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
         const contentType = CONTENT_TYPES[ext] ?? file.type ?? 'application/octet-stream'
         const cacheControl = ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable'
 
-        logger?.info('Serving static asset', {
-          event: 'static_asset',
-          pathname,
-          contentType
-        })
-
         return new Response(file, {
           headers: { 'content-type': contentType, 'cache-control': cacheControl }
         })

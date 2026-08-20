@@ -24,6 +24,28 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  cursor: pointer;
+  transition: border-color var(--mantine-transition-fast);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.card:hover {
+  border-color: var(--mantine-color-blue-filled);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-filled);
+  outline-offset: 2px;
+}
+
+.cardTitle {
+  flex: 1;
+  text-align: left;
+  pointer-events: none;
 }
 
 .cardFooter {
@@ -33,9 +55,4 @@
   margin-top: var(--mantine-spacing-sm);
   padding-top: var(--mantine-spacing-sm);
   border-top: 1px solid var(--mantine-color-default-border);
-}
-
-.titleButton {
-  flex: 1;
-  text-align: left;
 }

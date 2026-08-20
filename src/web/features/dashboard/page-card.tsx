@@ -1,4 +1,4 @@
-import { Card, Group, Text, Title, Menu, ActionIcon, UnstyledButton } from '@mantine/core'
+import { Card, Group, Text, Title, Menu, ActionIcon } from '@mantine/core'
 import { IconDots, IconCopy, IconTrash } from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { UI_TEXT } from '../../config/index.js'
@@ -20,41 +20,73 @@ function formatDate(value: string): string {
   }
 }
 
+/**
+ * Page card with explicit click/keyboard handling and isolated menu.
+ *
+ * The entire card is the primary interactive element for opening the page.
+ * The menu (three-dot) is wrapped in a click-stopper so menu actions
+ * (duplicate, delete) do not accidentally trigger the card's open action.
+ */
 export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps): JSX.Element {
+  const handleCardClick = (): void => {
+    onOpen(page.id)
+  }
+
+  const handleCardKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onOpen(page.id)
+    }
+  }
+
+  const handleMenuClick = (event: React.MouseEvent): void => {
+    event.stopPropagation()
+  }
+
+  const handleMenuKeyDown = (event: React.KeyboardEvent): void => {
+    event.stopPropagation()
+  }
+
   return (
-    <Card withBorder padding="md" radius="md" className={classes.card}>
+    <Card
+      component="button"
+      type="button"
+      withBorder
+      padding="md"
+      radius="md"
+      className={classes.card}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
+    >
       <Group justify="space-between" gap="xs" wrap="nowrap">
-        <UnstyledButton
-          onClick={() => onOpen(page.id)}
-          aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
-          className={classes.titleButton}
-        >
-          <Title order={4} lineClamp={2}>
-            {page.title || UI_TEXT.untitledPage}
-          </Title>
-        </UnstyledButton>
-        <Menu position="bottom-end" withinPortal>
-          <Menu.Target>
-            <ActionIcon
-              variant="subtle"
-              aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
-            >
-              <IconDots size={16} />
-            </ActionIcon>
-          </Menu.Target>
-          <Menu.Dropdown>
-            <Menu.Item leftSection={<IconCopy size={14} />} onClick={() => onDuplicate(page.id)}>
-              {UI_TEXT.duplicateAction}
-            </Menu.Item>
-            <Menu.Item
-              leftSection={<IconTrash size={14} />}
-              color="red"
-              onClick={() => onDelete(page.id)}
-            >
-              {UI_TEXT.deleteAction}
-            </Menu.Item>
-          </Menu.Dropdown>
-        </Menu>
+        <Title order={4} lineClamp={2} className={classes.cardTitle}>
+          {page.title || UI_TEXT.untitledPage}
+        </Title>
+        <div onClick={handleMenuClick} onKeyDown={handleMenuKeyDown}>
+          <Menu position="bottom-end" withinPortal>
+            <Menu.Target>
+              <ActionIcon
+                variant="subtle"
+                aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
+              >
+                <IconDots size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<IconCopy size={14} />} onClick={() => onDuplicate(page.id)}>
+                {UI_TEXT.duplicateAction}
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconTrash size={14} />}
+                color="red"
+                onClick={() => onDelete(page.id)}
+              >
+                {UI_TEXT.deleteAction}
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </div>
       </Group>
 
       <Text size="sm" c="dimmed" lineClamp={3} mt="xs">

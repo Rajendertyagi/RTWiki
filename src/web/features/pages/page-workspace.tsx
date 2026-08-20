@@ -1,4 +1,4 @@
-import { Stack, Text, Title, Paper } from '@mantine/core'
+import { Stack, Text, Paper } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import type { MutationStatus } from '../../hooks/use-pages-controller.js'
 import { UI_TEXT } from '../../config/index.js'
@@ -23,7 +23,7 @@ export function PageWorkspace({
   onDelete
 }: PageWorkspaceProps): JSX.Element {
   return (
-    <Stack gap={0} className={classes.workspace}>
+    <div className={classes.workspace}>
       <EditorHeader
         page={page}
         mutationStatus={mutationStatus}
@@ -34,27 +34,20 @@ export function PageWorkspace({
       />
 
       <div className={classes.content}>
-        <Paper withBorder p="md" radius="md" className={classes.preview}>
+        <Paper p="md" radius="md" className={classes.preview}>
           <Stack gap="sm">
-            <Title order={4}>{page.title || UI_TEXT.untitledPage}</Title>
-            <Text size="sm" c="dimmed">
-              {UI_TEXT.editorPlaceholderContent}
-            </Text>
             {page.content ? (
               <Text size="sm" className={classes.contentText}>
                 {page.content}
               </Text>
             ) : (
               <Text size="sm" c="dimmed" fs="italic">
-                No content yet.
+                {UI_TEXT.editorPlaceholderContent}
               </Text>
             )}
-            <Text size="xs" c="dimmed">
-              ID: {page.id} · Updated: {new Date(page.updatedAt).toLocaleString()}
-            </Text>
           </Stack>
         </Paper>
       </div>
-    </Stack>
+    </div>
   )
 }

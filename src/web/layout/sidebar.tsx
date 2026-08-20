@@ -1,5 +1,5 @@
 import { Button, NavLink, Stack, Text, Loader, Alert, ScrollArea } from '@mantine/core'
-import { IconPlus, IconAlertCircle, IconFileText } from '@tabler/icons-react'
+import { IconPlus, IconAlertCircle, IconFileText, IconHome } from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { UI_TEXT } from '../config/index.js'
 import { SearchInput } from '../components/search-input.js'
@@ -33,7 +33,7 @@ export function Sidebar({
         <SearchInput value={searchQuery} onChange={onSearchChange} />
       </div>
 
-      <div className={classes.newPageSection}>
+      <div className={classes.actionsSection}>
         <Button
           leftSection={<IconPlus size={16} />}
           onClick={onNewPage}
@@ -56,34 +56,36 @@ export function Sidebar({
           <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
             {error}
           </Alert>
-        ) : pages.length === 0 ? (
-          <Text size="sm" c="dimmed" ta="center" className={classes.listEmpty}>
-            {searchQuery.trim() ? UI_TEXT.noResults : UI_TEXT.emptyDescription}
-          </Text>
         ) : (
-          <Stack gap={4}>
-            <Button
-              variant={selectedId === null ? 'light' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconFileText size={16} />}
+          <Stack gap={2}>
+            {/* Home / Dashboard entry — always visible */}
+            <NavLink
+              label={UI_TEXT.dashboardTitle}
+              leftSection={<IconHome size={16} />}
+              active={selectedId === null}
               onClick={() => onSelect(null)}
               className={classes.navItem}
-              fullWidth
-            >
-              {UI_TEXT.dashboardTitle}
-            </Button>
-            {pages.map((page) => (
-              <NavLink
-                key={page.id}
-                label={page.title || UI_TEXT.untitledPage}
-                leftSection={<IconFileText size={16} />}
-                rightSection={<PageTypeBadge pageType={page.pageType} />}
-                active={selectedId === page.id}
-                onClick={() => onSelect(page.id)}
-                className={classes.navItem}
-                aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
-              />
-            ))}
+              aria-label={UI_TEXT.dashboardTitle}
+            />
+
+            {pages.length === 0 && !loading ? (
+              <Text size="sm" c="dimmed" ta="center" className={classes.listEmpty}>
+                {searchQuery.trim() ? UI_TEXT.noResults : UI_TEXT.emptyDescription}
+              </Text>
+            ) : (
+              pages.map((page) => (
+                <NavLink
+                  key={page.id}
+                  label={page.title || UI_TEXT.untitledPage}
+                  leftSection={<IconFileText size={16} />}
+                  rightSection={<PageTypeBadge pageType={page.pageType} />}
+                  active={selectedId === page.id}
+                  onClick={() => onSelect(page.id)}
+                  className={classes.navItem}
+                  aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
+                />
+              ))
+            )}
           </Stack>
         )}
       </ScrollArea>
