@@ -145,6 +145,7 @@ export function usePagesController(): PagesController {
       setMutationError(null)
       try {
         const page = await api.createPage({ title, pageType })
+        setSelectedPage(page)
         setMutationStatus('saved')
         scheduleReset()
         refreshPages()
@@ -185,6 +186,7 @@ export function usePagesController(): PagesController {
       setMutationError(null)
       try {
         const page = await api.duplicatePage(id)
+        setSelectedPage(page)
         setMutationStatus('saved')
         scheduleReset()
         refreshPages()

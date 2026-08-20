@@ -1,0 +1,19 @@
+.workspace {
+  height: 100%;
+  min-height: calc(100vh - 56px - var(--mantine-spacing-md) * 2);
+}
+
+.content {
+  flex: 1;
+  padding: var(--mantine-spacing-md);
+}
+
+.preview {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.contentText {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

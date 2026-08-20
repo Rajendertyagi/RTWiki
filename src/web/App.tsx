@@ -1,133 +1,134 @@
-import { useState, useEffect, useRef } from 'react'
-import {
-  Container,
-  Title,
-  Text,
-  Card,
-  Badge,
-  Button,
-  Stack,
-  Center,
-  Loader,
-  Alert,
-  Group
-} from '@mantine/core'
-import { IconCheck, IconAlertCircle, IconRefresh } from '@tabler/icons-react'
-import { checkHealth, type HealthStatus } from './services/api.js'
-import { STATUS_TEXT } from './config/index.js'
-
-interface HealthState {
-  status: HealthStatus | null
-  error: string | null
-}
+import { useState } from 'react'
+import { Alert, Stack } from '@mantine/core'
+import { IconAlertCircle } from '@tabler/icons-react'
+import { usePagesController } from './hooks/use-pages-controller.js'
+import { AppShellLayout } from './layout/app-shell.js'
+import { Sidebar } from './layout/sidebar.js'
+import { Dashboard } from './features/dashboard/dashboard.js'
+import { PageWorkspace } from './features/pages/page-workspace.js'
+import { NewPageDialog } from './features/pages/new-page-dialog.js'
+import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
+import type { PageType } from '@rtwiki/shared/contracts/pages'
+import { UI_TEXT } from './config/index.js'
 
 export function App(): JSX.Element {
-  const [state, setState] = useState<HealthState>({
-    status: null,
-    error: null
-  })
-  const abortRef = useRef<AbortController | null>(null)
+  const controller = usePagesController()
+  const [newDialogOpen, setNewDialogOpen] = useState(false)
+  const [newDialogType, setNewDialogType] = useState<PageType>('rich')
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
 
-  useEffect(() => {
-    abortRef.current = new AbortController()
-    const controller = abortRef.current
+  const handleCreateRich = (): void => {
+    setNewDialogType('rich')
+    setNewDialogOpen(true)
+  }
 
-    checkHealth(controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) {
-          setState({ status: result.status, error: null })
-        }
-      })
-      .catch((err: Error) => {
-        if (!controller.signal.aborted && err.name !== 'AbortError') {
-          setState({ status: 'error', error: err.message })
-        }
-      })
+  const handleCreateHtml = (): void => {
+    setNewDialogType('html')
+    setNewDialogOpen(true)
+  }
 
-    return () => {
-      controller.abort()
+  const handleNewPage = (): void => {
+    setNewDialogType('rich')
+    setNewDialogOpen(true)
+  }
+
+  const handleCreatePage = async (title: string, pageType: PageType): Promise<void> => {
+    await controller.createPage(title, pageType)
+  }
+
+  const handleDeleteRequest = (id: string): void => {
+    const page = controller.pages.find((p) => p.id === id)
+    if (page) {
+      setDeleteTarget({ id: page.id, title: page.title })
     }
-  }, [])
+  }
 
-  const handleRetry = (): void => {
-    setState({ status: null, error: null })
-    const controller = new AbortController()
-    abortRef.current = controller
+  const handleDeleteConfirm = async (): Promise<void> => {
+    if (!deleteTarget) return
+    await controller.deletePage(deleteTarget.id)
+    setDeleteTarget(null)
+  }
 
-    checkHealth(controller.signal)
-      .then((result) => setState({ status: result.status, error: null }))
-      .catch((err: Error) => {
-        if (err.name !== 'AbortError') {
-          setState({ status: 'error', error: err.message })
-        }
-      })
+  const handleDuplicate = async (id: string): Promise<void> => {
+    await controller.duplicatePage(id)
+  }
+
+  const handleWorkspaceDuplicate = async (): Promise<void> => {
+    if (!controller.selectedPage) return
+    await controller.duplicatePage(controller.selectedPage.id)
+  }
+
+  const handleWorkspaceDelete = (): void => {
+    if (!controller.selectedPage) return
+    setDeleteTarget({ id: controller.selectedPage.id, title: controller.selectedPage.title })
+  }
+
+  const handleRename = async (title: string): Promise<boolean> => {
+    if (!controller.selectedPage) return false
+    return controller.renamePage(controller.selectedPage.id, title)
   }
 
   return (
-    <Container size="sm" py="xl">
-      <Stack align="center" gap="lg">
-        <Title order={1} ta="center">
-          RTWiki
-        </Title>
-        <Text c="dimmed" ta="center">
-          {STATUS_TEXT.description}
-        </Text>
+    <>
+      <AppShellLayout
+        navbar={
+          <Sidebar
+            pages={controller.pages}
+            loading={controller.loading}
+            error={controller.error}
+            searchQuery={controller.searchQuery}
+            onSearchChange={controller.setSearchQuery}
+            selectedId={controller.selectedPage?.id ?? null}
+            onSelect={controller.selectPage}
+            onNewPage={handleNewPage}
+          />
+        }
+      >
+        <Stack gap="md">
+          {controller.mutationError ? (
+            <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
+              {controller.mutationError}
+            </Alert>
+          ) : null}
 
-        <Card withBorder padding="lg" radius="md" w="100%">
-          {state.status === null && (
-            <Center py="lg">
-              <Loader size="md" />
-            </Center>
+          {controller.selectedPage ? (
+            <PageWorkspace
+              page={controller.selectedPage}
+              mutationStatus={controller.mutationStatus}
+              onBack={() => controller.selectPage(null)}
+              onRename={handleRename}
+              onDuplicate={handleWorkspaceDuplicate}
+              onDelete={handleWorkspaceDelete}
+            />
+          ) : (
+            <Dashboard
+              pages={controller.pages}
+              loading={controller.loading}
+              error={controller.error}
+              searchQuery={controller.searchQuery}
+              onOpen={controller.selectPage}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDeleteRequest}
+              onCreateRich={handleCreateRich}
+              onCreateHtml={handleCreateHtml}
+            />
           )}
+        </Stack>
+      </AppShellLayout>
 
-          {state.status === 'ok' && (
-            <Stack gap="sm" align="center">
-              <IconCheck color="var(--mantine-color-green-6)" size={48} />
-              <Title order={3} ta="center">
-                {STATUS_TEXT.ready}
-              </Title>
-              <Badge color="green" variant="light">
-                Backend connected
-              </Badge>
-              <Text size="sm" c="dimmed" ta="center">
-                {STATUS_TEXT.readyHint}
-              </Text>
-            </Stack>
-          )}
+      <NewPageDialog
+        opened={newDialogOpen}
+        onClose={() => setNewDialogOpen(false)}
+        onCreate={handleCreatePage}
+        initialType={newDialogType}
+      />
 
-          {state.status === 'error' && (
-            <Stack gap="sm" align="center">
-              <Alert
-                icon={<IconAlertCircle />}
-                title="Connection failed"
-                color="red"
-                variant="light"
-                w="100%"
-              >
-                {state.error
-                  ? `Could not reach the backend: ${state.error}`
-                  : STATUS_TEXT.connectionFailed}
-              </Alert>
-              <Button
-                leftSection={<IconRefresh size={14} />}
-                onClick={handleRetry}
-                variant="outline"
-              >
-                {STATUS_TEXT.retry}
-              </Button>
-            </Stack>
-          )}
-        </Card>
-
-        <Group justify="center" w="100%">
-          <Button variant="light" size="sm">
-            Home
-          </Button>
-          <Button variant="light" size="sm">
-            Pages
-          </Button>
-        </Group>
-      </Stack>
-    </Container>
+      <DeleteConfirmModal
+        opened={deleteTarget !== null}
+        pageTitle={deleteTarget?.title ?? UI_TEXT.untitledPage}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+      />
+    </>
   )
 }

@@ -1,0 +1,98 @@
+import { Button, NavLink, Stack, Text, Loader, Alert, ScrollArea } from '@mantine/core'
+import { IconPlus, IconAlertCircle, IconFileText } from '@tabler/icons-react'
+import type { Page } from '@rtwiki/shared/contracts/pages'
+import { UI_TEXT } from '../config/index.js'
+import { SearchInput } from '../components/search-input.js'
+import { PageTypeBadge } from '../components/page-type-badge.js'
+import classes from './sidebar.module.css'
+
+interface SidebarProps {
+  pages: Page[]
+  loading: boolean
+  error: string | null
+  searchQuery: string
+  onSearchChange: (value: string) => void
+  selectedId: string | null
+  onSelect: (id: string | null) => void
+  onNewPage: () => void
+}
+
+export function Sidebar({
+  pages,
+  loading,
+  error,
+  searchQuery,
+  onSearchChange,
+  selectedId,
+  onSelect,
+  onNewPage
+}: SidebarProps): JSX.Element {
+  return (
+    <div className={classes.sidebarRoot}>
+      <div className={classes.searchSection}>
+        <SearchInput value={searchQuery} onChange={onSearchChange} />
+      </div>
+
+      <div className={classes.newPageSection}>
+        <Button
+          leftSection={<IconPlus size={16} />}
+          onClick={onNewPage}
+          fullWidth
+          aria-label={UI_TEXT.sidebarNewPage}
+        >
+          {UI_TEXT.sidebarNewPage}
+        </Button>
+      </div>
+
+      <ScrollArea className={classes.listSection}>
+        {loading ? (
+          <Stack align="center" gap="sm" py="md">
+            <Loader size="sm" />
+            <Text size="sm" c="dimmed">
+              {UI_TEXT.loadingPages}
+            </Text>
+          </Stack>
+        ) : error ? (
+          <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
+            {error}
+          </Alert>
+        ) : pages.length === 0 ? (
+          <Text size="sm" c="dimmed" ta="center" className={classes.listEmpty}>
+            {searchQuery.trim() ? UI_TEXT.noResults : UI_TEXT.emptyDescription}
+          </Text>
+        ) : (
+          <Stack gap={4}>
+            <Button
+              variant={selectedId === null ? 'light' : 'subtle'}
+              justify="flex-start"
+              leftSection={<IconFileText size={16} />}
+              onClick={() => onSelect(null)}
+              className={classes.navItem}
+              fullWidth
+            >
+              {UI_TEXT.dashboardTitle}
+            </Button>
+            {pages.map((page) => (
+              <NavLink
+                key={page.id}
+                label={page.title || UI_TEXT.untitledPage}
+                leftSection={<IconFileText size={16} />}
+                rightSection={<PageTypeBadge pageType={page.pageType} />}
+                active={selectedId === page.id}
+                onClick={() => onSelect(page.id)}
+                className={classes.navItem}
+                aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
+              />
+            ))}
+          </Stack>
+        )}
+      </ScrollArea>
+
+      <div className={classes.footer}>
+        <Text size="xs" c="dimmed">
+          {UI_TEXT.appName}
+        </Text>
+      </div>
+    </div>
+  )
+}
