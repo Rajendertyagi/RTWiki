@@ -1,0 +1,17 @@
+.main {
+  min-height: 100vh;
+  background: var(--mantine-color-body);
+}
+
+.headerInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding-inline: var(--mantine-spacing-md);
+}
+
+.headerTitle {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}

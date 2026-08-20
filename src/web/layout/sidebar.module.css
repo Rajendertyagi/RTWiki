@@ -1,0 +1,35 @@
+.sidebarRoot {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.searchSection {
+  padding: var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.newPageSection {
+  padding: var(--mantine-spacing-sm);
+}
+
+.listSection {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--mantine-spacing-sm);
+}
+
+.footer {
+  border-top: 1px solid var(--mantine-color-default-border);
+  padding: var(--mantine-spacing-sm);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.navItem {
+  border-radius: var(--mantine-radius-sm);
+}
+
+.listEmpty {
+  padding: var(--mantine-spacing-md);
+}
