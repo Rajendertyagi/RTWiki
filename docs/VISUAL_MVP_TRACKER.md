@@ -43,7 +43,7 @@ The following are **not** in scope for the Visual MVP:
 |-------|------|--------|------------|--------|----------|
 | 0 | Discovery and Tracker | Owner approved | 0c1010b | #71 | — |
 | 1 | Page Persistence and CRUD API | Owner approved | fe8f418 | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) | build/#79 |
-| 2 | Visual Workspace and Page Management | CI verified | 82688e0 | [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820) | RTWiki-0.1.0-windows-x64 (37.9 MB) |
+| 2 | Visual Workspace and Page Management | CI verified — owner retest required | 4c6cef6 | [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109) | RTWiki-0.1.0-windows-x64 |
 | 3 | Rich Note Editor and Autosave | Not started | — | — | — |
 | 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
@@ -257,6 +257,13 @@ src/web/components/search-input.tsx (new)
 | src/web/features/pages/page-workspace.module.css | Added | be16b08 |
 | src/web/App.tsx | Rewritten (small composition root + inline Alert feedback) | be16b08 |
 | src/server/repositories/page-repository.ts | Modified (+ rowid secondary sort for deterministic ordering) | 82688e0 |
+| src/server/static.ts | Rewritten (path.relative containment, structured logging, 404 for missing assets, SPA fallback only for extensionless routes) | d3a18dc |
+| src/server/app.ts | Modified (pass logger to serveStatic) | d3a18dc |
+| src/server/bootstrap.ts | Rewritten (probeExistingInstance health check, single-instance detection with 2s timeout) | 4c6cef6 |
+| src/server/index.ts | Rewritten (handle !runtime.server exit, wrap startup errors with logging) | 4c6cef6 |
+| src/server/launcher.ts | Modified (wrap launcher errors with context) | 4c6cef6 |
+| tests/foundation.test.ts | Rewritten (comprehensive static serving + single-instance tests) | 4c6cef6 |
+| .github/workflows/build.yml | Modified (strengthened smoke test: MIME verification, byte comparison, single-instance test) | 4c6cef6 |
 
 ### Commit Log
 
@@ -267,17 +274,37 @@ src/web/components/search-input.tsx (new)
 | 489e559 | fix: biome format compliance for Phase 2 | [#32382531143](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382531143) fail (lint) |
 | e7429cd | fix: use semantic button for page card title to satisfy a11y lint | [#32382729554](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382729554) fail (test) |
 | 82688e0 | fix: ensure deterministic page ordering with secondary rowid sort | [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820) **PASS** |
+| 8e8c62d | docs: update tracker with Phase 2 CI-verified status, commit log, and artifact | (docs) |
+| d3a18dc | fix: serve frontend assets with correct MIME types — Windows path separator fix, structured logging, 404 for missing assets | [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109) **PASS** |
+| 4c6cef6 | fix: handle existing RTWiki instance and strengthen smoke test — single-instance detection, EADDRINUSE handling, asset MIME smoke test | [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109) **PASS** |
 
 ### Known Limitations
 
 - No rich editor yet — placeholder workspace shows title, type badge, save status, and actions; content editing deferred to Phase 3.
 - No HTML/CSS/JS editor tabs — html page type can be created and listed but not edited beyond title.
-- No content autosave — save-status reflects title/API mutation (Saving…/Saved/Error with 2 s reset), not content autosave; no misleading permanent “Saved” state.
+- No content autosave — save-status reflects title/API mutation (Saving…/Saved/Error with 2 s reset), not content autosave; no misleading permanent "Saved" state.
 - Search is title/content via API `q` param with 300 ms debounce, AbortController, and request sequencing; older results cannot overwrite newer.
 - No Mantine Notifications — all feedback via inline Alert/status from existing Mantine components.
 - CSS modules + Mantine theme/CSS variables used for layout; no `style={...}` and no scattered numeric colors/spacing.
 - `App.tsx` is a small composition root delegating to `usePagesController`.
 - Portable artifact produced on every successful build; smoke test verifies exe + web assets + portable layout per ADR-005.
+
+### Root Cause Analysis and Corrections (Owner-reported defects)
+
+**Defect 1 — White page (assets served as index.html):**
+- **Root cause**: `src/server/static.ts` used `node:path.normalize()` which converts forward slashes to backslashes on Windows. The `withinRoot` check `resolved.startsWith(root + '/')` always fails on Windows because `root` has backslashes but the separator appended is `/`. Every request fell through to SPA fallback, serving `index.html` with `text/html` MIME for all assets.
+- **Fix** (`d3a18dc`): Rewrote containment check using `path.relative()` (separator-agnostic). Added structured logging for asset-not-found and path-rejected. Limited SPA fallback to extensionless navigation routes only.
+
+**Defect 2 — Second instance fatal error:**
+- **Root cause**: `src/server/bootstrap.ts` attempted `Bun.serve()` without first probing for an existing RTWiki instance. When two instances were launched, the second crashed with EADDRINUSE.
+- **Fix** (`4c6cef6`): Added `probeExistingInstance()` that sends GET `http://127.0.0.1:<port>/health` with a 2-second timeout. If the response contains `app: "RTWiki"`, the probe returns `{ server: null, db: null, detected: true }` and bootstrap exits cleanly with `process.exit(0)`.
+
+**Defect 3 — Logging gaps:**
+- **Fix** (`d3a18dc`, `4c6cef6`): Added structured JSONL logging for: asset-not-found (404), path-rejected, SPA-fallback, single-instance-exit, port-occupied-by-different-app (EADDRINUSE), browser-open-failure. All log through the existing logger module.
+
+**Test coverage added:**
+- `tests/foundation.test.ts`: 13 static serving tests (MIME types, byte counts, 404 for missing assets, SPA fallback for extensionless only, query strings, URL-encoded paths, path traversal rejection) + 6 single-instance tests (detection, --no-open, unrelated occupant, resource leak, normal start).
+- `.github/workflows/build.yml`: Smoke test now parses all `<script src>` and `<link href>` from index.html, verifies non-HTML MIME, compares byte sizes via `RawContentStream.Length`, and tests single-instance detection.
 
 ## Phase 3 — Rich Note Editor and Autosave
 
@@ -434,8 +461,8 @@ tests/sandbox-security.test.ts (new)
 
 ## Next Phase
 
-**Phase 2 — CI verified** (82688e0 — [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures. Portable artifact: RTWiki-0.1.0-windows-x64 (37.9 MB). Awaiting owner approval to proceed to Phase 3.
+**Phase 2 — CI verified — owner retest required** (4c6cef6 — [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. Owner-reported defects (white page, second-instance fatal error, logging gaps) have been corrected. Artifact ready for owner retest. Awaiting owner approval to proceed to Phase 3.
 
 ## Final Verification Status
 
-Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). Phase 2: CI verified (82688e0 — [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures.
+Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). Phase 2: CI verified — owner retest required (4c6cef6 — [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures. Correction commits address owner-reported defects: Windows MIME serving, single-instance detection, structured logging.
