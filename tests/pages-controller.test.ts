@@ -3,11 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { app } from '../src/server/app.js'
-import {
-  closeDatabase,
-  type getDb,
-  initDatabase
-} from '../src/server/database/index.js'
+import { closeDatabase, type getDb, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import type { Page } from '../src/shared/contracts/pages.js'
 import {
