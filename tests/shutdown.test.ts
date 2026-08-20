@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { bootstrap } from '../src/server/bootstrap.js'
 import { SHUTDOWN_TOKEN_HEADER } from '../src/shared/constants/index.js'
 

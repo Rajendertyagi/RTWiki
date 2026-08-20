@@ -1,11 +1,11 @@
 import { HEALTH_PATH } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
-import { getDb, checkIntegrity } from './database/index.js'
-import { logger } from './logging/index.js'
 import { resolveRuntimePaths } from './config/index.js'
-import { serveStatic } from './static.js'
+import { checkIntegrity, getDb } from './database/index.js'
+import { logger } from './logging/index.js'
 import { createPageRoutes } from './routes/pages.js'
 import { createShutdownRoutes } from './routes/shutdown.js'
+import { serveStatic } from './static.js'
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",

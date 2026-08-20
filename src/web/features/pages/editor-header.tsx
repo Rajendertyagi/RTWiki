@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
-import { Group, TextInput, Button, Menu, ActionIcon, Tooltip } from '@mantine/core'
-import { IconDots, IconCopy, IconTrash, IconArrowLeft } from '@tabler/icons-react'
+import { ActionIcon, Button, Group, Menu, TextInput, Tooltip } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import type { MutationStatus } from '../../hooks/use-pages-controller.js'
-import { UI_TEXT } from '../../config/index.js'
+import { IconArrowLeft, IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
+import { useEffect, useState } from 'react'
 import { PageTypeBadge } from '../../components/page-type-badge.js'
 import { SaveStatus } from '../../components/save-status.js'
+import { UI_TEXT } from '../../config/index.js'
+import type { MutationStatus } from '../../hooks/use-pages-controller.js'
 import classes from './editor-header.module.css'
 
 interface EditorHeaderProps {

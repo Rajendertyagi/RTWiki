@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Modal, TextInput, Radio, Group, Button, Stack, Alert } from '@mantine/core'
-import { IconAlertCircle } from '@tabler/icons-react'
+import { Alert, Button, Group, Modal, Radio, Stack, TextInput } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
+import { IconAlertCircle } from '@tabler/icons-react'
+import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 
 interface NewPageDialogProps {

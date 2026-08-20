@@ -1,9 +1,9 @@
-import { Button, NavLink, Stack, Text, Loader, Alert, ScrollArea, ActionIcon } from '@mantine/core'
-import { IconPlus, IconAlertCircle, IconFileText, IconHome, IconPower } from '@tabler/icons-react'
+import { ActionIcon, Alert, Button, Loader, NavLink, ScrollArea, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { UI_TEXT } from '../config/index.js'
-import { SearchInput } from '../components/search-input.js'
+import { IconAlertCircle, IconFileText, IconHome, IconPlus, IconPower } from '@tabler/icons-react'
 import { PageTypeBadge } from '../components/page-type-badge.js'
+import { SearchInput } from '../components/search-input.js'
+import { UI_TEXT } from '../config/index.js'
 import classes from './sidebar.module.css'
 
 interface SidebarProps {

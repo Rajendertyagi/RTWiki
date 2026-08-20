@@ -1,10 +1,10 @@
 import { Alert, Loader, Stack, Text, Title } from '@mantine/core'
-import { IconAlertCircle } from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
+import { IconAlertCircle } from '@tabler/icons-react'
 import { UI_TEXT } from '../../config/index.js'
+import classes from './dashboard.module.css'
 import { EmptyState } from './empty-state.js'
 import { PageCard } from './page-card.js'
-import classes from './dashboard.module.css'
 
 interface DashboardProps {
   pages: Page[]

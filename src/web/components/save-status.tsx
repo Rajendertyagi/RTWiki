@@ -1,6 +1,6 @@
 import { Text } from '@mantine/core'
-import type { MutationStatus } from '../hooks/use-pages-controller.js'
 import { UI_TEXT } from '../config/index.js'
+import type { MutationStatus } from '../hooks/use-pages-controller.js'
 
 interface SaveStatusProps {
   status: MutationStatus

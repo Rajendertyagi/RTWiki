@@ -1,7 +1,7 @@
-import { Hono } from 'hono'
 import { CreatePageSchema, UpdatePageSchema } from '@rtwiki/shared/schemas/pages'
-import * as service from '../services/page-service.js'
+import { Hono } from 'hono'
 import type { getDb } from '../database/index.js'
+import * as service from '../services/page-service.js'
 
 export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono {
   const routes = new Hono()

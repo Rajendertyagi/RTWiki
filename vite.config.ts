@@ -1,8 +1,8 @@
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
-import { existsSync } from "node:fs"
-import { resolve, dirname } from "node:path"
-import { fileURLToPath } from "node:url"
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 
 // Vite bundles this config into node_modules/.vite-temp at load time, so
 // import.meta.url does not point at the repository root. Walk up from the
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url"
 function findRepoRoot(start: string): string {
   let dir = start
   while (true) {
-    if (existsSync(resolve(dir, "package.json"))) return dir
+    if (existsSync(resolve(dir, 'package.json'))) return dir
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
@@ -24,27 +24,27 @@ const repoRoot = findRepoRoot(dirname(fileURLToPath(import.meta.url)))
 
 export default defineConfig({
   plugins: [react()],
-  root: resolve(repoRoot, "src/web"),
+  root: resolve(repoRoot, 'src/web'),
   build: {
-    outDir: resolve(repoRoot, "build/web"),
+    outDir: resolve(repoRoot, 'build/web'),
     emptyOutDir: true,
     rollupOptions: {
-      input: resolve(repoRoot, "src/web/index.html"),
-    },
+      input: resolve(repoRoot, 'src/web/index.html')
+    }
   },
   resolve: {
     alias: {
-      "@rtwiki/shared": resolve(repoRoot, "src/shared"),
-      "@rtwiki/web": resolve(repoRoot, "src/web"),
-    },
+      '@rtwiki/shared': resolve(repoRoot, 'src/shared'),
+      '@rtwiki/web': resolve(repoRoot, 'src/web')
+    }
   },
   server: {
     port: 5173,
     proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8080",
-        changeOrigin: true,
-      },
-    },
-  },
+      '/api': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true
+      }
+    }
+  }
 })

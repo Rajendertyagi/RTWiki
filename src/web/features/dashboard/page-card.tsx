@@ -1,8 +1,8 @@
-import { Card, Group, Text, Title, Menu, ActionIcon } from '@mantine/core'
-import { IconDots, IconCopy, IconTrash } from '@tabler/icons-react'
+import { ActionIcon, Card, Group, Menu, Text, Title } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { UI_TEXT } from '../../config/index.js'
+import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
 import { PageTypeBadge } from '../../components/page-type-badge.js'
+import { UI_TEXT } from '../../config/index.js'
 import classes from './dashboard.module.css'
 
 interface PageCardProps {

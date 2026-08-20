@@ -1,7 +1,7 @@
-import type { MiddlewareHandler } from 'hono'
 import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { HEALTH_PATH } from '@rtwiki/shared/constants'
+import type { MiddlewareHandler } from 'hono'
 import type { Logger } from './logging/index.js'
 
 const CONTENT_TYPES: Record<string, string> = {

@@ -1,7 +1,7 @@
-import { useState } from 'react'
 import { AppShell, Burger, Group, Title } from '@mantine/core'
-import { UI_TEXT } from '../config/index.js'
+import { useState } from 'react'
 import { ThemeToggle } from '../components/theme-toggle.js'
+import { UI_TEXT } from '../config/index.js'
 import classes from './app-shell.module.css'
 
 interface AppShellLayoutProps {

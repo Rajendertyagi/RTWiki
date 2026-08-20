@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { rmSync, mkdirSync } from 'node:fs'
-import { initDatabase, closeDatabase, type getDb } from '../src/server/database/index.js'
+import { closeDatabase, type getDb, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import * as service from '../src/server/services/page-service.js'
 

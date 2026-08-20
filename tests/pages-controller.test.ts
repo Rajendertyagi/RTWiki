@@ -1,23 +1,23 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
-import { Hono } from 'hono'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { rmSync, mkdirSync } from 'node:fs'
-import {
-  initDatabase,
-  closeDatabase,
-  type getDb,
-  getDatabasePath
-} from '../src/server/database/index.js'
-import { runMigrations } from '../src/server/database/migrations.js'
+import { Hono } from 'hono'
 import { app } from '../src/server/app.js'
 import {
-  findSelectionAfterDeletion,
-  syncSelectionWithPages,
-  findPageById,
-  filterPagesByQuery
-} from '../src/web/hooks/pages-controller-utils.js'
+  closeDatabase,
+  getDatabasePath,
+  type getDb,
+  initDatabase
+} from '../src/server/database/index.js'
+import { runMigrations } from '../src/server/database/migrations.js'
 import type { Page } from '../src/shared/contracts/pages.js'
+import {
+  filterPagesByQuery,
+  findPageById,
+  findSelectionAfterDeletion,
+  syncSelectionWithPages
+} from '../src/web/hooks/pages-controller-utils.js'
 
 function makeTempDir(): string {
   const dir = join(

@@ -1,7 +1,7 @@
-import { Stack, Text, Paper } from '@mantine/core'
+import { Paper, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import type { MutationStatus } from '../../hooks/use-pages-controller.js'
 import { UI_TEXT } from '../../config/index.js'
+import type { MutationStatus } from '../../hooks/use-pages-controller.js'
 import { EditorHeader } from './editor-header.js'
 import classes from './page-workspace.module.css'
 

@@ -1,5 +1,5 @@
 import { Button, Group, Stack, Text, Title } from '@mantine/core'
-import { IconPlus, IconNotes } from '@tabler/icons-react'
+import { IconNotes, IconPlus } from '@tabler/icons-react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './dashboard.module.css'
 

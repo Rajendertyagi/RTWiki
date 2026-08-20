@@ -1,27 +1,27 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { Hono } from 'hono'
+import { app } from '../src/server/app.js'
+import { bootstrap } from '../src/server/bootstrap.js'
 import {
   createConfig,
-  resolveRuntimePaths,
+  dirname,
   joinPaths,
-  dirname
+  resolveRuntimePaths
 } from '../src/server/config/index.js'
 import {
-  initDatabase,
+  checkIntegrity,
   closeDatabase,
-  type getDb,
   getDatabasePath,
-  checkIntegrity
+  type getDb,
+  initDatabase
 } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
-import { app } from '../src/server/app.js'
-import { serveStatic } from '../src/server/static.js'
+import { type Launcher, launchBrowser } from '../src/server/launcher.js'
 import { Logger } from '../src/server/logging/index.js'
-import { launchBrowser, type Launcher } from '../src/server/launcher.js'
-import { bootstrap } from '../src/server/bootstrap.js'
+import { serveStatic } from '../src/server/static.js'
 
 function makeTempDir(): string {
   const dir = join(tmpdir(), `rtwiki-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)

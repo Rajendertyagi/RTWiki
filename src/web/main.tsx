@@ -1,9 +1,9 @@
+import { MantineProvider } from '@mantine/core'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { MantineProvider } from '@mantine/core'
 import '@mantine/core/styles.css'
-import { theme } from './theme/index.js'
 import { App } from './App.js'
+import { theme } from './theme/index.js'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

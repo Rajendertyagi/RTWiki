@@ -1,4 +1,4 @@
-import type { Page, CreatePageRequest, UpdatePageRequest } from '@rtwiki/shared/contracts/pages'
+import type { CreatePageRequest, Page, UpdatePageRequest } from '@rtwiki/shared/contracts/pages'
 
 const API_BASE = '/api'
 

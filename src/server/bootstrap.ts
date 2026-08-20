@@ -1,13 +1,13 @@
-import { app } from './app.js'
-import { resolveRuntimePaths } from './config/index.js'
-import { createLogger, type Logger } from './logging/index.js'
-import { initDatabase, closeDatabase, checkIntegrity, type Database } from './database/index.js'
-import { runMigrations } from './database/migrations.js'
-import { launchBrowser, type Launcher } from './launcher.js'
-import { setShutdownHandler } from './routes/shutdown.js'
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { app } from './app.js'
+import { resolveRuntimePaths } from './config/index.js'
+import { checkIntegrity, closeDatabase, type Database, initDatabase } from './database/index.js'
+import { runMigrations } from './database/migrations.js'
+import { type Launcher, launchBrowser } from './launcher.js'
+import { createLogger, type Logger } from './logging/index.js'
+import { setShutdownHandler } from './routes/shutdown.js'
 
 export interface BootstrapOptions {
   logger?: Logger

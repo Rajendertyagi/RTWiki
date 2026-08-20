@@ -1,8 +1,8 @@
-import { bootstrap, type Runtime } from './bootstrap.js'
-import { app } from './app.js'
-import { createLogger } from './logging/index.js'
-import { resolveRuntimePaths } from './config/index.js'
 import { existsSync } from 'node:fs'
+import { app } from './app.js'
+import { bootstrap, type Runtime } from './bootstrap.js'
+import { resolveRuntimePaths } from './config/index.js'
+import { createLogger } from './logging/index.js'
 
 interface CliFlags {
   smokeTest: boolean

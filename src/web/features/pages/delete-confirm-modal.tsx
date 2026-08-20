@@ -1,4 +1,4 @@
-import { Modal, Text, Group, Button, Stack } from '@mantine/core'
+import { Button, Group, Modal, Stack, Text } from '@mantine/core'
 import { UI_TEXT } from '../../config/index.js'
 
 interface DeleteConfirmModalProps {

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * verify-docs.ts — permanent, dependency-free documentation verifier for RTWiki.
  *
@@ -28,11 +29,11 @@
  * Run from anywhere inside the repository; the root is resolved by locating .git.
  */
 
-import { readdir } from 'node:fs/promises'
 import { existsSync, statSync } from 'node:fs'
-import { join, dirname, resolve, extname, relative, sep, basename } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readdir } from 'node:fs/promises'
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { exit } from 'node:process'
+import { fileURLToPath } from 'node:url'
 
 // ---------------------------------------------------------------------------
 // Centralized configuration (no scattered magic strings)

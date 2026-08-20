@@ -1,5 +1,7 @@
 import { Database } from 'bun:sqlite'
+
 export type { Database } from 'bun:sqlite'
+
 import { joinPaths } from '../config/index.js'
 import { logger } from '../logging/index.js'
 
