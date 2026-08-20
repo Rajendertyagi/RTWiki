@@ -90,7 +90,13 @@ README.md (modified — add tracker link)
 ```
 
 ### Actual Files Changed
-( filled after implementation )
+
+| File | Action | Commit |
+|------|--------|--------|
+| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
+| README.md | Modified (+4 -0) | 4c80980 |
+| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
+| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
 
 ### Known Limitations
 - BlockNote, DOMPurify, @mantine/hooks are not yet installed — added in Phase 1/3
@@ -135,7 +141,13 @@ tests/pages.test.ts (new)
 ```
 
 ### Actual Files Changed
-( filled after implementation )
+
+| File | Action | Commit |
+|------|--------|--------|
+| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
+| README.md | Modified (+4 -0) | 4c80980 |
+| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
+| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
 
 ## Phase 2 — Visual Workspace and Page Management
 
@@ -186,7 +198,13 @@ src/web/components/search-input.tsx (new)
 ```
 
 ### Actual Files Changed
-( filled after implementation )
+
+| File | Action | Commit |
+|------|--------|--------|
+| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
+| README.md | Modified (+4 -0) | 4c80980 |
+| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
+| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
 
 ## Phase 3 — Rich Note Editor and Autosave
 
@@ -220,7 +238,13 @@ tests/rich-editor-roundtrip.test.ts (new)
 ```
 
 ### Actual Files Changed
-( filled after implementation )
+
+| File | Action | Commit |
+|------|--------|--------|
+| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
+| README.md | Modified (+4 -0) | 4c80980 |
+| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
+| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
 
 ## Phase 4 — Sandboxed HTML/CSS/JavaScript Pages
 
@@ -270,7 +294,13 @@ tests/sandbox-security.test.ts (new)
 ```
 
 ### Actual Files Changed
-( filled after implementation )
+
+| File | Action | Commit |
+|------|--------|--------|
+| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
+| README.md | Modified (+4 -0) | 4c80980 |
+| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
+| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
 
 ## Phase 5 — Polish and Release Candidate
 
@@ -303,7 +333,13 @@ tests/sandbox-security.test.ts (new)
 ( filled during implementation )
 
 ### Actual Files Changed
-( filled after implementation )
+
+| File | Action | Commit |
+|------|--------|--------|
+| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
+| README.md | Modified (+4 -0) | 4c80980 |
+| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
+| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
 
 ## Risks and Blockers
 
@@ -335,7 +371,7 @@ tests/sandbox-security.test.ts (new)
 
 ## Next Phase
 
-**Phase 0 — In progress**
+**Phase 0 — CI verified**
 
 ## Final Verification Status
 
