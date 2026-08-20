@@ -1,6 +1,13 @@
 name: Format Check Debug
 
 on:
+  push:
+    branches: [feature/dependency-compat]
+    paths:
+      - ".github/workflows/format-debug.yml"
+      - "biome.json"
+      - "**/*.ts"
+      - "**/*.tsx"
   workflow_dispatch:
 
 permissions:
