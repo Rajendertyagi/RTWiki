@@ -2,7 +2,7 @@ name: Build and Package
 
 on:
   push:
-    branches: [feature/mvp-foundation]
+    branches: [main, 'feature/**']
   pull_request:
     branches: [main]
 
