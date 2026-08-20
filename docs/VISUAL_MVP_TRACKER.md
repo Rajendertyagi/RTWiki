@@ -41,9 +41,9 @@ The following are **not** in scope for the Visual MVP:
 
 | Phase | Name | Status | Commit SHA | CI Run | Artifact |
 |-------|------|--------|------------|--------|----------|
-| 0 | Discovery and Tracker | CI verified | 0c1010b | #71 | — |
-| 1 | Page Persistence and CRUD API | CI verified | fe8f418 | #79 | build/#79 |
-| 2 | Visual Workspace and Page Management | Not started | — | — | — |
+| 0 | Discovery and Tracker | Owner approved | 0c1010b | #71 | — |
+| 1 | Page Persistence and CRUD API | Owner approved | fe8f418 | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) | build/#79 |
+| 2 | Visual Workspace and Page Management | In progress | — | — | — |
 | 3 | Rich Note Editor and Autosave | Not started | — | — | — |
 | 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
@@ -144,16 +144,42 @@ tests/pages.test.ts (new)
 
 | File | Action | Commit |
 |------|--------|--------|
-| src/shared/contracts/pages.ts | Added | 0c1010b |
-| src/shared/contracts/errors.ts | Added | 0c1010b |
-| src/shared/schemas/pages.ts | Added | 0c1010b |
-| src/shared/constants/pages.ts | Added | 0c1010b |
-| src/server/repositories/page-repository.ts | Added | 0c1010b, fe8f418 |
-| src/server/services/page-service.ts | Added | 0c1010b |
-| src/server/routes/pages.ts | Added | 0c1010b |
-| src/server/database/migrations.ts | Modified (+21) | 0c1010b |
-| src/server/app.ts | Modified (+8) | 0c1010b |
-| tests/pages.test.ts | Added (49 tests) | 0c1010b, fe8f418 |
+| src/shared/contracts/pages.ts | Added | 770d401 |
+| src/shared/contracts/errors.ts | Added | 770d401 |
+| src/shared/schemas/pages.ts | Added | 770d401 |
+| src/shared/constants/pages.ts | Added | 770d401 |
+| src/server/repositories/page-repository.ts | Added | 770d401, fe8f418 |
+| src/server/services/page-service.ts | Added | 770d401 |
+| src/server/routes/pages.ts | Added | 770d401 |
+| src/server/database/migrations.ts | Modified (+21) | 770d401 |
+| src/server/app.ts | Modified (+8) | 770d401 |
+| tests/pages.test.ts | Added (27 tests) | 770d401, fe8f418 |
+| docs/VISUAL_MVP_TRACKER.md | Added | 71b00e3 |
+
+### Commit Log
+
+| SHA | Message | CI |
+|-----|---------|-----|
+| 770d401 | feat: add page persistence and CRUD API | [#72](https://github.com/Rajendertyagi/RTWiki/actions/runs/32374762568) fail (format) |
+| de2061c | fix: format Phase 1 files for Biome compliance | [#73](https://github.com/Rajendertyagi/RTWiki/actions/runs/32374774870) fail (format) |
+| e960b95 | fix: Biome formatting compliance (no trailing commas, LF, trailing newlines) | [#74](https://github.com/Rajendertyagi/RTWiki/actions/runs/32375392596) fail (format) |
+| 3f1b26c | fix: wrap long lines for Biome 100-char limit | [#75](https://github.com/Rajendertyagi/RTWiki/actions/runs/32375812086) fail (format) |
+| 03764c7 | fix: add trailing newlines to satisfy Biome format check | [#76](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376050356) fail (format) |
+| 2d7e5c8 | fix: replace non-null assertions with optional chaining in tests | [#77](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376333346) fail (format) |
+| 25cf369 | fix: remove trailing blank line in test file for Biome compliance | [#78](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376513139) fail (format) |
+| fe8f418 | fix: use SQLQueryBindings type and cast optional content for JSON.parse | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) **PASS** |
+| 71b00e3 | docs: update tracker with Phase 1 CI-verified status | [#80](https://github.com/Rajendertyagi/RTWiki/actions/runs/32377325868) **PASS** |
+
+### Known Limitations
+
+- Drizzle ORM is listed in ARCHITECTURE.md but not yet installed — raw SQL with parameterized queries used instead (consistent with existing migrations)
+- No recycle bin restore UI — soft-delete implemented, restore UI deferred
+- No page version history UI — version counter implemented, UI deferred
+- No attachment upload UI — infrastructure deferred
+- No backup/restore UI — infrastructure deferred
+- No full-text search UI — FTS5 infrastructure exists, search integration deferred
+- BlockNote math-block and diagram-block not yet installed — available from BlockNote defaults only
+- `format-fix.yml` workflow is temporary — should be cleaned up in Phase 5
 
 ## Phase 2 — Visual Workspace and Page Management
 
@@ -357,16 +383,6 @@ tests/sandbox-security.test.ts (new)
 | format-fix.yml still targets old branch | Low — cosmetic | Delete or update in Phase 1 |
 | Local tree divergent (uncommitted changes) | Low — must use GitHub API exclusively | Enforced by protocol |
 
-## Known Limitations
-
-- Drizzle ORM is listed in ARCHITECTURE.md but not yet installed — raw SQL with parameterized queries used instead (consistent with existing migrations)
-- No recycle bin restore UI — soft-delete implemented, restore deferred
-- No page version history UI — version counter implemented, UI deferred
-- No attachment upload UI — infrastructure deferred
-- No backup/restore UI — infrastructure deferred
-- No full-text search UI — FTS5 infrastructure exists, search integration deferred
-- BlockNote math-block and diagram-block not yet installed — available from BlockNote defaults only
-
 ## Owner Feedback
 
 ( Record owner feedback after each artifact review )
@@ -377,8 +393,8 @@ tests/sandbox-security.test.ts (new)
 
 ## Next Phase
 
-**Phase 1 — CI verified.** Awaiting owner approval to proceed to Phase 2.
+**Phase 1 — Owner approved.** Proceeding to Phase 2: Visual Workspace and Page Management.
 
 ## Final Verification Status
 
-Phase 0: CI verified (#71). Phase 1: CI verified (#79). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures.
+Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures.
