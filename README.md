@@ -4,9 +4,9 @@ A lightweight, offline-first personal knowledge workspace for a family user. RTW
 
 ## Status
 
-**Planning approved — implementation not started**
+**MVP foundation implemented — rich-content features planned**
 
-All design decisions, architecture, data model, security requirements, development standards, and acceptance criteria have been documented in the `docs/` folder. The approved technology choices are recorded in the Architecture Decision Records. Implementation can begin once the owner gives the go-ahead.
+The application foundation and portable Windows build are implemented. Rich-content features (AI-generated note import, native rich blocks, sandboxed custom content) are planned and documented in the `docs/` folder. All architecture decisions are recorded in the Architecture Decision Records.
 
 ## Key Requirements
 
