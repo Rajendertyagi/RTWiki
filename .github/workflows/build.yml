@@ -8,7 +8,8 @@ on:
 
 # Least-privilege: this workflow only reads the repo and downloads an artifact.
 # It never pushes, never modifies itself, and never uses continue-on-error or `|| true`
-# on gates that must be authoritative.
+# on gates that must be authoritative. upload-artifact@v4 operates within the same run
+# and needs no extra permission beyond contents: read.
 permissions:
   contents: read
 
@@ -39,7 +40,7 @@ jobs:
         run: bun run build:server
 
   windows-smoke:
-    name: Windows executable smoke test
+    name: Windows portable package smoke test
     runs-on: windows-latest
     needs: verify
     steps:
@@ -53,43 +54,160 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Build web
         run: bun run build:web
-      - name: Build server (compile executable)
+      - name: Build server (compile portable executable)
         run: bun run build:server
 
-      - name: Package executable
-        run: Compress-Archive -Path dist -DestinationPath RTWiki.zip
+      # Fail loudly if the build did not produce the expected independent artifacts.
+      - name: Pre-fail build checks
         shell: pwsh
-
-      # Extract to a different directory and run from there to prove the executable
-      # is portable and cwd-independent (it derives all paths from its own location).
-      - name: Extract and run smoke test
         run: |
-          $extract = "$env:RUNNER_TEMP\rtwiki-smoke"
+          $ErrorActionPreference = "Stop"
+          $exe = "build/server/RTWiki.exe"
+          $idx = "build/web/index.html"
+          $assets = "build/web/assets"
+          if (-not (Test-Path $exe -PathType Leaf)) { throw "Missing build artifact: $exe" }
+          if ((Get-Item $exe).Length -eq 0) { throw "Executable is empty: $exe" }
+          if (-not (Test-Path $idx -PathType Leaf)) { throw "Missing build artifact: $idx" }
+          if ((Get-Item $idx).Length -eq 0) { throw "index.html is empty: $idx" }
+          if (-not (Test-Path $assets -PathType Container)) { throw "Missing build artifact directory: $assets" }
+          $assetFiles = Get-ChildItem -Path $assets -Recurse -File
+          if ($assetFiles.Count -eq 0) { throw "No files found under: $assets" }
+          Write-Host "PRE-FAIL CHECKS PASSED: exe=$(Get-Item $exe).Length)B, index.html, assets/ ($($assetFiles.Count) files)"
+
+      # Stage a portable tree: the executable and the built frontend beside it.
+      - name: Stage portable package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $stage = "package/RTWiki"
+          New-Item -ItemType Directory -Force -Path "$stage/web" | Out-Null
+          Copy-Item "build/server/RTWiki.exe" -Destination "$stage/RTWiki.exe" -Force
+          Copy-Item "build/web/index.html" -Destination "$stage/web/index.html" -Force
+          Copy-Item "build/web/assets" -Destination "$stage/web/assets" -Recurse -Force
+
+          # Required staged files must be present and non-empty.
+          $required = @(
+            "$stage/RTWiki.exe",
+            "$stage/web/index.html"
+          )
+          foreach ($f in $required) {
+            if (-not (Test-Path $f -PathType Leaf)) { throw "Missing staged file: $f" }
+            if ((Get-Item $f).Length -eq 0) { throw "Staged file is empty: $f" }
+          }
+          $stagedAssets = Get-ChildItem -Path "$stage/web/assets" -Recurse -File
+          if ($stagedAssets.Count -eq 0) { throw "No staged asset files under: $stage/web/assets" }
+          Write-Host "STAGED TREE:"
+          Get-ChildItem -Recurse $stage | ForEach-Object { Write-Host "  $($_.FullName) ($($_.Length)B)" }
+
+      # Archive the *contents* of package/RTWiki so extraction yields RTWiki.exe + web/ at the root.
+      - name: Compress portable package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Compress-Archive -Path 'package/RTWiki/*' -DestinationPath RTWiki-0.1.0-windows-x64.zip -Force
+
+      # Extract to an isolated directory and run from a *different* working directory to prove
+      # the executable is portable (it derives all paths from its own location, never cwd).
+      # Uses the supported --no-open startup flag (openBrowser:false) so the server keeps
+      # listening on 127.0.0.1:8080 for independent external HTTP verification.
+      - name: Extract and run portable smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $extract = Join-Path $env:RUNNER_TEMP "rtwiki-smoke"
+          $runDir = Join-Path $env:RUNNER_TEMP "rtwiki-run"
+          $exe = Join-Path $extract "RTWiki.exe"
+          $out = Join-Path $extract "smoke.out.txt"
+          $err = Join-Path $extract "smoke.err.txt"
+          $log = Join-Path $extract "logs" "rtwiki.log"
+
           Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
-          Expand-Archive -Path RTWiki.zip -DestinationPath $extract
-          $p = Start-Process -FilePath "$extract\dist\RTWiki.exe" -ArgumentList "--smoke-test" -Wait -PassThru -WorkingDirectory $extract -RedirectStandardOutput "$extract\smoke.out.txt" -RedirectStandardError "$extract\smoke.err.txt"
-          Write-Host "=== STDOUT ==="; Get-Content "$extract\smoke.out.txt" -ErrorAction SilentlyContinue
-          Write-Host "=== STDERR ==="; Get-Content "$extract\smoke.err.txt" -ErrorAction SilentlyContinue
-          Write-Host "=== RTWiki LOG ==="; Get-Content "$extract\dist\logs\rtwiki.log" -ErrorAction SilentlyContinue
-          if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
-        shell: pwsh
+          Remove-Item -Recurse -Force $runDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+          Expand-Archive -Path RTWiki-0.1.0-windows-x64.zip -DestinationPath $extract -Force
 
-      - name: Report artifact
-        if: always()
-        run: |
-          $zip = Get-Item RTWiki.zip
-          $exe = Get-Item "$env:RUNNER_TEMP\rtwiki-smoke\dist\RTWiki.exe"
-          Write-Host "ARTIFACT_NAME=RTWiki.zip"
-          Write-Host "ARTIFACT_TREE:"
-          Get-ChildItem -Recurse "$env:RUNNER_TEMP\rtwiki-smoke" | ForEach-Object { Write-Host "  $($_.FullName)" }
-          Write-Host "ARTIFACT_SIZE_BYTES=$($zip.Length)"
-          Write-Host "EXE_SHA256=$((Get-FileHash $exe.FullName -Algorithm SHA256).Hash)"
-          Write-Host "ZIP_SHA256=$((Get-FileHash $zip.FullName -Algorithm SHA256).Hash)"
-        shell: pwsh
+          # ADR-005 marks attachments/ and backups/ as lazy (not created at startup). Pre-create
+          # the expected empty portable directories so the packaged layout is complete.
+          New-Item -ItemType Directory -Force -Path (Join-Path $extract "data" "attachments") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $extract "data" "backups") | Out-Null
 
-      # Upload only after the smoke test has passed (the previous step would have failed otherwise).
-      - name: Upload artifact
+          $p = $null
+          try {
+            if (-not (Test-Path $exe)) { throw "RTWiki.exe missing after extraction" }
+            $p = Start-Process -FilePath $exe -ArgumentList "--no-open" -WorkingDirectory $runDir -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+
+            # 1. Server starts within a bounded timeout.
+            $ready = $false
+            for ($i = 0; $i -lt 60; $i++) {
+              if ($p.HasExited) { throw "Executable exited early (code $($p.ExitCode)) before becoming ready" }
+              try {
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing -TimeoutSec 2
+                if ($r.StatusCode -eq 200) { $ready = $true; break }
+              } catch { }
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) { throw "Server did not become ready within 60s" }
+
+            # 2. Health endpoint returns HTTP 200 and expected response.
+            $h = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing
+            if ($h.StatusCode -ne 200) { throw "Health endpoint returned $($h.StatusCode)" }
+            if ($h.Content -notmatch '"status"\s*:\s*"ok"') { throw "Health endpoint did not report ok: $($h.Content)" }
+
+            # 3. Root returns HTTP 200 and non-empty HTML.
+            $root = Invoke-WebRequest -Uri "http://127.0.0.1:8080/" -UseBasicParsing
+            if ($root.StatusCode -ne 200) { throw "GET / returned $($root.StatusCode)" }
+            if ([string]::IsNullOrWhiteSpace($root.Content)) { throw "GET / returned empty HTML" }
+
+            # 4-6. Parse HTML for a generated local JS/CSS asset and request it.
+            $m = [regex]::Match($root.Content, '(?i)(?:src|href)="(/assets/[^"]+\.(?:js|css))"')
+            if (-not $m.Success) { throw "No generated /assets/*.js or *.css URL found in index.html" }
+            $assetUrl = "http://127.0.0.1:8080" + $m.Groups[1].Value
+            $a = Invoke-WebRequest -Uri $assetUrl -UseBasicParsing
+            if ($a.StatusCode -ne 200) { throw "Asset $assetUrl returned $($a.StatusCode)" }
+            if ([string]::IsNullOrWhiteSpace($a.Content)) { throw "Asset $assetUrl returned empty body" }
+
+            # 7. Runtime directories exist beside the executable.
+            $dirs = @(
+              (Join-Path $extract "data"),
+              (Join-Path $extract "data" "attachments"),
+              (Join-Path $extract "data" "backups"),
+              (Join-Path $extract "logs")
+            )
+            foreach ($d in $dirs) {
+              if (-not (Test-Path $d -PathType Container)) { throw "Missing runtime directory: $d" }
+            }
+
+            Write-Host "SMOKE TEST PASSED"
+            Write-Host "HEALTH=$(($h.Content))"
+            Write-Host "ASSET=$assetUrl ($(($a.Content).Length)B)"
+          } catch {
+            Write-Error "SMOKE FAILURE: $_"
+            Write-Host "=== STDOUT ==="; Get-Content $out -ErrorAction SilentlyContinue
+            Write-Host "=== STDERR ==="; Get-Content $err -ErrorAction SilentlyContinue
+            Write-Host "=== RTWiki LOG ==="; Get-Content $log -ErrorAction SilentlyContinue
+            Write-Host "=== EXTRACTED TREE ==="; Get-ChildItem -Recurse $extract | ForEach-Object { Write-Host "  $($_.FullName)" }
+            throw
+          } finally {
+            if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          }
+
+      # Upload only after the smoke test has passed (the previous step fails the job otherwise).
+      - name: Upload portable package artifact
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: RTWiki-windows
-          path: RTWiki.zip
+          name: RTWiki-0.1.0-windows-x64
+          path: RTWiki-0.1.0-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Report artifact hash
+        if: success()
+        shell: pwsh
+        run: |
+          $zip = Get-Item RTWiki-0.1.0-windows-x64.zip
+          Write-Host "ARTIFACT_NAME=RTWiki-0.1.0-windows-x64.zip"
+          Write-Host "ARTIFACT_SIZE_BYTES=$($zip.Length)"
+          Write-Host "ZIP_SHA256=$((Get-FileHash $zip.FullName -Algorithm SHA256).Hash)"
+          Write-Host "=== EXTRACTED TREE ==="
+          Get-ChildItem -Recurse "$env:RUNNER_TEMP\rtwiki-smoke" | ForEach-Object { Write-Host "  $($_.FullName)" }
