@@ -102,7 +102,7 @@ export function createShutdownRoutes(): Hono {
 
     // Respond immediately, then execute shutdown asynchronously so the
     // HTTP response reaches the client before the server stops.
-    setTimeout(() => void currentOnShutdown!(), 200)
+    setTimeout(() => void currentOnShutdown?.(), 200)
     return c.json({ status: 'shutting_down' })
   })
 

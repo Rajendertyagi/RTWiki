@@ -32,6 +32,7 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
   return (
     <Card withBorder padding="md" radius="md" className={classes.card}>
       <button
+        type="button"
         className={classes.cardOpenButton}
         onClick={() => onOpen(page.id)}
         aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
