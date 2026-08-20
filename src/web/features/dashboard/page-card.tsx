@@ -21,49 +21,27 @@ function formatDate(value: string): string {
 }
 
 /**
- * Page card with explicit click/keyboard handling and isolated menu.
+ * Accessible page card using the ghost-button overlay pattern.
  *
- * The entire card is the primary interactive element for opening the page.
- * The menu (three-dot) is wrapped in a click-stopper so menu actions
- * (duplicate, delete) do not accidentally trigger the card's open action.
+ * The card is a non-interactive container. A transparent <button> covers the
+ * entire card area for the "open" action. The three-dot menu is a sibling
+ * button with higher z-index. No interactive element is nested inside another,
+ * satisfying the HTML spec and providing proper keyboard/screen-reader support.
  */
 export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps): JSX.Element {
-  const handleCardClick = (): void => {
-    onOpen(page.id)
-  }
-
-  const handleCardKeyDown = (event: React.KeyboardEvent): void => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      onOpen(page.id)
-    }
-  }
-
-  const handleMenuClick = (event: React.MouseEvent): void => {
-    event.stopPropagation()
-  }
-
-  const handleMenuKeyDown = (event: React.KeyboardEvent): void => {
-    event.stopPropagation()
-  }
-
   return (
-    <Card
-      component="button"
-      type="button"
-      withBorder
-      padding="md"
-      radius="md"
-      className={classes.card}
-      onClick={handleCardClick}
-      onKeyDown={handleCardKeyDown}
-      aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
-    >
-      <Group justify="space-between" gap="xs" wrap="nowrap">
+    <Card withBorder padding="md" radius="md" className={classes.card}>
+      <button
+        className={classes.cardOpenButton}
+        onClick={() => onOpen(page.id)}
+        aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
+      />
+
+      <Group justify="space-between" gap="xs" wrap="nowrap" className={classes.cardContent}>
         <Title order={4} lineClamp={2} className={classes.cardTitle}>
           {page.title || UI_TEXT.untitledPage}
         </Title>
-        <div onClick={handleMenuClick} onKeyDown={handleMenuKeyDown}>
+        <div className={classes.cardMenuWrapper}>
           <Menu position="bottom-end" withinPortal>
             <Menu.Target>
               <ActionIcon
@@ -89,11 +67,11 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
         </div>
       </Group>
 
-      <Text size="sm" c="dimmed" lineClamp={3} mt="xs">
+      <Text size="sm" c="dimmed" lineClamp={3} mt="xs" className={classes.cardContent}>
         {page.content ? page.content.slice(0, 120) : UI_TEXT.editorPlaceholderContent}
       </Text>
 
-      <div className={classes.cardFooter}>
+      <div className={`${classes.cardFooter} ${classes.cardContent}`}>
         <PageTypeBadge pageType={page.pageType} />
         <Text size="xs" c="dimmed">
           {formatDate(page.updatedAt)}
