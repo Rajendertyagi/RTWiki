@@ -73,6 +73,16 @@ async function main(): Promise<void> {
   }
 
   const runtime = await bootstrap({ openBrowser: !flags.noOpen })
+
+  // If an existing instance was detected, bootstrap returns a null server.
+  // The browser was already opened (if applicable). Exit cleanly.
+  if (!runtime.server) {
+    runtime.logger.info('Exiting: existing RTWiki instance already running', {
+      event: 'single_instance'
+    })
+    process.exit(0)
+  }
+
   runtime.logger.info('RTWiki initialized', { event: 'startup' })
 
   let shuttingDown = false

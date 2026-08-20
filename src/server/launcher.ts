@@ -35,8 +35,6 @@ export async function launchBrowser(url: string, open: Launcher = defaultOpen): 
     await open(url)
   } catch (err) {
     // Re-throw with context so callers can log the browser-open failure.
-    throw new Error(
-      `Browser-open failure: ${err instanceof Error ? err.message : String(err)}`
-    )
+    throw new Error(`Browser-open failure: ${err instanceof Error ? err.message : String(err)}`)
   }
 }

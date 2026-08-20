@@ -23,6 +23,54 @@ export interface Runtime {
   shutdown: () => Promise<void>
 }
 
+export interface ExistingInstanceResult {
+  detected: true
+  url: string
+}
+
+/**
+ * Probes the port to detect whether an existing RTWiki instance is already running.
+ *
+ * Returns `null` if the port is free or occupied by a different application.
+ * Returns `{ detected: true, url }` if an existing RTWiki instance responds.
+ */
+async function probeExistingInstance(
+  port: number,
+  logger: Logger
+): Promise<ExistingInstanceResult | null> {
+  const url = `http://127.0.0.1:${port}/health`
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000)
+    const res = await fetch(url, { signal: controller.signal })
+    clearTimeout(timeoutId)
+
+    if (res.ok) {
+      const body = (await res.json()) as Record<string, unknown>
+      if (body.app === 'RTWiki') {
+        logger.info('Existing RTWiki instance detected', {
+          event: 'single_instance',
+          port,
+          detected: true
+        })
+        return { detected: true, url: `http://127.0.0.1:${port}/` }
+      }
+    }
+
+    // Port is occupied by a different application (responded but not RTWiki).
+    logger.warn('Port occupied by different application', {
+      event: 'single_instance',
+      port,
+      detected: false,
+      status: res.status
+    })
+    return null
+  } catch {
+    // No response — port is free or connection refused. Proceed with startup.
+    return null
+  }
+}
+
 /**
  * Composition root: owns the config, logger, database, and HTTP server singletons.
  * The caller (index.ts) wires signal handlers and triggers shutdown.
@@ -36,6 +84,35 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   ensureDirectory(paths.dataDir)
   ensureDirectory(paths.logDir)
   ensureDirectory(paths.frontendDistDir)
+
+  // Probe for existing RTWiki instance before binding the port.
+  const existing = await probeExistingInstance(port, logger)
+  if (existing) {
+    // Another RTWiki is already running. Open its browser and exit cleanly.
+    if (openBrowser) {
+      const launcher = options.launcher ?? launchBrowser
+      try {
+        await launcher(existing.url)
+      } catch (err) {
+        logger.error('Browser-open failure', {
+          event: 'single_instance',
+          error: err instanceof Error ? err.message : String(err)
+        })
+      }
+    }
+    // Return a minimal runtime so the caller can exit without starting a second server.
+    // We do NOT start a second database or HTTP server.
+    const noopShutdown = async (): Promise<void> => {
+      /* no-op: we did not start a server or database */
+    }
+    return {
+      server: null as unknown as Awaited<ReturnType<typeof Bun.serve>>,
+      logger,
+      paths,
+      db: null as unknown as Database,
+      shutdown: noopShutdown
+    }
+  }
 
   const writeTest = join(paths.dataDir, '.write-test')
   try {

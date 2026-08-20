@@ -194,6 +194,12 @@ describe('static serving', () => {
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'index.html'), '<html><body>RTWiki</body></html>')
     writeFileSync(join(dir, 'app.js'), 'console.log("hi")')
+    mkdirSync(join(dir, 'assets'), { recursive: true })
+    writeFileSync(join(dir, 'assets', 'index-D_V3awhD.css'), 'body { color: red; }')
+    writeFileSync(
+      join(dir, 'assets', 'index-CHftKGy2.js'),
+      'export default function main() { return 42; }'
+    )
   })
 
   afterEach(() => {
@@ -213,11 +219,71 @@ describe('static serving', () => {
     expect(res.headers.get('content-type')).toContain('text/html')
   })
 
-  it('serves assets with correct content type', async () => {
+  it('serves JS asset with exact bytes and correct MIME', async () => {
+    const res = await staticApp().request('/assets/index-CHftKGy2.js')
+    expect(res.status).toBe(200)
+    const contentType = res.headers.get('content-type') ?? ''
+    expect(contentType).toContain('text/javascript')
+    expect(contentType).not.toContain('text/html')
+    const body = await res.text()
+    expect(body).toBe('export default function main() { return 42; }')
+    expect(body).not.toContain('RTWiki')
+  })
+
+  it('serves CSS asset with exact bytes and text/css', async () => {
+    const res = await staticApp().request('/assets/index-D_V3awhD.css')
+    expect(res.status).toBe(200)
+    const contentType = res.headers.get('content-type') ?? ''
+    expect(contentType).toContain('text/css')
+    expect(contentType).not.toContain('text/html')
+    const body = await res.text()
+    expect(body).toBe('body { color: red; }')
+    expect(body).not.toContain('RTWiki')
+  })
+
+  it('asset response is not index.html', async () => {
+    const jsRes = await staticApp().request('/assets/index-CHftKGy2.js')
+    const jsBody = await jsRes.text()
+    expect(jsBody).not.toContain('<html')
+    expect(jsBody).not.toContain('<body')
+
+    const cssRes = await staticApp().request('/assets/index-D_V3awhD.css')
+    const cssBody = await cssRes.text()
+    expect(cssBody).not.toContain('<html')
+    expect(cssBody).not.toContain('<body')
+  })
+
+  it('serves assets with immutable cache-control', async () => {
     const res = await staticApp().request('/app.js')
     expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toContain('text/javascript')
     expect(res.headers.get('cache-control')).toContain('immutable')
+  })
+
+  it('serves index.html with no-cache', async () => {
+    const res = await staticApp().request('/')
+    expect(res.headers.get('cache-control')).toBe('no-cache')
+  })
+
+  it('returns 404 for missing asset with extension', async () => {
+    const res = await staticApp().request('/assets/missing.js')
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 404 for missing CSS file', async () => {
+    const res = await staticApp().request('/assets/missing.css')
+    expect(res.status).toBe(404)
+  })
+
+  it('falls back to index.html for SPA navigation route', async () => {
+    const res = await staticApp().request('/some/spa/route')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('RTWiki')
+  })
+
+  it('falls back to index.html for route with trailing slash', async () => {
+    const res = await staticApp().request('/dashboard/')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('RTWiki')
   })
 
   it('does not serve /api paths (API precedence)', async () => {
@@ -226,16 +292,81 @@ describe('static serving', () => {
     expect(res.status).toBe(404)
   })
 
-  it('falls back to index.html for unknown SPA route', async () => {
-    const res = await staticApp().request('/some/spa/route')
+  it('does not fall back for /api paths', async () => {
+    const res = await staticApp().request('/api/pages/missing')
+    expect(res.status).toBe(404)
+    const body = await res.text()
+    expect(body).not.toContain('RTWiki')
+  })
+
+  it('serves assets with query string', async () => {
+    const res = await staticApp().request('/assets/index-CHftKGy2.js?v=123')
     expect(res.status).toBe(200)
-    expect(await res.text()).toContain('RTWiki')
+    expect(res.headers.get('content-type')).toContain('text/javascript')
+    const body = await res.text()
+    expect(body).toBe('export default function main() { return 42; }')
+  })
+
+  it('handles URL-encoded paths', async () => {
+    writeFileSync(join(dir, 'file with spaces.txt'), 'hello')
+    const res = await staticApp().request('/file%20with%20spaces.txt')
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toBe('hello')
   })
 
   it('blocks path traversal', async () => {
     const res = await staticApp().request('/../package.json')
+    // Should be blocked: either 403 or SPA fallback, but not actual file.
     const body = await res.text()
     expect(body).not.toContain('"name": "rtwiki"')
+  })
+
+  it('blocks encoded path traversal', async () => {
+    const res = await staticApp().request('/%2e%2e/package.json')
+    const body = await res.text()
+    expect(body).not.toContain('"name": "rtwiki"')
+  })
+
+  it('blocks null byte in path', async () => {
+    const res = await staticApp().request('/..%00/package.json')
+    // Should be rejected (400 or 403)
+    expect(res.status).toBeGreaterThanOrEqual(400)
+  })
+
+  it('rejects malformed percent-encoding', async () => {
+    const res = await staticApp().request('/%ZZ')
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('launcher', () => {
+  it('opens via injected launcher for loopback URL', async () => {
+    let opened = ''
+    const fakeLauncher: Launcher = (url) => {
+      opened = url
+    }
+    await launchBrowser('http://127.0.0.1:8080/', fakeLauncher)
+    expect(opened).toBe('http://127.0.0.1:8080/')
+  })
+
+  it('rejects non-loopback URLs', async () => {
+    await expect(launchBrowser('http://example.com/')).rejects.toThrow()
+  })
+
+  it('rejects non-loopback even with injected opener', async () => {
+    const noop: Launcher = () => {}
+    await expect(launchBrowser('http://192.168.0.1/', noop)).rejects.toThrow()
+    // noop must not have been called
+  })
+
+  it('wraps launcher errors with context', async () => {
+    const failingLauncher: Launcher = () => {
+      throw new Error('spawn failed')
+    }
+    await expect(launchBrowser('http://127.0.0.1:8080/', failingLauncher)).rejects.toThrow(
+      'Browser-open failure'
+    )
   })
 })
 
@@ -280,24 +411,158 @@ describe('logger', () => {
   })
 })
 
-describe('launcher', () => {
-  it('opens via injected launcher for loopback URL', async () => {
-    let opened = ''
-    const fakeLauncher: Launcher = (url) => {
-      opened = url
+describe('single-instance detection', () => {
+  it('detects existing RTWiki instance on port', async () => {
+    const port = freePort()
+    // Start a fake RTWiki health endpoint on the port.
+    const fakeServer = Bun.serve({
+      port,
+      hostname: '127.0.0.1',
+      fetch: (req) => {
+        const url = new URL(req.url)
+        if (url.pathname === '/health') {
+          return Response.json({
+            status: 'ok',
+            app: 'RTWiki',
+            version: '0.1.0',
+            db: { ready: true },
+            time: new Date().toISOString()
+          })
+        }
+        return new Response('Not found', { status: 404 })
+      }
+    })
+
+    try {
+      let openedUrl = ''
+      const fakeLauncher: Launcher = (url) => {
+        openedUrl = url
+      }
+
+      const runtime = await bootstrap({
+        port,
+        openBrowser: true,
+        launcher: fakeLauncher
+      })
+
+      // Should not start a real server (null server indicates detection).
+      expect(runtime.server).toBeNull()
+      expect(runtime.db).toBeNull()
+      expect(openedUrl).toBe(`http://127.0.0.1:${port}/`)
+
+      // Shutdown should be a no-op.
+      await runtime.shutdown()
+    } finally {
+      fakeServer.stop()
     }
-    await launchBrowser('http://127.0.0.1:8080/', fakeLauncher)
-    expect(opened).toBe('http://127.0.0.1:8080/')
   })
 
-  it('rejects non-loopback URLs', async () => {
-    await expect(launchBrowser('http://example.com/')).rejects.toThrow()
+  it('detects existing RTWiki with --no-open', async () => {
+    const port = freePort()
+    const fakeServer = Bun.serve({
+      port,
+      hostname: '127.0.0.1',
+      fetch: (req) => {
+        const url = new URL(req.url)
+        if (url.pathname === '/health') {
+          return Response.json({ status: 'ok', app: 'RTWiki', version: '0.1.0' })
+        }
+        return new Response('Not found', { status: 404 })
+      }
+    })
+
+    try {
+      let openedUrl = ''
+      const fakeLauncher: Launcher = (url) => {
+        openedUrl = url
+      }
+
+      const runtime = await bootstrap({
+        port,
+        openBrowser: false,
+        launcher: fakeLauncher
+      })
+
+      expect(runtime.server).toBeNull()
+      expect(openedUrl).toBe('')
+      await runtime.shutdown()
+    } finally {
+      fakeServer.stop()
+    }
   })
 
-  it('rejects non-loopback even with injected opener', async () => {
-    const noop: Launcher = () => {}
-    await expect(launchBrowser('http://192.168.0.1/', noop)).rejects.toThrow()
-    // noop must not have been called
+  it('unrelated port occupant does not trigger single-instance detection', async () => {
+    const port = freePort()
+    // A random HTTP server that does NOT identify as RTWiki.
+    const fakeServer = Bun.serve({
+      port,
+      hostname: '127.0.0.1',
+      fetch: () => new Response('some other app', { status: 200 })
+    })
+
+    try {
+      // The probe fires while fakeServer is running. It gets a 200 response
+      // but the body does NOT contain app:"RTWiki", so probe returns null.
+      // Bootstrap then attempts to bind and gets EADDRINUSE (not a single-instance exit).
+      let error: unknown = null
+      try {
+        await bootstrap({ port, openBrowser: false })
+      } catch (err) {
+        error = err
+      }
+
+      // Must have failed with EADDRINUSE, NOT exited as single-instance.
+      expect(error).not.toBeNull()
+      expect(error instanceof Error).toBe(true)
+      const msg = (error as Error).message
+      expect(msg).toContain('Failed to start server')
+      expect(msg).not.toContain('existing')
+    } finally {
+      fakeServer.stop()
+    }
+  })
+
+  it('no resource leak on existing instance detection', async () => {
+    const port = freePort()
+    const fakeServer = Bun.serve({
+      port,
+      hostname: '127.0.0.1',
+      fetch: (req) => {
+        const url = new URL(req.url)
+        if (url.pathname === '/health') {
+          return Response.json({ status: 'ok', app: 'RTWiki', version: '0.1.0' })
+        }
+        return new Response('Not found', { status: 404 })
+      }
+    })
+
+    try {
+      const runtime = await bootstrap({ port, openBrowser: false })
+
+      // Null server/db means no resources were allocated.
+      expect(runtime.server).toBeNull()
+      expect(runtime.db).toBeNull()
+
+      // Shutdown is idempotent.
+      await runtime.shutdown()
+      await runtime.shutdown()
+    } finally {
+      fakeServer.stop()
+    }
+  })
+
+  it('starts normally when port is free', async () => {
+    const port = freePort()
+    const runtime = await bootstrap({ port, openBrowser: false })
+
+    expect(runtime.server).not.toBeNull()
+    expect(runtime.db).not.toBeNull()
+
+    // Verify it's serving.
+    const res = await fetch(`http://127.0.0.1:${port}/health`)
+    expect(res.ok).toBe(true)
+
+    await runtime.shutdown()
   })
 })
 

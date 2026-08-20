@@ -72,7 +72,7 @@ jobs:
           if (-not (Test-Path $assets -PathType Container)) { throw "Missing build artifact directory: $assets" }
           $assetFiles = Get-ChildItem -Path $assets -Recurse -File
           if ($assetFiles.Count -eq 0) { throw "No files found under: $assets" }
-          Write-Host "PRE-FAIL CHECKS PASSED: exe=$(Get-Item $exe).Length)B, index.html, assets/ ($($assetFiles.Count) files)"
+          Write-Host "PRE-FAIL CHECKS PASSED: exe=$((Get-Item $exe).Length)B, index.html, assets/ ($($assetFiles.Count) files)"
 
       # Stage a portable tree: the executable and the built frontend beside it.
       - name: Stage portable package
@@ -158,37 +158,94 @@ jobs:
             if ($root.StatusCode -ne 200) { throw "GET / returned $($root.StatusCode)" }
             if ([string]::IsNullOrWhiteSpace($root.Content)) { throw "GET / returned empty HTML" }
 
-            # 4-6. Parse HTML for a generated local JS/CSS asset and request it.
-            $m = [regex]::Match($root.Content, '(?i)(?:src|href)="(/assets/[^"]+\.(?:js|css))"')
-            if (-not $m.Success) { throw "No generated /assets/*.js or *.css URL found in index.html" }
-            $assetUrl = "http://127.0.0.1:8080" + $m.Groups[1].Value
-            $a = Invoke-WebRequest -Uri $assetUrl -UseBasicParsing
-            if ($a.StatusCode -ne 200) { throw "Asset $assetUrl returned $($a.StatusCode)" }
-            if ([string]::IsNullOrWhiteSpace($a.Content)) { throw "Asset $assetUrl returned empty body" }
+            # 4. Parse ALL local <script src> and <link href> assets from index.html.
+            $scriptPattern = '(?i)<script\s+[^>]*src="(/assets/[^"]+)"'
+            $linkPattern = '(?i)<link\s+[^>]*href="(/assets/[^"]+)"'
+            $scriptMatches = [regex]::Matches($root.Content, $scriptPattern)
+            $linkMatches = [regex]::Matches($root.Content, $linkPattern)
 
-            # 7. Runtime directories exist beside the executable.
-            $dirs = @(
-              (Join-Path $extract "data"),
-              (Join-Path $extract "data" "attachments"),
-              (Join-Path $extract "data" "backups"),
-              (Join-Path $extract "logs")
-            )
-            foreach ($d in $dirs) {
-              if (-not (Test-Path $d -PathType Container)) { throw "Missing runtime directory: $d" }
+            $assetUrls = @()
+            foreach ($m in $scriptMatches) { $assetUrls += $m.Groups[1].Value }
+            foreach ($m in $linkMatches) { $assetUrls += $m.Groups[1].Value }
+
+            if ($assetUrls.Count -eq 0) { throw "No <script src> or <link href> assets found in index.html" }
+
+            $jsFound = $false
+            $cssFound = $false
+
+            foreach ($assetUrl in $assetUrls) {
+              $fullUrl = "http://127.0.0.1:8080$assetUrl"
+              $a = Invoke-WebRequest -Uri $fullUrl -UseBasicParsing
+
+              # 5. Each asset must return HTTP 200.
+              if ($a.StatusCode -ne 200) { throw "Asset $fullUrl returned $($a.StatusCode)" }
+              if ([string]::IsNullOrWhiteSpace($a.Content)) { throw "Asset $fullUrl returned empty body" }
+
+              # 6. Must have a non-HTML MIME type.
+              $contentType = $a.Headers['Content-Type']
+              if ($contentType -match 'text/html') { throw "Asset $fullUrl returned text/html MIME (likely SPA fallback). Content-Type: $contentType" }
+
+              # 7. Verify JS and CSS types found.
+              if ($assetUrl -match '\.js$') { $jsFound = $true }
+              if ($assetUrl -match '\.css$') { $cssFound = $true }
+
+              # 8. Compare file size against physical asset (use RawContentStream for true byte count).
+              $physicalPath = Join-Path $extract "web$assetUrl"
+              if (Test-Path $physicalPath) {
+                $physicalSize = (Get-Item $physicalPath).Length
+                $remoteSize = $a.RawContentStream.Length
+                if ($remoteSize -ne $physicalSize) { throw "Asset $fullUrl size mismatch: remote=$remoteSize physical=$physicalSize" }
+              }
+
+              Write-Host "ASSET OK: $assetUrl ($contentType) $($a.RawContentStream.Length)B"
             }
+
+            # 9. Require at least one JS and one CSS asset when both are produced.
+            if (-not $jsFound) { throw "No JavaScript asset found in index.html" }
+            if (-not $cssFound) { throw "No CSS asset found in index.html" }
+
+            # 10. Single-instance: start a second RTWiki instance.
+            $secondOut = Join-Path $extract "smoke2.out.txt"
+            $secondErr = Join-Path $extract "smoke2.err.txt"
+            $secondP = Start-Process -FilePath $exe -ArgumentList "--no-open" -WorkingDirectory $runDir -NoNewWindow -PassThru -RedirectStandardOutput $secondOut -RedirectStandardError $secondErr
+
+            # Wait up to 10s for the second instance to exit (it should detect the first and exit).
+            $exited = $false
+            for ($i = 0; $i -lt 10; $i++) {
+              if ($secondP.HasExited) { $exited = $true; break }
+              Start-Sleep -Seconds 1
+            }
+
+            if (-not $exited) {
+              # Kill the second instance if it didn't exit.
+              Stop-Process -Id $secondP.Id -Force -ErrorAction SilentlyContinue
+              throw "Second RTWiki instance did not exit within 10s (should detect existing and exit)"
+            }
+
+            if ($secondP.ExitCode -ne 0) {
+              $secondOutContent = Get-Content $secondOut -ErrorAction SilentlyContinue
+              $secondErrContent = Get-Content $secondErr -ErrorAction SilentlyContinue
+              throw "Second RTWiki instance exited with code $($secondP.ExitCode). Stdout: $secondOutContent Stderr: $secondErrContent"
+            }
+
+            # 11. First instance must still be healthy.
+            $verifyHealth = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing
+            if ($verifyHealth.StatusCode -ne 200) { throw "First instance health check failed after second launch" }
+            Write-Host "SINGLE-INSTANCE OK: second instance exited 0, first remains healthy"
 
             Write-Host "SMOKE TEST PASSED"
             Write-Host "HEALTH=$(($h.Content))"
-            Write-Host "ASSET=$assetUrl ($(($a.Content).Length)B)"
           } catch {
             Write-Error "SMOKE FAILURE: $_"
             Write-Host "=== STDOUT ==="; Get-Content $out -ErrorAction SilentlyContinue
             Write-Host "=== STDERR ==="; Get-Content $err -ErrorAction SilentlyContinue
             Write-Host "=== RTWiki LOG ==="; Get-Content $log -ErrorAction SilentlyContinue
+            Write-Host "=== REQUESTED URL === http://127.0.0.1:8080/"
             Write-Host "=== EXTRACTED TREE ==="; Get-ChildItem -Recurse $extract | ForEach-Object { Write-Host "  $($_.FullName)" }
             throw
           } finally {
             if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+            if ($secondP -and -not $secondP.HasExited) { Stop-Process -Id $secondP.Id -Force -ErrorAction SilentlyContinue }
           }
 
       # Upload only after the smoke test has passed (the previous step fails the job otherwise).
