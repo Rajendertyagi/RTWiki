@@ -43,7 +43,7 @@ The following are **not** in scope for the Visual MVP:
 |-------|------|--------|------------|--------|----------|
 | 0 | Discovery and Tracker | Owner approved | 0c1010b | #71 | — |
 | 1 | Page Persistence and CRUD API | Owner approved | fe8f418 | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) | build/#79 |
-| 2 | Visual Workspace and Page Management | CI verified — owner retest required | 4c6cef6 | [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109) | RTWiki-0.1.0-windows-x64 |
+| 2 | Visual Workspace and Page Management | CI verified — owner retest required | 00c3678 | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) | RTWiki-0.1.0-windows-x64 |
 | 3 | Rich Note Editor and Autosave | Not started | — | — | — |
 | 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
@@ -264,6 +264,16 @@ src/web/components/search-input.tsx (new)
 | src/server/launcher.ts | Modified (wrap launcher errors with context) | 4c6cef6 |
 | tests/foundation.test.ts | Rewritten (comprehensive static serving + single-instance tests) | 4c6cef6 |
 | .github/workflows/build.yml | Modified (strengthened smoke test: MIME verification, byte comparison, single-instance test) | 4c6cef6 |
+| src/web/features/dashboard/page-card.tsx | Rewritten (native `<button>` via `component="button"`, menu click isolation, keyboard Enter/Space) | 00c3678 |
+| src/web/features/dashboard/dashboard.module.css | Rewritten (hover/focus-visible states, cardTitle pointer-events, button resets) | 00c3678 |
+| src/web/layout/sidebar.tsx | Rewritten (Trilium-inspired: Home entry at top, prominent New Page, compact NavLink list, active selection) | 00c3678 |
+| src/web/layout/sidebar.module.css | Modified (added actionsSection border-bottom) | 00c3678 |
+| src/web/layout/app-shell.tsx | Modified (header 44px, navbar 280px) | 00c3678 |
+| src/web/features/pages/page-workspace.tsx | Modified (removed redundant Title, cleaner layout) | 00c3678 |
+| src/web/features/pages/page-workspace.module.css | Modified (min-height for 44px header) | 00c3678 |
+| src/server/static.ts | Modified (removed noisy "Serving static asset" info log per owner requirement) | 00c3678 |
+| src/web/hooks/pages-controller-utils.ts | Added (pure helpers: findSelectionAfterDeletion, syncSelectionWithPages, findPageById, filterPagesByQuery) | 00c3678 |
+| tests/pages-controller.test.ts | Added (10 utility tests + 6 API integration tests against real Hono server) | 00c3678 |
 
 ### Commit Log
 
@@ -277,6 +287,7 @@ src/web/components/search-input.tsx (new)
 | 8e8c62d | docs: update tracker with Phase 2 CI-verified status, commit log, and artifact | (docs) |
 | d3a18dc | fix: serve frontend assets with correct MIME types — Windows path separator fix, structured logging, 404 for missing assets | [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109) **PASS** |
 | 4c6cef6 | fix: handle existing RTWiki instance and strengthen smoke test — single-instance detection, EADDRINUSE handling, asset MIME smoke test | [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109) **PASS** |
+| 00c3678 | fix: resolve dashboard card-open defect and Trilium-inspired layout — native button a11y, sidebar Home entry, compact nav, controller/state tests, remove noisy asset logging | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) **PASS** |
 
 ### Known Limitations
 
@@ -288,6 +299,8 @@ src/web/components/search-input.tsx (new)
 - CSS modules + Mantine theme/CSS variables used for layout; no `style={...}` and no scattered numeric colors/spacing.
 - `App.tsx` is a small composition root delegating to `usePagesController`.
 - Portable artifact produced on every successful build; smoke test verifies exe + web assets + portable layout per ADR-005.
+- Dashboard cards now fully clickable as native `<button>` elements; menu actions isolated with `stopPropagation` to prevent accidental page open.
+- Sidebar uses Trilium-inspired persistent nav pattern: Home entry at top, prominent New Page button, compact searchable page list with active selection highlighting. No nested hierarchy, tabs, draggable tree, backlinks, or cloning.
 
 ### Root Cause Analysis and Corrections (Owner-reported defects)
 
@@ -305,6 +318,23 @@ src/web/components/search-input.tsx (new)
 **Test coverage added:**
 - `tests/foundation.test.ts`: 13 static serving tests (MIME types, byte counts, 404 for missing assets, SPA fallback for extensionless only, query strings, URL-encoded paths, path traversal rejection) + 6 single-instance tests (detection, --no-open, unrelated occupant, resource leak, normal start).
 - `.github/workflows/build.yml`: Smoke test now parses all `<script src>` and `<link href>` from index.html, verifies non-HTML MIME, compares byte sizes via `RawContentStream.Length`, and tests single-instance detection.
+
+**Defect 4 — Dashboard card-open defect:**
+- **Root cause**: The `PageCard` component rendered an `UnstyledButton` for the card title and a separate `Menu.Target` (ActionIcon) for the three-dot menu. Both were independent interactive elements on the same `Card`. The original implementation attempted `stopPropagation` on the menu to prevent the card click from firing, but the structure was fragile — the card's clickable area was ambiguous, and keyboard interaction (Enter/Space) was not handled. The `UnstyledButton` used `role="button"` with `tabIndex={0}` on a `div`, which also violated Biome's `useSemanticElements` lint rule.
+- **Fix** (`00c3678`): Restructured the entire card as a native `<button>` element via Mantine's `Card` with `component="button"`. This gives native keyboard handling, focus management, and correct semantic meaning for free. The three-dot menu is wrapped in a `stopPropagation` container so menu clicks/keystrokes don't propagate to the card's open action. Added CSS button resets (`background: transparent`, `font: inherit`, `color: inherit`, `width: 100%`) and hover/focus-visible states.
+
+**Defect 5 — Trilium-inspired layout adjustment:**
+- **Requirement**: Owner requested Trilium-inspired persistent left nav pattern (Home/dashboard entry at top, prominent New page, compact searchable page list, selected-page indication, main workspace on the right).
+- **Research**: Fetched TriliumNext official site (triliumnext.eu), GitHub repo (github.com/TriliumNext/Trilium), and docs (docs.triliumnotes.org). Adopted interaction model only — no branding, logos, copyrighted assets, source code, exact theme/colors, or unlicensed icons.
+- **Fix** (`00c3678`): Sidebar now has Home `NavLink` at the top (active when `selectedId === null`), prominent New Page button, compact page list using `NavLink` with `leftSection` icon and `rightSection` type badge, selected-page highlight via `active` prop. Header height reduced from 56px to 44px. Navbar width reduced from 300px to 280px.
+
+**Defect 6 — Noisy asset logging:**
+- **Root cause**: `src/server/static.ts` logged every successful static asset serve at info level, producing excessive noise in the JSONL log.
+- **Fix** (`00c3678`): Removed the `Serving static asset` info log. Only failure/rejection logs remain (path traversal, asset-not-found, unexpected failure, SPA fallback).
+
+**Test coverage added (correction 2):**
+- `tests/pages-controller.test.ts`: 10 pure utility tests (`findSelectionAfterDeletion`, `syncSelectionWithPages`, `findPageById`, `filterPagesByQuery`) + 6 API integration tests (create page, list pages, update page, duplicate page, delete page, search pages) against a real Hono server instance.
+- Total test count: **88 tests** across 3 files (was 49 in correction 1), 190 expect() calls, 0 failures.
 
 ## Phase 3 — Rich Note Editor and Autosave
 
@@ -461,8 +491,8 @@ tests/sandbox-security.test.ts (new)
 
 ## Next Phase
 
-**Phase 2 — CI verified — owner retest required** (4c6cef6 — [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. Owner-reported defects (white page, second-instance fatal error, logging gaps) have been corrected. Artifact ready for owner retest. Awaiting owner approval to proceed to Phase 3.
+**Phase 2 — CI verified — owner retest required** (00c3678 — [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 88 tests, 0 failures. Owner-reported defects corrected: white page, second-instance fatal error, dashboard card-open, logging gaps. Trilium-inspired layout applied. Owner retest required. Awaiting owner approval to proceed to Phase 3.
 
 ## Final Verification Status
 
-Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). Phase 2: CI verified — owner retest required (4c6cef6 — [#32389657109](https://github.com/Rajendertyagi/RTWiki/actions/runs/32389657109)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures. Correction commits address owner-reported defects: Windows MIME serving, single-instance detection, structured logging.
+Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). Phase 2: CI verified — owner retest required (00c3678 — [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 88 tests, 0 failures. Correction commits address owner-reported defects: Windows MIME serving, single-instance detection, dashboard card-open defect, Trilium-inspired layout, noisy asset logging. Total 3 correction commits for Phase 2.
