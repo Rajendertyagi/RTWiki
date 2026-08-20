@@ -11,3 +11,4 @@ export const DEFAULT_PORT = 8080 as const
 export const MAX_REQUEST_SIZE = 100 * 1024 * 1024
 export const PROVISIONAL_AUTOSAVE_DEBOUNCE_MS = 2000 as const
 export const PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024
+export const SHUTDOWN_TOKEN_HEADER = 'x-rtwiki-shutdown-token' as const

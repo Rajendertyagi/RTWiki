@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Alert, Stack } from '@mantine/core'
-import { IconAlertCircle } from '@tabler/icons-react'
+import { useState, useCallback, useEffect } from 'react'
+import { Alert, Stack, Text } from '@mantine/core'
+import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
@@ -8,6 +8,7 @@ import { Dashboard } from './features/dashboard/dashboard.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
+import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { UI_TEXT } from './config/index.js'
 
@@ -16,6 +17,47 @@ export function App(): JSX.Element {
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [newDialogType, setNewDialogType] = useState<PageType>('rich')
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
+  const [stopDialogOpen, setStopDialogOpen] = useState(false)
+  const [shutdownToken, setShutdownToken] = useState<string | null>(null)
+  const [shutdownStatus, setShutdownStatus] = useState<'idle' | 'stopping' | 'stopped' | 'error'>(
+    'idle'
+  )
+
+  useEffect(() => {
+    fetch('/api/shutdown/token')
+      .then(async (res) => {
+        if (res.ok) {
+          const data = (await res.json()) as { token: string }
+          setShutdownToken(data.token)
+        }
+      })
+      .catch(() => {
+        // Token fetch failed — shutdown button will be non-functional.
+      })
+  }, [])
+
+  const handleStop = useCallback((): void => {
+    setStopDialogOpen(true)
+  }, [])
+
+  const handleStopConfirm = useCallback(async (): Promise<void> => {
+    if (!shutdownToken) return
+    setShutdownStatus('stopping')
+    setStopDialogOpen(false)
+    try {
+      const res = await fetch('/api/shutdown', {
+        method: 'POST',
+        headers: { 'X-RTWiki-Shutdown-Token': shutdownToken }
+      })
+      if (res.ok) {
+        setShutdownStatus('stopped')
+      } else {
+        setShutdownStatus('error')
+      }
+    } catch {
+      setShutdownStatus('error')
+    }
+  }, [shutdownToken])
 
   const handleCreateRich = (): void => {
     setNewDialogType('rich')
@@ -68,6 +110,17 @@ export function App(): JSX.Element {
     return controller.renamePage(controller.selectedPage.id, title)
   }
 
+  if (shutdownStatus === 'stopped') {
+    return (
+      <Stack align="center" justify="center" h="100vh">
+        <IconCheck size={48} color="var(--mantine-color-green-filled)" />
+        <Text size="lg" fw={600}>
+          {UI_TEXT.stopSuccessMessage}
+        </Text>
+      </Stack>
+    )
+  }
+
   return (
     <>
       <AppShellLayout
@@ -81,6 +134,7 @@ export function App(): JSX.Element {
             selectedId={controller.selectedPage?.id ?? null}
             onSelect={controller.selectPage}
             onNewPage={handleNewPage}
+            onStop={handleStop}
           />
         }
       >
@@ -88,6 +142,12 @@ export function App(): JSX.Element {
           {controller.mutationError ? (
             <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
               {controller.mutationError}
+            </Alert>
+          ) : null}
+
+          {shutdownStatus === 'error' ? (
+            <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
+              {UI_TEXT.stopError}
             </Alert>
           ) : null}
 
@@ -128,6 +188,12 @@ export function App(): JSX.Element {
         pageTitle={deleteTarget?.title ?? UI_TEXT.untitledPage}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteConfirm}
+      />
+
+      <StopConfirmModal
+        opened={stopDialogOpen}
+        onClose={() => setStopDialogOpen(false)}
+        onConfirm={handleStopConfirm}
       />
     </>
   )

@@ -43,7 +43,14 @@ export const UI_TEXT = {
   loadingPages: 'Loading pages...',
   editorPlaceholderTitle: 'Page title',
   editorPlaceholderContent: 'Editor coming in Phase 3 — title and page actions are active now.',
-  backToDashboard: 'Back to pages'
+  backToDashboard: 'Back to pages',
+  stopRtwiki: 'Stop RTWiki',
+  stopConfirmTitle: 'Stop RTWiki',
+  stopConfirmMessage:
+    'This will shut down the RTWiki server. Any unsaved changes may be lost.',
+  stopButton: 'Stop',
+  stopSuccessMessage: 'RTWiki has stopped. You may close this browser tab.',
+  stopError: 'Failed to stop RTWiki.'
 } as const
 
 export const STATUS_TEXT = {

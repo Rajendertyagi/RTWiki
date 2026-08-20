@@ -233,6 +233,81 @@ jobs:
             if ($verifyHealth.StatusCode -ne 200) { throw "First instance health check failed after second launch" }
             Write-Host "SINGLE-INSTANCE OK: second instance exited 0, first remains healthy"
 
+            # 12. Shutdown API security: POST without token must be rejected.
+            try {
+              $noTokenRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -UseBasicParsing
+              throw "POST /api/shutdown without token returned $($noTokenRes.StatusCode) (expected 403)"
+            } catch {
+              $errStr = $_.Exception.Message
+              if ($errStr -match "403") {
+                Write-Host "SHUTDOWN SECURITY OK: POST without token rejected (403)"
+              } else {
+                throw "POST /api/shutdown without token: unexpected error: $errStr"
+              }
+            }
+
+            # 13. Shutdown API security: GET on POST endpoint must return 405.
+            try {
+              $getRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method GET -UseBasicParsing
+              throw "GET /api/shutdown returned $($getRes.StatusCode) (expected 405)"
+            } catch {
+              $errStr = $_.Exception.Message
+              if ($errStr -match "405") {
+                Write-Host "SHUTDOWN SECURITY OK: GET on shutdown endpoint rejected (405)"
+              } else {
+                throw "GET /api/shutdown: unexpected error: $errStr"
+              }
+            }
+
+            # 14. Obtain shutdown token.
+            $tokenRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown/token" -UseBasicParsing
+            if ($tokenRes.StatusCode -ne 200) { throw "GET /api/shutdown/token returned $($tokenRes.StatusCode)" }
+            $tokenObj = $tokenRes.Content | ConvertFrom-Json
+            $shutdownToken = $tokenObj.token
+            if ([string]::IsNullOrWhiteSpace($shutdownToken)) { throw "Shutdown token is empty" }
+            Write-Host "SHUTDOWN TOKEN OK: obtained token ($($shutdownToken.Length) chars)"
+
+            # 15. Shutdown API security: wrong token must be rejected.
+            try {
+              $wrongRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -Headers @{"X-RTWiki-Shutdown-Token"="wrong-token"} -UseBasicParsing
+              throw "POST /api/shutdown with wrong token returned $($wrongRes.StatusCode) (expected 403)"
+            } catch {
+              $errStr = $_.Exception.Message
+              if ($errStr -match "403") {
+                Write-Host "SHUTDOWN SECURITY OK: wrong token rejected (403)"
+              } else {
+                throw "POST /api/shutdown with wrong token: unexpected error: $errStr"
+              }
+            }
+
+            # 16. Authorized shutdown: correct token must trigger clean stop.
+            $shutdownRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -Headers @{"X-RTWiki-Shutdown-Token"=$shutdownToken} -UseBasicParsing
+            if ($shutdownRes.StatusCode -ne 200) { throw "Authorized shutdown returned $($shutdownRes.StatusCode)" }
+            $shutdownBody = $shutdownRes.Content | ConvertFrom-Json
+            if ($shutdownBody.status -ne "shutting_down") { throw "Shutdown response status: $($shutdownBody.status)" }
+
+            # Wait for server to stop (up to 5 seconds).
+            $stopped = $false
+            for ($i = 0; $i -lt 5; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $check = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing -TimeoutSec 1
+                if (-not $check) { $stopped = $true; break }
+              } catch {
+                $stopped = $true; break
+              }
+            }
+            if (-not $stopped) { throw "Server did not stop within 5s after authorized shutdown" }
+            Write-Host "SHUTDOWN OK: server stopped cleanly after authorized request"
+
+            # 17. Verify no orphan processes.
+            $orphanCheck = Get-Process -Name "RTWiki" -ErrorAction SilentlyContinue
+            if ($orphanCheck) {
+              Stop-Process -Id $orphanCheck.Id -Force -ErrorAction SilentlyContinue
+              throw "Orphan RTWiki process found after shutdown"
+            }
+            Write-Host "NO ORPHANS: all RTWiki processes terminated"
+
             Write-Host "SMOKE TEST PASSED"
             Write-Host "HEALTH=$(($h.Content))"
           } catch {

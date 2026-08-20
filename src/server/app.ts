@@ -5,6 +5,7 @@ import { logger } from './logging/index.js'
 import { resolveRuntimePaths } from './config/index.js'
 import { serveStatic } from './static.js'
 import { createPageRoutes } from './routes/pages.js'
+import { createShutdownRoutes } from './routes/shutdown.js'
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -67,6 +68,7 @@ app.get(HEALTH_PATH, (c) => {
 })
 
 app.route('/api/pages', createPageRoutes(getDb))
+app.route('/api/shutdown', createShutdownRoutes())
 
 app.use('/*', serveStatic({ root: resolveRuntimePaths().frontendDistDir, logger }))
 

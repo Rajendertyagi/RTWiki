@@ -1,11 +1,18 @@
 import { app } from './app.js'
 import { resolveRuntimePaths } from './config/index.js'
 import { createLogger, type Logger } from './logging/index.js'
-import { initDatabase, closeDatabase, checkIntegrity, type Database } from './database/index.js'
+import {
+  initDatabase,
+  closeDatabase,
+  checkIntegrity,
+  type Database
+} from './database/index.js'
 import { runMigrations } from './database/migrations.js'
 import { launchBrowser, type Launcher } from './launcher.js'
+import { setShutdownHandler } from './routes/shutdown.js'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 export interface BootstrapOptions {
   logger?: Logger
@@ -20,6 +27,7 @@ export interface Runtime {
   logger: Logger
   paths: ReturnType<typeof resolveRuntimePaths>
   db: Database
+  shutdownToken: string
   shutdown: () => Promise<void>
 }
 
@@ -80,6 +88,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   const paths = resolveRuntimePaths()
   const logger = options.logger ?? createLogger(paths.logPath)
   const openBrowser = options.openBrowser ?? true
+  const shutdownToken = randomUUID()
 
   ensureDirectory(paths.dataDir)
   ensureDirectory(paths.logDir)
@@ -110,6 +119,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
       logger,
       paths,
       db: null as unknown as Database,
+      shutdownToken,
       shutdown: noopShutdown
     }
   }
@@ -141,7 +151,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   logger.info('HTTP server listening', { event: 'startup', host: '127.0.0.1', port })
 
   let shuttingDown = false
-  const shutdown = async (): Promise<void> => {
+  const doShutdown = async (): Promise<void> => {
     if (shuttingDown) return
     shuttingDown = true
     logger.info('Shutting down', { event: 'shutdown' })
@@ -151,15 +161,19 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
       // Server may already be stopped.
     }
     await closeDatabase()
-    logger.info('Shutdown complete', { event: 'shutdown', done: true })
+    await logger.close()
   }
+
+  // Register this instance's shutdown token and handler. The routes are
+  // already mounted on the app; this updates the module-level state they reference.
+  setShutdownHandler(shutdownToken, () => doShutdown())
 
   if (openBrowser) {
     const launcher = options.launcher ?? launchBrowser
     await launcher(`http://127.0.0.1:${port}/`)
   }
 
-  return { server, logger, paths, db, shutdown }
+  return { server, logger, paths, db, shutdownToken, shutdown: doShutdown }
 }
 
 function ensureDirectory(dir: string): void {

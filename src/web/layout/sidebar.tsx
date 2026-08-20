@@ -1,5 +1,20 @@
-import { Button, NavLink, Stack, Text, Loader, Alert, ScrollArea } from '@mantine/core'
-import { IconPlus, IconAlertCircle, IconFileText, IconHome } from '@tabler/icons-react'
+import {
+  Button,
+  NavLink,
+  Stack,
+  Text,
+  Loader,
+  Alert,
+  ScrollArea,
+  ActionIcon
+} from '@mantine/core'
+import {
+  IconPlus,
+  IconAlertCircle,
+  IconFileText,
+  IconHome,
+  IconPower
+} from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { UI_TEXT } from '../config/index.js'
 import { SearchInput } from '../components/search-input.js'
@@ -15,6 +30,7 @@ interface SidebarProps {
   selectedId: string | null
   onSelect: (id: string | null) => void
   onNewPage: () => void
+  onStop: () => void
 }
 
 export function Sidebar({
@@ -25,7 +41,8 @@ export function Sidebar({
   onSearchChange,
   selectedId,
   onSelect,
-  onNewPage
+  onNewPage,
+  onStop
 }: SidebarProps): JSX.Element {
   return (
     <div className={classes.sidebarRoot}>
@@ -89,6 +106,19 @@ export function Sidebar({
           </Stack>
         )}
       </ScrollArea>
+
+      <div className={classes.stopSection}>
+        <ActionIcon
+          variant="subtle"
+          color="red"
+          size="lg"
+          onClick={onStop}
+          aria-label={UI_TEXT.stopRtwiki}
+          className={classes.stopButton}
+        >
+          <IconPower size={18} />
+        </ActionIcon>
+      </div>
 
       <div className={classes.footer}>
         <Text size="xs" c="dimmed">
