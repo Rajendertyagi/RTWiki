@@ -7,19 +7,6 @@ on:
       - ".github/workflows/dependency-migration-temp.yml"
       - "package.json"
   workflow_dispatch:
-    inputs:
-      react_version:
-        description: 'React version to use'
-        required: false
-        default: ''
-      mantine_version:
-        description: 'Mantine version to use'
-        required: false
-        default: ''
-      vite_version:
-        description: 'Vite version to use'
-        required: false
-        default: ''
 
 permissions:
   contents: read
@@ -35,15 +22,13 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.3.14"
-      - name: Query npm registry and build candidate package.json
+      - name: Query npm registry and generate candidate package.json
         id: resolve
         run: |
           set -e
-          echo "=== Querying npm registry for latest versions ==="
-          
-          # Use bun to query npm registry
-          cat > /tmp/query-deps.ts << 'TSEOF'
+          cat > /tmp/resolve.ts << 'TSEOF'
           import https from "node:https"
+          import fs from "node:fs"
           
           async function fetchPkg(pkg: string): Promise<Record<string, unknown>> {
             return new Promise((resolve, reject) => {
@@ -73,7 +58,7 @@ jobs:
               "@types/node", "@types/bun"
             ]
             
-            const results: Record<string, { version: string; peerDeps: Record<string, string>; distTag: Record<string, string> }> = {}
+            const results: Record<string, { version: string; peerDeps: Record<string, string>; allTags: Record<string, string> }> = {}
             
             for (const pkg of pkgs) {
               try {
@@ -86,62 +71,48 @@ jobs:
                 results[pkg] = {
                   version: latest,
                   peerDeps: v?.peerDependencies ?? {},
-                  distTag: data["dist-tags"]
+                  allTags: data["dist-tags"]
                 }
                 console.log(`${pkg}@${latest}  peerDeps=${JSON.stringify(v?.peerDependencies ?? {})}`)
               } catch (e) {
                 console.error(`FAILED ${pkg}: ${e}`)
-                results[pkg] = { version: "ERROR", peerDeps: {}, distTag: {} }
+                results[pkg] = { version: "ERROR", peerDeps: {}, allTags: {} }
               }
             }
             
-            // Also get Vite 5.x and 6.x latest for comparison
-            const viteData = await fetchPkg("vite") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
-            const v5 = Object.keys(viteData.versions).filter((v: string) => v.startsWith("5.")).sort((a: string, b: string) => b.localeCompare(a))[0]
-            const v6 = Object.keys(viteData.versions).filter((v: string) => v.startsWith("6.")).sort((a: string, b: string) => b.localeCompare(a))[0]
-            console.log(`\nVite 5.x latest: ${v5}`)
-            console.log(`Vite 6.x latest: ${v6}`)
-            console.log(`Vite 8.x latest: ${Object.keys(viteData.versions).filter((v: string) => v.startsWith("8.")).sort((a, b) => b.localeCompare(a))[0]}`)
+            // Version range analysis
+            console.log("\n=== VERSION RANGE ANALYSIS ===")
             
-            // Check Mantine 8.x vs 9.x
-            const mantineData = await fetchPkg("@mantine/core") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
+            // Vite versions
+            const viteData = results["vite"]
+            const viteVersions = Object.keys((await fetchPkg("vite")) as { versions: Record<string, unknown> }).filter((v: string) => /^5\./.test(v) || /^6\./.test(v) || /^8\./.test(v)).sort((a: string, b: string) => b.localeCompare(a))
+            console.log(`Vite 5.x latest: ${viteVersions.find((v: string) => v.startsWith("5."))}`)
+            console.log(`Vite 6.x latest: ${viteVersions.find((v: string) => v.startsWith("6."))}`)
+            console.log(`Vite 8.x latest: ${viteVersions.find((v: string) => v.startsWith("8."))}`)
+            
+            // Mantine versions
+            const mantineData = await fetchPkg("@mantine/core") as { versions: Record<string, { peerDependencies?: Record<string, string> }> }
             const m8 = Object.keys(mantineData.versions).filter((v: string) => v.startsWith("8.")).sort((a, b) => b.localeCompare(a))[0]
             const m9 = Object.keys(mantineData.versions).filter((v: string) => v.startsWith("9.")).sort((a, b) => b.localeCompare(a))[0]
             console.log(`\nMantine 8.x latest: ${m8}`)
             console.log(`Mantine 9.x latest: ${m9}`)
+            console.log(`Mantine 9.x peerDeps: ${JSON.stringify(mantineData.versions[m9]?.peerDependencies)}`)
             
-            // Check Biome versions
-            const biomeData = await fetchPkg("@biomejs/biome") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
+            // Biome versions
+            const biomeData = await fetchPkg("@biomejs/biome") as { versions: Record<string, unknown> }
             const b1 = Object.keys(biomeData.versions).filter((v: string) => v.startsWith("1.")).sort((a, b) => b.localeCompare(a))[0]
             const b2 = Object.keys(biomeData.versions).filter((v: string) => v.startsWith("2.")).sort((a, b) => b.localeCompare(a))[0]
             console.log(`\nBiome 1.x latest: ${b1}`)
             console.log(`Biome 2.x latest: ${b2}`)
             
-            // Check Zod versions
-            const zodData = await fetchPkg("zod") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
-            const z3 = Object.keys(zodData.versions).filter((v: string) => v.startsWith("3.")).sort((a, b) => b.localeCompare(a))[0]
-            const z4 = Object.keys(zodData.versions).filter((v: string) => v.startsWith("4.")).sort((a, b) => b.localeCompare(a))[0]
+            // Zod versions
+            const zodData = await fetchPkg("zod") as { "dist-tags": Record<string, string> }
+            const z3 = Object.keys((await fetchPkg("zod")) as { versions: Record<string, unknown> }).filter((v: string) => v.startsWith("3.")).sort((a, b) => b.localeCompare(a))[0]
             console.log(`\nZod 3.x latest: ${z3}`)
-            console.log(`Zod 4.x latest: ${z4}`)
             console.log(`Zod dist-tags: ${JSON.stringify(zodData["dist-tags"])}`)
             
-            // Check TypeScript versions
-            const tsData = await fetchPkg("typescript") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
+            // TypeScript versions
+            const tsData = await fetchPkg("typescript") as { versions: Record<string, unknown> }
             const ts5 = Object.keys(tsData.versions).filter((v: string) => v.startsWith("5.")).sort((a, b) => b.localeCompare(a))[0]
             const ts6 = Object.keys(tsData.versions).filter((v: string) => v.startsWith("6.")).sort((a, b) => b.localeCompare(a))[0]
             const ts7 = Object.keys(tsData.versions).filter((v: string) => v.startsWith("7.")).sort((a, b) => b.localeCompare(a))[0]
@@ -149,158 +120,79 @@ jobs:
             console.log(`TypeScript 6.x latest: ${ts6}`)
             console.log(`TypeScript 7.x latest: ${ts7}`)
             
-            // Check @types/node
-            const ntData = await fetchPkg("@types/node") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
+            // @types/node versions
+            const ntData = await fetchPkg("@types/node") as { versions: Record<string, unknown> }
             const nt22 = Object.keys(ntData.versions).filter((v: string) => v.startsWith("22.")).sort((a, b) => b.localeCompare(a))[0]
             const nt26 = Object.keys(ntData.versions).filter((v: string) => v.startsWith("26.")).sort((a, b) => b.localeCompare(a))[0]
             console.log(`\n@types/node 22.x latest: ${nt22}`)
             console.log(`@types/node 26.x latest: ${nt26}`)
             
-            // Check @tabler/icons-react
-            const tablerData = await fetchPkg("@tabler/icons-react") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
-            const t3 = Object.keys(tablerData.versions).filter((v: string) => v.startsWith("3.")).sort((a, b) => b.localeCompare(a))[0]
-            console.log(`\n@tabler/icons-react 3.x latest: ${t3}`)
+            // @mantine/utils - critical check
+            const utilsData = await fetchPkg("@mantine/utils") as { versions: Record<string, unknown> }
+            const utilsVers = Object.keys(utilsData.versions).filter((v: string) => v.match(/^6\.|^7\.|^8\.|^9\./)).sort((a, b) => b.localeCompare(a))
+            console.log(`\n@mantine/utils 6.x-9.x versions: ${utilsVers.length > 0 ? utilsVers.join(", ") : "NONE"}`)
             
-            // Check Hono
-            const honoData = await fetchPkg("hono") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
+            // Build the candidate package.json
+            const pkg = {
+              name: "rtwiki",
+              version: "0.1.0",
+              private: true,
+              type: "module",
+              scripts: {
+                "dev": "bun run --hot src/server/index.ts",
+                "dev:web": "vite",
+                "build": "bun run build:web && bun run build:server",
+                "build:web": "vite build",
+                "build:server": "bun run scripts/build.ts",
+                "start": "bun run src/server/index.ts",
+                "typecheck": "tsc --noEmit",
+                "format:check": "biome check --linter-enabled=false --organize-imports-enabled=false .",
+                "format:fix": "biome check --write .",
+                "format:write": "biome format --write .",
+                "lint": "biome lint .",
+                "test": "bun test",
+                "test:watch": "bun test --watch",
+                "test:coverage": "bun test --coverage",
+                "db:migrate": "bun run src/server/database/migrations.ts"
+              },
+              dependencies: {
+                "@blocknote/core": results["@blocknote/core"].version,
+                "@blocknote/mantine": results["@blocknote/mantine"].version,
+                "@blocknote/react": results["@blocknote/react"].version,
+                "@mantine/core": results["@mantine/core"].version,
+                "@mantine/hooks": results["@mantine/hooks"].version,
+                "@tabler/icons-react": results["@tabler/icons-react"].version,
+                "hono": results["hono"].version,
+                "react": results["react"].version,
+                "react-dom": results["react-dom"].version,
+                "zod": results["zod"].version
+              },
+              devDependencies: {
+                "@biomejs/biome": results["@biomejs/biome"].version,
+                "@types/bun": results["@types/bun"].version,
+                "@types/node": results["@types/node"].version,
+                "@types/react": results["@types/react"].version,
+                "@types/react-dom": results["@types/react-dom"].version,
+                "@vitejs/plugin-react": results["@vitejs/plugin-react"].version,
+                "typescript": results["typescript"].version,
+                "vite": results["vite"].version
+              }
             }
-            const h4 = Object.keys(honoData.versions).filter((v: string) => v.startsWith("4.")).sort((a, b) => b.localeCompare(a))[0]
-            console.log(`\nhono 4.x latest: ${h4}`)
-            console.log(`hono dist-tags: ${JSON.stringify(honoData["dist-tags"])}`)
             
-            // Check @mantine/utils - critical: does it have 8.x or 9.x?
-            const utilsData = await fetchPkg("@mantine/utils") as {
-              "dist-tags": Record<string, string>
-              versions: Record<string, { peerDependencies?: Record<string, string>; version: string }>
-            }
-            const utilsVers = Object.keys(utilsData.versions).filter((v: string) => v.startsWith("6.") || v.startsWith("7.") || v.startsWith("8.") || v.startsWith("9."))
-            console.log(`\n@mantine/utils versions 6.x-9.x: ${utilsVers.join(", ") || "NONE"}`)
-            console.log(`@mantine/utils latest: ${utilsData["dist-tags"].latest}`)
-            
-            // Write full results
-            const fs = await import("node:fs")
+            fs.writeFileSync("/tmp/candidate-package.json", JSON.stringify(pkg, null, 2) + "\n")
             fs.writeFileSync("/tmp/npm-results.json", JSON.stringify(results, null, 2))
-            fs.writeFileSync("/tmp/npm-raw.json", JSON.stringify({ results, vite: { v5, v6 }, mantine: { m8, m9 }, biome: { b1, b2 }, zod: { z3, z4 }, ts: { ts5, ts6, ts7 }, nodeTypes: { nt22, nt26 }, tabler: t3, hono: h4, utils: utilsVers }, null, 2))
-            console.log("\n=== WRITTEN /tmp/npm-results.json and /tmp/npm-raw.json ===")
+            console.log("\n=== CANDIDATE package.json ===")
+            console.log(JSON.stringify(pkg, null, 2))
           }
           
           main().catch((e) => { console.error(e); process.exit(1) })
           TSEOF
           
-          bun run /tmp/query-deps.ts
+          bun run /tmp/resolve.ts
           echo ""
-          echo "=== REGISTRY RESULTS ==="
-          cat /tmp/npm-results.json
-          echo ""
-          echo "=== RAW COMPARISON ==="
-          cat /tmp/npm-raw.json
-      - name: Build candidate package.json
-        id: build-pkg
-        run: |
-          # Use the resolved versions to build package.json
-          # Read the npm results
-          declare -A PKGS
-          
-          # Parse the raw results
-          REACT_VER=$(cat /tmp/npm-raw.json | grep '"react"' | head -1 | grep -oP '"version": "\K[^"]+')
-          REACT_DOM_VER=$(cat /tmp/npm-raw.json | grep '"react-dom"' | head -1 | grep -oP '"version": "\K[^"]+')
-          TYPES_REACT_VER=$(cat /tmp/npm-raw.json | grep '"@types/react"' | head -1 | grep -oP '"version": "\K[^"]+')
-          TYPES_REACT_DOM_VER=$(cat /tmp/npm-raw.json | grep '"@types/react-dom"' | head -1 | grep -oP '"version": "\K[^"]+')
-          MANTINE_CORE_VER=$(cat /tmp/npm-raw.json | grep '"@mantine/core"' | head -1 | grep -oP '"version": "\K[^"]+')
-          MANTINE_HOOKS_VER=$(cat /tmp/npm-raw.json | grep '"@mantine/hooks"' | head -1 | grep -oP '"version": "\K[^"]+')
-          BLOCKNOTE_VER=$(cat /tmp/npm-raw.json | grep '"@blocknote/core"' | head -1 | grep -oP '"version": "\K[^"]+')
-          VITE_VER=$(cat /tmp/npm-raw.json | grep -A1 '"vite"' | grep '"version"' | head -1 | grep -oP '"version": "\K[^"]+')
-          PLUGIN_REACT_VER=$(cat /tmp/npm-raw.json | grep '"@vitejs/plugin-react"' | head -1 | grep -oP '"version": "\K[^"]+')
-          TYPESCRIPT_VER=$(cat /tmp/npm-raw.json | grep '"typescript"' | head -1 | grep -oP '"version": "\K[^"]+')
-          BIOME_VER=$(cat /tmp/npm-raw.json | grep '"@biomejs/biome"' | head -1 | grep -oP '"version": "\K[^"]+')
-          HONO_VER=$(cat /tmp/npm-raw.json | grep '"hono"' | head -1 | grep -oP '"version": "\K[^"]+')
-          ZOD_VER=$(cat /tmp/npm-raw.json | grep '"zod"' | head -1 | grep -oP '"version": "\K[^"]+')
-          TABLER_VER=$(cat /tmp/npm-raw.json | grep '"@tabler/icons-react"' | head -1 | grep -oP '"version": "\K[^"]+')
-          NODE_TYPES_VER=$(cat /tmp/npm-raw.json | grep '"@types/node"' | head -1 | grep -oP '"version": "\K[^"]+')
-          BUN_TYPES_VER=$(cat /tmp/npm-raw.json | grep '"@types/bun"' | head -1 | grep -oP '"version": "\K[^"]+')
-          
-          echo "Resolved versions:"
-          echo "  react: $REACT_VER"
-          echo "  react-dom: $REACT_DOM_VER"
-          echo "  @types/react: $TYPES_REACT_VER"
-          echo "  @types/react-dom: $TYPES_REACT_DOM_VER"
-          echo "  @mantine/core: $MANTINE_CORE_VER"
-          echo "  @mantine/hooks: $MANTINE_HOOKS_VER"
-          echo "  @blocknote/*: $BLOCKNOTE_VER"
-          echo "  vite: $VITE_VER"
-          echo "  @vitejs/plugin-react: $PLUGIN_REACT_VER"
-          echo "  typescript: $TYPESCRIPT_VER"
-          echo "  @biomejs/biome: $BIOME_VER"
-          echo "  hono: $HONO_VER"
-          echo "  zod: $ZOD_VER"
-          echo "  @tabler/icons-react: $TABLER_VER"
-          echo "  @types/node: $NODE_TYPES_VER"
-          echo "  @types/bun: $BUN_TYPES_VER"
-          
-          # Write candidate package.json
-          cat > /tmp/candidate-package.json << PKGEOF
-          {
-            "name": "rtwiki",
-            "version": "0.1.0",
-            "private": true,
-            "type": "module",
-            "scripts": {
-              "dev": "bun run --hot src/server/index.ts",
-              "dev:web": "vite",
-              "build": "bun run build:web && bun run build:server",
-              "build:web": "vite build",
-              "build:server": "bun run scripts/build.ts",
-              "start": "bun run src/server/index.ts",
-              "typecheck": "tsc --noEmit",
-              "format:check": "biome check --linter-enabled=false --organize-imports-enabled=false .",
-              "format:fix": "biome check --write .",
-              "format:write": "biome format --write .",
-              "lint": "biome lint .",
-              "test": "bun test",
-              "test:watch": "bun test --watch",
-              "test:coverage": "bun test --coverage",
-              "db:migrate": "bun run src/server/database/migrations.ts"
-            },
-            "dependencies": {
-              "@blocknote/core": "$BLOCKNOTE_VER",
-              "@blocknote/mantine": "$BLOCKNOTE_VER",
-              "@blocknote/react": "$BLOCKNOTE_VER",
-              "@mantine/core": "$MANTINE_CORE_VER",
-              "@mantine/hooks": "$MANTINE_HOOKS_VER",
-              "@tabler/icons-react": "$TABLER_VER",
-              "hono": "$HONO_VER",
-              "react": "$REACT_VER",
-              "react-dom": "$REACT_DOM_VER",
-              "zod": "$ZOD_VER"
-            },
-            "devDependencies": {
-              "@biomejs/biome": "$BIOME_VER",
-              "@types/bun": "$BUN_TYPES_VER",
-              "@types/node": "$NODE_TYPES_VER",
-              "@types/react": "$TYPES_REACT_VER",
-              "@types/react-dom": "$TYPES_REACT_DOM_VER",
-              "@vitejs/plugin-react": "$PLUGIN_REACT_VER",
-              "typescript": "$TYPESCRIPT_VER",
-              "vite": "$VITE_VER"
-            }
-          }
-          PKGEOF
-          
-          echo ""
-          echo "=== CANDIDATE package.json ==="
-          cat /tmp/candidate-package.json
-          
-          # Copy to repo
+          echo "=== COPY CANDIDATE TO REPO ==="
           cp /tmp/candidate-package.json package.json
-          echo "PACKAGE_JSON_WRITTEN=true" >> $GITHUB_OUTPUT
+          cat package.json
       - name: Remove old lockfile and generate new one
         id: lock
         run: |
@@ -311,13 +203,13 @@ jobs:
           echo ""
           echo "=== Lockfile generated ==="
           ls -la bun.lock
-          echo "LOCK_GENERATED=true" >> $GITHUB_OUTPUT
+          head -35 bun.lock
       - name: Check for peer dependency warnings
         id: peers
         run: |
-          if grep -qi "peer dep\|peer-depend\|unmet peer\|missing peer\|WARN" /tmp/install.log 2>/dev/null; then
+          if grep -qi "peer dep\|peer-depend\|unmet peer\|missing peer\|warn" /tmp/install.log 2>/dev/null; then
             echo "PEER_WARNINGS=1" >> $GITHUB_OUTPUT
-            grep -i "peer dep\|peer-depend\|unmet peer\|missing peer\|WARN" /tmp/install.log | head -20
+            grep -i "peer dep\|peer-depend\|unmet peer\|missing peer\|warn" /tmp/install.log | head -20
           else
             echo "PEER_WARNINGS=0" >> $GITHUB_OUTPUT
           fi
@@ -328,91 +220,62 @@ jobs:
           echo ""
           echo "=== React entries in lockfile ==="
           grep -c '"react@' bun.lock || echo 0
-          echo ""
-          echo "=== Checking for multiple React copies ==="
-          find node_modules -maxdepth 2 -name "package.json" -path "*/react/package.json" 2>/dev/null | while read f; do
-            grep '"version"' "$f" | head -1
-          done
       - name: Check for duplicate Mantine
         run: |
-          echo "=== Mantine resolution ==="
+          echo "=== Mantine/core resolution ==="
           bun pm ls "@mantine/core" 2>/dev/null || true
           echo ""
-          echo "=== Mantine entries in lockfile ==="
+          echo "=== @mantine/core entries in lockfile ==="
           grep -c '"@mantine/core@' bun.lock || echo 0
       - name: Format check
         run: |
           set +e
           bun run format:check 2>&1 | tee /tmp/format.txt
-          echo "FORMAT_EXIT=$?" >> $GITHUB_OUTPUT
       - name: Lint
         run: |
           set +e
           bun run lint 2>&1 | tee /tmp/lint.txt
-          echo "LINT_EXIT=$?" >> $GITHUB_OUTPUT
       - name: Typecheck
         run: |
           set +e
           bun run typecheck 2>&1 | tee /tmp/typecheck.txt
-          echo "TYPECHECK_EXIT=$?" >> $GITHUB_OUTPUT
       - name: Test
         run: |
           set +e
           bun test 2>&1 | tee /tmp/test.txt
-          echo "TEST_EXIT=$?" >> $GITHUB_OUTPUT
-          echo "=== TEST COUNT ==="
-          grep -c "pass\|PASS\|✓" /tmp/test.txt || true
       - name: Build web
         run: |
           set +e
           bun run build:web 2>&1 | tee /tmp/build-web.txt
-          echo "WEB_BUILD_EXIT=$?" >> $GITHUB_OUTPUT
       - name: Build server
         run: |
           set +e
           bun run build:server 2>&1 | tee /tmp/build-server.txt
-          echo "SERVER_BUILD_EXIT=$?" >> $GITHUB_OUTPUT
       - name: Generate compatibility report
         run: |
-          cat > /tmp/compatibility-report.md << 'REPORT'
-          # Dependency Migration Compatibility Report
-          
-          ## Resolved Versions
-          REPORT
-          
-          # Append version info
-          cat /tmp/npm-raw.json | bun -e "
-          const d = JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8'));
-          const lines = [
-            '| Package | Version | Peer Deps |',
-            '|---------|---------|-----------|'
-          ];
-          for (const [k, v] of Object.entries(d.results)) {
-            const peers = Object.keys(v.peerDeps).length > 0 ? JSON.stringify(v.peerDeps) : '—'
-            lines.push(\`| \${k} | \${v.version} | \${peers} |\`)
-          }
-          console.log(lines.join('\n'))
-          " >> /tmp/compatibility-report.md 2>/dev/null || true
-          
-          cat >> /tmp/compatibility-report.md << 'REPORT'
-          
-          ## Build Results
-          REPORT
-          
-          echo "- Format: $([ -f /tmp/format.txt ] && grep -q 'All checks passed' /tmp/format.txt && echo PASS || echo CHECK)" >> /tmp/compatibility-report.md
-          echo "- Lint: $([ -f /tmp/lint.txt ] && grep -q 'All checks passed' /tmp/lint.txt && echo PASS || echo CHECK)" >> /tmp/compatibility-report.md
-          echo "- Typecheck: $([ -f /tmp/typecheck.txt ] && grep -q 'No errors found' /tmp/typecheck.txt && echo PASS || echo CHECK)" >> /tmp/compatibility-report.md
-          echo "- Tests: $([ -f /tmp/test.txt ] && grep -q 'All tests passed' /tmp/test.txt && echo PASS || echo CHECK)" >> /tmp/compatibility-report.md
-          echo "- Web build: $([ -f /tmp/build-web.txt ] && grep -q 'built' /tmp/build-web.txt && echo PASS || echo CHECK)" >> /tmp/compatibility-report.md
-          echo "- Server build: $([ -f /tmp/build-server.txt ] && grep -q 'compiled\|success' /tmp/build-server.txt && echo PASS || echo CHECK)" >> /tmp/compatibility-report.md
-          
-          echo "" >> /tmp/compatibility-report.md
-          echo "## Install Log (last 30 lines)" >> /tmp/compatibility-report.md
-          echo '```' >> /tmp/compatibility-report.md
-          tail -30 /tmp/install.log >> /tmp/compatibility-report.md 2>/dev/null || true
-          echo '```' >> /tmp/compatibility-report.md
-          
-          echo "Report written"
+          {
+            echo "# Dependency Migration Compatibility Report"
+            echo ""
+            echo "## Resolved Versions"
+            echo ''
+            echo '```json'
+            cat /tmp/npm-results.json
+            echo '```'
+            echo ""
+            echo "## Build Results"
+            echo "- Format: $([ -f /tmp/format.txt ] && grep -q 'All checks passed' /tmp/format.txt && echo PASS || echo FAILED)"
+            echo "- Lint: $([ -f /tmp/lint.txt ] && grep -q 'All checks passed' /tmp/lint.txt && echo PASS || echo FAILED)"
+            echo "- Typecheck: $([ -f /tmp/typecheck.txt ] && grep -q 'No errors found' /tmp/typecheck.txt && echo PASS || echo FAILED)"
+            echo "- Tests: $([ -f /tmp/test.txt ] && grep -q 'All tests passed' /tmp/test.txt && echo PASS || echo FAILED)"
+            echo "- Web build: $([ -f /tmp/build-web.txt ] && grep -q 'built' /tmp/build-web.txt && echo PASS || echo FAILED)"
+            echo "- Server build: $([ -f /tmp/build-server.txt ] && grep -q 'compiled\|success' /tmp/build-server.txt && echo PASS || echo FAILED)"
+            echo ""
+            echo "## Install Log (last 40 lines)"
+            echo '```'
+            tail -40 /tmp/install.log
+            echo '```'
+          } > /tmp/compatibility-report.md
+          cat /tmp/compatibility-report.md
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -429,6 +292,5 @@ jobs:
             /tmp/build-server.txt
             /tmp/compatibility-report.md
             /tmp/npm-results.json
-            /tmp/npm-raw.json
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: warn
