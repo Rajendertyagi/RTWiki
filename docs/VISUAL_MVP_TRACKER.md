@@ -43,7 +43,7 @@ The following are **not** in scope for the Visual MVP:
 |-------|------|--------|------------|--------|----------|
 | 0 | Discovery and Tracker | Owner approved | 0c1010b | #71 | — |
 | 1 | Page Persistence and CRUD API | Owner approved | fe8f418 | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) | build/#79 |
-| 2 | Visual Workspace and Page Management | CI verified — owner retest required | 00c3678 | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) | RTWiki-0.1.0-windows-x64 |
+| 2 | Visual Workspace and Page Management | Correction 3 pending CI | 00c3678 | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) | RTWiki-0.1.0-windows-x64 |
 | 3 | Rich Note Editor and Autosave | Not started | — | — | — |
 | 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
@@ -274,6 +274,20 @@ src/web/components/search-input.tsx (new)
 | src/server/static.ts | Modified (removed noisy "Serving static asset" info log per owner requirement) | 00c3678 |
 | src/web/hooks/pages-controller-utils.ts | Added (pure helpers: findSelectionAfterDeletion, syncSelectionWithPages, findPageById, filterPagesByQuery) | 00c3678 |
 | tests/pages-controller.test.ts | Added (10 utility tests + 6 API integration tests against real Hono server) | 00c3678 |
+| src/web/features/dashboard/page-card.tsx | Rewritten (ghost button overlay pattern: non-interactive Card wrapper, transparent <button> covering full card, sibling Menu button with z-index, no nested interactive elements) | correction 3 |
+| src/web/features/dashboard/dashboard.module.css | Rewritten (position: relative on card, .cardOpenButton absolute overlay, .cardContent z-index, .cardMenuWrapper z-index) | correction 3 |
+| src/web/layout/sidebar.tsx | Modified (added onStop prop, red power IconPower ActionIcon in footer section) | correction 3 |
+| src/web/layout/sidebar.module.css | Added (stopSection, stopButton opacity hover) | correction 3 |
+| src/web/App.tsx | Modified (shutdown state: token fetch, StopConfirmModal, stopped/error display) | correction 3 |
+| src/web/features/shutdown/stop-confirm-modal.tsx | Added (Mantine Modal with warning text, Cancel/Stop buttons) | correction 3 |
+| src/web/config/index.ts | Modified (added stopRtwiki, stopConfirmTitle, stopConfirmMessage, stopButton, stopSuccessMessage, stopError) | correction 3 |
+| src/shared/constants/index.ts | Modified (added SHUTDOWN_TOKEN_HEADER) | correction 3 |
+| src/server/routes/shutdown.ts | Added (module-level mutable token/handler, GET /token, POST /, same-origin validation, idempotent) | correction 3 |
+| src/server/app.ts | Modified (mount shutdown routes once at module level) | correction 3 |
+| src/server/bootstrap.ts | Modified (generate shutdownToken, setShutdownHandler, logger.close in shutdown) | correction 3 |
+| scripts/build.ts | Added (Bun.build() JS API with conditional Windows PE metadata) | correction 3 |
+| tests/shutdown.test.ts | Added (6 tests: token endpoint, unauthorized POST, wrong token, GET rejection, authorized shutdown, token not logged) | correction 3 |
+| .github/workflows/build.yml | Modified (extended smoke test: shutdown API security, authorized shutdown, orphan check) | correction 3 |
 
 ### Commit Log
 
@@ -299,8 +313,10 @@ src/web/components/search-input.tsx (new)
 - CSS modules + Mantine theme/CSS variables used for layout; no `style={...}` and no scattered numeric colors/spacing.
 - `App.tsx` is a small composition root delegating to `usePagesController`.
 - Portable artifact produced on every successful build; smoke test verifies exe + web assets + portable layout per ADR-005.
-- Dashboard cards now fully clickable as native `<button>` elements; menu actions isolated with `stopPropagation` to prevent accidental page open.
-- Sidebar uses Trilium-inspired persistent nav pattern: Home entry at top, prominent New Page button, compact searchable page list with active selection highlighting. No nested hierarchy, tabs, draggable tree, backlinks, or cloning.
+- Dashboard cards use ghost-button overlay pattern for accessible full-card click with separate menu button. No nested interactive elements.
+- Sidebar uses Trilium-inspired persistent nav pattern with visible Stop RTWiki power icon in footer. No nested hierarchy, tabs, draggable tree, backlinks, or cloning.
+- Windows PE metadata (title, description) set via `Bun.build()` JS API when compiled natively on Windows. On Linux cross-compilation, metadata is skipped — process shows as "Bun" in Task Manager.
+- Shutdown token is per-process and not persisted. If the server crashes, the token is lost (which is acceptable — the server is already stopped).
 
 ### Root Cause Analysis and Corrections (Owner-reported defects)
 
@@ -335,6 +351,38 @@ src/web/components/search-input.tsx (new)
 **Test coverage added (correction 2):**
 - `tests/pages-controller.test.ts`: 10 pure utility tests (`findSelectionAfterDeletion`, `syncSelectionWithPages`, `findPageById`, `filterPagesByQuery`) + 6 API integration tests (create page, list pages, update page, duplicate page, delete page, search pages) against a real Hono server instance.
 - Total test count: **88 tests** across 3 files (was 49 in correction 1), 190 expect() calls, 0 failures.
+
+**Defect 7 — Card accessibility (button-inside-button invalid HTML):**
+- **Root cause**: The correction 2 fix used `<Card component="button">` which renders as a `<button>` element. The `<Menu>` nested inside renders `<ActionIcon>` (another `<button>`). This creates button-inside-button — invalid HTML per the spec. The `stopPropagation` handlers masked the problem but did not fix the DOM structure.
+- **Fix**: Restructured using the "ghost button" overlay pattern. The card is a non-interactive `<div>` wrapper. A transparent `<button>` covers the entire card area for the "open" action (position: absolute, inset: 0). The three-dot menu is a sibling `<button>` with higher z-index (`position: relative; z-index: 2`). Content uses `pointer-events: none` so clicks pass through to the ghost button. No interactive element is nested inside another. Both controls are natively keyboard accessible (Tab to focus, Enter/Space to activate).
+
+**Defect 8 — Missing visible Stop RTWiki control:**
+- **Requirement**: Owner requires a visible mechanism to stop the RTWiki server from the browser, with a confirmation dialog, located outside the page list, using Mantine components, with Cancel/Stop buttons.
+- **Fix**: Added a red power icon (`IconPower`) `ActionIcon` in the sidebar footer section (above the app name). Click opens a `StopConfirmModal` (Mantine `Modal` with warning text, Cancel and Stop buttons). On confirm, the frontend obtains a per-process shutdown token from `GET /api/shutdown/token` and sends it in a `POST /api/shutdown` request with the custom header `X-RTWiki-Shutdown-Token`. On success, the UI displays "RTWiki has stopped. You may close this browser tab."
+
+**Defect 9 — No secure local shutdown API:**
+- **Requirement**: POST-only shutdown endpoint with per-process unpredictable token, custom header validation, same-origin check, no CORS, no token in URLs/logs/DB, idempotent execution.
+- **Fix**: Created `src/server/routes/shutdown.ts` with module-level mutable state pattern. Routes are mounted once on the Hono app; each `bootstrap()` call updates the token and handler via `setShutdownHandler()`. Security model:
+  - `GET /api/shutdown/token` — returns the token (same-origin via Origin/Referer check)
+  - `POST /api/shutdown` — validates token in `X-RTWiki-Shutdown-Token` header + same-origin, then responds 200 and executes shutdown asynchronously (server.stop → closeDatabase → logger.close → process.exit)
+  - `GET /api/shutdown` — returns 405 (method not allowed)
+  - Same-origin validation checks Origin/Referer for `127.0.0.1` or `localhost`
+  - Token generated via `crypto.randomUUID()` at bootstrap, never logged
+  - Idempotent — second POST returns 503 if shutdown already started
+
+**Defect 10 — Logger not flushed on shutdown:**
+- **Root cause**: The `shutdown()` function in `bootstrap.ts` called `server.stop()` and `closeDatabase()` but never called `logger.close()`, which flushes the buffer and marks the logger as closed.
+- **Fix**: Added `await logger.close()` as the final step in the shutdown sequence, after database close and before process exit.
+
+**Defect 11 — Windows process identity:**
+- **Requirement**: Set Windows PE metadata (product name, description) so the process shows as "RTWiki" in Task Manager instead of "Bun".
+- **Research**: Confirmed from Bun 1.3.14 official docs that `Bun.build()` JS API supports `compile.windows.{title, description, version, publisher, copyright}`. CLI only documents `--windows-icon` and `--windows-hide-console`. Metadata flags require native Windows compilation (not cross-compilation).
+- **Fix**: Created `scripts/build.ts` using `Bun.build()` JS API with platform detection (`process.platform === 'win32'`). On Windows (native compile in CI `windows-smoke` job), metadata is set: title "RTWiki", description, version "0.1.0", publisher "RTWiki". On Linux (cross-compile in CI `verify` job), metadata is skipped. Updated `package.json` `build:server` to use the script.
+
+**Test coverage added (correction 3):**
+- `tests/shutdown.test.ts`: 6 tests — GET /api/shutdown/token returns token, POST without token rejected (403), POST with wrong token rejected (403), GET on POST endpoint returns 405, POST with correct token accepted (200 + server stops), token not logged (UUID format verification).
+- Extended `.github/workflows/build.yml` smoke test: POST without token rejected, GET returns 405, token obtained, wrong token rejected, authorized shutdown stops server cleanly, no orphan processes.
+- Total test count: **94 tests** across 4 files (was 88 in correction 2).
 
 ## Phase 3 — Rich Note Editor and Autosave
 
@@ -491,8 +539,8 @@ tests/sandbox-security.test.ts (new)
 
 ## Next Phase
 
-**Phase 2 — CI verified — owner retest required** (00c3678 — [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 88 tests, 0 failures. Owner-reported defects corrected: white page, second-instance fatal error, dashboard card-open, logging gaps. Trilium-inspired layout applied. Owner retest required. Awaiting owner approval to proceed to Phase 3.
+**Phase 2 — Correction 3 pending CI**. Implements: accessible card interactions (ghost button overlay pattern), secure local shutdown control (token-based POST API + sidebar Stop button + confirmation dialog), Windows PE metadata via Bun.build() JS API, logger flush on shutdown, extended CI smoke test with shutdown security verification. 94 tests across 4 files. Awaiting CI verification and owner approval to proceed to Phase 3.
 
 ## Final Verification Status
 
-Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). Phase 2: CI verified — owner retest required (00c3678 — [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 88 tests, 0 failures. Correction commits address owner-reported defects: Windows MIME serving, single-instance detection, dashboard card-open defect, Trilium-inspired layout, noisy asset logging. Total 3 correction commits for Phase 2.
+Phase 0: Owner approved (#71). Phase 1: Owner approved (#79). Phase 2: Correction 3 pending CI. All format, lint, typecheck, test, build, and Windows smoke test gates previously passed at 88 tests (correction 2). Correction 3 adds accessible card pattern, shutdown API + UI + tests, Windows metadata build script, and extended smoke tests. Total 94 tests across 4 files. Awaiting CI run.
