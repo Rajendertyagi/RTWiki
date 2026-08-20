@@ -46,8 +46,7 @@ export const UI_TEXT = {
   backToDashboard: 'Back to pages',
   stopRtwiki: 'Stop RTWiki',
   stopConfirmTitle: 'Stop RTWiki',
-  stopConfirmMessage:
-    'This will shut down the RTWiki server. Any unsaved changes may be lost.',
+  stopConfirmMessage: 'This will shut down the RTWiki server. Any unsaved changes may be lost.',
   stopButton: 'Stop',
   stopSuccessMessage: 'RTWiki has stopped. You may close this browser tab.',
   stopError: 'Failed to stop RTWiki.'

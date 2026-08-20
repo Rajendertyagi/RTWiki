@@ -1,12 +1,7 @@
 import { app } from './app.js'
 import { resolveRuntimePaths } from './config/index.js'
 import { createLogger, type Logger } from './logging/index.js'
-import {
-  initDatabase,
-  closeDatabase,
-  checkIntegrity,
-  type Database
-} from './database/index.js'
+import { initDatabase, closeDatabase, checkIntegrity, type Database } from './database/index.js'
 import { runMigrations } from './database/migrations.js'
 import { launchBrowser, type Launcher } from './launcher.js'
 import { setShutdownHandler } from './routes/shutdown.js'

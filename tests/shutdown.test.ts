@@ -120,8 +120,6 @@ describe('shutdown token not logged', () => {
     // does not contain it. We access the private buffer via the
     // Runtime logger, but since the logger writes to a file, we
     // just verify the token is a UUID format and not a known string.
-    expect(token).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-    )
+    expect(token).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   })
 })
