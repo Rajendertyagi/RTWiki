@@ -31,5 +31,12 @@ export async function launchBrowser(url: string, open: Launcher = defaultOpen): 
   if (!isLoopback(url)) {
     throw new Error(`Refusing to open non-loopback URL: ${url}`)
   }
-  await open(url)
+  try {
+    await open(url)
+  } catch (err) {
+    // Re-throw with context so callers can log the browser-open failure.
+    throw new Error(
+      `Browser-open failure: ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
 }

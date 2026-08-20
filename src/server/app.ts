@@ -68,7 +68,7 @@ app.get(HEALTH_PATH, (c) => {
 
 app.route('/api/pages', createPageRoutes(getDb))
 
-app.use('/*', serveStatic({ root: resolveRuntimePaths().frontendDistDir }))
+app.use('/*', serveStatic({ root: resolveRuntimePaths().frontendDistDir, logger }))
 
 app.onError((err, c) => {
   logger.error('Unhandled error', { event: 'http_error', error: err.message })
