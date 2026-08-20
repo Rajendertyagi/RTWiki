@@ -6,9 +6,9 @@ This document outlines the planned feature rollout for RTWiki beyond the MVP. It
 
 Complete. This phase produces the specification, architecture, data model, security requirements, development standards, and acceptance criteria that guide all future work. See the [README](../README.md) for the documentation index.
 
-## Phase 1: MVP (Three-Day Target)
+## Phase 1: MVP (Milestone Sequence)
 
-See [MVP_SCOPE.md](MVP_SCOPE.md) for the detailed day-by-day plan. The MVP delivers a functional, portable Windows application that meets all acceptance criteria in [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md).
+See [MVP_SCOPE.md](MVP_SCOPE.md) for the detailed milestone plan. The MVP delivers a functional, portable Windows application that meets all acceptance criteria in [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md), including the rich-content requirements R-040–R-063.
 
 **Key outcomes of Phase 1:**
 - Working block editor with all supported block types
@@ -79,6 +79,25 @@ This phase evaluates whether a native desktop wrapper would provide sufficient v
 
 The outcome of this evaluation may result in no wrapper being adopted, a lightweight wrapper being adopted, or further evaluation in a later phase.
 
+## Phase 7: Optional AI Chat and Page Generation
+
+This phase adds an **optional** AI chat and page-generation assistant. RTWiki core has **no AI dependency**: all current features work offline without any AI or network. The assistant is a future, opt-in capability.
+
+- Receiving AI-generated content is already a core capability (Phases 0–1). This phase adds a conversational surface that helps the owner draft and refine pages, then imports the result through the same shared pipeline.
+- A future **local-model adapter** may run entirely offline on the owner's PC (no network required).
+- A future **cloud-provider adapter** may also be supported: it requires explicit opt-in, clear disclosure of what is sent, no automatic transmission, and no committed credentials. An external provider may require its own account; RTWiki itself still has no account system.
+- Both adapters register in the composition root (see [ADR-006](adr/ADR-006-rich-content-and-import-contract.md)) and use the same rich-content contract. AI must preview changes before applying them.
+- Cloud sync remains **not planned**. No vendor is hard-coded; the AI chat is not part of the MVP.
+
+| Feature | Description |
+|---------|------------|
+| AI chat panel (optional) | Optional side panel that drafts or edits page content and imports it through the shared pipeline |
+| Page generation from prompt | Produce a structured RTWiki page (native blocks where possible) and preview before save |
+| Local-model adapter (future) | Pluggable AI-provider adapter registered in the composition root; off by default |
+| Cloud-provider adapter (future, opt-in) | Pluggable adapter for an explicitly-selected cloud provider; requires opt-in, disclosure, and no committed credentials |
+
+See [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) for the import contract and [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) for the pipeline.
+
 ## Decision Points
 
 Each phase beyond Phase 1 requires an explicit owner decision before starting. The roadmap is a living document — phases may be added, removed, or reordered based on user feedback and technical discoveries during earlier phases.
@@ -89,3 +108,6 @@ Each phase beyond Phase 1 requires an explicit owner decision before starting. T
 - [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) — MVP success criteria
 - [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md) — full requirement list
 - [ARCHITECTURE.md](ARCHITECTURE.md) — architectural decisions that enable future phases
+- [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content

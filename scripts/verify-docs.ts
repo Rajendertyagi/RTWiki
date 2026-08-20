@@ -135,10 +135,11 @@ const PORTABLE_PROHIBITIONS: ReadonlyArray<PortableProhibition> = [
 ]
 
 /** Exact project-status line required in the root README. */
-const REQUIRED_README_STATUS = 'Planning approved — implementation not started'
+const REQUIRED_README_STATUS = 'MVP foundation implemented — rich-content features planned'
 
 /** Stale phrases that must not appear in the root README. */
 const FORBIDDEN_STATUS_PHRASES: ReadonlyArray<string> = [
+  'Planning approved — implementation not started',
   'Planning phase complete — ready for implementation',
   'React 18',
   'RTWIKI_DATA_DIR',

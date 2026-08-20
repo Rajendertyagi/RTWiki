@@ -134,8 +134,42 @@ This document defines measurable, observable pass/fail criteria for the MVP. Eac
 | AC-061 | Time to perform a search across 500 pages | ≤ 1 second |
 | AC-062 | Size of the portable Windows artifact | ≤ 150 MB |
 
+## 15. Rich-Content Import, Packages, and Sandboxed Custom Content
+
+These criteria validate the rich-content model (native blocks, `rt-*` HTML, and sandboxed custom HTML/CSS/JS), the note-package import contract, and the localhost import API. They correspond to requirements R-040–R-063. See [AI Content Import](AI_CONTENT_IMPORT.md), [ADR-006](adr/ADR-006-rich-content-and-import-contract.md), and [ADR-007](adr/ADR-007-sandboxed-custom-content.md).
+
+| ID | Criterion | Pass Condition |
+|----|----------|---------------|
+| AC-063 | All four content entry paths (paste, file drop, file import, localhost API) share one import pipeline. | Importing the same source through any of the four paths produces the same canonical result. |
+| AC-064 | A Card block (L1) is a first-class nested container. | The card renders as a grouped container with a border or background and can hold other blocks. |
+| AC-065 | A Tabs block (L1) is a first-class container with switchable panels. | Clicking a tab shows that tab's content and hides the others. |
+| AC-066 | A Callout block (L1) is a first-class block with a type/severity. | The callout renders with a distinct style (colour/icon) indicating its type. |
+| AC-067 | A Grid block (L1) is a first-class multi-column responsive layout. | The grid renders two or more columns that reflow on narrow widths. |
+| AC-068 | Mathematical formulas render inline and as block. | Both inline and block formulas render as properly formatted math notation. |
+| AC-069 | Mermaid diagrams, including mind maps, render. | The diagram renders as a visual graphic within the page. |
+| AC-070 | Imported images are localized to `data/attachments/`. | Images referenced by imported content are stored locally and their references are rewritten; they display offline. |
+| AC-071 | A note-package with an invalid or missing manifest is rejected. | The application shows a clear error and writes no partial data. |
+| AC-072 | A failed import rolls back completely. | After a failed import, all previously existing pages remain unchanged and intact. |
+| AC-073 | Unknown block types are preserved, not deleted. | An unrecognized block is stored, rendered with a safe fallback, and flagged for review. |
+| AC-074 | Non-lossless conversions store the original rich HTML as a `richHtml` block inside `pages.content`. | The original HTML is stored as a `richHtml` block inside `pages.content` and is available for review; no content is silently dropped. |
+| AC-075 | Per-page custom CSS is isolated. | Custom CSS on one page does not change the appearance of the rest of the application. |
+| AC-076 | Per-page custom JavaScript runs only in a sandbox. | Custom JS executes only inside an iframe and cannot reach the parent application's same-origin context, database, or filesystem. |
+| AC-077 | The sandbox makes no network connections. | A packet capture shows zero outbound connections from sandboxed custom content. |
+| AC-078 | The sandbox cannot access the parent DOM. | Custom JS cannot read or modify application DOM outside its own sandbox. |
+| AC-079 | Active content is off by default and toggleable. | Scripts do not run unless the user enables them in settings; an indicator shows when active content is present. |
+| AC-080 | The import API validates request schema. | A malformed request returns a 4xx error and writes no data. |
+| AC-081 | The import API is idempotent. | Repeating the same import request (same client id) does not create duplicate pages. |
+| AC-082 | Imported content shows a preview with warnings. | Before saving, the user sees a sanitized preview and any warnings (unknown blocks, stripped scripts). |
+| AC-083 | All imported content renders fully offline. | With the network disabled, native blocks, `rt-*` HTML, and sandboxed content all render correctly. |
+| AC-084 | Blocks are added via registry, not a central switch. | A new block type can be added by registering a module without editing a central switch statement. |
+| AC-085 | Schema migrations run on startup without data loss. | Pages authored under an older `content_schema_version` migrate automatically and render correctly. |
+| AC-086 | The RTWiki core app has no AI or network dependency at runtime. | All core features work with no external AI service or network; AI-generated content arrives only via local files or the localhost API. A future optional AI chat may add a provider adapter (local model or explicitly-selected cloud provider, opt-in); the core app still works without it. |
+
 ## Cross-References
 
 - [MVP_SCOPE.md](MVP_SCOPE.md) — what features these criteria cover
 - [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md) — the requirements each criterion validates
 - [ROADMAP.md](ROADMAP.md) — features beyond the MVP that will have their own criteria later
+- [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content

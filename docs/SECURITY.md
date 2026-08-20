@@ -27,14 +27,11 @@ All HTML input — whether pasted from a browser, imported from a file, or enter
 **Forbidden attributes:**
 `onclick, onerror, onload, onmouseover, style` (style attributes are allowed only if they contain safe CSS properties — implemented via DOMPurify `ADD_ATTR` configuration).
 
-**Script content is always stripped.** No `<script>`, `<iframe>`, `<object>`, or `<embed>` tags are permitted.
+**Script content is always stripped from pasted and imported HTML.** No `<script>`, `<object>`, or `<embed>` tags are permitted in pasted or imported content. Author-supplied custom HTML/CSS/JS from a note-package is permitted only inside the isolated sandbox described in §2.4, never in the main application document.
 
 ### 2.2 Mermaid Security Mode
 
-Mermaid diagrams are rendered in strict security mode:
-- JavaScript execution inside diagram code is disabled.
-- Only the subset of Mermaid syntax supported by `@blocknote/diagram-block` is allowed.
-- External resource loading (`href`, `src`) is blocked.
+Mermaid diagrams use the documented default `securityLevel: "strict"`, which encodes HTML tags in diagram text and disables click functionality. RTWiki separately blocks unauthorized external-resource loading through its CSP, sanitization, asset, and network policies. Only the subset of Mermaid syntax supported by `@blocknote/diagram-block` is allowed.
 
 ### 2.3 Paste Handler
 
@@ -43,6 +40,27 @@ The BlockNote paste handler converts incoming HTML/Markdown to BlockNote blocks 
 ```
 Raw HTML → DOMPurify sanitize → HTML-to-BlockNote converter → BlockNote JSON
 ```
+
+### 2.4 Custom Content Sandbox
+
+When a page supplies optional custom HTML/CSS/JS (L3), it is rendered only inside an isolated sandbox:
+
+- The sandbox is an `<iframe>` with `sandbox` attributes that **deny same-origin access** (`sandbox="allow-scripts"` without `allow-same-origin`), disable forms where unsafe, and block all network egress (`connect-src 'none'`, no `fetch`/XHR to external hosts).
+- The sandboxed content has **no access** to the application's database, filesystem, cookies, `localStorage`, or the parent DOM. It cannot read or modify other pages.
+- A strict **Content-Security-Policy** is applied to the sandbox: `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'none'`.
+- **Active content (scripts) is off by default** and toggleable by a user setting. When disabled, only scoped CSS renders; JavaScript does not execute.
+- Any page using custom content shows a clear visual indicator that active content is present.
+- Trusted-global customization (site-wide custom CSS/JS) is a future, disabled-by-default capability and is not part of the MVP.
+
+### 2.5 AI Import API
+
+The localhost import API (`POST /api/v1/import/pages`) is bound to the loopback interface only:
+
+- It accepts no cross-origin requests (CORS is disabled); only the local machine may call it.
+- Request and package size limits are enforced before parsing (ZIP-bomb protection).
+- Incoming packages are validated against the manifest schema; entry names are checked for path traversal.
+- Import is idempotent per client-supplied request id; duplicate submissions do not create duplicate pages.
+- Custom JavaScript inside an imported package is confined to the sandbox (§2.4) and has no database, filesystem, or network access.
 
 ## 3. Attachment Safety
 
@@ -117,3 +135,6 @@ If any validation step fails, the restore is aborted and the user is shown a cle
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding standards that enforce these requirements
 - [DATA_MODEL.md](DATA_MODEL.md) — soft-delete and attachment safety in the data layer
 - [CI_CD.md](CI_CD.md) — security linting and static analysis in the build pipeline
+- [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content

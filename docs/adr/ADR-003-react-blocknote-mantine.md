@@ -12,11 +12,12 @@
 RTWiki needs a frontend framework, a block-based editor, and a UI component library. The constraints are:
 
 - The editor must support drag-and-drop block rearrangement, a slash menu, and a formatting toolbar out of the box.
-- The editor must support rich block types: headings, lists, checklists, quotes, tables, code blocks, cards, tabs, formulas, Mermaid diagrams, and images.
+- The editor must support rich block types: headings, lists, checklists, quotes, tables, code blocks, images, cards, tabs, callouts, grids, formulas, and Mermaid diagrams (including mind maps). Cards, tabs, callouts, and grids are implemented as **first-class BlockNote custom blocks** (L1), not ordinary HTML, so they survive import and round-trip editing. See [ADR-006](ADR-006-rich-content-and-import-contract.md).
 - The UI must be clean, modern, and accessible with minimal custom styling effort.
 - The stack must be TypeScript-native.
 - The application must run offline with no CDN dependencies.
 - Exact dependency versions must be compatible with each other; the newest version is not the primary selection criterion.
+- Rich content frequently arrives from external AI tools, so cards, tabs, callouts, grids, formulas, and diagrams must be first-class native block types (L1) that survive import and round-trip editing without degrading to plain HTML.
 
 ## Decision
 
@@ -56,6 +57,7 @@ All dependency versions will be committed through the lockfile. Major versions m
 - React's ecosystem is mature with excellent TypeScript support.
 - Vite's build is fast and produces a small, optimized production bundle.
 - Pinning versions through the lockfile and prioritizing compatibility avoids breaking changes during the MVP.
+- Cards, tabs, callouts, and grids are defined as BlockNote custom blocks registered in the block registry, so new rich block types can be added without editing a central switch (see [ADR-006](ADR-006-rich-content-and-import-contract.md)).
 
 **Negative:**
 - BlockNote is a relatively new project. API stability is good but future breaking changes are possible.

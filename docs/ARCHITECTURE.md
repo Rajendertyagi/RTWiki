@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the architectural approach for RTWiki. It defines the modular monolith structure, the boundaries between layers, the data flow, and the key design principles that guide implementation.
+This document describes the architectural approach for RTWiki. It defines the modular monolith structure, the boundaries between layers, the data flow, and the key design principles that guide implementation. It also defines how rich AI-generated content (native blocks, the `rt-*` HTML vocabulary, and sandboxed custom HTML/CSS/JS) flows through the system.
 
 ## 1. Architectural Style
 
@@ -16,6 +16,11 @@ graph TD
     H --> SE[Search Engine]
     H --> AT[Attachments]
     H --> BK[Backup and Restore]
+    H --> IP[Import Pipeline]
+    IP --> BR[Block Registry]
+    IP --> SV[Sanitization]
+    IP --> AL[Asset Localization]
+    H --> SB[Custom Content Sandbox]
     AS --> DB[(SQLite)]
     SE --> DB
     AT --> FS[(Filesystem)]
@@ -25,6 +30,8 @@ graph TD
     style H fill:#fff3e0
     style DB fill:#e8f5e9
     style FS fill:#fce4ec
+    style IP fill:#ede7f6
+    style SB fill:#ede7f6
 ```
 
 ## 3. Layer Boundaries
@@ -50,7 +57,7 @@ Each layer has a single responsibility and communicates only with its adjacent l
 ### 3.3 API Routes
 
 - **Technology:** Hono routes
-- **Responsibility:** Expose RESTful endpoints for pages, attachments, search, and backups. Validate all incoming requests using schema validators (e.g., Zod).
+- **Responsibility:** Expose RESTful endpoints for pages, attachments, search, backups, and imports. Validate all incoming requests using schema validators (e.g., Zod).
 - **Endpoints:**
   - `GET /api/pages` — list pages
   - `POST /api/pages` — create page
@@ -62,6 +69,7 @@ Each layer has a single responsibility and communicates only with its adjacent l
   - `GET /api/search?q=...` — full-text search
   - `POST /api/backup/create` — create backup archive
   - `POST /api/backup/restore` — restore from archive
+  - `POST /api/v1/import/pages` — localhost-only import of AI-generated pages / note-packages (documented target; see [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) and [AI Content Import](AI_CONTENT_IMPORT.md))
 - **Constraint:** Every route validates inputs. No raw user input reaches the database.
 
 ### 3.4 Application Services
@@ -72,6 +80,7 @@ Each layer has a single responsibility and communicates only with its adjacent l
   - `SearchService` — FTS5 query execution and result formatting
   - `AttachmentService` — upload, validation, storage, and retrieval
   - `BackupService` — archive creation and restoration with integrity checks
+  - `ImportService` — orchestrates the shared import pipeline (see §3.11)
 - **Constraint:** Services are instantiated once per request or per module, not as hidden globals.
 
 ### 3.5 Database Access
@@ -90,7 +99,7 @@ Each layer has a single responsibility and communicates only with its adjacent l
 ### 3.7 Attachments
 
 - **Technology:** Filesystem storage managed by `AttachmentService`
-- **Responsibility:** Accept uploads, validate extension / MIME type / size, store under a safe generated filename, and serve them back on request.
+- **Responsibility:** Accept uploads, validate extension / MIME type / size, store under a safe generated filename, and serve them back on request. During import, referenced images are localized here under `data/attachments/`.
 - **Constraint:** Uploaded files are never executed. Only read and served. Path traversal is prevented by resolving the canonical path and verifying it is within the data directory.
 
 ### 3.8 Backup and Restore
@@ -104,7 +113,7 @@ Each layer has a single responsibility and communicates only with its adjacent l
 ### 3.9 Shared Schemas and Types
 
 - **Responsibility:** Single source of truth for all shared TypeScript types and runtime schemas (e.g., Zod schemas for validation). Both frontend and backend import from the same module.
-- **Examples:** `Page`, `Block`, `Tag`, `Attachment`, `SearchResult`, `BackupMetadata`
+- **Examples:** `Page`, `Block`, `Tag`, `Attachment`, `SearchResult`, `BackupMetadata`, `ImportManifest`
 
 ### 3.10 Configuration
 
@@ -112,17 +121,62 @@ Each layer has a single responsibility and communicates only with its adjacent l
 - **Provisional defaults** (defined once, may be adjusted after MVP usability testing):
   - Autosave debounce: `2000 ms`
   - Maximum attachment size: `50 MB`
+  - Maximum import package size: `50 MB` (ZIP-bomb guard)
+  - Custom content (CSS/JS) enabled: `false` (active content off by default)
 - **Constraint:** No hardcoded ports, paths, limits, colours, or environment-specific values scattered across modules. All values are read from the config object.
-- **Example:** `config.server.port`, `config.data.directory`, `config.attachments.maxFileSize`
+- **Example:** `config.server.port`, `config.data.directory`, `config.attachments.maxFileSize`, `config.import.maxPackageBytes`, `config.customContent.enabled`
 
-### 3.11 Logging
+### 3.11 Import Pipeline
+
+All content entry paths — **paste, file drop, file import, and the localhost import API** — share one centralized import pipeline. No parallel import implementations are permitted. The pipeline stages are:
+
+```
+adapter → validation → sanitize → asset localization → convert → preview → canonical JSON → transactional save
+```
+
+- **Adapter:** detects the source format (note-package, HTML, Markdown, or BlockNote JSON) and normalizes it.
+- **Validation:** verifies manifests, sizes, and schema versions; applies ZIP-bomb and path-traversal guards for packages.
+- **Sanitize:** runs DOMPurify on any HTML; strips scripts from pasted/imported HTML.
+- **Asset localization:** downloads/extracts referenced images and writes them to `data/attachments/`, rewriting references.
+- **Convert:** maps source structures to the RTWiki-extended BlockNote schema (native blocks + `rt-*` HTML where needed).
+- **Preview:** renders a sanitized preview and collects warnings (unknown blocks, stripped scripts).
+- **Canonical JSON:** produces the stored BlockNote JSON document.
+- **Transactional save:** writes pages and assets inside a single transaction; on failure, rolls back so existing data is untouched.
+
+See [AI Content Import](AI_CONTENT_IMPORT.md) for the full contract and [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) for the rationale.
+
+### 3.12 Block Registry and Composition Root
+
+RTWiki uses a **modular block architecture**. Each rich block type is owned by its own module that declares:
+
+- a unique **type id**,
+- a **schema** (Zod/BlockNote schema),
+- an **editor** component,
+- a **viewer/renderer** component,
+- a **parser** (source → block) and **serializer** (block → source),
+- optional **viewer-only fallback** for unknown blocks.
+
+All block modules register themselves in a **block registry**. A single **composition root** reads the registries and wires the editor, renderer, import pipeline, and search extractor together. There is **no central switch statement** over block types; behaviour is discovered through registry metadata. The same registry pattern applies to import adapters, export adapters, sanitization policies, asset storage, theme/token providers, package validators, and the schema migrator. A future AI-provider adapter would also register here rather than being hard-wired. See [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) for the enforceable module rules and [ADR-006](adr/ADR-006-rich-content-and-import-contract.md).
+
+### 3.13 Custom Content Sandbox (L3)
+
+When a page supplies optional custom HTML/CSS/JS, it is rendered only inside an isolated sandbox (iframe) with `sandbox` attributes that deny same-origin access, disable forms/scripts where unsafe, and block all network egress. The sandbox has no access to the application's database, filesystem, or parent DOM. Active content (scripts) is **off by default** and toggleable per setting. See [ADR-007](adr/ADR-007-sandboxed-custom-content.md) and [SECURITY.md](SECURITY.md).
+
+### 3.14 Logging
 
 - **Responsibility:** Structured logging (JSON lines) for errors, warnings, and operational events. Log entries must never contain sensitive page content.
 - **Constraint:** No secrets, no user-provided page content, and no attachment data in logs. Log files use rotation and retention limits so they cannot grow indefinitely.
 
 ## 4. Canonical Data Format
 
-BlockNote JSON is the canonical saved representation of page content. HTML and Markdown are import/export formats only — they are converted to and from BlockNote JSON at the API boundary, never stored directly in the database. See [ADR-004](adr/ADR-004-canonical-block-json-format.md) for the full rationale.
+BlockNote JSON is the canonical saved representation of page content. HTML and Markdown are import/export formats only — they are converted to and from BlockNote JSON at the API boundary, never stored directly in the database. See [ADR-004](adr/ADR-004-canonical-block-json-format.md) for the full rationale and [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) for the rich-content extension.
+
+The canonical format is a **versioned, RTWiki-extended BlockNote JSON schema**:
+
+- Each `content` document carries a schema `version` so migrations can be applied on startup.
+- Rich structures use **typed custom blocks** (cards, tabs, callouts, grids, formulas, diagrams) defined in the block registry.
+- When a source (rich HTML/Markdown) cannot be converted losslessly, the original rich-HTML source is stored as a typed `richHtml` block inside `pages.content` so no content is silently lost.
+- **Unknown or unrecognized block types are preserved**, not deleted. They are stored and rendered with a safe fallback, and flagged for review.
 
 ## 5. Lazy Loading
 
@@ -130,6 +184,7 @@ Heavy features are lazy-loaded to keep the initial bundle small:
 
 - `@blocknote/math-block` — loaded only when a formula block is encountered
 - `@blocknote/diagram-block` — loaded only when a Mermaid diagram block is encountered
+- Custom-content sandbox runtime — loaded only when a page uses L3 custom HTML/CSS/JS
 - Any future visual mind-map editor (React Flow) — loaded on demand
 
 ## 6. Windows Executable Bundling
@@ -143,6 +198,10 @@ Frontend assets (the built `dist/` folder from Vite) are bundled alongside the b
 - [ADR-003](adr/ADR-003-react-blocknote-mantine.md) — frontend framework decision
 - [ADR-004](adr/ADR-004-canonical-block-json-format.md) — canonical format decision
 - [ADR-005](adr/ADR-005-portable-data-layout.md) — data directory decision
+- [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
+- [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
 - [DATA_MODEL.md](DATA_MODEL.md) — detailed entity and relationship specification
 - [SECURITY.md](SECURITY.md) — security requirements for each layer
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding rules that govern implementation
+- [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
+- [REFERENCE_RESEARCH.md](REFERENCE_RESEARCH.md) — comparable tools and libraries researched
