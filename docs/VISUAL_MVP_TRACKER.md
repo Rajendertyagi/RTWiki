@@ -43,7 +43,7 @@ The following are **not** in scope for the Visual MVP:
 |-------|------|--------|------------|--------|----------|
 | 0 | Discovery and Tracker | Owner approved | 0c1010b | #71 | — |
 | 1 | Page Persistence and CRUD API | Owner approved | fe8f418 | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) | build/#79 |
-| 2 | Visual Workspace and Page Management | In progress | — | — | — |
+| 2 | Visual Workspace and Page Management | CI verified | 82688e0 | [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820) | RTWiki-0.1.0-windows-x64 (37.9 MB) |
 | 3 | Rich Note Editor and Autosave | Not started | — | — | — |
 | 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
@@ -196,19 +196,19 @@ tests/pages.test.ts (new)
 - No rich editor yet, no HTML editor yet
 
 ### Acceptance Criteria
-- [ ] AppShell with sidebar and main content area
-- [ ] Sidebar: logo, search, page list with type indicators, new-page button, theme toggle
-- [ ] Dashboard: empty state with "Create Rich Note" and "Create HTML Page" buttons
-- [ ] Page cards/list ordered by most recently updated
-- [ ] Search filters pages by title
-- [ ] New-page dialog with title input and type selection
-- [ ] Editor header: editable title, type badge, save status (Saving…/Saved/Error)
-- [ ] Rename, duplicate, delete actions in editor header
-- [ ] Delete confirmation modal
-- [ ] Loading and error states for all async operations
-- [ ] All strings in centralized UI text dictionary
-- [ ] All styles use Mantine theme tokens (no inline style)
-- [ ] Portable Windows artifact produced
+- [x] AppShell with sidebar and main content area
+- [x] Sidebar: logo, search, page list with type indicators, new-page button, theme toggle
+- [x] Dashboard: empty state with "Create Rich Note" and "Create HTML Page" buttons
+- [x] Page cards/list ordered by most recently updated
+- [x] Search filters pages by title
+- [x] New-page dialog with title input and type selection
+- [x] Editor header: editable title, type badge, save status (Saving…/Saved/Error)
+- [x] Rename, duplicate, delete actions in editor header
+- [x] Delete confirmation modal
+- [x] Loading and error states for all async operations
+- [x] All strings in centralized UI text dictionary
+- [x] All styles use Mantine theme tokens (no inline style)
+- [x] Portable Windows artifact produced
 
 ### Planned Files
 ```
@@ -233,10 +233,51 @@ src/web/components/search-input.tsx (new)
 
 | File | Action | Commit |
 |------|--------|--------|
-| docs/VISUAL_MVP_TRACKER.md | Added | 4c80980 |
-| README.md | Modified (+4 -0) | 4c80980 |
-| .github/workflows/docs-quality.yml | Modified (add feature/** trigger) | 44a9343 |
-| .github/workflows/build.yml | Modified (add feature/** trigger) | 44a9343 |
+| src/web/config/index.ts | Modified (expanded UI_TEXT, kept STATUS_TEXT alias) | c21e56c |
+| src/web/main.tsx | Modified (+ Mantine CSS import) | c21e56c |
+| src/web/services/pages-api.ts | Added | c21e56c |
+| src/web/hooks/use-pages-controller.ts | Added (AbortController + seq + 300 ms debounce + mutation status) | c21e56c, be16b08 |
+| src/web/components/page-type-badge.tsx | Added | c21e56c |
+| src/web/components/search-input.tsx | Added | c21e56c |
+| src/web/components/theme-toggle.tsx | Added | c21e56c |
+| src/web/components/save-status.tsx | Added (mutation status only) | c21e56c |
+| src/web/layout/app-shell.module.css | Added | c21e56c |
+| src/web/layout/sidebar.module.css | Added | c21e56c |
+| src/web/layout/app-shell.tsx | Added | be16b08 |
+| src/web/layout/sidebar.tsx | Added | be16b08 |
+| src/web/features/dashboard/dashboard.module.css | Added | be16b08 |
+| src/web/features/dashboard/empty-state.tsx | Added | be16b08 |
+| src/web/features/dashboard/page-card.tsx | Added | be16b08, e7429cd |
+| src/web/features/dashboard/dashboard.tsx | Added | be16b08 |
+| src/web/features/pages/new-page-dialog.tsx | Added | be16b08 |
+| src/web/features/pages/delete-confirm-modal.tsx | Added | be16b08 |
+| src/web/features/pages/editor-header.tsx | Added | be16b08 |
+| src/web/features/pages/editor-header.module.css | Added | be16b08 |
+| src/web/features/pages/page-workspace.tsx | Added | be16b08 |
+| src/web/features/pages/page-workspace.module.css | Added | be16b08 |
+| src/web/App.tsx | Rewritten (small composition root + inline Alert feedback) | be16b08 |
+| src/server/repositories/page-repository.ts | Modified (+ rowid secondary sort for deterministic ordering) | 82688e0 |
+
+### Commit Log
+
+| SHA | Message | CI |
+|-----|---------|-----|
+| c21e56c | feat(web): add UI foundation — config, pages API, controller hook, and reusable components | [#32382282660](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382282660) fail (format) |
+| be16b08 | feat(web): add visual workspace — AppShell, sidebar, dashboard, and page management | [#32382282660](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382282660) fail (format) |
+| 489e559 | fix: biome format compliance for Phase 2 | [#32382531143](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382531143) fail (lint) |
+| e7429cd | fix: use semantic button for page card title to satisfy a11y lint | [#32382729554](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382729554) fail (test) |
+| 82688e0 | fix: ensure deterministic page ordering with secondary rowid sort | [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820) **PASS** |
+
+### Known Limitations
+
+- No rich editor yet — placeholder workspace shows title, type badge, save status, and actions; content editing deferred to Phase 3.
+- No HTML/CSS/JS editor tabs — html page type can be created and listed but not edited beyond title.
+- No content autosave — save-status reflects title/API mutation (Saving…/Saved/Error with 2 s reset), not content autosave; no misleading permanent “Saved” state.
+- Search is title/content via API `q` param with 300 ms debounce, AbortController, and request sequencing; older results cannot overwrite newer.
+- No Mantine Notifications — all feedback via inline Alert/status from existing Mantine components.
+- CSS modules + Mantine theme/CSS variables used for layout; no `style={...}` and no scattered numeric colors/spacing.
+- `App.tsx` is a small composition root delegating to `usePagesController`.
+- Portable artifact produced on every successful build; smoke test verifies exe + web assets + portable layout per ADR-005.
 
 ## Phase 3 — Rich Note Editor and Autosave
 
@@ -393,8 +434,8 @@ tests/sandbox-security.test.ts (new)
 
 ## Next Phase
 
-**Phase 1 — Owner approved.** Proceeding to Phase 2: Visual Workspace and Page Management.
+**Phase 2 — CI verified** (82688e0 — [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures. Portable artifact: RTWiki-0.1.0-windows-x64 (37.9 MB). Awaiting owner approval to proceed to Phase 3.
 
 ## Final Verification Status
 
-Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures.
+Phase 0: Owner approved (#71). Phase 1: Owner approved (#79 — [#32376828943](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943)). Phase 2: CI verified (82688e0 — [#32382949820](https://github.com/Rajendertyagi/RTWiki/actions/runs/32382949820)). All format, lint, typecheck, test, build, and Windows smoke test gates passed. 49 tests, 0 failures.
