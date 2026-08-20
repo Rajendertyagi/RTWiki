@@ -61,9 +61,9 @@ describe('page CRUD', () => {
     const created = service.createPage(db, { title: 'Get Test', pageType: 'rich', content: 'body' })
     const fetched = service.getPage(db, created.id)
     expect(fetched).not.toBeNull()
-    expect(fetched!.id).toBe(created.id)
-    expect(fetched!.title).toBe('Get Test')
-    expect(fetched!.content).toBe('body')
+    expect(fetched?.id).toBe(created.id)
+    expect(fetched?.title).toBe('Get Test')
+    expect(fetched?.content).toBe('body')
   })
 
   it('returns null for non-existent page', () => {
@@ -75,20 +75,20 @@ describe('page CRUD', () => {
     const page = service.createPage(db, { title: 'Original', pageType: 'rich', content: '' })
     const updated = service.updatePage(db, page.id, { title: 'Updated' })
     expect(updated).not.toBeNull()
-    expect(updated!.title).toBe('Updated')
-    expect(updated!.version).toBe(page.version + 1)
+    expect(updated?.title).toBe('Updated')
+    expect(updated?.version).toBe(page.version + 1)
   })
 
   it('updates page content', () => {
     const page = service.createPage(db, { title: 'Content Test', pageType: 'rich', content: 'v1' })
     const updated = service.updatePage(db, page.id, { content: 'v2' })
-    expect(updated!.content).toBe('v2')
+    expect(updated?.content).toBe('v2')
   })
 
   it('updates page type', () => {
     const page = service.createPage(db, { title: 'Type Test', pageType: 'rich', content: '' })
     const updated = service.updatePage(db, page.id, { pageType: 'html' })
-    expect(updated!.pageType).toBe('html')
+    expect(updated?.pageType).toBe('html')
   })
 
   it('returns null when updating non-existent page', () => {
@@ -134,10 +134,10 @@ describe('page CRUD', () => {
     })
     const copy = service.duplicatePage(db, original.id)
     expect(copy).not.toBeNull()
-    expect(copy!.id).not.toBe(original.id)
-    expect(copy!.title).toBe('Original Page - Copy')
-    expect(copy!.content).toBe('content here')
-    expect(copy!.pageType).toBe('rich')
+    expect(copy?.id).not.toBe(original.id)
+    expect(copy?.title).toBe('Original Page - Copy')
+    expect(copy?.content).toBe('content here')
+    expect(copy?.pageType).toBe('rich')
   })
 
   it('returns null when duplicating non-existent page', () => {
@@ -202,8 +202,8 @@ describe('rich-content JSON round trip', () => {
       content: blockNoteJson
     })
     const fetched = service.getPage(db, page.id)
-    expect(fetched!.content).toBe(blockNoteJson)
-    const parsed = JSON.parse(fetched!.content)
+    expect(fetched?.content).toBe(blockNoteJson)
+    const parsed = JSON.parse(fetched?.content)
     expect(parsed.children[0].type).toBe('heading')
     expect(parsed.children[0].content[0].text).toBe('Hello')
   })
@@ -224,7 +224,7 @@ describe('rich-content JSON round trip', () => {
     })
     service.updatePage(db, page.id, { content: updatedContent })
     const fetched = service.getPage(db, page.id)
-    expect(fetched!.content).toBe(updatedContent)
+    expect(fetched?.content).toBe(updatedContent)
   })
 })
 
@@ -258,8 +258,8 @@ describe('HTML content round trip', () => {
       content: htmlContent
     })
     const fetched = service.getPage(db, page.id)
-    expect(fetched!.pageType).toBe('html')
-    const parsed = JSON.parse(fetched!.content)
+    expect(fetched?.pageType).toBe('html')
+    const parsed = JSON.parse(fetched?.content)
     expect(parsed.html).toBe('<h1>Title</h1><p>Body</p>')
     expect(parsed.jsEnabled).toBe(false)
   })
@@ -296,3 +296,4 @@ describe('API validation', () => {
     expect(result.success).toBe(false)
   })
 })
+
