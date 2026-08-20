@@ -1,6 +1,8 @@
 name: Format verify-docs.ts
 on:
-  workflow_dispatch:
+  push:
+    branches: [feature/mvp-foundation]
+    paths: [scripts/verify-docs.ts]
 
 permissions:
   contents: write
