@@ -73,7 +73,13 @@ export function Dashboard({
 
       <div className={classes.grid}>
         {pages.map((page) => (
-          <PageCard key={page.id} page={page} onOpen={onOpen} onDuplicate={onDuplicate} onDelete={onDelete} />
+          <PageCard
+            key={page.id}
+            page={page}
+            onOpen={onOpen}
+            onDuplicate={onDuplicate}
+            onDelete={onDelete}
+          />
         ))}
       </div>
     </Stack>

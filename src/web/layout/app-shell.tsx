@@ -21,7 +21,12 @@ export function AppShellLayout({ navbar, children }: AppShellLayoutProps): JSX.E
       <AppShell.Header>
         <div className={classes.headerInner}>
           <Group gap="sm">
-            <Burger opened={opened} onClick={() => setOpened((o) => !o)} hiddenFrom="sm" size="sm" />
+            <Burger
+              opened={opened}
+              onClick={() => setOpened((o) => !o)}
+              hiddenFrom="sm"
+              size="sm"
+            />
             <Title order={3} className={classes.headerTitle}>
               {UI_TEXT.appName}
             </Title>

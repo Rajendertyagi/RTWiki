@@ -1,8 +1,4 @@
-import type {
-  Page,
-  CreatePageRequest,
-  UpdatePageRequest
-} from '@rtwiki/shared/contracts/pages'
+import type { Page, CreatePageRequest, UpdatePageRequest } from '@rtwiki/shared/contracts/pages'
 
 const API_BASE = '/api'
 
@@ -33,10 +29,7 @@ export async function listPages(
   return (await res.json()) as PagesResult
 }
 
-export async function createPage(
-  request: CreatePageRequest,
-  signal?: AbortSignal
-): Promise<Page> {
+export async function createPage(request: CreatePageRequest, signal?: AbortSignal): Promise<Page> {
   const res = await fetch(`${API_BASE}/pages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

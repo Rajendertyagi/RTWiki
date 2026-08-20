@@ -81,13 +81,21 @@ export function EditorHeader({
       </Group>
 
       <Group gap="xs" wrap="nowrap">
-        <Button variant="light" size="xs" leftSection={<IconCopy size={14} />} onClick={onDuplicate}>
+        <Button
+          variant="light"
+          size="xs"
+          leftSection={<IconCopy size={14} />}
+          onClick={onDuplicate}
+        >
           {UI_TEXT.duplicateAction}
         </Button>
 
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
-            <ActionIcon variant="subtle" aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}>
+            <ActionIcon
+              variant="subtle"
+              aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
+            >
               <IconDots size={16} />
             </ActionIcon>
           </Menu.Target>

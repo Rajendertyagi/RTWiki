@@ -39,7 +39,10 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
         </Title>
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
-            <ActionIcon variant="subtle" aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}>
+            <ActionIcon
+              variant="subtle"
+              aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
+            >
               <IconDots size={16} />
             </ActionIcon>
           </Menu.Target>

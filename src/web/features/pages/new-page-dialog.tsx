@@ -76,7 +76,11 @@ export function NewPageDialog({
           aria-label={UI_TEXT.titleLabel}
         />
 
-        <Radio.Group label={UI_TEXT.typeLabel} value={pageType} onChange={(v) => setPageType(v as PageType)}>
+        <Radio.Group
+          label={UI_TEXT.typeLabel}
+          value={pageType}
+          onChange={(v) => setPageType(v as PageType)}
+        >
           <Group mt="xs" gap="md">
             <Radio value="rich" label={UI_TEXT.richNote} />
             <Radio value="html" label={UI_TEXT.htmlPage} />

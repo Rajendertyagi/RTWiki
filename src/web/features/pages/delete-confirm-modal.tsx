@@ -17,9 +17,7 @@ export function DeleteConfirmModal({
   return (
     <Modal opened={opened} onClose={onClose} title={UI_TEXT.deleteTitle} centered>
       <Stack gap="md">
-        <Text size="sm">
-          {UI_TEXT.deleteConfirmation}
-        </Text>
+        <Text size="sm">{UI_TEXT.deleteConfirmation}</Text>
         {pageTitle ? (
           <Text size="sm" fw={600}>
             {pageTitle}
