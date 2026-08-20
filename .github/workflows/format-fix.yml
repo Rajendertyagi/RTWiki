@@ -4,10 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [feature/dependency-compat]
-    paths:
-      - "biome.json"
-      - "**/*.ts"
-      - "**/*.tsx"
 
 permissions:
   contents: read
