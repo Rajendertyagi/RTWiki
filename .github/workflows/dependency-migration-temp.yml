@@ -1,6 +1,11 @@
 name: Dependency Migration Resolution
 
 on:
+  push:
+    branches: [feature/dependency-compat]
+    paths:
+      - ".github/workflows/dependency-migration-temp.yml"
+      - "package.json"
   workflow_dispatch:
     inputs:
       react_version:
