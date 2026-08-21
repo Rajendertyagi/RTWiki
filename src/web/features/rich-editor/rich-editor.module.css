@@ -1,0 +1,20 @@
+.editorRoot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.editorContainer {
+  flex: 1;
+  min-height: 400px;
+}
+
+.blockNoteWrapper {
+  flex: 1;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  padding: var(--mantine-spacing-sm);
+  background: var(--mantine-color-body);
+  min-height: 300px;
+}
