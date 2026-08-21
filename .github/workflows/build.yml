@@ -230,6 +230,8 @@ jobs:
             $root = Invoke-WebRequest -Uri "http://127.0.0.1:8080/" -UseBasicParsing
             if ($root.StatusCode -ne 200) { throw "GET / returned $($root.StatusCode)" }
             if ([string]::IsNullOrWhiteSpace($root.Content)) { throw "GET / returned empty HTML" }
+            Write-Host "ROOT CONTENT: [$($root.Content.Length)] chars, type=$($root.Headers['Content-Type'])"
+            Write-Host "ROOT SNIPPET: $($root.Content.Substring(0, [Math]::Min(300, $root.Content.Length)))"
 
             # 6c. Parse all <script src> and <link href> assets; verify JS/CSS MIME.
             $scriptPattern = '(?i)<script\s+[^>]*src="(/assets/[^"]+)"'
