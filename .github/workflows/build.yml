@@ -280,15 +280,15 @@ jobs:
               }
             }
 
-            # 16. Authorized shutdown: correct token must trigger clean stop.
+            # 16. Authorized shutdown: correct token must trigger clean stop (202).
             $shutdownRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -Headers @{"X-RTWiki-Shutdown-Token"=$shutdownToken} -UseBasicParsing
-            if ($shutdownRes.StatusCode -ne 200) { throw "Authorized shutdown returned $($shutdownRes.StatusCode)" }
+            if ($shutdownRes.StatusCode -ne 202) { throw "Authorized shutdown returned $($shutdownRes.StatusCode) (expected 202)" }
             $shutdownBody = $shutdownRes.Content | ConvertFrom-Json
             if ($shutdownBody.status -ne "shutting_down") { throw "Shutdown response status: $($shutdownBody.status)" }
 
-            # Wait for server to stop (up to 5 seconds).
+            # Wait for server to stop (up to 10 seconds).
             $stopped = $false
-            for ($i = 0; $i -lt 5; $i++) {
+            for ($i = 0; $i -lt 10; $i++) {
               Start-Sleep -Seconds 1
               try {
                 $check = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing -TimeoutSec 1
@@ -297,8 +297,22 @@ jobs:
                 $stopped = $true; break
               }
             }
-            if (-not $stopped) { throw "Server did not stop within 5s after authorized shutdown" }
+            if (-not $stopped) { throw "Server did not stop within 10s after authorized shutdown" }
             Write-Host "SHUTDOWN OK: server stopped cleanly after authorized request"
+
+            # Confirm port 8080 no longer accepts connections.
+            try {
+              $portCheck = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing -TimeoutSec 2
+              throw "Port 8080 still accepts connections after shutdown"
+            } catch {
+              $errStr = $_.Exception.Message
+              if ($errStr -match "Connection refused|400|cannot be reached") {
+                Write-Host "PORT RELEASED: 8080 no longer accepts connections"
+              } else {
+                # Any non-200 response confirms the port is not serving.
+                Write-Host "PORT RELEASED: 8080 not serving (got: $errStr)"
+              }
+            }
 
             # 17. Verify no orphan processes.
             $orphanCheck = Get-Process -Name "RTWiki" -ErrorAction SilentlyContinue

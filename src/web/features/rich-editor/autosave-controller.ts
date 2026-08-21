@@ -9,10 +9,17 @@ export interface AutosaveState {
   pendingContent: string | null
 }
 
+export interface Scheduler {
+  setTimeout(fn: () => void, ms: number): unknown
+  clearTimeout(id: unknown): void
+}
+
 export interface AutosaveControllerOptions {
   debounceMs?: number
   onSave: (pageId: string, content: string) => Promise<void>
   onStatusChange?: (state: AutosaveState) => void
+  /** @internal Test injection point; defaults to the real timers. */
+  scheduler?: Scheduler
 }
 
 export function createAutosaveController(options: AutosaveControllerOptions): {
@@ -23,6 +30,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   dispose: () => void
 } {
   const debounceMs = options.debounceMs ?? AUTOSAVE_DEBOUNCE_MS
+  const scheduler = options.scheduler ?? { setTimeout, clearTimeout }
   let status: AutosaveStatus = 'idle'
   let error: string | null = null
   let pendingPageId: string | null = null
@@ -30,7 +38,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   let savingPageId: string | null = null
   let savingContent: string | null = null
   let savingPromise: Promise<void> | null = null
-  let timer: ReturnType<typeof setTimeout> | null = null
+  let timer: unknown = null
   let nextPending: { pageId: string; content: string } | null = null
   let disposed = false
   let seq = 0
@@ -47,8 +55,8 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   }
 
   const clearTimer = (): void => {
-    if (timer) {
-      clearTimeout(timer)
+    if (timer !== null) {
+      scheduler.clearTimeout(timer)
       timer = null
     }
   }
@@ -106,7 +114,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
 
   const scheduleSave = (): void => {
     clearTimer()
-    timer = setTimeout(() => {
+    timer = scheduler.setTimeout(() => {
       timer = null
       if (pendingPageId && pendingContent !== null) {
         const pid = pendingPageId

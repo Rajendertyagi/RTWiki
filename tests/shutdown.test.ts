@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { createShutdownRoutes } from '../src/server/routes/shutdown.js'
 import type { ShutdownResult as CoordinatorResult } from '../src/server/shutdown-coordinator.js'
@@ -244,9 +244,135 @@ describe('shutdown routes (pure)', () => {
   })
 })
 
-// ---------- C. Real network lifecycle integration test ----------
+// ---------- B. Coordinator lifecycle tests ----------
 
-describe('shutdown integration (real server, one shot)', () => {
+describe('shutdown coordinator lifecycle', () => {
+  it('returns 202 and coordinator transitions through states', async () => {
+    let stopResolver!: (v: void) => void
+    const stopPromise = new Promise<void>((r) => {
+      stopResolver = r
+    })
+
+    const coordinator = new ShutdownCoordinator({
+      stopGracefully: () => stopPromise,
+      closeDatabase: () => Promise.resolve(),
+      logInfo: () => {},
+      logWarn: () => {},
+      logError: () => {},
+      closeLogger: () => Promise.resolve()
+    })
+
+    expect(coordinator.state).toBe('running')
+
+    const token = randomUUID()
+    const routes = createShutdownRoutes({ coordinator, token })
+
+    const res = await routes.fetch(
+      new Request('http://127.0.0.1:8080/', {
+        method: 'POST',
+        headers: {
+          Origin: 'http://127.0.0.1:8080',
+          [SHUTDOWN_TOKEN_HEADER]: token
+        }
+      })
+    )
+    expect(res.status).toBe(202)
+
+    // State should be 'stopping' immediately after request
+    expect(coordinator.state).toBe('stopping')
+
+    // Resolve the stop to complete shutdown
+    stopResolver()
+    const result = await coordinator.completed
+    expect(result.ok).toBe(true)
+    expect(coordinator.state).toBe('stopped')
+  })
+
+  it('is idempotent — second requestShutdown returns the same resolved result', async () => {
+    const coordinator = new ShutdownCoordinator({
+      stopGracefully: () => Promise.resolve(),
+      closeDatabase: () => Promise.resolve(),
+      logInfo: () => {},
+      logWarn: () => {},
+      logError: () => {},
+      closeLogger: () => Promise.resolve()
+    })
+
+    const p1 = coordinator.requestShutdown()
+    const p2 = coordinator.requestShutdown()
+    expect(p1).toBe(p2)
+
+    const r1 = await p1
+    const r2 = await p2
+    expect(r1).toEqual(r2)
+    expect(r1.ok).toBe(true)
+  })
+
+  it('DB closes after server stops, logger closes after DB', async () => {
+    const phases: string[] = []
+
+    const coordinator = new ShutdownCoordinator({
+      stopGracefully: async () => {
+        phases.push('server_stop')
+      },
+      closeDatabase: async () => {
+        phases.push('db_close')
+      },
+      logInfo: () => {},
+      logWarn: () => {},
+      logError: () => {},
+      closeLogger: async () => {
+        phases.push('logger_close')
+      }
+    })
+
+    await coordinator.requestShutdown()
+    await coordinator.completed
+
+    expect(phases).toEqual(['server_stop', 'db_close', 'logger_close'])
+    expect(coordinator.state).toBe('stopped')
+  })
+
+  it('route-level idempotency — second POST also returns 202', async () => {
+    const coordinator = new ShutdownCoordinator({
+      stopGracefully: () => Promise.resolve(),
+      closeDatabase: () => Promise.resolve(),
+      logInfo: () => {},
+      logWarn: () => {},
+      logError: () => {},
+      closeLogger: () => Promise.resolve()
+    })
+
+    const token = randomUUID()
+    const routes = createShutdownRoutes({ coordinator, token })
+
+    const res1 = await routes.fetch(
+      new Request('http://127.0.0.1:8080/', {
+        method: 'POST',
+        headers: {
+          Origin: 'http://127.0.0.1:8080',
+          [SHUTDOWN_TOKEN_HEADER]: token
+        }
+      })
+    )
+    expect(res1.status).toBe(202)
+
+    const res2 = await routes.fetch(
+      new Request('http://127.0.0.1:8080/', {
+        method: 'POST',
+        headers: {
+          Origin: 'http://127.0.0.1:8080',
+          [SHUTDOWN_TOKEN_HEADER]: token
+        }
+      })
+    )
+    expect(res2.status).toBe(202)
+  })
+})
+
+// ---------- C. Real HTTP integration test ----------
+
+describe('shutdown integration (real HTTP, one shot)', () => {
   let runtime: Awaited<ReturnType<typeof import('../src/server/bootstrap.js').bootstrap>>
   let port: number
 
@@ -262,7 +388,7 @@ describe('shutdown integration (real server, one shot)', () => {
     // again — the integration test below triggers the real one.
   })
 
-  it('single valid shutdown: 202 then coordinator completes', async () => {
+  it('real HTTP: valid POST returns 202, coordinator completes, server stops accepting connections', async () => {
     // Obtain token via in-process fetch (avoids network-path Origin quirks).
     const tokenRes = await runtime.server.fetch(
       new Request(`http://127.0.0.1:${port}/api/shutdown/token`)
@@ -272,25 +398,44 @@ describe('shutdown integration (real server, one shot)', () => {
     expect(typeof token).toBe('string')
     expect(token.length).toBeGreaterThan(0)
 
-    // Send one valid POST.
-    const shutdownRes = await runtime.server.fetch(
-      new Request(`http://127.0.0.1:${port}/api/shutdown`, {
-        method: 'POST',
-        headers: {
-          Origin: `http://127.0.0.1:${port}`,
-          [SHUTDOWN_TOKEN_HEADER]: token
-        }
-      })
-    )
+    // Send real HTTP POST (not in-process fetch).
+    const shutdownRes = await fetch(`http://127.0.0.1:${port}/api/shutdown`, {
+      method: 'POST',
+      headers: {
+        [SHUTDOWN_TOKEN_HEADER]: token
+      }
+    })
     expect(shutdownRes.status).toBe(202)
     const body = (await shutdownRes.json()) as { status: string }
     expect(body.status).toBe('shutting_down')
 
-    // Verify coordinator completes.
+    // Await coordinator completion deterministically.
     const result = await runtime.coordinator.completed
     expect(result.ok).toBe(true)
     expect(runtime.coordinator.state).toBe('stopped')
 
-    // Do NOT send further requests — the server is gone.
+    // Server must reject new connections after shutdown.
+    await expect(
+      fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })
+    ).rejects.toThrow()
+  })
+
+  it('real HTTP: wrong token is rejected with 403', async () => {
+    // Re-bootstrap a fresh server for this test since the previous one shut down.
+    const fresh = await import('../src/server/bootstrap.js').then((m) =>
+      m.bootstrap({ port: 0, openBrowser: false })
+    )
+    const freshPort = fresh.server.port as number
+
+    const wrongRes = await fetch(`http://127.0.0.1:${freshPort}/api/shutdown`, {
+      method: 'POST',
+      headers: {
+        [SHUTDOWN_TOKEN_HEADER]: 'wrong-token'
+      }
+    })
+    expect(wrongRes.status).toBe(403)
+
+    // Clean up fresh server.
+    void fresh.coordinator.requestShutdown()
   })
 })
