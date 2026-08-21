@@ -83,9 +83,9 @@ describe('workspace routing', () => {
       selected = id ? (pages.find((p) => p.id === id) ?? null) : null
     }
     select('p1')
-    expect((selected as Page).id).toBe('p1')
+    expect(selected!.id).toBe('p1')
     select('p2')
-    expect((selected as Page).id).toBe('p2')
+    expect(selected!.id).toBe('p2')
     // Three-dot menu should not trigger open - tested via ghost button pattern in component
   })
 
