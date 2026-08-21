@@ -248,7 +248,7 @@ describe('shutdown routes (pure)', () => {
 
 describe('shutdown coordinator lifecycle', () => {
   it('returns 202 and coordinator transitions through states', async () => {
-    let stopResolver!: (v: void) => void
+    let stopResolver!: () => void
     const stopPromise = new Promise<void>((r) => {
       stopResolver = r
     })

@@ -10,8 +10,8 @@ export interface AutosaveState {
 }
 
 export interface Scheduler {
-  setTimeout(fn: () => void, ms: number): unknown
-  clearTimeout(id: unknown): void
+  setTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout>
+  clearTimeout(id: ReturnType<typeof clearTimeout>): void
 }
 
 export interface AutosaveControllerOptions {
@@ -38,7 +38,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   let savingPageId: string | null = null
   let savingContent: string | null = null
   let savingPromise: Promise<void> | null = null
-  let timer: unknown = null
+  let timer: ReturnType<typeof setTimeout> | null = null
   let nextPending: { pageId: string; content: string } | null = null
   let disposed = false
   let seq = 0
@@ -56,8 +56,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
 
   const clearTimer = (): void => {
     if (timer !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      scheduler.clearTimeout(timer as any)
+      scheduler.clearTimeout(timer)
       timer = null
     }
   }
