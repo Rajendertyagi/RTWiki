@@ -44,33 +44,8 @@ function makeFakeScheduler(): {
   return { scheduler, fireNext, fireAll }
 }
 
-// ---------- save-pool: deterministic deferred saves ----------
-// Each call to pendingSave() returns a { done, resolve } pair. The controller's
-// onSave fires the first unresolved pending save (in FIFO order) and then
-// awaits its resolution. This replaces fragile await-tick sequences.
-
-function pendingSave(): { done: Promise<void>; resolve: () => void } {
-  let resolve!: () => void
-  const done = new Promise<void>((r) => {
-    resolve = r
-  })
-  return { done, resolve }
-}
-
-const activeSaves = new Map<number, { resolve: () => void }>()
-let saveCounter = 0
-
-function makeSaveFn(resolverMap: Map<number, { resolve: () => void }>) {
-  return async (_pageId: string, _content: string): Promise<void> => {
-    const id = ++saveCounter
-    resolverMap.set(id, { resolve: () => {} })
-    // Wait until the test signals this save is done.
-    await new Promise<void>((r) => {
-      resolverMap.get(id)!.resolve = r
-    })
-    resolverMap.delete(id)
-  }
-}
+// Yield to the event loop so in-flight async saves can settle.
+const tick = (): Promise<void> => Promise.resolve()
 
 // ---------- tests ----------
 
@@ -111,7 +86,6 @@ describe('autosave controller', () => {
     let activeSaves = 0
     let maxConcurrent = 0
     const { scheduler, fireNext } = makeFakeScheduler()
-    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
