@@ -22,7 +22,7 @@ describe('shutdown client', () => {
         ok: true,
         status: 200,
         json: async () => ({ token: 'test-token-123' })
-      } as unknown as Response)
+      } as unknown as Response
     const token = await fetchShutdownToken()
     expect(token).toBe('test-token-123')
   })
@@ -34,7 +34,7 @@ describe('shutdown client', () => {
         ok: false,
         status: 403,
         json: async () => ({ error: 'forbidden' })
-      } as unknown as Response)
+      } as unknown as Response
     const token = await fetchShutdownToken()
     expect(token).toBeNull()
   })
@@ -46,7 +46,7 @@ describe('shutdown client', () => {
         ok: true,
         status: 202,
         json: async () => ({ status: 'shutting_down' })
-      } as unknown as Response)
+      } as unknown as Response
     const result = await requestShutdown('valid-token')
     expect(result.success).toBe(true)
   })
@@ -58,7 +58,7 @@ describe('shutdown client', () => {
         ok: true,
         status: 200,
         json: async () => ({ status: 'shutting_down' })
-      } as unknown as Response)
+      } as unknown as Response
     const result = await requestShutdown('valid-token')
     expect(result.success).toBe(true)
   })
@@ -70,7 +70,7 @@ describe('shutdown client', () => {
         ok: false,
         status: 403,
         json: async () => ({ error: 'Invalid shutdown token' })
-      } as unknown as Response)
+      } as unknown as Response
     const result = await requestShutdown('bad-token')
     expect(result.success).toBe(false)
     expect(result.error).toContain('Invalid shutdown token')
@@ -94,7 +94,7 @@ describe('shutdown client', () => {
         ok: true,
         status: 202,
         json: async () => ({ status: 'shutting_down' })
-      } as unknown as Response)
+      } as unknown as Response
     const result = await requestShutdown(token)
     expect(result.success).toBe(true)
     // Ensure error messages do not contain token
@@ -104,7 +104,7 @@ describe('shutdown client', () => {
         ok: false,
         status: 403,
         json: async () => ({ error: 'Invalid shutdown token' })
-      } as unknown as Response)
+      } as unknown as Response
     const fail = await requestShutdown('wrong')
     expect(fail.error).not.toContain(token)
   })

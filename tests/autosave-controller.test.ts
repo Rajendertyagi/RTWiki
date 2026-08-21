@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { createAutosaveController } from '../src/web/features/rich-editor/autosave-controller.js'
 import type { Scheduler } from '../src/web/features/rich-editor/autosave-controller.js'
+import { createAutosaveController } from '../src/web/features/rich-editor/autosave-controller.js'
 
 // ---------- deterministic fake scheduler ----------
 

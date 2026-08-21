@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { randomUUID } from 'node:crypto'
-import { createApp, type AppDependencies } from '../src/server/app.js'
+import { type AppDependencies, createApp } from '../src/server/app.js'
 import { closeDatabase, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import { ShutdownCoordinator } from '../src/server/shutdown-coordinator.js'
@@ -12,10 +12,7 @@ import { SHUTDOWN_TOKEN_HEADER } from '../src/shared/constants/index.js'
 // ---------- helpers ----------
 
 function makeTempDir(): string {
-  const dir = join(
-    tmpdir(),
-    `rtwiki-app-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  )
+  const dir = join(tmpdir(), `rtwiki-app-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dir, { recursive: true })
   return dir
 }
