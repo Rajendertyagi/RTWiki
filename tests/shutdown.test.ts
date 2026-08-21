@@ -34,10 +34,9 @@ describe('shutdown API security', () => {
       headers: { Origin: `http://127.0.0.1:${port}` }
     })
     console.log('DIAG_NETWORK', res.status)
-    const diagBody = await res.text()
-    if (res.status !== 200) {
-      throw new Error(`SHUTDOWN_TOKEN_STATUS=${res.status} BODY=${diagBody.slice(0, 120)}`)
-    }
+    const diagOrigin = res.headers.get('x-diag-origin') ?? 'MISSING'
+    const diagUrl = res.headers.get('x-diag-url') ?? 'MISSING'
+    expect(diagOrigin).toBe('ORIGIN_SHOULD_BE_VISIBLE_HERE')
     expect(res.status).toBe(200)
     const body = (await res.json()) as { token: string }
     expect(typeof body.token).toBe('string')
