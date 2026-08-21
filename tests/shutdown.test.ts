@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { bootstrap } from '../src/server/bootstrap.js'
+import { app } from '../src/server/app.js'
 import { SHUTDOWN_TOKEN_HEADER } from '../src/shared/constants/index.js'
 
 function freePort(): number {
@@ -23,9 +24,16 @@ describe('shutdown API security', () => {
   })
 
   it('GET /api/shutdown/token returns a token', async () => {
+    const direct = await app.fetch(
+      new Request(`http://127.0.0.1:${port}/api/shutdown/token`, {
+        headers: { Origin: `http://127.0.0.1:${port}` }
+      })
+    )
+    console.log('DIAG_DIRECT', direct.status, await direct.text())
     const res = await fetch(`http://127.0.0.1:${port}/api/shutdown/token`, {
       headers: { Origin: `http://127.0.0.1:${port}` }
     })
+    console.log('DIAG_NETWORK', res.status, await res.text())
     expect(res.status).toBe(200)
     const body = (await res.json()) as { token: string }
     expect(typeof body.token).toBe('string')
