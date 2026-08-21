@@ -10,16 +10,6 @@ import { SHUTDOWN_TOKEN_HEADER } from '../../shared/constants/index.js'
  * triggering shutdown via CSRF.
  */
 function isSameOrigin(req: Request): boolean {
-  // Primary guard: the server binds exclusively to 127.0.0.1, so any request
-  // that reaches it is inherently local. This holds even when a client (or
-  // test framework) cannot or does not set an Origin/Referer header.
-  try {
-    const target = new URL(req.url)
-    if (target.hostname === '127.0.0.1' || target.hostname === 'localhost') return true
-  } catch {
-    // Malformed target URL — fall through to header checks.
-  }
-
   const origin = req.headers.get('origin')
   if (origin) {
     try {
@@ -43,10 +33,11 @@ function isSameOrigin(req: Request): boolean {
   }
 
   // No Origin or Referer header: accept. Non-browser clients (PowerShell,
-  // curl, test frameworks) do not send these headers. The custom
-  // X-RTWiki-Shutdown-Token header requirement provides CSRF protection:
-  // browsers always send Origin for cross-origin requests with custom
-  // headers, and we reject non-localhost origins.
+  // curl, test frameworks) do not send these headers. Since the server binds
+  // exclusively to 127.0.0.1, any request that reaches it is inherently local.
+  // The custom X-RTWiki-Shutdown-Token header requirement provides CSRF
+  // protection: browsers always send Origin for cross-origin requests with
+  // custom headers, and we reject non-localhost origins.
   return true
 }
 
