@@ -99,23 +99,17 @@ jobs:
           Write-Host "STAGED TREE:"
           Get-ChildItem -Recurse $stage | ForEach-Object { Write-Host "  $($_.FullName) ($($_.Length)B)" }
 
-      # Archive the *contents* of package/RTWiki so extraction yields RTWiki.exe + web/ at the root.
-      - name: Compress portable package
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          Compress-Archive -Path 'package/RTWiki/*' -DestinationPath RTWiki-0.1.0-windows-x64.zip -Force
-
-      # Extract to an isolated directory and run from a *different* working directory to prove
-      # the executable is portable (it derives all paths from its own location, never cwd).
-      # Uses the supported --no-open startup flag (openBrowser:false) so the server keeps
-      # listening on 127.0.0.1:8080 for independent external HTTP verification.
-      - name: Extract and run portable smoke test
+      # Extract the staged portable tree to an isolated temp directory for the smoke test.
+      # Run from a *different* working directory to prove the executable is portable
+      # (it derives all paths from its own location, never cwd).
+      # Uses the --no-open startup flag so the server keeps listening for independent verification.
+      - name: Run portable smoke test
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $extract = Join-Path $env:RUNNER_TEMP "rtwiki-smoke"
           $runDir = Join-Path $env:RUNNER_TEMP "rtwiki-run"
+          $src = Join-Path $env:GITHUB_WORKSPACE "package/RTWiki"
           $exe = Join-Path $extract "RTWiki.exe"
           $out = Join-Path $extract "smoke.out.txt"
           $err = Join-Path $extract "smoke.err.txt"
@@ -124,7 +118,7 @@ jobs:
           Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $runDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $runDir | Out-Null
-          Expand-Archive -Path RTWiki-0.1.0-windows-x64.zip -DestinationPath $extract -Force
+          Copy-Item -Path "$src/*" -Destination $extract -Recurse -Force
 
           # ADR-005 marks attachments/ and backups/ as lazy (not created at startup). Pre-create
           # the expected empty portable directories so the packaged layout is complete.
@@ -133,7 +127,7 @@ jobs:
 
           $p = $null
           try {
-            if (-not (Test-Path $exe)) { throw "RTWiki.exe missing after extraction" }
+            if (-not (Test-Path $exe)) { throw "RTWiki.exe missing after staging copy" }
             $p = Start-Process -FilePath $exe -ArgumentList "--no-open" -WorkingDirectory $runDir -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
 
             # 1. Server starts within a bounded timeout.
@@ -217,7 +211,6 @@ jobs:
             }
 
             if (-not $exited) {
-              # Kill the second instance if it didn't exit.
               Stop-Process -Id $secondP.Id -Force -ErrorAction SilentlyContinue
               throw "Second RTWiki instance did not exit within 10s (should detect existing and exit)"
             }
@@ -309,7 +302,6 @@ jobs:
               if ($errStr -match "Connection refused|400|cannot be reached") {
                 Write-Host "PORT RELEASED: 8080 no longer accepts connections"
               } else {
-                # Any non-200 response confirms the port is not serving.
                 Write-Host "PORT RELEASED: 8080 not serving (got: $errStr)"
               }
             }
@@ -337,13 +329,15 @@ jobs:
             if ($secondP -and -not $secondP.HasExited) { Stop-Process -Id $secondP.Id -Force -ErrorAction SilentlyContinue }
           }
 
-      # Upload only after the smoke test has passed (the previous step fails the job otherwise).
+      # Upload the staged portable tree directly as a directory artifact.
+      # No intermediate zip is created, so downloaders get the portable layout
+      # (RTWiki.exe + web/) at the root — not a nested zip.
       - name: Upload portable package artifact
         if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: RTWiki-0.1.0-windows-x64
-          path: RTWiki-0.1.0-windows-x64.zip
+          path: package/RTWiki/
           if-no-files-found: error
           retention-days: 7
 
@@ -351,9 +345,9 @@ jobs:
         if: success()
         shell: pwsh
         run: |
-          $zip = Get-Item RTWiki-0.1.0-windows-x64.zip
-          Write-Host "ARTIFACT_NAME=RTWiki-0.1.0-windows-x64.zip"
-          Write-Host "ARTIFACT_SIZE_BYTES=$($zip.Length)"
-          Write-Host "ZIP_SHA256=$((Get-FileHash $zip.FullName -Algorithm SHA256).Hash)"
-          Write-Host "=== EXTRACTED TREE ==="
-          Get-ChildItem -Recurse "$env:RUNNER_TEMP\rtwiki-smoke" | ForEach-Object { Write-Host "  $($_.FullName)" }
+          $exe = Get-Item "package/RTWiki/RTWiki.exe"
+          Write-Host "ARTIFACT_NAME=RTWiki-0.1.0-windows-x64"
+          Write-Host "EXE_SIZE_BYTES=$($exe.Length)"
+          Write-Host "EXE_SHA256=$(Get-FileHash $exe.FullName -Algorithm SHA256).Hash)"
+          Write-Host "=== STAGED TREE ==="
+          Get-ChildItem -Recurse "package/RTWiki" | ForEach-Object { Write-Host "  $($_.FullName)" }
