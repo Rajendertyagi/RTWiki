@@ -77,6 +77,8 @@ export function createShutdownRoutes(): Hono {
 
   router.get('/token', async (c) => {
     if (!isSameOrigin(c.req.raw)) {
+      console.warn('SHUTDOWN_ORIGIN=' + (c.req.raw.headers.get('origin') ?? 'NONE'))
+      console.warn('SHUTDOWN_URL=' + c.req.raw.url)
       c.header('x-diag-origin', c.req.raw.headers.get('origin') ?? 'NONE')
       c.header('x-diag-url', c.req.raw.url)
       return c.json({ error: 'Forbidden' }, 403)
