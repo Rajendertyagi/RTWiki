@@ -1,4 +1,3 @@
-import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { Alert, Stack, Text } from '@mantine/core'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -7,12 +6,13 @@ import { Dashboard } from './features/dashboard/dashboard.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
-import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
+import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
+import type { PageType } from '@rtwiki/shared/contracts/pages'
 
 export function App(): JSX.Element {
   const controller = usePagesController()
@@ -206,7 +206,12 @@ export function App(): JSX.Element {
           ) : null}
 
           {shutdownStatus === 'stopping' ? (
-            <Alert icon={<IconAlertCircle size={16} />} color="yellow" variant="light" title="Stopping">
+            <Alert
+              icon={<IconAlertCircle size={16} />}
+              color="yellow"
+              variant="light"
+              title="Stopping"
+            >
               {UI_TEXT.stopConfirmMessage}
             </Alert>
           ) : null}
