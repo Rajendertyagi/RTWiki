@@ -57,7 +57,8 @@
       "**/*.jsonc",
       "**/*.css",
       "**/*.graphql",
-      "**/*.html"
+      "**/*.html",
+      "!!**/.agent-sandbox"
     ]
   }
 }
