@@ -1,79 +1,13 @@
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--mantine-spacing-md);
-}
-
 .header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  margin-bottom: var(--mantine-spacing-md);
+  padding-bottom: var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
 }
 
-.emptyWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--mantine-spacing-xl);
-  text-align: center;
-}
-
-.card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-}
-
-.cardOpenButton {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  z-index: 0;
-}
-
-.cardOpenButton:hover {
-  border-color: var(--mantine-color-blue-filled);
-}
-
-.cardOpenButton:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-filled);
-  outline-offset: 2px;
-  border-radius: var(--mantine-radius-md);
-}
-
-.cardContent {
-  position: relative;
-  z-index: 1;
-  pointer-events: none;
-}
-
-.cardMenuWrapper {
-  position: relative;
-  z-index: 2;
-  pointer-events: auto;
-}
-
-.cardTitle {
-  flex: 1;
-  text-align: left;
-  pointer-events: none;
-}
-
-.cardFooter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--mantine-spacing-sm);
-  padding-top: var(--mantine-spacing-sm);
-  border-top: 1px solid var(--mantine-color-default-border);
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--mantine-spacing-md);
 }

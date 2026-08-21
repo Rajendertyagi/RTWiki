@@ -138,10 +138,9 @@ describe('autosave controller', () => {
     controller.notifyEdit('p1', 'second')
     controller.notifyEdit('p1', 'third') // latest wins
 
-    // Resolve first save; controller auto-starts second save for 'third'.
+    // Resolve first save; drain() in flush will start saving 'third'.
     resolvers.get(1)?.resolve()
-    // Yield to event loop so the second save's deferred promise is created,
-    // then resolve it before flush() awaits it.
+    // The second save creates resolver 2. Resolve it before flush awaits.
     setTimeout(() => resolvers.get(2)?.resolve(), 0)
     await controller.flush()
 
@@ -169,11 +168,9 @@ describe('autosave controller', () => {
     controller.notifyEdit('p1', 'second')
     expect(controller.getState().status).toBe('dirty')
 
-    // Resolve first save; controller auto-starts second save for 'second'.
+    // Resolve first save; drain() in flush will start saving 'second'.
     resolvers.get(1)?.resolve()
-    await controller.flush()
-
-    // Yield so the internally-chained second save begins, then resolve it.
+    // The second save creates resolver 2. Resolve it before flush awaits.
     setTimeout(() => resolvers.get(2)?.resolve(), 0)
     await controller.flush()
 
@@ -299,13 +296,12 @@ describe('autosave controller', () => {
     fireNext() // first save starts
     controller.notifyEdit('p1', 'second')
 
-    // Resolve first; flush starts it, then internally chains the second save.
+    // Resolve first; drain() will start the second save.
     resolvers.get(1)?.resolve()
-    await controller.flush()
-
     // Yield so the internally-chained second save begins, then resolve it.
     setTimeout(() => resolvers.get(2)?.resolve(), 0)
-    await controller.flush()
+    const ok = await controller.flush()
+    expect(ok).toBe(true)
     expect(saves).toEqual(['first', 'second'])
     expect(controller.getState().status).toBe('saved')
 
@@ -406,11 +402,9 @@ describe('autosave controller', () => {
     controller.notifyEdit('p1', 'b')
     expect(controller.getState().status).toBe('dirty')
 
-    // Resolve save 'a'; flush starts it, then internally chains save 'b'.
+    // Resolve save 'a'; drain() in flush will start saving 'b'.
     resolvers.get(1)?.resolve()
-    await controller.flush()
-
-    // Yield so the internally-chained save 'b' begins, then resolve it.
+    // The second save creates resolver 2. Resolve it before flush awaits.
     setTimeout(() => resolvers.get(2)?.resolve(), 0)
     await controller.flush()
 

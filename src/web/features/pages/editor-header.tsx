@@ -1,16 +1,17 @@
-import { ActionIcon, Button, Group, Menu, TextInput, Tooltip } from '@mantine/core'
+import { ActionIcon, Button, Group, Menu, Text, TextInput, Tooltip } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconArrowLeft, IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { PageTypeBadge } from '../../components/page-type-badge.js'
-import { SaveStatus } from '../../components/save-status.js'
 import { UI_TEXT } from '../../config/index.js'
-import type { MutationStatus } from '../../hooks/use-pages-controller.js'
 import classes from './editor-header.module.css'
 
 interface EditorHeaderProps {
   page: Page
-  mutationStatus: MutationStatus
+  isDirty: boolean
+  saveState: 'clean' | 'saving' | 'saved' | 'error'
+  onSave: () => Promise<boolean>
+  onRetry: () => Promise<boolean>
   onBack: () => void
   onRename: (title: string) => Promise<boolean>
   onDuplicate: () => void
@@ -19,7 +20,10 @@ interface EditorHeaderProps {
 
 export function EditorHeader({
   page,
-  mutationStatus,
+  isDirty,
+  saveState,
+  onSave,
+  onRetry,
   onBack,
   onRename,
   onDuplicate,
@@ -53,6 +57,18 @@ export function EditorHeader({
     }
   }
 
+  const isSaving = saveState === 'saving'
+  const isClean = saveState === 'clean' || saveState === 'saved'
+  const isError = saveState === 'error'
+
+  const saveLabel = isSaving
+    ? UI_TEXT.saveStatusSaving
+    : isError
+      ? UI_TEXT.saveStatusError
+      : isDirty
+        ? UI_TEXT.saveStatusSaved
+        : UI_TEXT.saveStatusSaved
+
   return (
     <div className={classes.header}>
       <Group gap="sm" wrap="nowrap" className={classes.left}>
@@ -77,10 +93,42 @@ export function EditorHeader({
         />
 
         <PageTypeBadge pageType={page.pageType} />
-        <SaveStatus status={mutationStatus} />
+
+        {isError ? (
+          <Group gap="xs" className={classes.saveStatus}>
+            <Text size="xs" c="red">
+              {UI_TEXT.saveStatusError}
+            </Text>
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={async () => {
+                await onRetry()
+              }}
+            >
+              {UI_TEXT.saveStatusRetry}
+            </Button>
+          </Group>
+        ) : (
+          <Text size="xs" c="dimmed" aria-live="polite">
+            {saveLabel}
+          </Text>
+        )}
       </Group>
 
       <Group gap="xs" wrap="nowrap">
+        <Button
+          size="xs"
+          variant={isDirty ? 'filled' : 'subtle'}
+          disabled={isSaving || isClean}
+          onClick={async () => {
+            await onSave()
+          }}
+          aria-label="Save note"
+        >
+          {isSaving ? UI_TEXT.saveStatusSaving : UI_TEXT.saveStatusSaved}
+        </Button>
+
         <Button
           variant="light"
           size="xs"

@@ -1,12 +1,16 @@
+import type { PartialBlock } from '@blocknote/core'
 import { BlockNoteView } from '@blocknote/mantine'
-import { useCreateBlockNote } from '@blocknote/react'
+import { FormattingToolbar, useCreateBlockNote } from '@blocknote/react'
+import { useComputedColorScheme } from '@mantine/core'
+import type { AutosaveStatus } from './autosave-controller.js'
+import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Alert, Button, Stack, Text } from '@mantine/core'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { updatePage } from '../../services/pages-api.js'
-import { createDefaultDocument, parseStoredDocument, serializeDocument } from './document.js'
+import { createDefaultDocument, parseStoredDocument } from './document.js'
 import classes from './rich-editor.module.css'
 import { useAutosave } from './use-autosave.js'
 
@@ -15,24 +19,37 @@ interface RichEditorProps {
   storedContent: string
   pageTitle: string
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
+  onSaveStateChange?: (state: {
+    isDirty: boolean
+    saveState: 'clean' | 'saving' | 'saved' | 'error'
+  }) => void
 }
 
 export function RichEditor({
   pageId,
   storedContent,
-  pageTitle,
-  onFlushRef
+  onFlushRef,
+  onSaveStateChange
 }: RichEditorProps): JSX.Element {
   const parseResult = parseStoredDocument(storedContent)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [hasReset, setHasReset] = useState(false)
-  const [documentResetKey, setDocumentResetKey] = useState(0)
 
   const handleSave = async (pid: string, content: string): Promise<void> => {
     await updatePage(pid, { content })
   }
 
-  const { status, error, notifyEdit, retry, flush } = useAutosave({ pageId, onSave: handleSave })
+  const { status, error, isDirty, notifyEdit, save, retry, flush } = useAutosave({
+    pageId,
+    onSave: handleSave
+  })
+
+  // Sync state changes back to parent
+  useEffect(() => {
+    if (onSaveStateChange) {
+      onSaveStateChange({ isDirty, saveState: status as 'clean' | 'saving' | 'saved' | 'error' })
+    }
+  }, [isDirty, status, onSaveStateChange])
 
   useEffect(() => {
     if (onFlushRef) onFlushRef(flush)
@@ -46,15 +63,12 @@ export function RichEditor({
     void pageId
     setHasReset(false)
     setShowResetConfirm(false)
-    setDocumentResetKey(0)
   }, [pageId])
 
   // Handle reset after malformed content
   const handleReset = (): void => {
     setShowResetConfirm(false)
     setHasReset(true)
-    setDocumentResetKey((k) => k + 1)
-    // Save the default document immediately
     const defaultContent = JSON.stringify(createDefaultDocument())
     notifyEdit(defaultContent)
   }
@@ -97,7 +111,13 @@ export function RichEditor({
         {status === 'error' ? (
           <Alert color="red" variant="light" title={UI_TEXT.saveStatusError}>
             {error ?? UI_TEXT.saveStatusError}
-            <Button size="xs" ml="sm" onClick={retry}>
+            <Button
+              size="xs"
+              ml="sm"
+              onClick={async () => {
+                await retry()
+              }}
+            >
               {UI_TEXT.saveStatusRetry}
             </Button>
           </Alert>
@@ -113,14 +133,12 @@ export function RichEditor({
   return (
     <div className={classes.editorRoot} data-testid="rich-editor">
       <RichEditorInner
-        key={`${pageId}-${documentResetKey}`}
+        key={pageId}
         pageId={pageId}
         initialDocument={initialDocument}
         notifyEdit={notifyEdit}
         status={status}
         error={error}
-        onRetry={retry}
-        pageTitle={pageTitle}
       />
     </div>
   )
@@ -130,63 +148,51 @@ interface InnerProps {
   pageId: string
   initialDocument: ReturnType<typeof createDefaultDocument>
   notifyEdit: (content: string) => void
-  status: ReturnType<typeof useAutosave>['status']
+  status: AutosaveStatus
   error: string | null
-  onRetry: () => void
-  pageTitle: string
 }
 
 function RichEditorInner({
+  pageId,
   initialDocument,
   notifyEdit,
   status,
-  error,
-  onRetry
+  error
 }: InnerProps): JSX.Element {
-  const editor = useCreateBlockNote({
-    initialContent: initialDocument as never
-  })
+  const editor = useCreateBlockNote(
+    {
+      initialContent: initialDocument as PartialBlock[]
+    },
+    [pageId]
+  )
 
-  // Expose flush for page switching via window event? Parent will handle via ref?
-  // For now, notifyEdit on change
+  const blocknoteTheme = useComputedColorScheme('light')
+
+  // Use useEditorChange for reliable change detection per official docs
   useEffect(() => {
-    // Ensure editor is available
-    if (!editor) return
-    // No additional setup needed
-  }, [editor])
+    const subscription = editor.onChange(() => {
+      const content = JSON.stringify(editor.document)
+      notifyEdit(content)
+    })
+    return () => {
+      subscription()
+    }
+  }, [editor, notifyEdit])
 
   return (
     <Stack gap="xs" className={classes.editorContainer}>
       {status === 'error' ? (
         <Alert color="red" variant="light" title={UI_TEXT.saveStatusError}>
           <Text size="sm">{error ?? UI_TEXT.saveFailedRetryHint}</Text>
-          <Button size="xs" ml="sm" onClick={onRetry}>
-            {UI_TEXT.saveStatusRetry}
-          </Button>
         </Alert>
       ) : null}
 
-      {status === 'saving' ? (
-        <Text size="xs" c="dimmed">
-          {UI_TEXT.saveStatusSaving}
-        </Text>
-      ) : null}
-
-      {status === 'saved' ? (
-        <Text size="xs" c="dimmed">
-          {UI_TEXT.saveStatusSaved}
-        </Text>
-      ) : null}
+      <div className={classes.toolbarArea} role="toolbar" aria-label="Permanent formatting toolbar">
+        <FormattingToolbar />
+      </div>
 
       <div className={classes.blockNoteWrapper}>
-        <BlockNoteView
-          editor={editor}
-          theme="light"
-          onChange={() => {
-            const content = JSON.stringify(editor.document)
-            notifyEdit(content)
-          }}
-        />
+        <BlockNoteView editor={editor} theme={blocknoteTheme} />
       </div>
 
       <Text size="xs" c="dimmed">
@@ -197,4 +203,4 @@ function RichEditorInner({
 }
 
 // Re-export for testing
-export { serializeDocument }
+export { serializeDocument } from './document.js'

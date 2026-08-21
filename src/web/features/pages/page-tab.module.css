@@ -4,8 +4,8 @@
   justify-content: space-between;
   height: 36px;
   padding-inline: var(--mantine-spacing-sm);
-  border-bottom: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  background: var(--rtwiki-surface, var(--mantine-color-body));
 }
 
 .tabInner {

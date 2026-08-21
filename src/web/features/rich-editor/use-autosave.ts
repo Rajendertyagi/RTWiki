@@ -9,9 +9,11 @@ interface UseAutosaveOptions {
 export function useAutosave(options: UseAutosaveOptions): {
   status: AutosaveStatus
   error: string | null
+  isDirty: boolean
   notifyEdit: (content: string) => void
+  save: () => Promise<boolean>
+  retry: () => Promise<boolean>
   flush: () => Promise<boolean>
-  retry: () => void
 } {
   const { pageId, onSave } = options
   const [status, setStatus] = useState<AutosaveStatus>('idle')
@@ -34,12 +36,14 @@ export function useAutosave(options: UseAutosaveOptions): {
     }
   }, [onSave])
 
-  // Reset status and notify controller of page change
+  // Reset status when page changes
   useEffect(() => {
     void pageId
     setStatus('idle')
     setError(null)
   }, [pageId])
+
+  const isDirty = status === 'dirty' || status === 'error'
 
   const notifyEdit = useCallback(
     (content: string): void => {
@@ -48,14 +52,19 @@ export function useAutosave(options: UseAutosaveOptions): {
     [pageId]
   )
 
+  const save = useCallback(async (): Promise<boolean> => {
+    const result = await controllerRef.current?.save()
+    return result ?? true
+  }, [])
+
+  const retry = useCallback(async (): Promise<boolean> => {
+    return (await controllerRef.current?.retry()) ?? false
+  }, [])
+
   const flush = useCallback(async (): Promise<boolean> => {
     const result = await controllerRef.current?.flush()
     return result ?? true
   }, [])
 
-  const retry = useCallback((): void => {
-    controllerRef.current?.retry()
-  }, [])
-
-  return { status, error, notifyEdit, flush, retry }
+  return { status, error, isDirty, notifyEdit, save, retry, flush }
 }

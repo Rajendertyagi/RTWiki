@@ -3,11 +3,13 @@
   min-height: calc(100vh - 44px - var(--mantine-spacing-md) * 2);
   display: flex;
   flex-direction: column;
+  background: var(--rtwiki-background, var(--mantine-color-body));
 }
 
 .content {
   flex: 1;
   padding: var(--mantine-spacing-md);
+  background: var(--rtwiki-background, var(--mantine-color-body));
 }
 
 .preview {

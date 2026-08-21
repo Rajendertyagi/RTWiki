@@ -1,5 +1,4 @@
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import type { MutationStatus } from '../../hooks/use-pages-controller.js'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { RichEditor } from '../rich-editor/rich-editor.js'
 import { EditorHeader } from './editor-header.js'
@@ -8,22 +7,33 @@ import classes from './page-workspace.module.css'
 
 interface PageWorkspaceProps {
   page: Page
-  mutationStatus: MutationStatus
+  isDirty: boolean
+  saveState: 'clean' | 'saving' | 'saved' | 'error'
+  onSave: () => Promise<boolean>
+  onRetry: () => Promise<boolean>
   onBack: () => void
   onRename: (title: string) => Promise<boolean>
   onDuplicate: () => void
   onDelete: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
+  onSaveStateChange: (state: {
+    isDirty: boolean
+    saveState: 'clean' | 'saving' | 'saved' | 'error'
+  }) => void
 }
 
 export function PageWorkspace({
   page,
-  mutationStatus,
+  isDirty,
+  saveState,
+  onSave,
+  onRetry,
   onBack,
   onRename,
   onDuplicate,
   onDelete,
-  onFlushRef
+  onFlushRef,
+  onSaveStateChange
 }: PageWorkspaceProps): JSX.Element {
   return (
     <div className={classes.workspace}>
@@ -31,7 +41,10 @@ export function PageWorkspace({
 
       <EditorHeader
         page={page}
-        mutationStatus={mutationStatus}
+        isDirty={isDirty}
+        saveState={saveState}
+        onSave={onSave}
+        onRetry={onRetry}
         onBack={onBack}
         onRename={onRename}
         onDuplicate={onDuplicate}
@@ -45,6 +58,7 @@ export function PageWorkspace({
             storedContent={page.content}
             pageTitle={page.title}
             onFlushRef={onFlushRef}
+            onSaveStateChange={onSaveStateChange}
           />
         ) : (
           <HtmlPlaceholder />

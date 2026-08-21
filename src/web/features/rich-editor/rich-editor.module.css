@@ -10,11 +10,17 @@
   min-height: 400px;
 }
 
+.toolbarArea {
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+}
+
 .blockNoteWrapper {
   flex: 1;
-  border: 1px solid var(--mantine-color-default-border);
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   padding: var(--mantine-spacing-sm);
-  background: var(--mantine-color-body);
+  background: var(--rtwiki-surface, var(--mantine-color-body));
   min-height: 300px;
 }

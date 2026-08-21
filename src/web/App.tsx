@@ -14,6 +14,8 @@ import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
 
+type SaveState = 'clean' | 'saving' | 'saved' | 'error'
+
 export function App(): JSX.Element {
   const controller = usePagesController()
   const [newDialogOpen, setNewDialogOpen] = useState(false)
@@ -26,6 +28,8 @@ export function App(): JSX.Element {
   )
   const [shutdownError, setShutdownError] = useState<string | null>(null)
   const [pendingFlushError, setPendingFlushError] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<SaveState>('clean')
+  const [isDirty, setIsDirty] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const flushRef = useRef<(() => Promise<boolean>) | null>(null)
 
@@ -124,12 +128,31 @@ export function App(): JSX.Element {
 
   const handleWorkspaceDuplicate = async (): Promise<void> => {
     if (!controller.selectedPage) return
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
     await controller.duplicatePage(controller.selectedPage.id)
   }
 
-  const handleWorkspaceDelete = (): void => {
+  const handleWorkspaceDelete = async (): Promise<void> => {
     if (!controller.selectedPage) return
-    setDeleteTarget({ id: controller.selectedPage.id, title: controller.selectedPage.title })
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    setDeleteTarget({
+      id: controller.selectedPage.id,
+      title: controller.selectedPage.title
+    })
   }
 
   const handleRename = async (title: string): Promise<boolean> => {
@@ -148,6 +171,22 @@ export function App(): JSX.Element {
     }
     controller.selectPage(null)
   }
+
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      return ok
+    }
+    return true
+  }, [])
+
+  const handleRetry = useCallback(async (): Promise<boolean> => {
+    if (flushRef.current) {
+      // Retry is handled by the editor's own retry
+      return true
+    }
+    return false
+  }, [])
 
   if (shutdownStatus === 'stopped') {
     return (
@@ -225,13 +264,20 @@ export function App(): JSX.Element {
           {controller.selectedPage ? (
             <PageWorkspace
               page={controller.selectedPage}
-              mutationStatus={controller.mutationStatus}
+              isDirty={isDirty}
+              saveState={saveState}
+              onSave={handleSave}
+              onRetry={handleRetry}
               onBack={handleWorkspaceClose}
               onRename={handleRename}
               onDuplicate={handleWorkspaceDuplicate}
               onDelete={handleWorkspaceDelete}
               onFlushRef={(fn) => {
                 flushRef.current = fn
+              }}
+              onSaveStateChange={({ isDirty: dirty, saveState: state }) => {
+                setIsDirty(dirty)
+                setSaveState(state)
               }}
             />
           ) : (

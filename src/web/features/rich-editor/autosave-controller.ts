@@ -1,5 +1,3 @@
-import { AUTOSAVE_DEBOUNCE_MS } from './document.js'
-
 export type AutosaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
 export interface AutosaveState {
@@ -22,26 +20,37 @@ export interface AutosaveControllerOptions {
   scheduler?: Scheduler
 }
 
+/**
+ * A DocumentRevision holds a snapshot of content at a point in time.
+ * Revisions are monotonically increasing and never reused.
+ */
+interface DocumentRevision {
+  revision: number
+  content: string
+}
+
 export function createAutosaveController(options: AutosaveControllerOptions): {
   getState: () => AutosaveState
   notifyEdit: (pageId: string, content: string) => void
+  save: () => Promise<boolean>
+  retry: () => Promise<boolean>
   flush: () => Promise<boolean>
-  retry: () => void
   dispose: () => void
 } {
-  const debounceMs = options.debounceMs ?? AUTOSAVE_DEBOUNCE_MS
+  const debounceMs = options.debounceMs ?? 2000
   const scheduler = options.scheduler ?? { setTimeout, clearTimeout }
+
+  // Monotonic counter — never derived from snapshot state
+  let currentRevision = 0
   let status: AutosaveStatus = 'idle'
   let error: string | null = null
   let pendingPageId: string | null = null
   let pendingContent: string | null = null
-  let savingPageId: string | null = null
-  let savingContent: string | null = null
-  let savingPromise: Promise<void> | null = null
+  let confirmedRevision = 0
+  let inFlightSnapshot: DocumentRevision | null = null
+  let inFlightPromise: Promise<boolean> | null = null
   let timer: number | null = null
-  let nextPending: { pageId: string; content: string } | null = null
   let disposed = false
-  let seq = 0
 
   const emit = (): void => {
     if (disposed) return
@@ -61,169 +70,122 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
     }
   }
 
-  const startSave = async (pageId: string, content: string): Promise<void> => {
-    const currentSeq = ++seq
-    savingPageId = pageId
-    savingContent = content
-    pendingPageId = null
-    pendingContent = null
+  /**
+   * Save exactly the supplied immutable snapshot.
+   * Clears only its own in-flight state in finally.
+   */
+  const startSnapshotSave = async (snapshot: DocumentRevision): Promise<boolean> => {
+    inFlightSnapshot = snapshot
+    inFlightPromise = (async (): Promise<boolean> => {
+      try {
+        await options.onSave(pendingPageId ?? '', snapshot.content)
+        // Advance confirmedRevision only if this request is still the newest
+        if (snapshot.revision >= confirmedRevision) {
+          confirmedRevision = snapshot.revision
+          // Only clear pending if it hasn't been superseded
+          if (
+            pendingContent !== null &&
+            pendingPageId !== null &&
+            currentRevision === snapshot.revision
+          ) {
+            pendingPageId = null
+            pendingContent = null
+          }
+          // Determine state
+          if (
+            pendingContent !== null &&
+            pendingPageId !== null &&
+            confirmedRevision < currentRevision
+          ) {
+            setState('dirty', null)
+          } else {
+            setState('saved', null)
+          }
+        }
+        // Stale completion: do nothing — newer revision is already confirmed
+        return true
+      } catch (err) {
+        // Only surface error if this was still the active in-flight request
+        if (inFlightSnapshot !== null && inFlightSnapshot.revision === snapshot.revision) {
+          setState('error', err instanceof Error ? err.message : 'Save failed')
+        }
+        // Do NOT clear pendingContent — preserve for retry
+        return false
+      } finally {
+        inFlightSnapshot = null
+        inFlightPromise = null
+      }
+    })()
     setState('saving', null)
+    return inFlightPromise
+  }
 
-    const promise = options.onSave(pageId, content)
-    savingPromise = promise
+  /**
+   * Single drain operation used by autosave, manual save, retry, and flush.
+   * Coalesces in-flight saves and continues until current revision is confirmed.
+   */
+  const drain = async (): Promise<boolean> => {
+    clearTimer()
 
-    try {
-      await promise
-      if (disposed || currentSeq !== seq) return
-      savingPageId = null
-      savingContent = null
-      savingPromise = null
-
-      if (nextPending) {
-        const next = nextPending
-        nextPending = null
-        pendingPageId = next.pageId
-        pendingContent = next.content
-        // Immediately start next save without debounce
-        void startSave(next.pageId, next.content)
-        return
+    while (
+      pendingContent !== null &&
+      pendingPageId !== null &&
+      confirmedRevision < currentRevision
+    ) {
+      if (inFlightPromise !== null) {
+        const activeResult = await inFlightPromise
+        if (!activeResult) return false
+        continue
       }
 
-      setState('saved', null)
-      // After saved, return to idle after a short delay (handled by caller if needed)
-      // Keep saved state until next edit
-    } catch (err) {
-      if (disposed || currentSeq !== seq) return
-      const failedPageId = savingPageId
-      const failedContent = savingContent
-      savingPageId = null
-      savingContent = null
-      savingPromise = null
-      const message = err instanceof Error ? err.message : 'Save failed'
-      if (nextPending) {
-        pendingPageId = nextPending.pageId
-        pendingContent = nextPending.content
-        nextPending = null
-      } else if (failedPageId && failedContent !== null) {
-        pendingPageId = failedPageId
-        pendingContent = failedContent
+      const snapshot: DocumentRevision = {
+        revision: currentRevision,
+        content: pendingContent
       }
-      setState('error', message)
+      const result = await startSnapshotSave(snapshot)
+      if (!result) return false
     }
+
+    return true
   }
 
   const scheduleSave = (): void => {
     clearTimer()
-    timer = scheduler.setTimeout(() => {
+    timer = scheduler.setTimeout(async () => {
       timer = null
-      if (pendingPageId && pendingContent !== null) {
-        const pid = pendingPageId
-        const content = pendingContent
-        void startSave(pid, content)
-      }
+      await drain()
     }, debounceMs)
   }
 
   const notifyEdit = (pageId: string, content: string): void => {
     if (disposed) return
 
-    // If currently saving, queue as nextPending (always keep latest)
-    if (status === 'saving') {
-      nextPending = { pageId, content }
-      pendingPageId = pageId
-      pendingContent = content
-      setState('dirty', null)
-      // Don't schedule timer now; will start immediately after current save finishes
-      return
-    }
-
-    // If saved/error/idle/dirty, set pending and schedule
+    currentRevision += 1
     pendingPageId = pageId
     pendingContent = content
-    nextPending = null
-
-    if (status === 'error') {
-      setState('dirty', null)
-    } else if (status !== 'dirty') {
-      setState('dirty', null)
-    } else {
-      // already dirty, just update content
-      emit()
-    }
-
+    setState('dirty', null)
     scheduleSave()
   }
 
-  const flush = async (): Promise<boolean> => {
+  const save = async (): Promise<boolean> => {
     if (disposed) return false
-
-    if (!pendingPageId && !savingPageId && !nextPending) {
-      return true
-    }
-
-    clearTimer()
-
-    // If currently saving, wait for it
-    if (savingPromise) {
-      try {
-        await savingPromise
-      } catch {
-        return false
-      }
-      // After saving, check if there is pending dirty for same page
-      if (pendingPageId && pendingContent !== null) {
-        const pid = pendingPageId
-        const content = pendingContent
-        await startSave(pid, content)
-        return status !== 'error'
-      }
-      if (nextPending) {
-        const pid = nextPending.pageId
-        const content = nextPending.content
-        nextPending = null
-        pendingPageId = pid
-        pendingContent = content
-        await startSave(pid, content)
-        return status !== 'error'
-      }
-      return status !== 'error'
-    }
-
-    // If dirty pending, save immediately
-    if (pendingPageId && pendingContent !== null) {
-      const pid = pendingPageId
-      const content = pendingContent
-      await startSave(pid, content)
-      return status !== 'error'
-    }
-
-    if (nextPending) {
-      const pid = nextPending.pageId
-      const content = nextPending.content
-      nextPending = null
-      pendingPageId = pid
-      pendingContent = content
-      await startSave(pid, content)
-      return status !== 'error'
-    }
-
-    return true
+    return drain()
   }
 
-  const retry = (): void => {
-    if (disposed) return
-    if (status !== 'error' || !pendingPageId || pendingContent === null) return
-    // Retry immediately without debounce
-    const pid = pendingPageId
-    const content = pendingContent
-    clearTimer()
-    void startSave(pid, content)
+  const retry = async (): Promise<boolean> => {
+    if (disposed) return false
+    const saved = await drain()
+    return saved
+  }
+
+  const flush = async (): Promise<boolean> => {
+    if (disposed) return true
+    return drain()
   }
 
   const dispose = (): void => {
     disposed = true
     clearTimer()
-    seq++
   }
 
   const getState = (): AutosaveState => ({
@@ -233,5 +195,5 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
     pendingContent
   })
 
-  return { getState, notifyEdit, flush, retry, dispose }
+  return { getState, notifyEdit, save, retry, flush, dispose }
 }

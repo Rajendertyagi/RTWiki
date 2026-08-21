@@ -1,0 +1,44 @@
+.card {
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-md);
+  transition: box-shadow 150ms ease;
+  position: relative;
+}
+
+.card:hover {
+  box-shadow: var(--mantine-shadow-sm);
+}
+
+.cardContent {
+  pointer-events: none;
+}
+
+.cardOpenButton {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.cardMenuWrapper {
+  position: relative;
+  z-index: 2;
+}
+
+.cardMenuWrapper button {
+  pointer-events: auto;
+}
+
+.cardTitle {
+  color: var(--rtwiki-text, var(--mantine-color-text));
+  pointer-events: none;
+}
+
+.cardTitle:hover {
+  cursor: pointer;
+}
