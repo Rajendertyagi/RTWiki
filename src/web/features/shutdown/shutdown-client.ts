@@ -7,8 +7,9 @@ export interface ShutdownResult {
 
 export async function fetchShutdownToken(): Promise<string | null> {
   try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8080'
     const res = await fetch('/api/shutdown/token', {
-      headers: { Origin: window.location.origin }
+      headers: { Origin: origin }
     })
     if (!res.ok) return null
     const data = (await res.json()) as { token: string }
@@ -20,11 +21,12 @@ export async function fetchShutdownToken(): Promise<string | null> {
 
 export async function requestShutdown(token: string): Promise<ShutdownResult> {
   try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8080'
     const res = await fetch('/api/shutdown', {
       method: 'POST',
       headers: {
         [SHUTDOWN_TOKEN_HEADER]: token,
-        Origin: window.location.origin
+        Origin: origin
       }
     })
     if (res.ok) {

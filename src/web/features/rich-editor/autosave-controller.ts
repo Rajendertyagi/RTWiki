@@ -28,6 +28,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   let pendingPageId: string | null = null
   let pendingContent: string | null = null
   let savingPageId: string | null = null
+  let savingContent: string | null = null
   let savingPromise: Promise<void> | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let nextPending: { pageId: string; content: string } | null = null
@@ -55,6 +56,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   const startSave = async (pageId: string, content: string): Promise<void> => {
     const currentSeq = ++seq
     savingPageId = pageId
+    savingContent = content
     pendingPageId = null
     pendingContent = null
     setState('saving', null)
@@ -66,6 +68,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
       await promise
       if (disposed || currentSeq !== seq) return
       savingPageId = null
+      savingContent = null
       savingPromise = null
 
       if (nextPending) {
@@ -83,14 +86,19 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
       // Keep saved state until next edit
     } catch (err) {
       if (disposed || currentSeq !== seq) return
+      const failedPageId = savingPageId
+      const failedContent = savingContent
       savingPageId = null
+      savingContent = null
       savingPromise = null
       const message = err instanceof Error ? err.message : 'Save failed'
-      // If there was a next pending, keep it as pending dirty
       if (nextPending) {
         pendingPageId = nextPending.pageId
         pendingContent = nextPending.content
         nextPending = null
+      } else if (failedPageId && failedContent !== null) {
+        pendingPageId = failedPageId
+        pendingContent = failedContent
       }
       setState('error', message)
     }
