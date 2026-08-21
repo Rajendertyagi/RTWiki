@@ -338,6 +338,28 @@ describe('static serving', () => {
     const res = await staticApp().request('/%ZZ')
     expect(res.status).toBe(400)
   })
+
+  it('serves assets when root uses forward slashes (ported executable path)', async () => {
+    // Simulates the production path: joinPaths() produces forward-slash roots
+    // like 'D:/a/_temp/rtwiki-smoke/web' which path.join must resolve correctly.
+    const fwdRoot = dir.replace(/\\/g, '/') + '/web'
+    mkdirSync(fwdRoot, { recursive: true })
+    writeFileSync(join(fwdRoot, 'index.html'), '<html><body>RTWiki</body></html>')
+    mkdirSync(join(fwdRoot, 'assets'), { recursive: true })
+    writeFileSync(join(fwdRoot, 'assets', 'app-BPzxOpvP.js'), 'console.log("hi")')
+
+    const srv = new Hono()
+    srv.use('/*', serveStatic({ root: fwdRoot }))
+
+    const res = await srv.request('/')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('RTWiki')
+
+    const assetRes = await srv.request('/assets/app-BPzxOpvP.js')
+    expect(assetRes.status).toBe(200)
+    expect(assetRes.headers.get('content-type')).toContain('text/javascript')
+    expect(await assetRes.text()).toBe('console.log("hi")')
+  })
 })
 
 describe('launcher', () => {
