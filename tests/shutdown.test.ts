@@ -26,7 +26,6 @@ describe('shutdown API security', () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/shutdown/token`, {
       headers: { Origin: `http://127.0.0.1:${port}` }
     })
-    console.log('DIAG_TOKEN_STATUS', res.status, 'BODY', await res.text())
     expect(res.status).toBe(200)
     const body = (await res.json()) as { token: string }
     expect(typeof body.token).toBe('string')

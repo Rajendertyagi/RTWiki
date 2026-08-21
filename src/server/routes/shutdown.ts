@@ -86,8 +86,11 @@ export function createShutdownRoutes(): Hono {
 
   router.get('/token', async (c) => {
     if (!isSameOrigin(c.req.raw)) {
-      logger?.warn('SHUTDOWN_DIAG', { url: c.req.raw.url, origin: c.req.raw.headers.get('origin') })
-      return c.json({ error: 'Forbidden', diag: { url: c.req.raw.url, origin: c.req.raw.headers.get('origin') } }, 403)
+      logger?.warn('SHUTDOWN_DIAG', {
+        url: c.req.raw.url,
+        origin: c.req.raw.headers.get('origin')
+      })
+      return c.json({ error: 'Forbidden' }, 403)
     }
     if (!currentToken) {
       return c.json({ error: 'Shutdown not available' }, 503)

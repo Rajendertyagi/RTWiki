@@ -88,12 +88,17 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
 
     // Path traversal check — the resolved path must stay inside root.
     if (!isInsideRoot(resolved, root)) {
-      logger?.warn('STATIC_DIAG', { event: 'static_asset', pathname, root, resolved })
+      logger?.warn('STATIC_DIAG', {
+        event: 'static_asset',
+        pathname,
+        root,
+        resolved
+      })
       logger?.warn('Asset path rejected: path traversal', {
         event: 'static_asset',
         pathname
       })
-      return c.json({ error: 'Forbidden', diag: { pathname, root, resolved } }, 403)
+      return c.json({ error: 'Forbidden' }, 403)
     }
 
     // Strip query string from resolved path for extension/exists checks.
