@@ -1,5 +1,7 @@
 name: Format Apply
 on:
+  push:
+    branches: [feature/rich-note-editor]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,8 +14,8 @@ jobs:
         with:
           bun-version: "1.4.0"
       - run: bun install --frozen-lockfile
-      - run: bunx biome check --write src/web/App.tsx src/web/config/index.ts src/web/features/pages/page-tab.tsx src/web/features/rich-editor/document.ts src/web/features/rich-editor/rich-editor.tsx src/web/layout/sidebar.tsx src/web/layout/utility-rail.tsx tests/rich-editor-document.test.ts tests/autosave-controller.test.ts tests/shutdown-controller.test.ts tests/workspace.test.ts 2>&1 | tee /tmp/fmt.log; cat /tmp/fmt.log
-      - run: git diff --stat; git diff src/web/App.tsx | head -80
+      - run: bunx biome check --write . 2>&1 | tee /tmp/fmt.log; cat /tmp/fmt.log; git diff --stat | head -30
+      - run: git diff | head -200
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: formatted-files
@@ -23,6 +25,8 @@ jobs:
             src/web/features/pages/page-tab.tsx
             src/web/features/rich-editor/document.ts
             src/web/features/rich-editor/rich-editor.tsx
+            src/web/features/rich-editor/autosave-controller.ts
+            src/web/features/rich-editor/use-autosave.ts
             src/web/layout/sidebar.tsx
             src/web/layout/utility-rail.tsx
             tests/rich-editor-document.test.ts
