@@ -243,11 +243,23 @@ jobs:
             foreach ($m in $linkMatches)   { $assetUrls += $m.Groups[1].Value }
             Write-Host "CHECK 6c: assets ($($assetUrls.Count) found)"
             if ($assetUrls.Count -eq 0) { throw "No <script src> or <link href> assets found in index.html" }
+            # Diagnostic: list actual asset files on disk for comparison
+            $diskAssets = Get-ChildItem -Path (Join-Path $extract "web/assets") -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+            Write-Host "ASSET DISK: [$($diskAssets.Count)] $($diskAssets -join ', ')"
             $jsFound = $false; $cssFound = $false
             foreach ($assetUrl in $assetUrls) {
               $fullUrl = "http://127.0.0.1:8080$assetUrl"
               Write-Host "ASSET FETCH: $fullUrl"
-              $a = Invoke-WebRequest -Uri $fullUrl -UseBasicParsing
+              try {
+                $a = Invoke-WebRequest -Uri $fullUrl -UseBasicParsing
+              } catch {
+                $errResp = $_.Exception.Response
+                if ($errResp) {
+                  $errBody = (New-Object System.IO.StreamReader($errResp.GetResponseStream())).ReadToEnd()
+                  throw "Asset $fullUrl returned $($errResp.StatusCode): $errBody"
+                }
+                throw "Asset $fullUrl: $($_.Exception.Message)"
+              }
               if ($a.StatusCode -ne 200) { throw "Asset $fullUrl returned $($a.StatusCode)" }
               if ([string]::IsNullOrWhiteSpace($a.Content)) { throw "Asset $fullUrl returned empty body" }
               $contentType = $a.Headers['Content-Type']
