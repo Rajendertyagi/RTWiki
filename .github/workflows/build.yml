@@ -244,6 +244,7 @@ jobs:
             $jsFound = $false; $cssFound = $false
             foreach ($assetUrl in $assetUrls) {
               $fullUrl = "http://127.0.0.1:8080$assetUrl"
+              Write-Host "ASSET FETCH: $fullUrl"
               $a = Invoke-WebRequest -Uri $fullUrl -UseBasicParsing
               if ($a.StatusCode -ne 200) { throw "Asset $fullUrl returned $($a.StatusCode)" }
               if ([string]::IsNullOrWhiteSpace($a.Content)) { throw "Asset $fullUrl returned empty body" }
