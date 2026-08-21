@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { bootstrap } from '../src/server/bootstrap.js'
 import { app } from '../src/server/app.js'
+import { bootstrap } from '../src/server/bootstrap.js'
 import { SHUTDOWN_TOKEN_HEADER } from '../src/shared/constants/index.js'
 
 function freePort(): number {
