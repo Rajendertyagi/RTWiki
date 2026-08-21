@@ -44,9 +44,6 @@ function makeFakeScheduler(): {
   return { scheduler, fireNext, fireAll }
 }
 
-// Yield to the event loop so in-flight async saves can settle.
-const tick = (): Promise<void> => Promise.resolve()
-
 // ---------- tests ----------
 
 describe('autosave controller', () => {
