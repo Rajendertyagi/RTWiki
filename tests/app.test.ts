@@ -66,7 +66,7 @@ describe('createApp factory', () => {
 
   it('creates a Hono app with health endpoint returning 200 and RTWiki info', async () => {
     const app = createApp(deps)
-    const res = await app.fetch(new Request('http://localhost/health'))
+    const res = await app.fetch(new Request('http://127.0.0.1:8080/health'))
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       status: string
@@ -82,7 +82,7 @@ describe('createApp factory', () => {
 
   it('returns security headers on every response', async () => {
     const app = createApp(deps)
-    const res = await app.fetch(new Request('http://localhost/health'))
+    const res = await app.fetch(new Request('http://127.0.0.1:8080/health'))
     expect(res.headers.get('Content-Security-Policy')).toBeTruthy()
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
     expect(res.headers.get('X-Frame-Options')).toBe('DENY')
@@ -95,28 +95,28 @@ describe('createApp factory', () => {
 
     // Create a page.
     const createRes = await app.fetch(
-      new Request('http://localhost/api/pages', {
+      new Request('http://127.0.0.1:8080/api/pages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: 'App Test Page', pageType: 'rich', content: '{}' })
       })
     )
     expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; title: string }
-    expect(created.id).toBeDefined()
-    expect(created.title).toBe('App Test Page')
+    const created = (await createRes.json()) as { page: { id: string; title: string } }
+    expect(created.page.id).toBeDefined()
+    expect(created.page.title).toBe('App Test Page')
 
     // List pages.
-    const listRes = await app.fetch(new Request('http://localhost/api/pages'))
+    const listRes = await app.fetch(new Request('http://127.0.0.1:8080/api/pages'))
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as { pages: Array<{ id: string; title: string }> }
-    expect(list.pages.some((p) => p.id === created.id)).toBe(true)
+    expect(list.pages.some((p) => p.id === created.page.id)).toBe(true)
   })
 
   it('shutdown route GET /token with matching Origin returns 200', async () => {
     const app = createApp(deps)
     const res = await app.fetch(
-      new Request('http://localhost/api/shutdown/token', {
+      new Request('http://127.0.0.1:8080/api/shutdown/token', {
         headers: { Origin: 'http://127.0.0.1:8080' }
       })
     )
@@ -139,7 +139,7 @@ describe('createApp factory', () => {
     const app = createApp({ ...deps, coordinator, token })
 
     const res = await app.fetch(
-      new Request('http://localhost/api/shutdown', {
+      new Request('http://127.0.0.1:8080/api/shutdown', {
         method: 'POST',
         headers: {
           Origin: 'http://127.0.0.1:8080',
@@ -155,7 +155,7 @@ describe('createApp factory', () => {
   it('shutdown route without token returns 403', async () => {
     const app = createApp(deps)
     const res = await app.fetch(
-      new Request('http://localhost/api/shutdown', {
+      new Request('http://127.0.0.1:8080/api/shutdown', {
         method: 'POST',
         headers: { Origin: 'http://127.0.0.1:8080' }
       })
@@ -179,7 +179,7 @@ describe('createApp factory', () => {
     const app = createApp({ ...deps, coordinator: customCoordinator, token: 'test-token' })
 
     const res = await app.fetch(
-      new Request('http://localhost/api/shutdown', {
+      new Request('http://127.0.0.1:8080/api/shutdown', {
         method: 'POST',
         headers: {
           Origin: 'http://127.0.0.1:8080',
@@ -200,12 +200,12 @@ describe('createApp factory', () => {
 
     // Each app has its own token.
     const tokenARes = await appA.fetch(
-      new Request('http://localhost/api/shutdown/token', {
+      new Request('http://127.0.0.1:8080/api/shutdown/token', {
         headers: { Origin: 'http://127.0.0.1:8080' }
       })
     )
     const tokenBRes = await appB.fetch(
-      new Request('http://localhost/api/shutdown/token', {
+      new Request('http://127.0.0.1:8080/api/shutdown/token', {
         headers: { Origin: 'http://127.0.0.1:8080' }
       })
     )
@@ -215,7 +215,7 @@ describe('createApp factory', () => {
 
     // Each app accepts its own token independently.
     const resA = await appA.fetch(
-      new Request('http://localhost/api/shutdown', {
+      new Request('http://127.0.0.1:8080/api/shutdown', {
         method: 'POST',
         headers: {
           Origin: 'http://127.0.0.1:8080',
@@ -224,7 +224,7 @@ describe('createApp factory', () => {
       })
     )
     const resB = await appB.fetch(
-      new Request('http://localhost/api/shutdown', {
+      new Request('http://127.0.0.1:8080/api/shutdown', {
         method: 'POST',
         headers: {
           Origin: 'http://127.0.0.1:8080',
@@ -237,7 +237,7 @@ describe('createApp factory', () => {
 
     // A wrong token for appA is rejected by appA (not confused with appB's token).
     const wrongRes = await appA.fetch(
-      new Request('http://localhost/api/shutdown', {
+      new Request('http://127.0.0.1:8080/api/shutdown', {
         method: 'POST',
         headers: {
           Origin: 'http://127.0.0.1:8080',
@@ -250,7 +250,7 @@ describe('createApp factory', () => {
 
   it('404 for unknown routes', async () => {
     const app = createApp(deps)
-    const res = await app.fetch(new Request('http://localhost/nonexistent'))
+    const res = await app.fetch(new Request('http://127.0.0.1:8080/nonexistent'))
     expect(res.status).toBe(404)
   })
 })
