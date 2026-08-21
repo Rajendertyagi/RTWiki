@@ -46,6 +46,15 @@ function makeFakeScheduler(): {
 
 // ---------- tests ----------
 
+function makeSaveFn(resolverMap: Map<number, { resolve: () => void }>) {
+  return async (_pageId: string, _content: string): Promise<void> => {
+    const id = resolverMap.size + 1
+    await new Promise<void>((r) => {
+      resolverMap.set(id, { resolve: r })
+    })
+  }
+}
+
 describe('autosave controller', () => {
   it('debounces edits and saves after timer fires', async () => {
     const { scheduler, fireNext } = makeFakeScheduler()
