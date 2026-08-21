@@ -374,6 +374,8 @@ jobs:
             Write-Host "=== REQUESTED URL === http://127.0.0.1:8080/"
             Write-Host "=== EXTRACTED TREE ==="
             Get-ChildItem -Recurse $extract | ForEach-Object { Write-Host "  $($_.FullName)" }
+            Write-Host "=== DIAG DIR ==="
+            Get-ChildItem -Recurse $diag -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.FullName)" }
             throw
           } finally {
             # Copy RTWiki log into diag dir for upload.
