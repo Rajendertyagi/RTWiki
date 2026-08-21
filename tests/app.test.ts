@@ -68,7 +68,12 @@ describe('createApp factory', () => {
     const app = createApp(deps)
     const res = await app.fetch(new Request('http://localhost/health'))
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { status: string; app: string; version: string; db: { ready: boolean } }
+    const body = (await res.json()) as {
+      status: string
+      app: string
+      version: string
+      db: { ready: boolean }
+    }
     expect(body.status).toBe('ok')
     expect(body.app).toBe('RTWiki')
     expect(body.version).toBe('0.1.0')
