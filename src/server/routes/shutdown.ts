@@ -1,92 +1,87 @@
+import { timingSafeEqual } from 'node:crypto'
 import { Hono } from 'hono'
 import { SHUTDOWN_TOKEN_HEADER } from '../../shared/constants/index.js'
+import type { ShutdownCoordinator } from '../shutdown-coordinator.js'
+
+export interface ShutdownRouteOptions {
+  coordinator: ShutdownCoordinator
+  token: string
+}
 
 /**
  * Validates that a request originates from the local machine by checking
- * the Origin or Referer headers for 127.0.0.1 / localhost.
+ * fetch-metadata headers against the request URL's origin.
  *
- * Since the server binds exclusively to 127.0.0.1, all traffic is inherently
- * local. This check prevents a malicious page on a different local port from
- * triggering shutdown via CSRF.
+ * Security model:
+ * - When Sec-Fetch-Site is present, require exactly "same-origin".
+ * - When Origin is present: reject "null", reject malformed values,
+ *   require exact equality with `new URL(request.url).origin`.
+ * - When Referer is present: reject malformed values, require exact origin equality.
+ * - When no browser headers are present (CLI/automation path): accept; the
+ *   POST token requirement provides CSRF protection.
  */
 function isSameOrigin(req: Request): boolean {
+  const fetchSite = req.headers.get('sec-fetch-site')
+  if (fetchSite !== null && fetchSite !== 'same-origin') return false
+
+  const requestOrigin = new URL(req.url).origin
+
   const origin = req.headers.get('origin')
-  if (origin) {
+  if (origin !== null) {
+    if (origin === 'null') return false
     try {
-      const u = new URL(origin)
-      if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') return true
+      if (new URL(origin).origin !== requestOrigin) return false
     } catch {
-      // Malformed origin — reject.
+      return false // malformed Origin
     }
-    return false
+    return true
   }
 
   const referer = req.headers.get('referer')
-  if (referer) {
+  if (referer !== null) {
     try {
-      const u = new URL(referer)
-      if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') return true
+      if (new URL(referer).origin !== requestOrigin) return false
     } catch {
-      // Malformed referer — reject.
+      return false // malformed Referer
     }
-    return false
+    return true
   }
 
-  // No Origin or Referer header: accept. Non-browser clients (PowerShell,
-  // curl, test frameworks) do not send these headers. Since the server binds
-  // exclusively to 127.0.0.1, any request that reaches it is inherently local.
-  // The custom X-RTWiki-Shutdown-Token header requirement provides CSRF
-  // protection: browsers always send Origin for cross-origin requests with
-  // custom headers, and we reject non-localhost origins.
-  return true
+  return true // CLI/automation path — token required on POST for CSRF protection
 }
 
-// Module-level mutable state. Each bootstrap() call updates the token and
-// handler. The routes (mounted once on the app) always reference the current values.
-let currentToken: string | null = null
-let currentOnShutdown: (() => Promise<void>) | null = null
-let shutdownStarted = false
-
-/**
- * Updates the active shutdown token and handler. Called by bootstrap()
- * each time a new server instance is started.
- */
-export function setShutdownHandler(token: string, onShutdown: () => Promise<void>): void {
-  currentToken = token
-  currentOnShutdown = onShutdown
-  shutdownStarted = false
+export function timingSafeEqualStrings(a: string, b: string): boolean {
+  const aBytes = Buffer.from(a, 'utf8')
+  const bBytes = Buffer.from(b, 'utf8')
+  if (aBytes.byteLength !== bBytes.byteLength) return false
+  return timingSafeEqual(aBytes, bBytes)
 }
 
 /**
  * Creates the shutdown API routes.
  *
  * - GET  /token  → returns the per-process shutdown token
- * - POST /       → validates token + same-origin, then triggers shutdown
+ * - POST /       → validates token + same-origin, then triggers shutdown (returns 202)
+ * - Any other method on / → 405
  *
  * Security model:
  * - POST-only shutdown endpoint
  * - Per-process unpredictable token (crypto.randomUUID)
  * - Custom header required (not query param, not body field)
- * - Same-origin validation via Origin / Referer
- * - No CORS headers (set globally by app.ts middleware)
+ * - Fetch-metadata validation via Sec-Fetch-Site / Origin / Referer
+ * - Constant-time token comparison
+ * - No CORS headers (set globally by app middleware)
  * - Token never logged, never in URL, never in DB
- * - Idempotent — second POST after shutdown starts returns 503
  */
-export function createShutdownRoutes(): Hono {
+export function createShutdownRoutes(opts: ShutdownRouteOptions): Hono {
+  const { coordinator, token } = opts
   const router = new Hono()
 
   router.get('/token', async (c) => {
     if (!isSameOrigin(c.req.raw)) {
-      console.warn('SHUTDOWN_ORIGIN=' + (c.req.raw.headers.get('origin') ?? 'NONE'))
-      console.warn('SHUTDOWN_URL=' + c.req.raw.url)
-      c.header('x-diag-origin', c.req.raw.headers.get('origin') ?? 'NONE')
-      c.header('x-diag-url', c.req.raw.url)
       return c.json({ error: 'Forbidden' }, 403)
     }
-    if (!currentToken) {
-      return c.json({ error: 'Shutdown not available' }, 503)
-    }
-    return c.json({ token: currentToken })
+    return c.json({ token })
   })
 
   router.post('/', async (c) => {
@@ -94,25 +89,14 @@ export function createShutdownRoutes(): Hono {
       return c.json({ error: 'Forbidden' }, 403)
     }
 
-    if (shutdownStarted) {
-      return c.json({ error: 'Shutdown already in progress' }, 503)
-    }
-
-    if (!currentToken || !currentOnShutdown) {
-      return c.json({ error: 'Shutdown not available' }, 503)
-    }
-
     const provided = c.req.header(SHUTDOWN_TOKEN_HEADER)
-    if (provided !== currentToken) {
+    if (!timingSafeEqualStrings(provided ?? '', token)) {
       return c.json({ error: 'Invalid shutdown token' }, 403)
     }
 
-    shutdownStarted = true
-
-    // Respond immediately, then execute shutdown asynchronously so the
-    // HTTP response reaches the client before the server stops.
-    setTimeout(() => void currentOnShutdown?.(), 200)
-    return c.json({ status: 'shutting_down' })
+    // Fire-and-forget: route returns immediately; coordinator handles completion.
+    void coordinator.requestShutdown()
+    return c.json({ status: 'shutting_down' }, 202)
   })
 
   // Reject any other method on the root path.

@@ -35,7 +35,17 @@ describe('shutdown client', () => {
     expect(token).toBeNull()
   })
 
-  it('requestShutdown succeeds with valid token', async () => {
+  it('requestShutdown succeeds with HTTP 202', async () => {
+    mockFetchOnce({
+      ok: true,
+      status: 202,
+      json: async () => ({ status: 'shutting_down' })
+    })
+    const result = await requestShutdown('valid-token')
+    expect(result.success).toBe(true)
+  })
+
+  it('requestShutdown succeeds with HTTP 200 (backward compat)', async () => {
     mockFetchOnce({
       ok: true,
       status: 200,
@@ -67,11 +77,11 @@ describe('shutdown client', () => {
   })
 
   it('shutdown confirmation flow requires explicit token', async () => {
-    // Token is not exposed in UI - verify client does not log it
+    // Token is not exposed in UI — verify client does not log it
     const token = 'secret-uuid-token'
     mockFetchOnce({
       ok: true,
-      status: 200,
+      status: 202,
       json: async () => ({ status: 'shutting_down' })
     })
     const result = await requestShutdown(token)
@@ -97,9 +107,6 @@ describe('shutdown controller state', () => {
   })
 
   it('requires confirmation before shutdown', async () => {
-    // This is a behavioral test: the App component shows StopConfirmModal
-    // and only calls requestShutdown after user confirms.
-    // Verify the modal text is present.
     const { UI_TEXT } = await import('../src/web/config/index.js')
     expect(UI_TEXT.stopConfirmTitle.length).toBeGreaterThan(0)
     expect(UI_TEXT.stopConfirmMessage.length).toBeGreaterThan(0)

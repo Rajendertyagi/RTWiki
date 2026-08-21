@@ -1,19 +1,19 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { app } from './app.js'
+import { createApp } from './app.js'
 import { resolveRuntimePaths } from './config/index.js'
 import { checkIntegrity, closeDatabase, type Database, initDatabase } from './database/index.js'
 import { runMigrations } from './database/migrations.js'
 import { type Launcher, launchBrowser } from './launcher.js'
 import { createLogger, type Logger } from './logging/index.js'
-import { setShutdownHandler } from './routes/shutdown.js'
+import { ShutdownCoordinator } from './shutdown-coordinator.js'
 
 export interface BootstrapOptions {
   logger?: Logger
   launcher?: Launcher
   openBrowser?: boolean
-  /** Listening port. Defaults to 8080; tests may pass a free port to avoid conflicts. */
+  /** Listening port. Defaults to 8080; tests may pass 0 for auto-assignment. */
   port?: number
 }
 
@@ -23,6 +23,8 @@ export interface Runtime {
   paths: ReturnType<typeof resolveRuntimePaths>
   db: Database
   shutdownToken: string
+  coordinator: ShutdownCoordinator
+  /** Shorthand for coordinator.requestShutdown(). */
   shutdown: () => Promise<void>
 }
 
@@ -75,8 +77,17 @@ async function probeExistingInstance(
 }
 
 /**
- * Composition root: owns the config, logger, database, and HTTP server singletons.
- * The caller (index.ts) wires signal handlers and triggers shutdown.
+ * Composition root: owns the config, logger, database, HTTP server, and shutdown
+ * coordinator singletons. Each call creates an isolated app and coordinator.
+ *
+ * Construction order (deterministic, no races):
+ *  1. Create coordinator with late-bound server-stop capability.
+ *  2. Create a fresh Hono app with the coordinator injected.
+ *  3. Call Bun.serve() to start the server.
+ *  4. Synchronously attach the real server handle before returning.
+ *     No request can arrive between steps 3 and 4 because JavaScript
+ *     cannot process another event while the current synchronous call
+ *     stack is still executing.
  */
 export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime> {
   const port = options.port ?? 8080
@@ -104,18 +115,25 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
         })
       }
     }
-    // Return a minimal runtime so the caller can exit without starting a second server.
-    // We do NOT start a second database or HTTP server.
-    const noopShutdown = async (): Promise<void> => {
-      /* no-op: we did not start a server or database */
-    }
+    // Close the logger created for this second process — it has no server to serve.
+    await logger.close()
     return {
       server: null as unknown as Awaited<ReturnType<typeof Bun.serve>>,
       logger,
       paths,
       db: null as unknown as Database,
       shutdownToken,
-      shutdown: noopShutdown
+      coordinator: new ShutdownCoordinator({
+        stopGracefully: async () => {
+          throw new Error('No server — existing instance detected')
+        },
+        closeDatabase: async () => {},
+        logInfo: () => {},
+        logWarn: () => {},
+        logError: () => {},
+        closeLogger: async () => {}
+      }),
+      shutdown: async () => {}
     }
   }
 
@@ -136,39 +154,62 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     throw new Error('Database integrity check failed')
   }
 
-  // Binds loopback only (127.0.0.1) — never exposed to the network.
+  // 1. Create coordinator with late-bound server-stop capability.
+  let serverRef: Awaited<ReturnType<typeof Bun.serve>> | null = null
+  const coordinator = new ShutdownCoordinator({
+    stopGracefully: async () => {
+      if (!serverRef) throw new Error('Server not yet attached')
+      await serverRef.stop()
+    },
+    closeDatabase: async () => {
+      await closeDatabase()
+    },
+    logInfo: logger.info.bind(logger),
+    logWarn: logger.warn.bind(logger),
+    logError: logger.error.bind(logger),
+    closeLogger: logger.close.bind(logger)
+  })
+
+  // 2. Create a fresh Hono app with the coordinator injected.
+  const app = createApp({
+    coordinator,
+    token: shutdownToken,
+    getDb: () => db,
+    logger,
+    frontendDistDir: paths.frontendDistDir
+  })
+
+  // 3. Start the Bun HTTP server.
   const server = await Bun.serve({
     fetch: app.fetch,
     port,
     hostname: '127.0.0.1'
   })
 
-  logger.info('HTTP server listening', { event: 'startup', host: '127.0.0.1', port })
+  // 4. Synchronously attach the real server handle.
+  //    No request can arrive between Bun.serve() resolving and this assignment
+  //    because JavaScript cannot process another event while the current
+  //    synchronous call stack is still executing.
+  serverRef = server
 
-  let shuttingDown = false
-  const doShutdown = async (): Promise<void> => {
-    if (shuttingDown) return
-    shuttingDown = true
-    logger.info('Shutting down', { event: 'shutdown' })
-    try {
-      server.stop()
-    } catch {
-      // Server may already be stopped.
-    }
-    await closeDatabase()
-    await logger.close()
-  }
-
-  // Register this instance's shutdown token and handler. The routes are
-  // already mounted on the app; this updates the module-level state they reference.
-  setShutdownHandler(shutdownToken, () => doShutdown())
+  logger.info('HTTP server listening', { event: 'startup', host: '127.0.0.1', port: server.port })
 
   if (openBrowser) {
     const launcher = options.launcher ?? launchBrowser
-    await launcher(`http://127.0.0.1:${port}/`)
+    await launcher(`http://127.0.0.1:${server.port}/`)
   }
 
-  return { server, logger, paths, db, shutdownToken, shutdown: doShutdown }
+  return {
+    server,
+    logger,
+    paths,
+    db,
+    shutdownToken,
+    coordinator,
+    shutdown: async () => {
+      await coordinator.requestShutdown()
+    }
+  }
 }
 
 function ensureDirectory(dir: string): void {
