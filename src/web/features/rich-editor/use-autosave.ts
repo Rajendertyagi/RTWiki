@@ -36,6 +36,7 @@ export function useAutosave(options: UseAutosaveOptions): {
 
   // Reset status and notify controller of page change
   useEffect(() => {
+    void pageId
     setStatus('idle')
     setError(null)
   }, [pageId])

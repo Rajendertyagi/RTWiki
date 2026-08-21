@@ -4,7 +4,6 @@
   align-items: center;
   width: 56px;
   min-width: 56px;
-  height: 100vh;
   height: 100dvh;
   padding: var(--mantine-spacing-xs) 0;
   background: var(--mantine-color-body);

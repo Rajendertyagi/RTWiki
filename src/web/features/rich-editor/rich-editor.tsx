@@ -43,10 +43,11 @@ export function RichEditor({
 
   // Reset hasReset when page changes
   useEffect(() => {
+    void pageId
     setHasReset(false)
     setShowResetConfirm(false)
     setDocumentResetKey(0)
-  }, [pageId, storedContent])
+  }, [pageId])
 
   // Handle reset after malformed content
   const handleReset = (): void => {
