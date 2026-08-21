@@ -77,17 +77,10 @@ describe('workspace routing', () => {
 
   it('dashboard card and sidebar both open same page', () => {
     const pages = [makePage({ id: 'p1', title: 'Alpha' }), makePage({ id: 'p2', title: 'Beta' })]
-    // Both use same selectPage logic
-    let selected: Page | null = null
-    const select = (id: string | null): void => {
-      selected = id ? (pages.find((p) => p.id === id) ?? null) : null
-    }
-    select('p1')
-    if (!selected) throw new Error('not found')
-    expect(selected.id).toBe('p1')
-    select('p2')
-    if (!selected) throw new Error('not found')
-    expect(selected.id).toBe('p2')
+    const selected1 = pages.find((p) => p.id === 'p1') ?? null
+    const selected2 = pages.find((p) => p.id === 'p2') ?? null
+    expect(selected1?.id).toBe('p1')
+    expect(selected2?.id).toBe('p2')
     // Three-dot menu should not trigger open - tested via ghost button pattern in component
   })
 
