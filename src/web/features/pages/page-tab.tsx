@@ -1,6 +1,6 @@
 import { ActionIcon, Badge, Group, Text, Tooltip } from '@mantine/core'
-import { IconX } from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
+import { IconX } from '@tabler/icons-react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './page-tab.module.css'
 
@@ -11,7 +11,13 @@ interface PageTabProps {
 
 export function PageTab({ page, onClose }: PageTabProps): JSX.Element {
   return (
-    <div className={classes.tab} role="tab" aria-selected="true" aria-label={UI_TEXT.activePageTabLabel}>
+    <div
+      className={classes.tab}
+      role="tab"
+      aria-selected="true"
+      aria-label={UI_TEXT.activePageTabLabel}
+      tabIndex={0}
+    >
       <Group gap="xs" wrap="nowrap" className={classes.tabInner}>
         <Text size="sm" fw={600} truncate className={classes.title}>
           {page.title || UI_TEXT.untitledPage}

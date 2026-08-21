@@ -1,4 +1,3 @@
-import { Stack } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import type { MutationStatus } from '../../hooks/use-pages-controller.js'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'

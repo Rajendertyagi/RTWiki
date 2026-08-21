@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
+import type { Page } from '../src/shared/contracts/pages.js'
 import { parseStoredDocument } from '../src/web/features/rich-editor/document.js'
 import { filterPagesByQuery, findPageById } from '../src/web/hooks/pages-controller-utils.js'
-import type { Page } from '../src/shared/contracts/pages.js'
 
 function makePage(overrides: Partial<Page> = {}): Page {
   const now = new Date().toISOString()
