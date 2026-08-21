@@ -35,7 +35,9 @@ describe('shutdown API security', () => {
     })
     console.log('DIAG_NETWORK', res.status)
     const body = await res.text()
-    console.log('DIAG_BODY', body.slice(0, 80))
+    if (res.status !== 200) {
+      throw new Error(`SHUTDOWN_TOKEN_STATUS=${res.status} BODY=${body.slice(0, 120)}`)
+    }
     expect(res.status).toBe(200)
     const body = (await res.json()) as { token: string }
     expect(typeof body.token).toBe('string')
