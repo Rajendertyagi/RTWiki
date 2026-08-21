@@ -56,7 +56,8 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
 
   const clearTimer = (): void => {
     if (timer !== null) {
-      scheduler.clearTimeout(timer)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      scheduler.clearTimeout(timer as any)
       timer = null
     }
   }
