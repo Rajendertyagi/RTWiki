@@ -20,11 +20,18 @@ function makePage(overrides: Partial<Page> = {}): Page {
 
 describe('workspace routing', () => {
   it('routes rich pages to RichEditor and html pages to placeholder', () => {
-    const rich = makePage({ pageType: 'rich', content: JSON.stringify([{ type: 'paragraph', content: [] }]) })
-    const html = makePage({ pageType: 'html', content: JSON.stringify({ html: '<p>hi</p>' }) })
+    const rich = makePage({
+      pageType: 'rich',
+      content: JSON.stringify([{ type: 'paragraph', content: [] }])
+    })
+    const html = makePage({
+      pageType: 'html',
+      content: JSON.stringify({ html: '<p>hi</p>' })
+    })
 
     // Pure logic that PageWorkspace uses
-    const getWorkspaceMode = (page: Page): 'rich' | 'html' => (page.pageType === 'rich' ? 'rich' : 'html')
+    const getWorkspaceMode = (page: Page): 'rich' | 'html' =>
+      page.pageType === 'rich' ? 'rich' : 'html'
 
     expect(getWorkspaceMode(rich)).toBe('rich')
     expect(getWorkspaceMode(html)).toBe('html')
@@ -97,7 +104,12 @@ describe('workspace routing', () => {
 
   it('search limitation is documented honestly', async () => {
     // Current search is title-only via filterPagesByQuery; rich content search is not implemented
-    const pages = [makePage({ title: 'Visible Title', content: JSON.stringify([{ type: 'paragraph', content: [{ text: 'hidden rich content' }] }]) })]
+    const pages = [
+      makePage({
+        title: 'Visible Title',
+        content: JSON.stringify([{ type: 'paragraph', content: [{ text: 'hidden rich content' }] }])
+      })
+    ]
     const byContent = filterPagesByQuery(pages, 'hidden')
     // This will be 0 because filter only checks title
     expect(byContent.length).toBe(0)
