@@ -1,3 +1,4 @@
+import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { Alert, Stack, Text } from '@mantine/core'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -12,7 +13,6 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
-import type { PageType } from '@rtwiki/shared/contracts/pages'
 
 export function App(): JSX.Element {
   const controller = usePagesController()
@@ -21,7 +21,9 @@ export function App(): JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [shutdownToken, setShutdownToken] = useState<string | null>(null)
-  const [shutdownStatus, setShutdownStatus] = useState<'idle' | 'stopping' | 'stopped' | 'error'>('idle')
+  const [shutdownStatus, setShutdownStatus] = useState<'idle' | 'stopping' | 'stopped' | 'error'>(
+    'idle'
+  )
   const [shutdownError, setShutdownError] = useState<string | null>(null)
   const [pendingFlushError, setPendingFlushError] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
