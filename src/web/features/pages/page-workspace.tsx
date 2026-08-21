@@ -1,8 +1,10 @@
-import { Paper, Stack, Text } from '@mantine/core'
+import { Stack } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { UI_TEXT } from '../../config/index.js'
 import type { MutationStatus } from '../../hooks/use-pages-controller.js'
+import { HtmlPlaceholder } from '../html/html-placeholder.js'
+import { RichEditor } from '../rich-editor/rich-editor.js'
 import { EditorHeader } from './editor-header.js'
+import { PageTab } from './page-tab.js'
 import classes from './page-workspace.module.css'
 
 interface PageWorkspaceProps {
@@ -12,6 +14,7 @@ interface PageWorkspaceProps {
   onRename: (title: string) => Promise<boolean>
   onDuplicate: () => void
   onDelete: () => void
+  onFlushRef: (fn: (() => Promise<boolean>) | null) => void
 }
 
 export function PageWorkspace({
@@ -20,10 +23,13 @@ export function PageWorkspace({
   onBack,
   onRename,
   onDuplicate,
-  onDelete
+  onDelete,
+  onFlushRef
 }: PageWorkspaceProps): JSX.Element {
   return (
     <div className={classes.workspace}>
+      <PageTab page={page} onClose={onBack} />
+
       <EditorHeader
         page={page}
         mutationStatus={mutationStatus}
@@ -34,19 +40,16 @@ export function PageWorkspace({
       />
 
       <div className={classes.content}>
-        <Paper p="md" radius="md" className={classes.preview}>
-          <Stack gap="sm">
-            {page.content ? (
-              <Text size="sm" className={classes.contentText}>
-                {page.content}
-              </Text>
-            ) : (
-              <Text size="sm" c="dimmed" fs="italic">
-                {UI_TEXT.editorPlaceholderContent}
-              </Text>
-            )}
-          </Stack>
-        </Paper>
+        {page.pageType === 'rich' ? (
+          <RichEditor
+            pageId={page.id}
+            storedContent={page.content}
+            pageTitle={page.title}
+            onFlushRef={onFlushRef}
+          />
+        ) : (
+          <HtmlPlaceholder />
+        )}
       </div>
     </div>
   )

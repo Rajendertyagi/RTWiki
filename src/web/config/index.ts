@@ -25,6 +25,7 @@ export const UI_TEXT = {
   saveStatusSaving: 'Saving...',
   saveStatusSaved: 'Saved',
   saveStatusError: 'Save failed',
+  saveStatusRetry: 'Retry',
   untitledPage: 'Untitled',
   renameAction: 'Rename',
   duplicateAction: 'Duplicate',
@@ -49,7 +50,24 @@ export const UI_TEXT = {
   stopConfirmMessage: 'This will shut down the RTWiki server. Any unsaved changes may be lost.',
   stopButton: 'Stop',
   stopSuccessMessage: 'RTWiki has stopped. You may close this browser tab.',
-  stopError: 'Failed to stop RTWiki.'
+  stopError: 'Failed to stop RTWiki.',
+  utilityRailHome: 'Home',
+  utilityRailSearch: 'Search',
+  utilityRailNewPage: 'New page',
+  utilityRailTheme: 'Theme',
+  utilityRailStop: 'Stop RTWiki',
+  activePageTabLabel: 'Active page',
+  closeTabLabel: 'Close and return to dashboard',
+  htmlPlaceholderTitle: 'HTML / CSS / JavaScript editor',
+  htmlPlaceholderMessage: 'The HTML/CSS/JS editor is coming in the next phase. Your HTML pages are safely stored and will be editable soon.',
+  htmlPlaceholderHint: 'HTML pages remain viewable as stored content.',
+  richEditorLoadError: 'This Rich Note could not be loaded. The stored content appears to be corrupted.',
+  richEditorPreserveNotice: 'Original content has been preserved. Reset the document to start fresh.',
+  richEditorResetButton: 'Reset document',
+  hierarchyFutureNote: 'Hierarchical page organization is planned for a future release.',
+  saveFailedRetryHint: 'Save failed. You can retry or keep editing.',
+  unsavedChangesWarning: 'You have unsaved changes that failed to save. Please retry before leaving or your recent edits may be lost.',
+  abruptExitNotice: 'If the browser or app is closed abruptly, only the current unsaved debounce window may be lost.'
 } as const
 
 export const STATUS_TEXT = {

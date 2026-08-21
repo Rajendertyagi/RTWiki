@@ -20,33 +20,17 @@
   padding: var(--mantine-spacing-xs);
 }
 
-.footer {
-  border-top: 1px solid var(--mantine-color-default-border);
-  padding: var(--mantine-spacing-sm);
-  display: flex;
-  justify-content: flex-end;
-}
-
-.stopSection {
-  border-top: 1px solid var(--mantine-color-default-border);
-  padding: var(--mantine-spacing-sm);
-  display: flex;
-  justify-content: flex-end;
-}
-
-.stopButton {
-  opacity: 0.6;
-  transition: opacity var(--mantine-transition-fast);
-}
-
-.stopButton:hover {
-  opacity: 1;
-}
-
 .navItem {
   border-radius: var(--mantine-radius-sm);
+  font-size: var(--mantine-font-size-sm);
 }
 
 .listEmpty {
   padding: var(--mantine-spacing-md);
+}
+
+.hierarchyNote {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-top: 1px solid var(--mantine-color-default-border);
+  margin-top: var(--mantine-spacing-xs);
 }

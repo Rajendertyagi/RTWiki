@@ -1,0 +1,37 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 56px;
+  min-width: 56px;
+  height: 100vh;
+  height: 100dvh;
+  padding: var(--mantine-spacing-xs) 0;
+  background: var(--mantine-color-body);
+  border-right: 1px solid var(--mantine-color-default-border);
+}
+
+.topGroup {
+  padding-top: var(--mantine-spacing-xs);
+}
+
+.bottomGroup {
+  padding-bottom: var(--mantine-spacing-xs);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.action {
+  border-radius: var(--mantine-radius-md);
+}
+
+.stopAction {
+  opacity: 0.85;
+  border-radius: var(--mantine-radius-md);
+}
+
+.stopAction:hover {
+  opacity: 1;
+}

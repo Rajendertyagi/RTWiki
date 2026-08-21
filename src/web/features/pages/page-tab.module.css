@@ -1,0 +1,27 @@
+.tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding-inline: var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
+}
+
+.tabInner {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+}
+
+.badge {
+  flex-shrink: 0;
+}
+
+.close {
+  flex-shrink: 0;
+}

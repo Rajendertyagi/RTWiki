@@ -1,6 +1,6 @@
-import { ActionIcon, Alert, Button, Loader, NavLink, ScrollArea, Stack, Text } from '@mantine/core'
+import { Alert, Loader, NavLink, ScrollArea, Stack, Text } from '@mantine/core'
+import { IconAlertCircle, IconFileText, IconHome } from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { IconAlertCircle, IconFileText, IconHome, IconPlus, IconPower } from '@tabler/icons-react'
 import { PageTypeBadge } from '../components/page-type-badge.js'
 import { SearchInput } from '../components/search-input.js'
 import { UI_TEXT } from '../config/index.js'
@@ -14,8 +14,7 @@ interface SidebarProps {
   onSearchChange: (value: string) => void
   selectedId: string | null
   onSelect: (id: string | null) => void
-  onNewPage: () => void
-  onStop: () => void
+  searchInputRef?: React.RefObject<HTMLInputElement | null>
 }
 
 export function Sidebar({
@@ -26,24 +25,12 @@ export function Sidebar({
   onSearchChange,
   selectedId,
   onSelect,
-  onNewPage,
-  onStop
+  searchInputRef
 }: SidebarProps): JSX.Element {
   return (
     <div className={classes.sidebarRoot}>
       <div className={classes.searchSection}>
-        <SearchInput value={searchQuery} onChange={onSearchChange} />
-      </div>
-
-      <div className={classes.actionsSection}>
-        <Button
-          leftSection={<IconPlus size={16} />}
-          onClick={onNewPage}
-          fullWidth
-          aria-label={UI_TEXT.sidebarNewPage}
-        >
-          {UI_TEXT.sidebarNewPage}
-        </Button>
+        <SearchInput ref={searchInputRef} value={searchQuery} onChange={onSearchChange} />
       </div>
 
       <ScrollArea className={classes.listSection}>
@@ -92,24 +79,9 @@ export function Sidebar({
         )}
       </ScrollArea>
 
-      <div className={classes.stopSection}>
-        <ActionIcon
-          variant="subtle"
-          color="red"
-          size="lg"
-          onClick={onStop}
-          aria-label={UI_TEXT.stopRtwiki}
-          className={classes.stopButton}
-        >
-          <IconPower size={18} />
-        </ActionIcon>
-      </div>
-
-      <div className={classes.footer}>
-        <Text size="xs" c="dimmed">
-          {UI_TEXT.appName}
-        </Text>
-      </div>
+      <Text size="xs" c="dimmed" ta="center" className={classes.hierarchyNote}>
+        {UI_TEXT.hierarchyFutureNote}
+      </Text>
     </div>
   )
 }

@@ -1,21 +1,25 @@
 import { AppShell, Burger, Group, Title } from '@mantine/core'
 import { useState } from 'react'
-import { ThemeToggle } from '../components/theme-toggle.js'
 import { UI_TEXT } from '../config/index.js'
 import classes from './app-shell.module.css'
 
 interface AppShellLayoutProps {
+  utilityRail: React.ReactNode
   navbar: React.ReactNode
   children: React.ReactNode
 }
 
-export function AppShellLayout({ navbar, children }: AppShellLayoutProps): JSX.Element {
+export function AppShellLayout({
+  utilityRail,
+  navbar,
+  children
+}: AppShellLayoutProps): JSX.Element {
   const [opened, setOpened] = useState(false)
 
   return (
     <AppShell
       header={{ height: 44 }}
-      navbar={{ width: 280, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      navbar={{ width: 336, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
     >
       <AppShell.Header>
@@ -31,11 +35,15 @@ export function AppShellLayout({ navbar, children }: AppShellLayoutProps): JSX.E
               {UI_TEXT.appName}
             </Title>
           </Group>
-          <ThemeToggle />
         </div>
       </AppShell.Header>
 
-      <AppShell.Navbar p={0}>{navbar}</AppShell.Navbar>
+      <AppShell.Navbar p={0}>
+        <div className={classes.navbarInner}>
+          <div className={classes.railColumn}>{utilityRail}</div>
+          <div className={classes.sidebarColumn}>{navbar}</div>
+        </div>
+      </AppShell.Navbar>
 
       <AppShell.Main className={classes.main}>{children}</AppShell.Main>
     </AppShell>

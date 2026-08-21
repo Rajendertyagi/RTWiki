@@ -1,16 +1,18 @@
 import { Alert, Stack, Text } from '@mantine/core'
-import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from './config/index.js'
 import { Dashboard } from './features/dashboard/dashboard.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
+import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
+import { UtilityRail } from './layout/utility-rail.js'
+import type { PageType } from '@rtwiki/shared/contracts/pages'
 
 export function App(): JSX.Element {
   const controller = usePagesController()
@@ -19,21 +21,16 @@ export function App(): JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [shutdownToken, setShutdownToken] = useState<string | null>(null)
-  const [shutdownStatus, setShutdownStatus] = useState<'idle' | 'stopping' | 'stopped' | 'error'>(
-    'idle'
-  )
+  const [shutdownStatus, setShutdownStatus] = useState<'idle' | 'stopping' | 'stopped' | 'error'>('idle')
+  const [shutdownError, setShutdownError] = useState<string | null>(null)
+  const [pendingFlushError, setPendingFlushError] = useState<string | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const flushRef = useRef<(() => Promise<boolean>) | null>(null)
 
   useEffect(() => {
-    fetch('/api/shutdown/token')
-      .then(async (res) => {
-        if (res.ok) {
-          const data = (await res.json()) as { token: string }
-          setShutdownToken(data.token)
-        }
-      })
-      .catch(() => {
-        // Token fetch failed — shutdown button will be non-functional.
-      })
+    void fetchShutdownToken().then((token) => {
+      if (token) setShutdownToken(token)
+    })
   }, [])
 
   const handleStop = useCallback((): void => {
@@ -41,21 +38,21 @@ export function App(): JSX.Element {
   }, [])
 
   const handleStopConfirm = useCallback(async (): Promise<void> => {
-    if (!shutdownToken) return
-    setShutdownStatus('stopping')
-    setStopDialogOpen(false)
-    try {
-      const res = await fetch('/api/shutdown', {
-        method: 'POST',
-        headers: { 'X-RTWiki-Shutdown-Token': shutdownToken }
-      })
-      if (res.ok) {
-        setShutdownStatus('stopped')
-      } else {
-        setShutdownStatus('error')
-      }
-    } catch {
+    if (!shutdownToken) {
+      setShutdownError(UI_TEXT.stopError)
       setShutdownStatus('error')
+      setStopDialogOpen(false)
+      return
+    }
+    setShutdownStatus('stopping')
+    setShutdownError(null)
+    setStopDialogOpen(false)
+    const result = await requestShutdown(shutdownToken)
+    if (result.success) {
+      setShutdownStatus('stopped')
+    } else {
+      setShutdownStatus('error')
+      setShutdownError(result.error ?? UI_TEXT.stopError)
     }
   }, [shutdownToken])
 
@@ -72,6 +69,34 @@ export function App(): JSX.Element {
   const handleNewPage = (): void => {
     setNewDialogType('rich')
     setNewDialogOpen(true)
+  }
+
+  const handleSearchFocus = (): void => {
+    searchInputRef.current?.focus()
+  }
+
+  const handleHome = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    controller.selectPage(null)
+  }
+
+  const handleSelectPage = async (id: string | null): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    controller.selectPage(id)
   }
 
   const handleCreatePage = async (title: string, pageType: PageType): Promise<void> => {
@@ -110,6 +135,18 @@ export function App(): JSX.Element {
     return controller.renamePage(controller.selectedPage.id, title)
   }
 
+  const handleWorkspaceClose = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    controller.selectPage(null)
+  }
+
   if (shutdownStatus === 'stopped') {
     return (
       <Stack align="center" justify="center" h="100vh">
@@ -124,6 +161,15 @@ export function App(): JSX.Element {
   return (
     <>
       <AppShellLayout
+        utilityRail={
+          <UtilityRail
+            activeHome={controller.selectedPage === null}
+            onHome={handleHome}
+            onSearchFocus={handleSearchFocus}
+            onNewPage={handleNewPage}
+            onStop={handleStop}
+          />
+        }
         navbar={
           <Sidebar
             pages={controller.pages}
@@ -132,22 +178,40 @@ export function App(): JSX.Element {
             searchQuery={controller.searchQuery}
             onSearchChange={controller.setSearchQuery}
             selectedId={controller.selectedPage?.id ?? null}
-            onSelect={controller.selectPage}
-            onNewPage={handleNewPage}
-            onStop={handleStop}
+            onSelect={handleSelectPage}
+            searchInputRef={searchInputRef}
           />
         }
       >
-        <Stack gap="md">
+        <Stack gap="sm">
           {controller.mutationError ? (
             <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
               {controller.mutationError}
             </Alert>
           ) : null}
 
+          {pendingFlushError ? (
+            <Alert
+              icon={<IconAlertCircle size={16} />}
+              color="red"
+              variant="light"
+              title="Error"
+              withCloseButton
+              onClose={() => setPendingFlushError(null)}
+            >
+              {pendingFlushError}
+            </Alert>
+          ) : null}
+
+          {shutdownStatus === 'stopping' ? (
+            <Alert icon={<IconAlertCircle size={16} />} color="yellow" variant="light" title="Stopping">
+              {UI_TEXT.stopConfirmMessage}
+            </Alert>
+          ) : null}
+
           {shutdownStatus === 'error' ? (
             <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
-              {UI_TEXT.stopError}
+              {shutdownError ?? UI_TEXT.stopError}
             </Alert>
           ) : null}
 
@@ -155,10 +219,13 @@ export function App(): JSX.Element {
             <PageWorkspace
               page={controller.selectedPage}
               mutationStatus={controller.mutationStatus}
-              onBack={() => controller.selectPage(null)}
+              onBack={handleWorkspaceClose}
               onRename={handleRename}
               onDuplicate={handleWorkspaceDuplicate}
               onDelete={handleWorkspaceDelete}
+              onFlushRef={(fn) => {
+                flushRef.current = fn
+              }}
             />
           ) : (
             <Dashboard
@@ -166,7 +233,7 @@ export function App(): JSX.Element {
               loading={controller.loading}
               error={controller.error}
               searchQuery={controller.searchQuery}
-              onOpen={controller.selectPage}
+              onOpen={handleSelectPage}
               onDuplicate={handleDuplicate}
               onDelete={handleDeleteRequest}
               onCreateRich={handleCreateRich}

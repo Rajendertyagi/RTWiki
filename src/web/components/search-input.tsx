@@ -1,5 +1,6 @@
 import { TextInput } from '@mantine/core'
 import { IconSearch } from '@tabler/icons-react'
+import { forwardRef } from 'react'
 import { UI_TEXT } from '../config/index.js'
 
 interface SearchInputProps {
@@ -8,13 +9,13 @@ interface SearchInputProps {
   placeholder?: string
 }
 
-export function SearchInput({
-  value,
-  onChange,
-  placeholder = UI_TEXT.searchPlaceholder
-}: SearchInputProps): JSX.Element {
+export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(function SearchInput(
+  { value, onChange, placeholder = UI_TEXT.searchPlaceholder }: SearchInputProps,
+  ref
+): JSX.Element {
   return (
     <TextInput
+      ref={ref}
       placeholder={placeholder}
       leftSection={<IconSearch size={16} />}
       value={value}
@@ -24,4 +25,4 @@ export function SearchInput({
       aria-label={UI_TEXT.searchLabel}
     />
   )
-}
+})
