@@ -39,7 +39,7 @@ export function RichEditor({
     await updatePage(pid, { content })
   }
 
-  const { status, error, isDirty, notifyEdit, save, retry, flush } = useAutosave({
+  const { status, error, isDirty, notifyEdit, retry, flush } = useAutosave({
     pageId,
     onSave: handleSave
   })
