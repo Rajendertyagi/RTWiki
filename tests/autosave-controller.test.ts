@@ -9,16 +9,16 @@ function makeFakeScheduler(): {
   fireNext: () => void
   fireAll: () => void
 } {
-  const pending = new Map<unknown, () => void>()
+  const pending = new Map<number, () => void>()
   let nextId = 0
 
   const scheduler: Scheduler = {
-    setTimeout(fn: () => void): unknown {
+    setTimeout(fn: () => void): number {
       const id = nextId++
       pending.set(id, fn)
       return id
     },
-    clearTimeout(id: unknown): void {
+    clearTimeout(id: number): void {
       pending.delete(id)
     }
   }

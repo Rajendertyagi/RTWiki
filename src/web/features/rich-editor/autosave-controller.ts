@@ -10,8 +10,8 @@ export interface AutosaveState {
 }
 
 export interface Scheduler {
-  setTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout>
-  clearTimeout(id: ReturnType<typeof clearTimeout>): void
+  setTimeout(fn: () => void, ms: number): number
+  clearTimeout(id: number): void
 }
 
 export interface AutosaveControllerOptions {
@@ -38,7 +38,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   let savingPageId: string | null = null
   let savingContent: string | null = null
   let savingPromise: Promise<void> | null = null
-  let timer: ReturnType<typeof setTimeout> | null = null
+  let timer: number | null = null
   let nextPending: { pageId: string; content: string } | null = null
   let disposed = false
   let seq = 0
