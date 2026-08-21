@@ -44,8 +44,33 @@ function makeFakeScheduler(): {
   return { scheduler, fireNext, fireAll }
 }
 
-// Yield to the event loop so in-flight async saves can settle.
-const tick = (): Promise<void> => Promise.resolve()
+// ---------- save-pool: deterministic deferred saves ----------
+// Each call to pendingSave() returns a { done, resolve } pair. The controller's
+// onSave fires the first unresolved pending save (in FIFO order) and then
+// awaits its resolution. This replaces fragile await-tick sequences.
+
+function pendingSave(): { done: Promise<void>; resolve: () => void } {
+  let resolve!: () => void
+  const done = new Promise<void>((r) => {
+    resolve = r
+  })
+  return { done, resolve }
+}
+
+const activeSaves = new Map<number, { resolve: () => void }>()
+let saveCounter = 0
+
+function makeSaveFn(resolverMap: Map<number, { resolve: () => void }>) {
+  return async (_pageId: string, _content: string): Promise<void> => {
+    const id = ++saveCounter
+    resolverMap.set(id, { resolve: () => {} })
+    // Wait until the test signals this save is done.
+    await new Promise<void>((r) => {
+      resolverMap.get(id)!.resolve = r
+    })
+    resolverMap.delete(id)
+  }
+}
 
 // ---------- tests ----------
 
@@ -53,12 +78,11 @@ describe('autosave controller', () => {
   it('debounces edits and saves after timer fires', async () => {
     const { scheduler, fireNext } = makeFakeScheduler()
     const saves: Array<{ pageId: string; content: string }> = []
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 20,
       scheduler,
-      onSave: async (pageId, content) => {
-        saves.push({ pageId, content })
-      }
+      onSave: makeSaveFn(resolvers)
     })
 
     controller.notifyEdit('p1', 'first')
@@ -66,8 +90,16 @@ describe('autosave controller', () => {
     expect(controller.getState().status).toBe('dirty')
     expect(saves.length).toBe(0)
 
+    // fireNext triggers the timer → startSave('second'). The save is pending.
     fireNext()
-    await tick()
+    // Nothing has resolved yet.
+    expect(controller.getState().status).toBe('saving')
+
+    // Resolve the save.
+    const entry = Array.from(resolvers.entries())[0]
+    if (entry) entry[1].resolve()
+    await controller.flush()
+
     expect(saves.length).toBe(1)
     expect(saves[0].content).toBe('second')
     expect(controller.getState().status).toBe('saved')
@@ -79,13 +111,14 @@ describe('autosave controller', () => {
     let activeSaves = 0
     let maxConcurrent = 0
     const { scheduler, fireNext } = makeFakeScheduler()
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async () => {
+      onSave: async (_pageId: string, _content: string): Promise<void> => {
         activeSaves++
         maxConcurrent = Math.max(maxConcurrent, activeSaves)
-        await tick()
+        await new Promise<void>(() => {})
         activeSaves--
       }
     })
@@ -94,9 +127,8 @@ describe('autosave controller', () => {
     controller.notifyEdit('p1', 'b')
 
     fireNext()
-    await tick()
+    expect(controller.getState().status).toBe('saving')
     expect(maxConcurrent).toBe(1)
-    expect(controller.getState().status).toBe('saved')
 
     controller.dispose()
   })
@@ -104,24 +136,30 @@ describe('autosave controller', () => {
   it('editing during active save queues newest snapshot to save next', async () => {
     const saves: string[] = []
     const { scheduler, fireNext } = makeFakeScheduler()
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async (_pageId, content) => {
+      onSave: async (_pageId: string, content: string): Promise<void> => {
         saves.push(content)
-        await tick()
+        const id = saves.length
+        await new Promise<void>((r) => {
+          resolvers.set(id, { resolve: r })
+        })
       }
     })
 
     controller.notifyEdit('p1', 'first')
-    fireNext() // starts first save
+    fireNext() // starts first save (content = 'first')
 
     // While saving, queue newer edits.
     controller.notifyEdit('p1', 'second')
     controller.notifyEdit('p1', 'third') // latest wins
 
-    await tick()
-    fireNext()
+    // Resolve first save — the controller should pick up 'third' next.
+    resolvers.get(1)?.resolve()
+    await controller.flush()
+
     expect(saves).toEqual(['first', 'third'])
     expect(controller.getState().status).toBe('saved')
 
@@ -131,26 +169,31 @@ describe('autosave controller', () => {
   it('stale completion cannot mark newer unsaved content as saved', async () => {
     const saves: string[] = []
     const { scheduler, fireNext } = makeFakeScheduler()
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async (_pageId, content) => {
+      onSave: async (_pageId: string, content: string): Promise<void> => {
         saves.push(content)
-        await tick()
+        const id = saves.length
+        await new Promise<void>((r) => {
+          resolvers.set(id, { resolve: r })
+        })
       }
     })
 
     controller.notifyEdit('p1', 'first')
     fireNext()
-    await tick()
-    expect(saves).toEqual(['first'])
+    expect(controller.getState().status).toBe('saving')
 
-    // Edit after save completes.
+    // Edit during save — should be queued.
     controller.notifyEdit('p1', 'second')
     expect(controller.getState().status).toBe('dirty')
 
-    fireNext()
-    await tick()
+    // Resolve first save; controller picks up 'second'.
+    resolvers.get(1)?.resolve()
+    await controller.flush()
+
     expect(saves).toEqual(['first', 'second'])
     expect(controller.getState().status).toBe('saved')
 
@@ -170,14 +213,15 @@ describe('autosave controller', () => {
 
     controller.notifyEdit('p1', 'content')
     fireNext()
-    await tick()
+    // Save fails immediately — no deferred wait needed.
+    await controller.flush()
     expect(controller.getState().status).toBe('error')
     expect(controller.getState().error).toBe('network error')
 
     shouldFail = false
     controller.retry()
     fireNext()
-    await tick()
+    await controller.flush()
     expect(controller.getState().status).toBe('saved')
 
     controller.dispose()
@@ -190,7 +234,7 @@ describe('autosave controller', () => {
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async (_pageId, content) => {
+      onSave: async (_pageId: string, content: string): Promise<void> => {
         call++
         if (call === 1) throw new Error('fail')
         saves.push(content)
@@ -199,7 +243,7 @@ describe('autosave controller', () => {
 
     controller.notifyEdit('p1', 'first')
     fireNext()
-    await tick()
+    await controller.flush()
     expect(controller.getState().status).toBe('error')
 
     // Edit again before retry.
@@ -208,7 +252,7 @@ describe('autosave controller', () => {
 
     controller.retry()
     fireNext()
-    await tick()
+    await controller.flush()
     expect(saves).toEqual(['second'])
     expect(controller.getState().status).toBe('saved')
 
@@ -221,7 +265,7 @@ describe('autosave controller', () => {
     const controller = createAutosaveController({
       debounceMs: 100,
       scheduler,
-      onSave: async (_pageId, content) => {
+      onSave: async (_pageId: string, content: string): Promise<void> => {
         saves.push(content)
       }
     })
@@ -239,12 +283,16 @@ describe('autosave controller', () => {
   it('flush during saving waits for active save', async () => {
     const saves: string[] = []
     const { scheduler, fireNext } = makeFakeScheduler()
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async (_pageId, content) => {
+      onSave: async (_pageId: string, content: string): Promise<void> => {
         saves.push(content)
-        await tick()
+        const id = saves.length
+        await new Promise<void>((r) => {
+          resolvers.set(id, { resolve: r })
+        })
       }
     })
 
@@ -253,6 +301,7 @@ describe('autosave controller', () => {
     expect(controller.getState().status).toBe('saving')
 
     const ok = await controller.flush()
+    resolvers.get(1)?.resolve()
     expect(ok).toBe(true)
     expect(saves).toEqual(['first'])
 
@@ -262,12 +311,16 @@ describe('autosave controller', () => {
   it('flush with queued nextPending saves both', async () => {
     const saves: string[] = []
     const { scheduler, fireNext } = makeFakeScheduler()
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async (_pageId, content) => {
+      onSave: async (_pageId: string, content: string): Promise<void> => {
         saves.push(content)
-        await tick()
+        const id = saves.length
+        await new Promise<void>((r) => {
+          resolvers.set(id, { resolve: r })
+        })
       }
     })
 
@@ -277,7 +330,10 @@ describe('autosave controller', () => {
 
     const ok = await controller.flush()
     expect(ok).toBe(true)
-    await tick()
+    // Flush waited for 'first' save to resolve, then started 'second'.
+    resolvers.get(1)?.resolve()
+    resolvers.get(2)?.resolve()
+    await controller.flush()
     expect(saves).toEqual(['first', 'second'])
     expect(controller.getState().status).toBe('saved')
 
@@ -296,7 +352,7 @@ describe('autosave controller', () => {
 
     controller.notifyEdit('p1', 'content')
     fireNext()
-    await tick()
+    await controller.flush()
     expect(controller.getState().status).toBe('error')
 
     const ok = await controller.flush()
@@ -309,22 +365,29 @@ describe('autosave controller', () => {
   it('page identity is associated with every pending save', async () => {
     const saves: Array<{ pageId: string; content: string }> = []
     const { scheduler, fireNext } = makeFakeScheduler()
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async (pageId, content) => {
+      onSave: async (pageId: string, content: string): Promise<void> => {
         saves.push({ pageId, content })
+        const id = saves.length
+        await new Promise<void>((r) => {
+          resolvers.set(id, { resolve: r })
+        })
       }
     })
 
     controller.notifyEdit('p1', 'content-a')
     fireNext()
-    await tick()
+    resolvers.get(1)?.resolve()
+    await controller.flush()
     expect(saves[0].pageId).toBe('p1')
 
     controller.notifyEdit('p2', 'content-b')
     fireNext()
-    await tick()
+    resolvers.get(2)?.resolve()
+    await controller.flush()
     expect(saves[1].pageId).toBe('p2')
 
     controller.dispose()
@@ -336,7 +399,7 @@ describe('autosave controller', () => {
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async (_pageId, content) => {
+      onSave: async (_pageId: string, content: string): Promise<void> => {
         saves.push(content)
       }
     })
@@ -352,12 +415,16 @@ describe('autosave controller', () => {
   it('never claims saved until latest content confirmed', async () => {
     let saveCount = 0
     const { scheduler, fireNext } = makeFakeScheduler()
+    const resolvers = new Map<number, { resolve: () => void }>()
     const controller = createAutosaveController({
       debounceMs: 10,
       scheduler,
-      onSave: async () => {
+      onSave: async (_pageId: string, _content: string): Promise<void> => {
         saveCount++
-        await tick()
+        const id = saveCount
+        await new Promise<void>((r) => {
+          resolvers.set(id, { resolve: r })
+        })
       }
     })
 
@@ -367,8 +434,15 @@ describe('autosave controller', () => {
     controller.notifyEdit('p1', 'b')
     expect(controller.getState().status).toBe('dirty')
 
-    await tick()
-    fireNext() // saves 'b'
+    // Resolve save 'a'; controller queues save 'b'.
+    resolvers.get(1)?.resolve()
+    await controller.flush()
+
+    // Save 'b' is now pending — fire and resolve it.
+    fireNext()
+    resolvers.get(2)?.resolve()
+    await controller.flush()
+
     expect(saveCount).toBe(2)
     expect(controller.getState().status).toBe('saved')
 

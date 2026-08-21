@@ -165,9 +165,15 @@ describe('createApp factory', () => {
 
   it('injected coordinator is used — not the default export', async () => {
     let stopCalled = false
+    let stopResolve!: () => void
+    const stopPromise = new Promise<void>((r) => {
+      stopResolve = r
+    })
+
     const customCoordinator = new ShutdownCoordinator({
       stopGracefully: async () => {
         stopCalled = true
+        await stopPromise
       },
       closeDatabase: async () => {},
       logInfo: () => {},
@@ -187,11 +193,15 @@ describe('createApp factory', () => {
         }
       })
     )
+    // 202 is returned immediately; stopGracefully was invoked but not yet completed.
     expect(res.status).toBe(202)
-    expect(stopCalled).toBe(false) // fire-and-forget, not awaited yet
+    expect(stopCalled).toBe(true) // invoked synchronously before the await
+    expect(customCoordinator.state).toBe('stopping') // not yet resolved
 
+    // Release the deferred stop.
+    stopResolve()
     await customCoordinator.completed
-    expect(stopCalled).toBe(true)
+    expect(customCoordinator.state).toBe('stopped')
   })
 
   it('two app instances are isolated — different tokens, different coordinators', async () => {
