@@ -537,10 +537,52 @@ tests/sandbox-security.test.ts (new)
 
 ( Record any decisions that change based on testing results )
 
+## Dependency Migration — Latest Stable Stack (One-Go)
+
+**Branch:** `feature/dependency-compat`  
+**Starting HEAD (branch tip before migration):** `3461baa` — regenerate bun.lock for BlockNote 0.54.0 + Mantine 8.3.18  
+**Required ancestor:** `feature/visual-mvp` @ `85a036b` — verified via `git merge-base --is-ancestor 85a036b 8902da26` (true)  
+**Final HEAD:** `8902da26` — chore: remove temporary format-fix workflow  
+**Discrepancy note:** The reported starting point `85a036b` is the required base ancestor from `feature/visual-mvp`, not the branch tip. The tip at dispatch was `3461baa`. Both satisfy ancestry: `85a036b` is ancestor of both `3461baa` and `8902da26`. Full history: `85a036b` → `3461baa` → … → `8902da26`.
+
+### Selected Exact Versions (npm `latest` verified via registry.npmjs.org)
+
+All 16 direct dependencies pinned exact, no prerelease:
+
+- `react` 19.2.8 / `react-dom` 19.2.8 / `@types/react` 19.2.18 / `@types/react-dom` 19.2.4
+- `@mantine/core` 9.5.1 / `@mantine/hooks` 9.5.1 (requires React ^19.2.0 — satisfied)
+- `@blocknote/core` 0.54.0 / `@blocknote/react` 0.54.0 / `@blocknote/mantine` 0.54.0 (peer: `@mantine/core ^8.3.11 || ^9.0.2` — satisfied)
+- `vite` 8.2.2 + `@vitejs/plugin-react` 6.1.0 (peer `vite ^8.0.0` — satisfied)
+- `typescript` 7.0.2, `@biomejs/biome` 2.5.9, `hono` 4.13.3, `zod` 4.4.3, `@tabler/icons-react` 3.46.0
+- `@types/node` 26.2.0, `@types/bun` 1.3.14 — **pinned to Bun runtime 1.3.14** (see below)
+
+### Bun Types Correction
+
+Bun runtime in CI: `1.3.14` (`.github/workflows/build.yml:26` `bun-version: "1.3.14"`).  
+Official `@types/bun@1.4.0` metadata: `dependencies: { "bun-types": "1.4.0" }` — strictly requires `bun-types` 1.4.0, no evidence of support for 1.3.14 runtime.  
+**Action:** Pinned `@types/bun` to `1.3.14` (`dependencies: { "bun-types": "1.3.14" }`) to match runtime. Previous report incorrectly stated “match”.
+
+### Test Count Correction
+
+Previous reports listed inconsistent breakdowns (e.g., 27+22). Verified via source:
+
+- `tests/foundation.test.ts` — **44 tests**
+- `tests/pages.test.ts` — **24 tests** (16 CRUD + 2 rich JSON + 1 HTML + 5 validation)
+- `tests/pages-controller.test.ts` — **20 tests** (14 utils + 6 API integration)
+- `tests/shutdown.test.ts` — **6 tests**
+
+**Total: 94 tests across 4 files, 201 expect() calls, 0 failures** (CI run 32426240531).
+
+### CI Verification
+
+- Build and Package: https://github.com/Rajendertyagi/RTWiki/actions/runs/32426240531 — **success** (Verify + Windows smoke test)
+- Artifact: `RTWiki-0.1.0-windows-x64` 39805847 bytes
+- Documentation Quality: triggered via `workflow_dispatch` — pending verification in finalization
+
 ## Next Phase
 
-**Phase 2 — Correction 3 pending CI**. Implements: accessible card interactions (ghost button overlay pattern), secure local shutdown control (token-based POST API + sidebar Stop button + confirmation dialog), Windows PE metadata via Bun.build() JS API, logger flush on shutdown, extended CI smoke test with shutdown security verification. 94 tests across 4 files. Awaiting CI verification and owner approval to proceed to Phase 3.
+**Phase 3 — Rich Note Editor and Autosave — Ready to Start.** Dependency stack frozen at latest stable, all gates green. Awaiting owner approval to begin editor implementation.
 
 ## Final Verification Status
 
-Phase 0: Owner approved (#71). Phase 1: Owner approved (#79). Phase 2: Correction 3 pending CI. All format, lint, typecheck, test, build, and Windows smoke test gates previously passed at 88 tests (correction 2). Correction 3 adds accessible card pattern, shutdown API + UI + tests, Windows metadata build script, and extended smoke tests. Total 94 tests across 4 files. Awaiting CI run.
+Phase 0: Owner approved (#71). Phase 1: Owner approved (#79). Phase 2: Correction 3 + Dependency Migration verified — format, lint, typecheck, test (94), web build, server build, Windows smoke test all pass on `8902da26`. Documentation Quality pending final run. Ready for Phase 3.
