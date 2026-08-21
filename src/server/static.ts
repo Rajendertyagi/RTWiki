@@ -92,7 +92,7 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
         event: 'static_asset',
         pathname
       })
-      return c.json({ error: 'Forbidden' }, 403)
+      return c.json({ error: 'Forbidden', diag: { pathname, root, resolved } }, 403)
     }
 
     // Strip query string from resolved path for extension/exists checks.
