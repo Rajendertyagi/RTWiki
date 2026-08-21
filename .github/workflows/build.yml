@@ -220,11 +220,13 @@ jobs:
 
             # --- 6. Endpoint matrix (only after ownership proven) ---
             # 6a. Health returns HTTP 200 and expected response.
+            Write-Host "CHECK 6a: health"
             $h = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing
             if ($h.StatusCode -ne 200) { throw "Health endpoint returned $($h.StatusCode)" }
             if ($h.Content -notmatch '"status"\s*:\s*"ok"') { throw "Health endpoint did not report ok" }
 
             # 6b. Root returns HTTP 200 and non-empty HTML.
+            Write-Host "CHECK 6b: root"
             $root = Invoke-WebRequest -Uri "http://127.0.0.1:8080/" -UseBasicParsing
             if ($root.StatusCode -ne 200) { throw "GET / returned $($root.StatusCode)" }
             if ([string]::IsNullOrWhiteSpace($root.Content)) { throw "GET / returned empty HTML" }
@@ -237,6 +239,7 @@ jobs:
             $assetUrls = @()
             foreach ($m in $scriptMatches) { $assetUrls += $m.Groups[1].Value }
             foreach ($m in $linkMatches)   { $assetUrls += $m.Groups[1].Value }
+            Write-Host "CHECK 6c: assets ($($assetUrls.Count) found)"
             if ($assetUrls.Count -eq 0) { throw "No <script src> or <link href> assets found in index.html" }
             $jsFound = $false; $cssFound = $false
             foreach ($assetUrl in $assetUrls) {
@@ -260,6 +263,7 @@ jobs:
             if (-not $cssFound) { throw "No CSS asset found in index.html" }
 
             # 6d. Shutdown POST without token must be rejected (403).
+            Write-Host "CHECK 6d: POST /api/shutdown (no token, expect 403)"
             try {
               Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -UseBasicParsing
               throw "POST /api/shutdown without token returned 200 (expected 403)"
@@ -270,6 +274,7 @@ jobs:
             }
 
             # 6e. Shutdown GET method rejection (405).
+            Write-Host "CHECK 6e: GET /api/shutdown (expect 405)"
             try {
               Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method GET -UseBasicParsing
               throw "GET /api/shutdown returned 200 (expected 405)"
@@ -280,6 +285,7 @@ jobs:
             }
 
             # 6f. Obtain shutdown token (print length only, never the value).
+            Write-Host "CHECK 6f: GET /api/shutdown/token (expect 200)"
             $tokenRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown/token" -UseBasicParsing
             if ($tokenRes.StatusCode -ne 200) { throw "GET /api/shutdown/token returned $($tokenRes.StatusCode)" }
             $tokenObj      = $tokenRes.Content | ConvertFrom-Json
@@ -288,6 +294,7 @@ jobs:
             Write-Host "SHUTDOWN TOKEN OK: obtained token ($($shutdownToken.Length) chars) [value never printed]"
 
             # 6g. Shutdown POST with wrong token must be rejected (403).
+            Write-Host "CHECK 6g: POST /api/shutdown (wrong token, expect 403)"
             try {
               Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -Headers @{"X-RTWiki-Shutdown-Token"="wrong-token"} -UseBasicParsing
               throw "POST /api/shutdown with wrong token returned 200 (expected 403)"
@@ -299,6 +306,7 @@ jobs:
             Write-Host "ENDPOINT MATRIX PASSED: health, root, JS/CSS MIME, shutdown security"
 
             # --- 7. Single-instance: second instance must detect first and exit ---
+            Write-Host "CHECK 7: single-instance test"
             $secondOut = Join-Path $diag "smoke2.out.txt"
             $secondErr = Join-Path $diag "smoke2.err.txt"
             $secondP = Start-Process -FilePath $exe -ArgumentList "--no-open" -WorkingDirectory $runDir -NoNewWindow -PassThru -RedirectStandardOutput $secondOut -RedirectStandardError $secondErr
