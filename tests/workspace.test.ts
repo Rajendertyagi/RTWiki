@@ -90,27 +90,27 @@ describe('workspace routing', () => {
   })
 
   it('search remains functional after migration', () => {
-    const pages = [
+    const pages: Page[] = [
       makePage({ id: 'p1', title: 'Quantum Mechanics' }),
       makePage({ id: 'p2', title: 'History of Rome' }),
       makePage({ id: 'p3', title: 'Cooking Basics' })
     ]
-    const result = filterPagesByQuery(pages, 'quantum')
+    const result: Page[] = filterPagesByQuery(pages, 'quantum')
     expect(result.length).toBe(1)
     expect(result[0].id).toBe('p1')
-    const empty = filterPagesByQuery(pages, '')
+    const empty: Page[] = filterPagesByQuery(pages, '')
     expect(empty.length).toBe(3)
   })
 
   it('search limitation is documented honestly', async () => {
     // Current search is title-only via filterPagesByQuery; rich content search is not implemented
-    const pages = [
+    const pages: Page[] = [
       makePage({
         title: 'Visible Title',
         content: JSON.stringify([{ type: 'paragraph', content: [{ text: 'hidden rich content' }] }])
       })
     ]
-    const byContent = filterPagesByQuery(pages, 'hidden')
+    const byContent: Page[] = filterPagesByQuery(pages, 'hidden')
     // This will be 0 because filter only checks title
     expect(byContent.length).toBe(0)
     // Document limitation: search does not yet index rich content

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { type AutosaveStatus, createAutosaveController } from './autosave-controller.js'
 
 interface UseAutosaveOptions {
