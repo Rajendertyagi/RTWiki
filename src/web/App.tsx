@@ -1,4 +1,5 @@
 import { Alert, Stack, Text } from '@mantine/core'
+import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from './config/index.js'
@@ -12,7 +13,6 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
-import type { PageType } from '@rtwiki/shared/contracts/pages'
 
 export function App(): JSX.Element {
   const controller = usePagesController()

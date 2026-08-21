@@ -47,7 +47,11 @@ export function parseStoredDocument(storedValue: string): DocumentParseResult {
 
     // Validate that each block has a type
     for (const block of parsed) {
-      if (!block || typeof block !== 'object' || typeof (block as Record<string, unknown>).type !== 'string') {
+      if (
+        !block ||
+        typeof block !== 'object' ||
+        typeof (block as Record<string, unknown>).type !== 'string'
+      ) {
         return {
           status: 'error',
           document: null,

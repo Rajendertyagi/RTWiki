@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import { createDefaultDocument, parseStoredDocument, serializeDocument } from '../src/web/features/rich-editor/document.js'
+import {
+  createDefaultDocument,
+  parseStoredDocument,
+  serializeDocument
+} from '../src/web/features/rich-editor/document.js'
 
 describe('rich-editor document', () => {
   it('parses valid stored BlockNote JSON', () => {
@@ -53,7 +57,13 @@ describe('rich-editor document', () => {
   })
 
   it('round-trips valid document through serialize', () => {
-    const doc = [{ type: 'heading', props: { level: 1 }, content: [{ type: 'text', text: 'Title', styles: {} }] }]
+    const doc = [
+      {
+        type: 'heading',
+        props: { level: 1 },
+        content: [{ type: 'text', text: 'Title', styles: {} }]
+      }
+    ]
     const serialized = serializeDocument(doc as never)
     const reparsed = parseStoredDocument(serialized)
     expect(reparsed.status).toBe('ok')
@@ -61,7 +71,12 @@ describe('rich-editor document', () => {
   })
 
   it('saved content reload reproduces same document', () => {
-    const original = [{ type: 'paragraph', content: [{ type: 'text', text: 'Saved content', styles: { bold: true } }] }]
+    const original = [
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Saved content', styles: { bold: true } }]
+      }
+    ]
     const stored = JSON.stringify(original)
     const parsed = parseStoredDocument(stored)
     expect(parsed.status).toBe('ok')

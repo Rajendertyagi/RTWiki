@@ -1,6 +1,6 @@
 import { Alert, Loader, NavLink, ScrollArea, Stack, Text } from '@mantine/core'
-import { IconAlertCircle, IconFileText, IconHome } from '@tabler/icons-react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
+import { IconAlertCircle, IconFileText, IconHome } from '@tabler/icons-react'
 import { PageTypeBadge } from '../components/page-type-badge.js'
 import { SearchInput } from '../components/search-input.js'
 import { UI_TEXT } from '../config/index.js'

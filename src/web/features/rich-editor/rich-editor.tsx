@@ -7,8 +7,8 @@ import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { updatePage } from '../../services/pages-api.js'
 import { createDefaultDocument, parseStoredDocument, serializeDocument } from './document.js'
-import { useAutosave } from './use-autosave.js'
 import classes from './rich-editor.module.css'
+import { useAutosave } from './use-autosave.js'
 
 interface RichEditorProps {
   pageId: string
@@ -105,7 +105,9 @@ export function RichEditor({
     )
   }
 
-  const initialDocument = hasReset ? createDefaultDocument() : (parseResult.document ?? createDefaultDocument())
+  const initialDocument = hasReset
+    ? createDefaultDocument()
+    : (parseResult.document ?? createDefaultDocument())
 
   return (
     <div className={classes.editorRoot} data-testid="rich-editor">

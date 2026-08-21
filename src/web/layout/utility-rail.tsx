@@ -1,6 +1,11 @@
-import { ActionIcon, Stack, Tooltip } from '@mantine/core'
+import {
+  ActionIcon,
+  Stack,
+  Tooltip,
+  useComputedColorScheme,
+  useMantineColorScheme
+} from '@mantine/core'
 import { IconHome, IconMoon, IconPlus, IconPower, IconSearch, IconSun } from '@tabler/icons-react'
-import { useComputedColorScheme, useMantineColorScheme } from '@mantine/core'
 import { UI_TEXT } from '../config/index.js'
 import classes from './utility-rail.module.css'
 

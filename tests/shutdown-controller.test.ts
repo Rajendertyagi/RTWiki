@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'bun:test'
-import { fetchShutdownToken, requestShutdown } from '../src/web/features/shutdown/shutdown-client.js'
+import {
+  fetchShutdownToken,
+  requestShutdown
+} from '../src/web/features/shutdown/shutdown-client.js'
 
 // Mock fetch for shutdown client tests
-function mockFetchOnce(response: { ok: boolean; status: number; json: () => Promise<unknown> }): void {
-  // @ts-ignore - override global fetch for test
+function mockFetchOnce(response: {
+  ok: boolean
+  status: number
+  json: () => Promise<unknown>
+}): void {
+  // @ts-expect-error - override global fetch for test
   globalThis.fetch = async () => response as unknown as Response
 }
 
@@ -50,7 +57,7 @@ describe('shutdown client', () => {
   })
 
   it('requestShutdown handles network failure', async () => {
-    // @ts-ignore
+    // @ts-expect-error
     globalThis.fetch = async () => {
       throw new Error('network failure')
     }
