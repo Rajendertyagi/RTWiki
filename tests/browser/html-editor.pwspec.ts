@@ -222,9 +222,9 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
     await typeIntoEditor(page, '<p id="retry-marker">retry me</p>')
     await expect(page.getByText('Save failed')).toBeVisible({ timeout: 10_000 })
-    // The header owns the Retry action.
+    // The editor's own Retry control drains the pending content save.
     const save = nextSave(page)
-    await page.getByRole('button', { name: 'Retry' }).click()
+    await page.getByTestId('html-editor-retry').click()
     const result = await save.done
     expect(result.ok, `PATCH failed after retry: ${result.status}`).toBe(true)
     expect(result.payload).toContain('retry-marker')

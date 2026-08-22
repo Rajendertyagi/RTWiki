@@ -1,4 +1,4 @@
-import { Box, Group, Stack, Switch, Tabs, Text } from '@mantine/core'
+import { Box, Button, Group, Stack, Switch, Tabs, Text } from '@mantine/core'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import {
   createEmptyHtmlContent,
@@ -72,7 +72,7 @@ export default function HtmlEditorWorkspace({
 
   // The autosave hook is content-agnostic: it persists whatever string we
   // hand it — here always canonical v2 JSON.
-  const { status, notifyEdit, save, flush } = useAutosave({
+  const { status, error, notifyEdit, save, retry, flush } = useAutosave({
     pageId,
     onSave: handleSave
   })
@@ -210,6 +210,19 @@ export default function HtmlEditorWorkspace({
           <PreviewFrame content={previewContent} />
         </Box>
       </div>
+
+      {status === 'error' ? (
+        <Group gap="xs" p="xs">
+          <Text size="sm" c="red">
+            {error ?? UI_TEXT.saveFailedRetryHint}
+          </Text>
+          {/* Content-save retry lives here (parity with the Rich editor); the
+              header's Retry action belongs to page-list mutations. */}
+          <Button size="xs" variant="light" data-testid="html-editor-retry" onClick={retry}>
+            {UI_TEXT.saveStatusRetry}
+          </Button>
+        </Group>
+      ) : null}
     </div>
   )
 }
