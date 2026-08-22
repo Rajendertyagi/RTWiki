@@ -129,15 +129,20 @@ media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none';
 base-uri 'none'; form-action 'none'
 ```
 
-The JavaScript pane is the only executable user-script source; authored HTML
-is normalized in a browser-parsed copy (`script`, `iframe`, `object`,
-`embed`, `base`, external stylesheets, `meta[http-equiv]`, and inline `on*`
-attributes removed) before it enters the preview document, while the stored
-source remains untouched. Because the iframe's origin is opaque,
-`postMessage` uses `targetOrigin="*"`, so the parent validates every message
-against three independent checks — `event.source === iframe.contentWindow`,
-a strict message schema, and an exact per-preview channel ID generated with
-`crypto.getRandomValues()` — and silently ignores anything else.
+The JavaScript pane is the only executable user-script source and runs **only
+when the page's `jsEnabled` flag is on** (canonical content v2; legacy v1
+documents normalize to disabled). When enabled it is emitted as a nonce'd
+script element; when disabled the element is omitted entirely — the bootstrap
+(our own code, required for navigation defense and status reporting) always
+runs. Authored HTML is normalized in a browser-parsed copy (`script`,
+`iframe`, `object`, `embed`, `base`, external stylesheets, `meta[http-equiv]`,
+and inline `on*` attributes removed) before it enters the preview document,
+while the stored source remains untouched. Because the iframe's origin is
+opaque, `postMessage` uses `targetOrigin="*"`, so the parent validates every
+message against three independent checks — `event.source ===
+iframe.contentWindow`, a strict message schema, and an exact per-preview
+channel ID generated with `crypto.getRandomValues()` — and silently ignores
+anything else.
 
 ## 6. Upload and Request Limits
 

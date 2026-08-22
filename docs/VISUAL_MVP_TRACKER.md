@@ -46,7 +46,7 @@ The following are **not** in scope for the Visual MVP:
 | 2 | Visual Workspace and Page Management | Correction 3 pending CI | 00c3678 | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) | RTWiki-0.1.0-windows-x64 |
 | 3 | Rich Note Editor and Autosave | CI verified | 405dc01b | [#32570059083](https://github.com/Rajendertyagi/RTWiki/actions/runs/32570059083) | RTWiki-0.1.0-windows-x64 |
 | 4A | Secure HTML Page Foundation (preview, no editor UI) | CI verified | 3a1d4f3 | [#32584637817](https://github.com/Rajendertyagi/RTWiki/actions/runs/32584637817) | RTWiki-0.1.0-windows-x64 |
-| 4B | HTML/CSS/JS Editor Tabs and Live Editing | Not started | — | — | — |
+| 4B | HTML/CSS/JS Editor Tabs and Live Editing | Implemented — awaiting CI | e732531 | pending | pending |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
 
 ### Status Definitions
@@ -868,3 +868,65 @@ split-pane live editing, per-page JavaScript enable/disable toggle, paste and
 .html import through the shared pipeline, full-page preview mode, revisit of
 the page-type-conversion restriction. All Phase 4A foundations above are
 built to be consumed unchanged by 4B.
+
+## Phase 4B — Editable HTML-Page Workspace
+
+**Branch:** `feature/html-page-editor` (continues on the Phase 4A branch from `b700919`).
+**Status:** Implemented — awaiting CI. No hierarchy, drag/drop, sidebar or Rich Note work included.
+
+### Scope delivered
+
+- CodeMirror 6 editors for HTML, CSS and JavaScript (official `codemirror@6.0.2`
+  meta-package `basicSetup` + `lang-html`/`lang-css`/`lang-javascript`), wrapped
+  by a thin in-repo hook — no third-party React binding.
+- Tabs and a responsive editor/preview split view (stacks below 48em).
+- Live preview through the unchanged Phase 4A secure sandbox; rebuilds are
+  debounced by the centralized `PREVIEW_REBUILD_DEBOUNCE_MS = 800` constant and
+  regenerate the channel ID per rebuild.
+- Autosave via the shared controller plus manual Save (`Mod-S` and header
+  button); Saving/Saved/Failed/Retry states reuse the existing status surface.
+- Reload and page-switch persistence ride the existing server-merge and
+  flush-ref patterns.
+
+### Canonical schema v2 — per-page JavaScript toggle
+
+- v2 adds `jsEnabled`; new pages default to **false**; legacy v1 documents
+  load safely and normalize to disabled in memory (stored bytes stay v1 until
+  an actual edit re-serializes as v2 — no database migration, content is
+  opaque TEXT validated at the application boundary).
+- The preview includes the user JavaScript pane only when enabled; the
+  bootstrap always runs. Toggle is visible, labelled, and persisted through
+  autosave/manual Save.
+
+### Dependencies (verified against npm registry metadata at planning time)
+
+Direct: `codemirror@6.0.2`, `@codemirror/state@6.7.1`, `@codemirror/view@6.43.9`,
+`@codemirror/language@6.12.4`, `@codemirror/lang-html@6.4.12`,
+`@codemirror/lang-css@6.3.1`, `@codemirror/lang-javascript@6.2.5`,
+`@lezer/highlight@1.2.3`. Transitive leaves: `style-mod`, `w3c-keyname`
+(pre-existing via ProseMirror), `crelt`, `@marijn/find-cluster-break`,
+`@lezer/{common,lr,html,css,javascript}`, `@codemirror/{autocomplete,search,
+commands,lint}` (via basicSetup). Lockfile updated through the approved
+temporary read-only artifact workflow; deleted in the same corrective push.
+
+### Lazy loading
+
+The editor loads as its own chunk via `React.lazy` under a Suspense skeleton
+(aria-busy) and an `HtmlEditorErrorBoundary` (Retry / Back to pages / sanitized
+report). Chunk sizes are measured in CI before any decision on replacing
+basicSetup with manual composition.
+
+### Tests
+
+Unit: schema-v1/v2 validation matrix, normalization, empty-doc defaults,
+toggle serialization preserving siblings, byte limits in both shapes; preview
+gating (JS pane omitted when disabled, bootstrap always present).
+Browser (`html-editor.pwspec.ts`): editor opens with tabs + JS off default;
+typing updates live preview after debounce; autosave Saved + reload
+persistence; Mod-S manual save; failed-save Retry recovery; page-switch flush;
+JS-off does not execute seeded code; enabling executes after rebuild; toggle
+persists across reload and page switching; v1 compatibility with normalize-on-
+save; editing never weakens normalization (typed scripts stay inert); mobile
+split stacking. The full Phase 4A security suite runs unchanged (seeds now
+explicitly enable JS where probes require execution).
+
