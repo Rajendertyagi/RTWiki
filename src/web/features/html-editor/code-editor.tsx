@@ -23,11 +23,5 @@ export function CodeEditor(props: CodeEditorProps): JSX.Element {
     ariaLabel: props.label,
     extraKeys: props.extraKeys
   })
-  return (
-    <div
-      ref={attach}
-      className={classes.host}
-      data-testid={`code-editor-${props.language}`}
-    />
-  )
+  return <div ref={attach} className={classes.host} data-testid={`code-editor-${props.language}`} />
 }
