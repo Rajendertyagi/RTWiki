@@ -634,3 +634,38 @@ Clicking an existing Rich Note or creating a new one blanked the entire applicat
 ### Validation
 
 Pending: first full run over the corrected code (triggered by the tracker commit).
+
+## Phase 3 Correction - Persistent Diagnostic Logging (empty logs/)
+
+**Status:** Owner-discovered blocking defect; resolved together with browser-proven editor defects below.
+
+### Defect
+
+The portable application created `logs/` but `logs/rtwiki.log` never appeared (or lost history).
+
+### Root Cause (proven)
+
+The logger buffered up to 100 lines in memory and flushed via `BunFile.write()`, which truncates the destination on every write. Short sessions never flushed at all; Windows console-close killed the process before close(); fatal-startup and smoke-failure paths buffered events that were never written; when a flush did run it overwrote all earlier records.
+
+### Correction
+
+- Logger rewritten: eager file creation at construction, synchronous append-only JSONL (nothing buffered, history preserved, survives hard kills), bounded rotation (1 MB threshold, `rtwiki.1.log`..`rtwiki.3.log`), fail-safe sink (one terminal warning, terminal logging continues, never throws).
+- Full lifecycle persisted: startup (version + privacy-redacted dirs via `sanitizePathForLog()`), db open/migrations, listening, single-instance, shutdown requested/stages/complete, fatal startup.
+- Dev runtime paths moved to `<repo>/data` and `<repo>/logs`; hidden import-time logger singleton removed (database module receives its logger explicitly); tests inject temporary paths only.
+- Sanitized frontend-error endpoint `POST /api/client-errors` (shared Zod schema, same-origin, 8 KB pre-parse cap, 20/min rate limit, shutdown-token scrubbing) writing `client_error` events; no log-read endpoint exists.
+- Global `AppErrorBoundary` plus extended `EditorErrorBoundary` recovery UI (Retry / Back to Pages / log location / diagnostic reference id); centralized frontend reporter with canned messages, reduced stack frames, bounded dedupe and WeakMap handled-error suppression.
+- Unsafe self-pushing `lockfile-sync.yml` workflow removed.
+- Windows smoke now asserts `logs/rtwiki.log` is app-created, non-empty valid JSONL with startup and shutdown-complete events and no token leakage.
+
+### Additional defects proven by the new browser suite (all fixed)
+
+- Autosave scheduler invoked detached `window.setTimeout/clearTimeout`, throwing `TypeError: Illegal invocation` on first edit in Chromium (Node timers are this-agnostic, so unit tests passed).
+- The autosave controller was recreated on every render (inline `onSave` identity), disposing the pending debounce timer so saves never fired in the browser.
+- Creating a note raced the page-list refresh: the selection-sync effect cleared the fresh selection; loads are now sequenced and created pages are inserted optimistically.
+- Reopening after a save read a stale local list snapshot; saved pages now merge into state via `savePageContent()` (`updatePage` already returns the server page).
+
+### Validation
+
+- Unit/integration suites added for logger, path sanitization, lifecycle persistence, client-error endpoint and reporter semantics; Playwright suite extended to 11 scenarios including correlation-id-in-log assertions; `bun test` isolation from Playwright via `.pwspec.ts`.
+- Green end to end: run [32569818202](https://github.com/Rajendertyagi/RTWiki/actions/runs/32569818202) (Verify + Browser tests + Windows smoke all success). Artifact `RTWiki-0.1.0-windows-x64`, SHA-256 `84D46EB75ABF3EC5C269F9FBC7CB0EC47EABD35CC88FCBE78ECFB2801A934B8E`. Smoke evidence: `LOG OK ... valid JSONL, startup event present`, `LOG FINAL OK: shutdown_complete persisted; shutdown token absent`.
+- Phase 4 has not started.
