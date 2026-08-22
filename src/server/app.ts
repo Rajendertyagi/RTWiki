@@ -1,8 +1,8 @@
-import { HEALTH_PATH } from '@rtwiki/shared/constants'
+import { APP_NAME, APP_VERSION, HEALTH_PATH } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { checkIntegrity, getDb } from './database/index.js'
-import type { Logger } from './logging/index.js'
-import { logger as defaultLogger } from './logging/index.js'
+import { createConsoleLogger, type Logger } from './logging/index.js'
+import { createClientErrorRoutes } from './routes/client-errors.js'
 import { createPageRoutes } from './routes/pages.js'
 import { createShutdownRoutes } from './routes/shutdown.js'
 import type { ShutdownCoordinator } from './shutdown-coordinator.js'
@@ -54,8 +54,8 @@ export function createApp(
         return c.json(
           {
             status: 'error',
-            app: 'RTWiki',
-            version: '0.1.0',
+            app: APP_NAME,
+            version: APP_VERSION,
             db: { ready: false },
             time: timestamp
           },
@@ -64,8 +64,8 @@ export function createApp(
       }
       return c.json({
         status: 'ok',
-        app: 'RTWiki',
-        version: '0.1.0',
+        app: APP_NAME,
+        version: APP_VERSION,
         db: { ready: true },
         time: timestamp
       })
@@ -73,8 +73,8 @@ export function createApp(
       return c.json(
         {
           status: 'error',
-          app: 'RTWiki',
-          version: '0.1.0',
+          app: APP_NAME,
+          version: APP_VERSION,
           db: { ready: false },
           time: timestamp
         },
@@ -87,6 +87,12 @@ export function createApp(
   app.route(
     '/api/shutdown',
     createShutdownRoutes({ coordinator: deps.coordinator, token: deps.token })
+  )
+  // Sanitized frontend-error reports. The shutdown token is scrubbed from any
+  // accepted field before the report reaches the log file.
+  app.route(
+    '/api/client-errors',
+    createClientErrorRoutes({ logger: deps.logger, scrubValues: [deps.token] })
   )
 
   app.use('/*', serveStatic({ root: deps.frontendDistDir, logger: deps.logger }))
@@ -102,8 +108,8 @@ export function createApp(
 }
 
 /**
- * Default app instance for tests and legacy access.
- * Uses a no-op coordinator so the shutdown route rejects gracefully.
+ * Default app instance for tests and legacy access. Uses an explicitly
+ * injected console-only logger so importing this module never creates files.
  */
 export const app = createApp({
   coordinator: {
@@ -120,6 +126,6 @@ export const app = createApp({
   } as unknown as import('./shutdown-coordinator.js').ShutdownCoordinator,
   token: '',
   getDb: getDb,
-  logger: defaultLogger,
+  logger: createConsoleLogger(),
   frontendDistDir: ''
 })

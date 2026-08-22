@@ -57,6 +57,7 @@ export function PageWorkspace({
             pageId={page.id}
             storedContent={page.content}
             pageTitle={page.title}
+            onBack={onBack}
             onFlushRef={onFlushRef}
             onSaveStateChange={onSaveStateChange}
           />

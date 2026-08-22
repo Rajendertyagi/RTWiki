@@ -70,6 +70,11 @@ export const UI_TEXT = {
   richEditorPreserveNotice:
     'Original content has been preserved. Reset the document to start fresh.',
   richEditorResetButton: 'Reset document',
+  richEditorLogLocation: 'Technical details are written to logs\\rtwiki.log',
+  richEditorReferenceLabel: 'Diagnostic reference',
+  appCrashTitle: 'Something went wrong',
+  appCrashMessage: 'The application hit an unexpected problem. Reload to continue.',
+  appCrashReload: 'Reload RTWiki',
   hierarchyFutureNote: 'Hierarchical page organization is planned for a future release.',
   saveFailedRetryHint: 'Save failed. You can retry or keep editing.',
   unsavedChangesWarning:

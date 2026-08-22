@@ -1,4 +1,6 @@
-import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 
 const editorRoot = '[data-testid="rich-editor"]'
 const editable = '.bn-editor .ProseMirror'
@@ -180,5 +182,48 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await page.getByRole('button', { name: 'Confirm reset' }).click()
     await expect(page.locator(editorRoot)).toBeVisible()
     await expect(page.locator('.bn-editor')).toBeVisible()
+  })
+})
+
+test.describe('frontend diagnostics reporting', () => {
+  test('a controlled window error is reported and its id reaches rtwiki.log', async ({ page }) => {
+    await page.goto('/')
+    const reportPromise = page.waitForRequest(
+      (req) => req.url().includes('/api/client-errors') && req.method() === 'POST'
+    )
+    await page.evaluate(() => {
+      window.dispatchEvent(new ErrorEvent('error', { error: new TypeError('Controlled probe') }))
+    })
+    const request = await reportPromise
+    const body = request.postDataJSON() as Record<string, unknown>
+    const correlationId = String(body.correlationId)
+    expect(correlationId).toMatch(/^[0-9a-f]{8}$/)
+    // Canned message only — the raw error text must never be transmitted.
+    expect(JSON.stringify(body)).not.toContain('Controlled probe')
+
+    // The correlation id must appear in the persistent server-side log.
+    const logPath = resolve('logs', 'rtwiki.log')
+    await expect
+      .poll(async () => (await readFile(logPath, 'utf8').catch(() => '')).includes(correlationId))
+      .toBe(true)
+  })
+
+  test('an unhandled rejection is reported through the same channel', async ({ page }) => {
+    await page.goto('/')
+    const reportPromise = page.waitForRequest(
+      (req) => req.url().includes('/api/client-errors') && req.method() === 'POST'
+    )
+    await page.evaluate(() => {
+      // Reject now, attach the handler on a later task: the rejection is
+      // genuinely unhandled (fires unhandledrejection) but is cleaned up so
+      // it cannot surface as a late page error in the afterEach guard.
+      const promise = Promise.reject(new RangeError('Controlled rejection'))
+      setTimeout(() => {
+        promise.catch(() => {})
+      }, 0)
+    })
+    const request = await reportPromise
+    const body = request.postDataJSON() as Record<string, unknown>
+    expect(body.event).toBe('unhandled_rejection')
   })
 })

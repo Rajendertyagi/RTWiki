@@ -9,6 +9,7 @@ import { Alert, Button, Stack, Text } from '@mantine/core'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { updatePage } from '../../services/pages-api.js'
 import { createDefaultDocument, parseStoredDocument } from './document.js'
 import { EditorErrorBoundary } from './editor-error-boundary.js'
@@ -19,6 +20,8 @@ interface RichEditorProps {
   pageId: string
   storedContent: string
   pageTitle: string
+  /** Returns to the pages dashboard from recovery UIs. */
+  onBack?: () => void
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
     isDirty: boolean
@@ -29,6 +32,7 @@ interface RichEditorProps {
 export function RichEditor({
   pageId,
   storedContent,
+  onBack,
   onFlushRef,
   onSaveStateChange
 }: RichEditorProps): JSX.Element {
@@ -67,12 +71,39 @@ export function RichEditor({
     setShowResetConfirm(false)
   }, [pageId])
 
+  // Report malformed stored content once per page (reporter dedupes repeats).
+  useEffect(() => {
+    if (parseResult.status === 'error' && !hasReset) {
+      reportClientError('rich_note_parse_error', {
+        pageType: 'rich',
+        component:
+ichEditor.parse:${pageId}`
+      })
+    }
+  }, [parseResult.status, hasReset, pageId])
+
+  // Report autosave failures once per error episode (reporter dedupes repeats).
+  useEffect(() => {
+    if (status === 'error') {
+      reportClientError('rich_note_save_error', {
+        pageType: 'rich',
+        component:
+ichEditor.autosave:${pageId}`
+      })
+    }
+  }, [status, pageId])
+
   // Handle reset after malformed content or a contained editor failure.
   const handleReset = (): void => {
     setShowResetConfirm(false)
     setHasReset(true)
     setResetSeq((seq) => seq + 1)
     notifyEdit(JSON.stringify(createDefaultDocument()))
+  }
+
+  // Retry remounts the editor with the same stored content — nothing is wiped.
+  const handleRetry = (): void => {
+    setResetSeq((seq) => seq + 1)
   }
 
   if (parseResult.status === 'error' && !hasReset) {
@@ -134,7 +165,7 @@ export function RichEditor({
 
   return (
     <div className={classes.editorRoot} data-testid="rich-editor">
-      <EditorErrorBoundary onReset={handleReset}>
+      <EditorErrorBoundary onReset={handleReset} onRetry={handleRetry} onBack={onBack}>
         <RichEditorInner
           key={`${pageId}-${resetSeq}`}
           pageId={pageId}
