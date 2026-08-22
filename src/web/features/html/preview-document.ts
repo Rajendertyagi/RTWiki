@@ -37,18 +37,21 @@ function escapeHtmlAttribute(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
-/** Escapes closing-sequence breakouts inside <style> content. */
+/**
+ * Escapes closing-sequence breakouts inside <style> content, preserving the
+ * authored tag casing.
+ */
 export function escapeStyleContent(css: string): string {
-  return css.replace(/<\/style/gi, '<\\/style')
+  return css.replace(/<\/(style)/gi, (_match, tag: string) => `<\\/${tag}`)
 }
 
 /**
- * Escapes closing-sequence breakouts inside <script> content. `<\/script`
- * is semantically identical to `</script` inside JavaScript strings and
- * regexes, so user code behavior is preserved.
+ * Escapes closing-sequence breakouts inside <script> content, preserving the
+ * authored tag casing. `<\/script` is semantically identical to `</script`
+ * inside JavaScript strings and regexes, so user code behavior is preserved.
  */
 export function escapeScriptContent(js: string): string {
-  return js.replace(/<\/script/gi, '<\\/script')
+  return js.replace(/<\/(script)/gi, (_match, tag: string) => `<\\/${tag}`)
 }
 
 /**
