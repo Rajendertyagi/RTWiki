@@ -72,10 +72,10 @@ async function expectSaved(page: Page): Promise<void> {
  * this is the authoritative persistence signal.
  */
 function nextSave(page: Page): {
-  done: Promise<{ ok: boolean; status: number; body: string }>
+  done: Promise<{ ok: boolean; status: number; payload: string }>
 } {
-  let resolve: (v: { ok: boolean; status: number; body: string }) => void
-  const done = new Promise<{ ok: boolean; status: number; body: string }>((res) => {
+  let resolve: (v: { ok: boolean; status: number; payload: string }) => void
+  const done = new Promise<{ ok: boolean; status: number; payload: string }>((res) => {
     resolve = res
   })
   void page
@@ -84,13 +84,23 @@ function nextSave(page: Page): {
       timeout: 15_000
     })
     .then((req) => {
-      const postData = req.postData() ?? ''
+      // The wire format is the API envelope { content: "<canonical JSON>" };
+      // unwrap it so assertions match the document actually being saved.
+      let payload = req.postData() ?? ''
+      try {
+        const envelope = JSON.parse(payload) as { content?: string }
+        if (typeof envelope.content === 'string') {
+          payload = envelope.content
+        }
+      } catch {
+        // Non-envelope bodies fail the payload assertions below.
+      }
       void req.response().then((resp) => {
         if (!resp) {
-          resolve({ ok: false, status: 0, body: postData })
+          resolve({ ok: false, status: 0, payload })
           return
         }
-        resolve({ ok: resp.ok(), status: resp.status(), body: postData })
+        resolve({ ok: resp.ok(), status: resp.status(), payload })
       })
     })
   return { done }
@@ -160,7 +170,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await typeIntoEditor(page, '<p id="persist-marker">reload me</p>')
     const result = await save.done
     expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
-    expect(result.body).toContain('reload me')
+    expect(result.payload).toContain('reload me')
     await expectSaved(page)
 
     await page.reload()
@@ -187,7 +197,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await page.keyboard.press('Control+s')
     const result = await save.done
     expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
-    expect(result.body).toContain('manual-marker')
+    expect(result.payload).toContain('manual-marker')
 
     const stored = await readStoredContent(request, title)
     expect(stored).toContain('manual-marker')
@@ -217,7 +227,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await page.getByRole('button', { name: 'Retry' }).click()
     const result = await save.done
     expect(result.ok, `PATCH failed after retry: ${result.status}`).toBe(true)
-    expect(result.body).toContain('retry-marker')
+    expect(result.payload).toContain('retry-marker')
     await expectSaved(page)
 
     const stored = await readStoredContent(request, title)
@@ -282,7 +292,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await page.locator(JS_TOGGLE).click()
     const result = await save.done
     expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
-    expect(result.body).toContain('"jsEnabled":true')
+    expect(result.payload).toContain('"jsEnabled":true')
 
     // After the debounced rebuild the pane executes with the flag on.
     const frame = page.frameLocator(PREVIEW_FRAME)
@@ -291,8 +301,11 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
   test('the toggle persists across reload and page switching', async ({ page, request }) => {
     const title = uniqueTitle('Toggle Persist')
+    // Non-throwing probe: this scenario targets persistence, not error
+    // containment (covered by the security suite).
     await seedHtmlPage(request, title, {
-      content: '{"version":2,"html":"","css":"","javascript":"x()","jsEnabled":false}'
+      content:
+        '{"version":2,"html":"","css":"","javascript":"document.documentElement.setAttribute(\\"data-probe\\", \\"ran\\")","jsEnabled":false}'
     })
     await openHtmlPage(page, title)
 
@@ -300,7 +313,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await page.locator(JS_TOGGLE).click()
     const result = await save.done
     expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
-    expect(result.body).toContain('"jsEnabled":true')
+    expect(result.payload).toContain('"jsEnabled":true')
     await expectSaved(page)
 
     await page.reload()
@@ -333,8 +346,8 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await typeIntoEditor(page, '<i> appended</i>')
     const result = await save.done
     expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
-    expect(result.body).toContain('"version":2')
-    expect(result.body).toContain('"jsEnabled":false')
+    expect(result.payload).toContain('"version":2')
+    expect(result.payload).toContain('"jsEnabled":false')
     await expectSaved(page)
     const stored = await readStoredContent(request, title)
     expect(stored).toContain('"version":2')
