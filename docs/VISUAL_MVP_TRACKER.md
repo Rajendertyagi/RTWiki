@@ -609,3 +609,28 @@ Phase 0: Owner approved (#71). Phase 1: Owner approved (#79). Phase 2: Correctio
 
 - Refactor verified: run [32551658371](https://github.com/Rajendertyagi/RTWiki/actions/runs/32551658371) — all gates pass on `5d974b54`.
 - Phase 4 has **not** started; design remains provisionally accepted only.
+
+## Phase 3 Correction — Rich Note Blank Page
+
+**Status:** Owner-discovered blocking defect after the green CI refactor at `4dc66dcd`. Phase 3 reopened.
+
+### Defect
+
+Clicking an existing Rich Note or creating a new one blanked the entire application.
+
+### Root Cause
+
+`FormattingToolbar` was rendered as a sibling of `BlockNoteView`. Per official BlockNote documentation, that component requires the editor React context provided inside `BlockNoteView` (custom toolbars go through `FormattingToolbarController` with `formattingToolbar={false}`). Standalone, its hooks throw during render; with no error boundary anywhere, React 19 unmounted the whole root. Unit tests and the Windows smoke test never exercise the React UI, so CI stayed green while the app was broken in a real browser.
+
+### Correction (`95ce27a8`, lockfile sync `df2bc3aa`)
+
+- Removed the standalone toolbar — `BlockNoteView` renders its default formatting toolbar automatically.
+- Added `EditorErrorBoundary` around the editor: safe recovery panel (no error text, paths, tokens, or page content), reset-to-valid-empty-document flow, forced editor remount on recovery.
+- Canonical empty document is a paragraph without a `content` key.
+- New Playwright browser suite (`tests/browser/rich-note.spec.ts`, `@playwright/test` 1.62.1) runs against the real built application in CI: dashboard render, open/create paths, formatting toolbar, autosave Saved state, manual save, reload, home+reopen, pending-flush switch, dark-theme surface, HTML placeholder isolation (BlockNote never mounted), malformed-content recovery UI, plus uncaught-exception and blank-root guards.
+- CI gained a `browser-tests` job (ubuntu, Chromium) between Verify and the Windows smoke; artifact uploads only after all three jobs pass.
+- `lockfile-sync.yml` resolves `bun.lock` through GitHub-hosted automation whenever dependencies change.
+
+### Validation
+
+Pending: first full run over the corrected code (triggered by the tracker commit).
