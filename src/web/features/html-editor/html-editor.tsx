@@ -210,24 +210,6 @@ export default function HtmlEditorWorkspace({
           <PreviewFrame content={previewContent} />
         </Box>
       </div>
-
-      {status === 'error' ? (
-        <Group gap="xs" p="xs">
-          <Text size="sm" c="red">
-            {error ?? UI_TEXT.saveFailedRetryHint}
-          </Text>
-          <Text
-            size="sm"
-            c="blue"
-            style={{ cursor: 'pointer' }}
-            onClick={() => {
-              void retry()
-            }}
-          >
-            {UI_TEXT.saveStatusRetry}
-          </Text>
-        </Group>
-      ) : null}
     </div>
   )
 }
