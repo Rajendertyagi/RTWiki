@@ -37,8 +37,13 @@ jobs:
 
       # Repository-pinned formatter (package.json "format:fix" -> local
       # @biomejs/biome at the locked version). No bunx, no version fetch.
+      # check --write exits nonzero when unfixable lint errors remain; the
+      # patch and diagnostics must still be captured, so failures here are
+      # tolerated and surfaced via the uploaded outputs instead.
       - name: Run repository formatter
-        run: bun run format:fix
+        run: |
+          bun run format:fix > formatter-output.txt 2>&1 || true
+          tail -n 40 formatter-output.txt
 
       - name: Capture formatting patch and changed-file list
         run: |
@@ -62,6 +67,7 @@ jobs:
             biome-format.patch
             changed-files.txt
             before-format.txt
+            formatter-output.txt
             diagnostics-format.txt
             diagnostics-lint.txt
             diagnostics-typecheck.txt
