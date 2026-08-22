@@ -53,6 +53,8 @@ jobs:
       - name: Build web
         run: bun run build:web
       # The development-mode server resolves the SPA to <repo>/build/web.
+      - name: Measure web bundle (informational, no threshold)
+        run: bun scripts/measure-bundle.ts
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
       - name: Run browser tests against the built application
