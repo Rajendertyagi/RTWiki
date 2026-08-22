@@ -16,6 +16,8 @@ export default defineConfig({
     baseURL,
     trace: 'retain-on-failure'
   },
+  // Cold BlockNote mounts on CI runners can exceed the default 5s.
+  expect: { timeout: 15_000 },
   webServer: {
     command: 'bun src/server/index.ts --no-open',
     url: `${baseURL}/health`,

@@ -31,7 +31,9 @@ async function seedPage(
 }
 
 async function openNote(page: Page, title: string): Promise<void> {
-  await page.locator(`[aria-label="Open ${title}"]`).click()
+  // The sidebar renders a NavLink (<a>) and the dashboard a <button> with the
+  // same accessible name; role=button uniquely targets the dashboard card.
+  await page.getByRole('button', { name: `Open ${title}` }).click()
 }
 
 async function goHome(page: Page): Promise<void> {
@@ -211,13 +213,14 @@ test.describe('frontend diagnostics reporting', () => {
       (req) => req.url().includes('/api/client-errors') && req.method() === 'POST'
     )
     await page.evaluate(() => {
-      // Reject now, attach the handler on a later task: the rejection is
-      // genuinely unhandled (fires unhandledrejection) but is cleaned up so
-      // it cannot surface as a late page error in the afterEach guard.
-      const promise = Promise.reject(new RangeError('Controlled rejection'))
-      setTimeout(() => {
-        promise.catch(() => {})
-      }, 0)
+      // Synthetic rejection event: deterministic, and it cannot surface as a
+      // late uncaught exception in the afterEach pageerror guard.
+      window.dispatchEvent(
+        new PromiseRejectionEvent('unhandledrejection', {
+          reason: new RangeError('Controlled rejection'),
+          promise: Promise.resolve()
+        })
+      )
     })
     const request = await reportPromise
     const body = request.postDataJSON() as Record<string, unknown>
