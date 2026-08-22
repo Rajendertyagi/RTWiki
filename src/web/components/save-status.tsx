@@ -18,7 +18,7 @@ export function SaveStatus({ status }: SaveStatusProps): JSX.Element | null {
   if (!config) return null
 
   return (
-    <Text size="sm" c={config.color} aria-live="polite">
+    <Text size="sm" c={config.color} aria-live="polite" data-testid="save-status">
       {config.text}
     </Text>
   )

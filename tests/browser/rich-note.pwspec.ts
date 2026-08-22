@@ -130,8 +130,10 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await page.keyboard.press('ControlOrMeta+a')
     await expect(page.locator(toolbar)).toBeVisible()
 
-    // Autosave reaches the Saved state after the debounce window.
-    await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 10_000 })
+    // Autosave reaches the Saved state after the debounce window. The status
+    // paragraph is targeted via testid: the manual-save button's label also
+    // reads "Saved" once saved, which would trip strict mode.
+    await expect(page.getByTestId('save-status')).toHaveText('Saved', { timeout: 10_000 })
     savedTitle = title
   })
 
@@ -177,12 +179,12 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await openNote(page, title)
     const surface = page.locator('.bn-container')
     const lightBg = await surface.evaluate((el) => getComputedStyle(el).backgroundColor)
-    await page.getByRole('button', { name: 'Toggle color scheme' }).click()
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await expect(page.locator('html[data-mantine-color-scheme="dark"]')).toHaveCount(1)
     const darkBg = await surface.evaluate((el) => getComputedStyle(el).backgroundColor)
     expect(darkBg).not.toBe(lightBg)
     expect(darkBg).not.toBe('rgb(255, 255, 255)')
-    await page.getByRole('button', { name: 'Toggle color scheme' }).click()
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
   })
 
   test('HTML pages show their placeholder and never mount BlockNote', async ({ page, request }) => {
