@@ -151,7 +151,13 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
   }
 
   return (
-    <Stack gap="xs" className={classes.root} data-testid="html-preview">
+    <Stack
+      gap="xs"
+      className={classes.root}
+      data-testid="html-preview"
+      // Test observability: reflects which validated messages were accepted.
+      data-preview-status={status.kind}
+    >
       <Group gap="xs">
         <IconShieldLock size={14} />
         <Text size="xs" c="dimmed">
