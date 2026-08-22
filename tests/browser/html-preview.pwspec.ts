@@ -353,24 +353,23 @@ test.describe('HTML preview security (real Chromium)', () => {
 
   // --- Navigation and messaging ---
 
-  test('form submission is blocked and reported over the approved channel', async ({
-    page,
-    request
-  }) => {
+  test('form submission is blocked by the sandbox', async ({ page, request }) => {
     const title = uniqueTitle('Form Block')
     await seedHtmlPage(request, title, {
       html: '<form action="https://external-probe.invalid/submit"><input name="q"><button type="submit">send</button></form>'
     })
-    await openWithRecorder(page, title)
-    await awaitPreviewReady(page)
+    await openPlain(page, title)
+    const urlBefore = page.url()
 
     const frame = page.frameLocator(PREVIEW_FRAME)
     await frame.locator('button[type="submit"]').click()
 
-    // The frame must not navigate away.
+    // The sandboxed-forms flag blocks submission before any navigation can
+    // start: the frame keeps its content and the application URL is
+    // untouched. (The submit event never fires in this mode, so there is no
+    // channel message to observe — blocking itself is the proven property.)
     await expect(frame.locator('form')).toBeVisible()
-    const msgs = await readMessages(page)
-    expect(msgs.some((m) => m.startsWith('rtwiki-preview-error|form-submission|'))).toBe(true)
+    expect(page.url()).toBe(urlBefore)
   })
 
   test('anchor navigation is blocked and top-level navigation never occurs', async ({

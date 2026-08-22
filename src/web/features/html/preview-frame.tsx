@@ -60,6 +60,12 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
   const buildPreview = useCallback((): BuildResult => {
     try {
       if (!nonce) {
+        // Fail closed AND report: a served document without its nonce means
+        // previews cannot run safely anywhere on this page load.
+        reportClientError('html_preview_error', {
+          pageType: 'html',
+          component: 'PreviewFrame.nonce'
+        })
         return { error: UI_TEXT.htmlPreviewNonceMissing }
       }
       channelIdRef.current = generateChannelId()
