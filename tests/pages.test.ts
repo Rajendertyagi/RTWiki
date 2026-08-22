@@ -49,13 +49,14 @@ describe('page CRUD', () => {
   })
 
   it('creates a page with type html', () => {
+    const canonical = '{"version":1,"html":"<div>hi</div>","css":"","javascript":""}'
     const page = service.createPage(db, {
       title: 'HTML Page',
       pageType: 'html',
-      content: '<div>hi</div>'
+      content: canonical
     })
     expect(page.pageType).toBe('html')
-    expect(page.content).toBe('<div>hi</div>')
+    expect(page.content).toBe(canonical)
   })
 
   it('gets a page by id', () => {

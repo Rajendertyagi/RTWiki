@@ -90,24 +90,35 @@ describe('preview document construction', () => {
     expect(escapeScriptContent('</script>')).toBe('<\\/script>')
     expect(escapeScriptContent('</SCRIPT>')).toBe('<\\/SCRIPT>')
     expect(escapeScriptContent('</ScRiPt>')).toBe('<\\/ScRiPt>')
-    // String content keeps its meaning: "\/" === "/" in JS strings.
-    const doc = build({ javascript: 'var s = "</script>alert(1)<script>";' })
-    // The escaped sequence cannot terminate the script element early.
-    const scriptStart = doc.lastIndexOf('<script')
-    const scriptEnd = doc.indexOf('</script>', scriptStart)
-    const inner = doc.slice(scriptStart, scriptEnd)
+    const doc = build({ javascript: 'var s = "</script>alert(1)";' })
+    // Locate the JavaScript-pane script element (the second of two).
+    const scriptElements = [...doc.matchAll(/<script nonce="[^"]+">/g)]
+    expect(scriptElements.length).toBe(2)
+    const jsPaneStart = scriptElements[1]?.index ?? -1
+    const jsPaneEnd = doc.indexOf('</script>', jsPaneStart)
+    const inner = doc.slice(jsPaneStart, jsPaneEnd)
+    // The escaped sequence cannot terminate the script element early…
     expect(inner).toContain('<\\/script>')
-    expect(inner).not.toContain('</script>alert')
+    expect(inner).not.toContain('</script>')
+    // …and string content keeps its meaning: "\/" === "/" in JS strings.
+    expect(inner).toContain('var s = "<\\/script>alert(1)"')
   })
 
   it('escapes closing style sequences case-insensitively', () => {
     expect(escapeStyleContent('</style>')).toBe('<\\/style>')
     expect(escapeStyleContent('</STYLE>')).toBe('<\\/STYLE>')
-    const doc = build({ css: 'a::after { content: "</style><script>alert(1)</script>"; }' })
+    const css = 'a::after { content: "</style><script>alert(1)</script>"; }'
+    const doc = build({ css })
+    // Exactly one style element: the injected closing sequence could not
+    // split it into pieces.
+    expect([...doc.matchAll(/<style>/g)]).toHaveLength(1)
+    // The real closing tag appears only after the complete CSS rule.
     const styleEnd = doc.indexOf('</style>')
+    expect(styleEnd).toBeGreaterThan(doc.indexOf('"; }'))
+    // Both dangerous sequences inside the CSS text are escaped, not raw.
     const headSection = doc.slice(0, styleEnd)
-    expect(headSection).toContain('<\\/STYLE>'.replace('STYLE', 'style'))
-    expect(doc.indexOf('<script>alert(1)', 0)).toBe(-1)
+    expect(headSection).toContain('<\\/style>')
+    expect(headSection).toContain('<\\/script>')
   })
 
   it('omits empty CSS and JavaScript blocks entirely', () => {
