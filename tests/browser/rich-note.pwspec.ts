@@ -32,8 +32,9 @@ async function seedPage(
 
 async function openNote(page: Page, title: string): Promise<void> {
   // The sidebar renders a NavLink (<a>) and the dashboard a <button> with the
-  // same accessible name; role=button uniquely targets the dashboard card.
-  await page.getByRole('button', { name: `Open ${title}` }).click()
+  // same accessible name; role=button with exact matching uniquely targets
+  // the dashboard card.
+  await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
 }
 
 async function goHome(page: Page): Promise<void> {
@@ -52,13 +53,27 @@ const VALID_DOC = JSON.stringify([
 
 test.describe('Rich Note lifecycle (real application)', () => {
   let pageErrors: Error[] = []
+  let consoleMessages: string[] = []
 
   test.beforeEach(({ page }) => {
     pageErrors = []
+    consoleMessages = []
     page.on('pageerror', (err) => pageErrors.push(err))
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' || msg.type() === 'warning') {
+        consoleMessages.push(`[${msg.type()}] ${msg.text()}`)
+      }
+    })
   })
 
   test.afterEach(() => {
+    // Forensics first: stacks and browser console make CI failures debuggable.
+    for (const err of pageErrors) {
+      console.log(`PAGEERROR: ${err.message}\n${err.stack ?? '(no stack)'}`)
+    }
+    for (const msg of consoleMessages.slice(0, 40)) {
+      console.log(`BROWSER ${msg}`)
+    }
     expect(pageErrors, 'no uncaught browser exceptions').toEqual([])
   })
 
