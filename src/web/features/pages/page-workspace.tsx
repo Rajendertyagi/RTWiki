@@ -1,11 +1,9 @@
+import { Box, Skeleton, Stack } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
-import { Box, Skeleton, Stack } from '@mantine/core'
 import { lazy, Suspense } from 'react'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
-import {
-  HtmlEditorErrorBoundary
-} from '../html-editor/html-editor-error-boundary.js'
+import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
 import { RichEditor } from '../rich-editor/rich-editor.js'
 import { EditorHeader } from './editor-header.js'
 import { PageTab } from './page-tab.js'

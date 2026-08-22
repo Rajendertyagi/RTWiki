@@ -46,9 +46,9 @@ describe('canonical HTML-page content schema', () => {
 
   it('accepts legacy v1 documents (schema-v1 compatibility)', () => {
     expect(HtmlContentSchema.safeParse(v1Content()).success).toBe(true)
-    expect(
-      HtmlContentSchema.safeParse(v1Content({ html: '<b>old</b>', css: 'b{}' })).success
-    ).toBe(true)
+    expect(HtmlContentSchema.safeParse(v1Content({ html: '<b>old</b>', css: 'b{}' })).success).toBe(
+      true
+    )
   })
 
   it('rejects a wrong version in either shape', () => {

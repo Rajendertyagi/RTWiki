@@ -253,9 +253,7 @@ describe('HTML-page canonical content lifecycle', () => {
   it('lenient create: omitted content becomes the canonical empty document', () => {
     const page = service.createPage(db, { title: 'Empty HTML', pageType: 'html', content: '' })
     expect(page.pageType).toBe('html')
-    expect(page.content).toBe(
-      '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
-    )
+    expect(page.content).toBe('{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}')
   })
 
   it('stores and retrieves populated canonical content verbatim', () => {

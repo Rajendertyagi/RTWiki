@@ -1,5 +1,5 @@
-import { useCodeMirror, type CodeEditorLanguage } from './use-codemirror.js'
 import classes from './code-editor.module.css'
+import { type CodeEditorLanguage, useCodeMirror } from './use-codemirror.js'
 
 export interface CodeEditorProps {
   value: string
@@ -28,8 +28,6 @@ export function CodeEditor(props: CodeEditorProps): JSX.Element {
       ref={attach}
       className={classes.host}
       data-testid={`code-editor-${props.language}`}
-      role="group"
-      aria-label={props.label}
     />
   )
 }

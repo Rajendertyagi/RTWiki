@@ -1,13 +1,10 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
+import { html } from '@codemirror/lang-html'
 import { javascript } from '@codemirror/lang-javascript'
 import { bracketMatching, indentOnInput } from '@codemirror/language'
-import {
-  EditorState,
-  type Extension
-} from '@codemirror/state'
-import { EditorView, drawSelection, dropCursor, keymap, lineNumbers } from '@codemirror/view'
+import { EditorState, type Extension } from '@codemirror/state'
+import { drawSelection, dropCursor, EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
 import { htmlEditorHighlighting, htmlEditorTheme } from './editor-theme.js'
 
@@ -41,7 +38,9 @@ export interface UseCodeMirrorOptions {
  * controlled-value updates are dispatched only when they actually differ
  * from the document, which prevents cursor jumps while typing.
  */
-export function useCodeMirror(options: UseCodeMirrorOptions): (element: HTMLDivElement | null) => void {
+export function useCodeMirror(
+  options: UseCodeMirrorOptions
+): (element: HTMLDivElement | null) => void {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   // Last document string this hook emitted or received — the loop guard.
@@ -49,6 +48,11 @@ export function useCodeMirror(options: UseCodeMirrorOptions): (element: HTMLDivE
   const onChangeRef = useRef(options.onChange)
   onChangeRef.current = options.onChange
 
+  // The editor is constructed exactly once per pane mount: language, label
+  // and key bindings are fixed for the pane's lifetime, and value/onChange
+  // flow through refs plus the guarded sync effect below. The suppression is
+  // intentionally scoped to this construction effect.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time view construction; options flow via refs and the sync effect
   useEffect(() => {
     const host = hostRef.current
     if (!host) {
@@ -68,11 +72,7 @@ export function useCodeMirror(options: UseCodeMirrorOptions): (element: HTMLDivE
           htmlEditorHighlighting,
           htmlEditorTheme,
           languageExtension(options.language),
-          keymap.of([
-            ...(options.extraKeys ?? []),
-            ...defaultKeymap,
-            ...historyKeymap
-          ]),
+          keymap.of([...(options.extraKeys ?? []), ...defaultKeymap, ...historyKeymap]),
           EditorView.contentAttributes.of({ 'aria-label': options.ariaLabel }),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) {
@@ -90,9 +90,6 @@ export function useCodeMirror(options: UseCodeMirrorOptions): (element: HTMLDivE
       view.destroy()
       viewRef.current = null
     }
-    // The editor is created once per pane mount; value/onChange flow through
-    // refs and the sync effect below. Language never changes per mount.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: one-time construction; options flow via refs
   }, [])
 
   // External value sync (page switch, reset, reload merge). Skipped when the

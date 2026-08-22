@@ -85,7 +85,7 @@ export const UI_TEXT = {
   htmlEditorLoadError:
     'This HTML page could not be loaded. The stored content appears to be corrupted.',
   htmlEditorCrashMessage: 'The HTML editor stopped unexpectedly.',
-  htmlEditorLoadingLabel: 'Loading the HTML editor…'
+  htmlEditorLoadingLabel: 'Loading the HTML editor…',
   richEditorLoadError:
     'This Rich Note could not be loaded. The stored content appears to be corrupted.',
   richEditorCrashTitle: 'The editor encountered a problem',

@@ -307,12 +307,18 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await openHtmlPage(page, title)
 
     const boxes = await page.evaluate(() => {
-      const editor = document.querySelector('[data-testid^="code-editor-"]')?.getBoundingClientRect()
-      const preview = document.querySelector('[data-testid="live-preview"]')?.getBoundingClientRect()
+      const editor = document
+        .querySelector('[data-testid^="code-editor-"]')
+        ?.getBoundingClientRect()
+      const preview = document
+        .querySelector('[data-testid="live-preview"]')
+        ?.getBoundingClientRect()
       if (!editor || !preview) return null
       return { editorBottom: editor.bottom, previewTop: preview.top }
     })
-    expect(boxes).not.toBeNull()
-    expect(boxes!.previewTop).toBeGreaterThanOrEqual(boxes!.editorBottom - 1)
+    if (!boxes) {
+      throw new Error('layout probe failed: panes not found')
+    }
+    expect(boxes.previewTop).toBeGreaterThanOrEqual(boxes.editorBottom - 1)
   })
 })

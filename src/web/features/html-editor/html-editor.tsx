@@ -1,12 +1,12 @@
+import { Box, Group, Stack, Switch, Tabs, Text } from '@mantine/core'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import {
-  type HtmlPageContentV2,
   createEmptyHtmlContent,
+  type HtmlPageContentV2,
   normalizeHtmlContent,
   parseHtmlContent,
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
-import { Box, Group, Stack, Switch, Tabs, Text } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { PreviewFrame } from '../html/preview-frame.js'
@@ -46,7 +46,6 @@ export default function HtmlEditorWorkspace({
   pageId,
   storedContent,
   onSaveContent,
-  onBack,
   onFlushRef,
   onSaveStateChange
 }: HtmlEditorWorkspaceProps): JSX.Element {

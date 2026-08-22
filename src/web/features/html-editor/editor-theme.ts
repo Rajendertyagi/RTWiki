@@ -23,8 +23,9 @@ export const htmlEditorTheme = EditorView.theme({
   },
   '.cm-content': { padding: '8px 0', caretColor: 'var(--mantine-color-text)' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--mantine-color-text)' },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-    { backgroundColor: 'color-mix(in srgb, var(--mantine-color-text) 15%, transparent)' },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+    backgroundColor: 'color-mix(in srgb, var(--mantine-color-text) 15%, transparent)'
+  },
   '.cm-activeLine': {
     backgroundColor: 'color-mix(in srgb, var(--mantine-color-text) 5%, transparent)'
   },
