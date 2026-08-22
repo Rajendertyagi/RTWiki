@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { bootstrap, type Runtime } from './bootstrap.js'
 import { resolveRuntimePaths } from './config/index.js'
 import { reportFatalStartupError } from './fatal.js'
