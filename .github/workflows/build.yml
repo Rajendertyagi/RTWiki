@@ -258,7 +258,7 @@ jobs:
                   $errBody = (New-Object System.IO.StreamReader($errResp.GetResponseStream())).ReadToEnd()
                   throw "Asset $fullUrl returned $($errResp.StatusCode): $errBody"
                 }
-                throw "Asset $fullUrl: $($_.Exception.Message)"
+                throw "Asset ${fullUrl}: $($_.Exception.Message)"
               }
               if ($a.StatusCode -ne 200) { throw "Asset $fullUrl returned $($a.StatusCode)" }
               if ([string]::IsNullOrWhiteSpace($a.Content)) { throw "Asset $fullUrl returned empty body" }
