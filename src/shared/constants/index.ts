@@ -10,6 +10,10 @@ export const LOG_FILENAME = 'rtwiki.log' as const
 export const DEFAULT_HOST = '127.0.0.1' as const
 export const DEFAULT_PORT = 8080 as const
 export const MAX_REQUEST_SIZE = 100 * 1024 * 1024
+// Ceiling for page create/update JSON bodies: accommodates the worst-case
+// JSON encoding overhead of a fully populated canonical HTML-page content
+// document (2 MiB HTML + 2 x 512 KiB CSS/JS) with generous headroom.
+export const MAX_PAGE_JSON_BODY_BYTES = 4 * 1024 * 1024
 export const PROVISIONAL_AUTOSAVE_DEBOUNCE_MS = 2000 as const
 export const PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024
 export const SHUTDOWN_TOKEN_HEADER = 'x-rtwiki-shutdown-token' as const
