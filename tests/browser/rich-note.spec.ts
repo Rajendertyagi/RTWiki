@@ -1,4 +1,4 @@
-import { expect, test, type Page, type APIRequestContext } from '@playwright/test'
+import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 
 const editorRoot = '[data-testid="rich-editor"]'
 const editable = '.bn-editor .ProseMirror'
