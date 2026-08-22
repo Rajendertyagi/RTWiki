@@ -46,7 +46,7 @@ The following are **not** in scope for the Visual MVP:
 | 2 | Visual Workspace and Page Management | Correction 3 pending CI | 00c3678 | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) | RTWiki-0.1.0-windows-x64 |
 | 3 | Rich Note Editor and Autosave | CI verified | 405dc01b | [#32570059083](https://github.com/Rajendertyagi/RTWiki/actions/runs/32570059083) | RTWiki-0.1.0-windows-x64 |
 | 4A | Secure HTML Page Foundation (preview, no editor UI) | CI verified | 3a1d4f3 | [#32584637817](https://github.com/Rajendertyagi/RTWiki/actions/runs/32584637817) | RTWiki-0.1.0-windows-x64 |
-| 4B | HTML/CSS/JS Editor Tabs and Live Editing | Implemented — awaiting CI | e732531 | pending | pending |
+| 4B | HTML/CSS/JS Editor Tabs and Live Editing | CI verified | fb0bcb4 | [#32597212309](https://github.com/Rajendertyagi/RTWiki/actions/runs/32597212309) | RTWiki-0.1.0-windows-x64 |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
 
 ### Status Definitions
@@ -872,7 +872,7 @@ built to be consumed unchanged by 4B.
 ## Phase 4B — Editable HTML-Page Workspace
 
 **Branch:** `feature/html-page-editor` (continues on the Phase 4A branch from `b700919`).
-**Status:** Implemented — awaiting CI. No hierarchy, drag/drop, sidebar or Rich Note work included.
+**Status:** CI verified — Verify (format, lint, typecheck, tests, web+server build), Browser tests (Playwright/Chromium: 13 editor scenarios + 19 preview-security + rich-note suite) and Windows portable smoke all green on `fb0bcb4` ([run 32597212309](https://github.com/Rajendertyagi/RTWiki/actions/runs/32597212309)). No hierarchy, drag/drop, sidebar or Rich Note work included.
 
 ### Scope delivered
 
@@ -930,3 +930,33 @@ save; editing never weakens normalization (typed scripts stay inert); mobile
 split stacking. The full Phase 4A security suite runs unchanged (seeds now
 explicitly enable JS where probes require execution).
 
+
+### Validation
+
+- **Green end to end:** run [32597212309](https://github.com/Rajendertyagi/RTWiki/actions/runs/32597212309)
+  on `fb0bcb4` — Verify, Browser tests (42 scenarios), Windows portable smoke
+  all success. Artifact `RTWiki-0.1.0-windows-x64`, 41,993,184 bytes.
+- Save persistence is asserted at the network layer: tests capture the actual
+  `PATCH /api/pages/:id` request and unwrap the `{content}` envelope before
+  asserting, so a stale status label can never masquerade as a save.
+- Content-save Retry lives in the editor surface (parity with the Rich
+  editor); the header's Retry action remains scoped to page-list mutations.
+
+### Commits
+
+| SHA | Message |
+|-----|---------|
+| 5cb6dcc | chore(deps): declare CodeMirror 6 packages + temporary lockfile-artifact workflow |
+| a614415 | chore(deps): sync bun.lock for CodeMirror 6 packages; remove temporary workflow |
+| 4b74f09 | feat: editable HTML workspace with CodeMirror tabs, JS toggle and live preview |
+| d00de74 | test: schema v2 jsEnabled coverage and preview gating assertions |
+| e732531 | test: browser suite for editable HTML workspace and JS toggle |
+| aa7e5fe | docs: record Phase 4B scope, schema v2 and dependency evidence |
+| c17b4aa | chore: temporary format-diagnostics workflow (read-only artifact; deleted in e530d80) |
+| e530d80 | fix: canonical formatting + lint/typecheck findings; remove diagnostics workflow |
+| 147e5d7 / 78f27fd | fix: canonical JSX form; header save-state mapping without unsafe cast |
+| 08f68e7 | fix: expect().toContainText assertion form in editor suite |
+| 421d83c / 688aead | test: Saved assertion scoped to aria-live status paragraph (canonical form) |
+| 2c96a91 | fix: handle null response in save watcher |
+| 9c6ff2c | test: assert save persistence via PATCH request truth; header owns list-Retry |
+| fb0bcb4 | fix: restore editor-owned content-save retry control |
