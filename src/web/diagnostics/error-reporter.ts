@@ -41,7 +41,8 @@ const CANNED_MESSAGES: Record<SafeEvent, string> = {
   unhandled_rejection: 'A promise rejected without a handler.',
   rich_note_parse_error: 'Stored Rich Note content could not be parsed.',
   rich_note_save_error: 'Saving the Rich Note failed.',
-  rich_note_init_error: 'Initializing the Rich Note editor failed.'
+  rich_note_init_error: 'Initializing the Rich Note editor failed.',
+  html_preview_error: 'Building the sandboxed HTML preview failed.'
 }
 
 function randomId(): string {

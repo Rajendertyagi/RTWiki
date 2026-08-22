@@ -1,5 +1,7 @@
 import type { Page } from '@rtwiki/shared/contracts/pages'
+import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
+import { PreviewFrame } from '../html/preview-frame.js'
 import { RichEditor } from '../rich-editor/rich-editor.js'
 import { EditorHeader } from './editor-header.js'
 import { PageTab } from './page-tab.js'
@@ -66,9 +68,22 @@ export function PageWorkspace({
             onSaveStateChange={onSaveStateChange}
           />
         ) : (
-          <HtmlPlaceholder />
+          <HtmlPreviewOrPlaceholder storedContent={page.content} />
         )}
       </div>
     </div>
   )
+}
+
+/**
+ * Renders the sandboxed preview for canonical HTML-page content. Stored
+ * content that predates canonical validation (or is malformed) keeps the
+ * placeholder — it is never overwritten and never silently "fixed".
+ */
+function HtmlPreviewOrPlaceholder({ storedContent }: { storedContent: string }): JSX.Element {
+  const parsed = parseHtmlContent(storedContent)
+  if (!parsed.ok) {
+    return <HtmlPlaceholder />
+  }
+  return <PreviewFrame content={parsed.content} />
 }

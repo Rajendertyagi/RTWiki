@@ -10,7 +10,8 @@ export const CLIENT_ERROR_EVENTS = [
   'unhandled_rejection',
   'rich_note_parse_error',
   'rich_note_save_error',
-  'rich_note_init_error'
+  'rich_note_init_error',
+  'html_preview_error'
 ] as const
 
 export const CLIENT_ERROR_PAGE_TYPES = ['rich', 'html', 'dashboard', 'unknown'] as const

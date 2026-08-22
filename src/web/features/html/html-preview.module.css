@@ -1,0 +1,12 @@
+.root {
+  width: 100%;
+  min-height: 0;
+}
+
+.frame {
+  width: 100%;
+  height: 60vh;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+}

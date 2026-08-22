@@ -62,6 +62,18 @@ export const UI_TEXT = {
   htmlPlaceholderMessage:
     'The HTML/CSS/JS editor is coming in the next phase. Your HTML pages are safely stored and will be editable soon.',
   htmlPlaceholderHint: 'HTML pages remain viewable as stored content.',
+  htmlPreviewSandboxNotice:
+    'Sandboxed preview. Scripts run in an isolated frame with no access to RTWiki or the network.',
+  htmlPreviewIframeTitle: 'Sandboxed HTML page preview',
+  htmlPreviewErrorTitle: 'Preview unavailable',
+  htmlPreviewNonceMissing:
+    'The preview could not start because this document was served without a security nonce. Reload the application and try again.',
+  htmlPreviewBuildFailed: 'The preview could not be built from the stored content.',
+  htmlPreviewPreservedNotice:
+    'Your stored page content is untouched. Nothing was modified or deleted.',
+  htmlPreviewRuntimeTitle: 'The preview reported a problem',
+  htmlPreviewRuntimeMessage:
+    'Code inside the sandboxed preview stopped unexpectedly. The rest of RTWiki is unaffected.',
   richEditorLoadError:
     'This Rich Note could not be loaded. The stored content appears to be corrupted.',
   richEditorCrashTitle: 'The editor encountered a problem',
