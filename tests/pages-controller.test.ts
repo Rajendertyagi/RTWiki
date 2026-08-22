@@ -296,7 +296,9 @@ describe('HTML-page content API validation', () => {
   it('creates an html page without content as the canonical empty document', async () => {
     const page = await createHtmlPage()
     expect(page.pageType).toBe('html')
-    expect(page.content).toBe('{"version":1,"html":"","css":"","javascript":""}')
+    expect(page.content).toBe(
+      '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
+    )
   })
 
   it('rejects malformed non-empty html content with the structured error format', async () => {

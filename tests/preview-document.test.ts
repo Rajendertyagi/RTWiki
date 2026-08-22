@@ -17,6 +17,7 @@ function build(overrides: Partial<Parameters<typeof buildPreviewDocument>[0]> = 
     normalizedBody: '<p>body</p>',
     css: '',
     javascript: '',
+    jsEnabled: true,
     nonce: NONCE,
     channelId: CHANNEL,
     ...overrides
@@ -122,6 +123,23 @@ describe('preview document construction', () => {
     const headSection = doc.slice(0, styleEnd)
     expect(headSection).toContain('<\\/style>')
     expect(headSection).not.toContain('</style>')
+  })
+
+  it('omits the JavaScript pane entirely when jsEnabled is false', () => {
+    const doc = build({ javascript: 'mark("should-not-run")', jsEnabled: false })
+    // Only the ever-present bootstrap script remains — the user JS pane is
+    // gated off, so its code cannot execute even though it is stored.
+    const scripts = [...doc.matchAll(/<script nonce="([^"]+)">/g)]
+    expect(scripts.length).toBe(1)
+    expect(doc).not.toContain('should-not-run')
+    expect(doc).toContain('rtwiki-preview-ready')
+  })
+
+  it('includes the JavaScript pane when jsEnabled is true', () => {
+    const doc = build({ javascript: 'mark("ran")', jsEnabled: true })
+    const scripts = [...doc.matchAll(/<script nonce="([^"]+)">/g)]
+    expect(scripts.length).toBe(2)
+    expect(doc).toContain('mark("ran")')
   })
 
   it('omits empty CSS and JavaScript blocks entirely', () => {
