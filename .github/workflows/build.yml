@@ -6,10 +6,8 @@ on:
   pull_request:
     branches: [main]
 
-# Least-privilege: this workflow only reads the repo and downloads an artifact.
-# It never pushes, never modifies itself, and never uses continue-on-error or `|| true`
-# on gates that must be authoritative. upload-artifact@v4 operates within the same run
-# and needs no extra permission beyond contents: read.
+# Least privilege: the workflow reads the repo, builds, verifies the packaged
+# application on a Windows runner, and uploads artifacts within the same run.
 permissions:
   contents: read
 
@@ -57,382 +55,28 @@ jobs:
       - name: Build server (compile portable executable)
         run: bun run build:server
 
-      # Fail loudly if the build did not produce the expected independent artifacts.
-      - name: Pre-fail build checks
+      # Stage and validate the portable package (RTWiki.exe beside web/).
+      - name: Package portable Windows build
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $exe = "build/server/RTWiki.exe"
-          $idx = "build/web/index.html"
-          $assets = "build/web/assets"
-          if (-not (Test-Path $exe -PathType Leaf)) { throw "Missing build artifact: $exe" }
-          if ((Get-Item $exe).Length -eq 0) { throw "Executable is empty: $exe" }
-          if (-not (Test-Path $idx -PathType Leaf)) { throw "Missing build artifact: $idx" }
-          if ((Get-Item $idx).Length -eq 0) { throw "index.html is empty: $idx" }
-          if (-not (Test-Path $assets -PathType Container)) { throw "Missing build artifact directory: $assets" }
-          $assetFiles = Get-ChildItem -Path $assets -Recurse -File
-          if ($assetFiles.Count -eq 0) { throw "No files found under: $assets" }
-          Write-Host "PRE-FAIL CHECKS PASSED: exe=$((Get-Item $exe).Length)B, index.html, assets/ ($($assetFiles.Count) files)"
+        run: ./scripts/ci/package-windows.ps1 -SourceDir build -DestDir package/RTWiki
 
-      # Stage a portable tree: the executable and the built frontend beside it.
-      - name: Stage portable package
+      # Launch the packaged application and verify it end to end.
+      - name: Windows portable smoke test
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $stage = "package/RTWiki"
-          New-Item -ItemType Directory -Force -Path "$stage/web" | Out-Null
-          Copy-Item "build/server/RTWiki.exe" -Destination "$stage/RTWiki.exe" -Force
-          Copy-Item "build/web/index.html" -Destination "$stage/web/index.html" -Force
-          Copy-Item "build/web/assets" -Destination "$stage/web/assets" -Recurse -Force
+        run: >
+          ./scripts/ci/windows-smoke.ps1
+          -PackageDir package/RTWiki
+          -BuildExe build/server/RTWiki.exe
+          -RunDir "${{ runner.temp }}/rtwiki-run"
+          -DiagDir "${{ runner.temp }}/rtwiki-diag"
 
-          # Required staged files must be present and non-empty.
-          $required = @(
-            "$stage/RTWiki.exe",
-            "$stage/web/index.html"
-          )
-          foreach ($f in $required) {
-            if (-not (Test-Path $f -PathType Leaf)) { throw "Missing staged file: $f" }
-            if ((Get-Item $f).Length -eq 0) { throw "Staged file is empty: $f" }
-          }
-          $stagedAssets = Get-ChildItem -Path "$stage/web/assets" -Recurse -File
-          if ($stagedAssets.Count -eq 0) { throw "No staged asset files under: $stage/web/assets" }
-          Write-Host "STAGED TREE:"
-          Get-ChildItem -Recurse $stage | ForEach-Object { Write-Host "  $($_.FullName) ($($_.Length)B)" }
-
-      # Fail if port 8080 already has a listening owner before launching.
-      - name: Pre-launch port ownership check
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $port = 8080
-          $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-          if ($conn) {
-            $ownerPid  = $conn[0].OwningProcess
-            $proc      = Get-Process -Id $ownerPid -ErrorAction SilentlyContinue
-            $procName  = if ($proc) { $proc.Name } else { "(unknown)" }
-            $procPath  = if ($proc) { $proc.Path } else { "(unknown)" }
-            $startTime = if ($proc) { $proc.StartTime } else { "(unknown)" }
-            Write-Host "PRE-LAUNCH OCCUPIED: PID=$ownerPid NAME=$procName PATH=$procPath START=$startTime"
-            throw "PORT $port ALREADY OCCUPIED BEFORE LAUNCH by PID $ownerPid ($procPath). Refusing to start; not terminating automatically."
-          }
-          Write-Host "PRE-LAUNCH PORT CHECK PASSED: 8080 is free"
-
-      # Extract the staged portable tree to an isolated temp directory for the smoke test.
-      # Run from a *different* working directory to prove the executable is portable
-      # (it derives all paths from its own location, never cwd).
-      # Uses the --no-open startup flag so the server keeps listening for independent verification.
-      - name: Run portable smoke test
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $extract   = Join-Path $env:RUNNER_TEMP "rtwiki-smoke"
-          $diag      = Join-Path $env:RUNNER_TEMP "rtwiki-diag"
-          $runDir    = Join-Path $env:RUNNER_TEMP "rtwiki-run"
-          $src       = Join-Path $env:GITHUB_WORKSPACE "package/RTWiki"
-          $exe       = Join-Path $extract "RTWiki.exe"
-          $out       = Join-Path $diag "smoke.out.txt"
-          $err       = Join-Path $diag "smoke.err.txt"
-          $identity  = Join-Path $diag "identity.txt"
-          $diagLog   = Join-Path $diag "rtwiki.log"
-          $log       = Join-Path $extract "logs" "rtwiki.log"
-
-          # --- 0. Prepare all directories; all diagnostic files live under $diag ---
-          Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force $diag    -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force $runDir  -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $runDir | Out-Null
-          New-Item -ItemType Directory -Force -Path $diag   | Out-Null
-          # Copy the staged directory itself (no wildcard): a wildcard source
-          # with a non-existent destination flattens the top-level web/ folder,
-          # which breaks frontendDistDir (<exe>/web) at runtime.
-          Copy-Item -Path $src -Destination $extract -Recurse -Force
-          New-Item -ItemType Directory -Force -Path (Join-Path $extract "data" "attachments") | Out-Null
-          New-Item -ItemType Directory -Force -Path (Join-Path $extract "data" "backups")     | Out-Null
-
-          # --- 1. Executable identity: build / staged / extracted must be byte-identical ---
-          $buildExe   = Join-Path $env:GITHUB_WORKSPACE "build/server/RTWiki.exe"
-          $stageExe   = Join-Path $src "RTWiki.exe"
-          if (-not (Test-Path $buildExe))   { throw "Missing build artifact: $buildExe" }
-          if (-not (Test-Path $stageExe))   { throw "Missing staged artifact: $stageExe" }
-          if (-not (Test-Path $exe))        { throw "RTWiki.exe missing after staging copy" }
-          $hBuild   = (Get-FileHash $buildExe   -Algorithm SHA256).Hash
-          $hStage   = (Get-FileHash $stageExe   -Algorithm SHA256).Hash
-          $hExtract = (Get-FileHash $exe        -Algorithm SHA256).Hash
-          "BUILD_SHA256=$hBuild"     | Out-File -FilePath $identity
-          "STAGE_SHA256=$hStage"     | Out-File -FilePath $identity -Append
-          "EXTRACT_SHA256=$hExtract" | Out-File -FilePath $identity -Append
-          Write-Host "IDENTITY: build=$hBuild stage=$hStage extracted=$hExtract"
-          if ($hBuild -ne $hStage -or $hStage -ne $hExtract) {
-            throw "EXECUTABLE IDENTITY MISMATCH: build=$hBuild stage=$hStage extracted=$hExtract"
-          }
-          Write-Host "IDENTITY OK: all three executables match ($hBuild)"
-
-          $p = $null
-          $shutdownToken = $null
-          $secondP = $null
-          try {
-            # --- 2. Re-check port immediately before launch (closes race with pre-launch step) ---
-            $preConn = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
-            if ($preConn) {
-              $ppPid  = $preConn[0].OwningProcess
-              $ppProc = Get-Process -Id $ppPid -ErrorAction SilentlyContinue
-              $ppPath = if ($ppProc) { $ppProc.Path } else { "(unknown)" }
-              throw "PORT 8080 OCCUPIED IMMEDIATELY BEFORE LAUNCH by PID $ppPid ($ppPath). Aborting to avoid testing wrong process."
-            }
-
-            # --- 3. Start ONLY the extracted executable; capture exact process ---
-            $p = Start-Process -FilePath $exe -ArgumentList "--no-open" -WorkingDirectory $runDir -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
-            Write-Host "CAPTURED PID=$($p.Id) PATH=$exe"
-
-            # --- 4. Readiness poll: refresh process state; fail if captured process exits ---
-            $ready = $false
-            for ($i = 0; $i -lt 60; $i++) {
-              $p.Refresh()
-              if ($p.HasExited) {
-                Write-Host "Captured PID $($p.Id) exited with code $($p.ExitCode) before becoming ready"
-                Get-Content $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  [stdout] $_" }
-                Get-Content $err -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  [stderr] $_" }
-                throw "Captured PID $($p.Id) exited early (code $($p.ExitCode)) before becoming ready"
-              }
-              try {
-                $r = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing -TimeoutSec 2
-                if ($r.StatusCode -eq 200) { $ready = $true; break }
-              } catch { }
-              Start-Sleep -Seconds 1
-            }
-            if (-not $ready) { throw "Server did not become ready within 60s (captured PID $($p.Id))" }
-
-            # --- 5. PROVE PORT OWNERSHIP (decisive check) ---
-            $conn = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
-            if (-not $conn) { throw "No listener on 8080 after health returned 200 (captured PID $($p.Id))" }
-            $p.Refresh()
-            if ($p.HasExited) {
-              throw "Captured PID $($p.Id) exited but 8080 served by listener PID $($conn[0].OwningProcess)"
-            }
-            $listenerPid = $conn[0].OwningProcess
-            if ($listenerPid -ne $p.Id) {
-              $lproc = Get-Process -Id $listenerPid -ErrorAction SilentlyContinue
-              throw "PORT 8080 OWNER MISMATCH: listener PID=$listenerPid ($($lproc.Path)) != captured RTWiki PID=$($p.Id) ($($p.Path))"
-            }
-            $expectedPath = [IO.Path]::GetFullPath($exe)
-            $actualPath   = [IO.Path]::GetFullPath((Get-Process -Id $p.Id -ErrorAction Stop).Path)
-            if ($actualPath -ine $expectedPath) {
-              throw "PROCESS PATH MISMATCH: captured=$actualPath expected=$expectedPath"
-            }
-            Write-Host "PORT OWNERSHIP PROVEN: PID $($p.Id) owns 8080 and matches extracted exe"
-
-            # --- 6. Endpoint matrix (only after ownership proven) ---
-            # 6a. Health returns HTTP 200 and expected response.
-            $h = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing
-            if ($h.StatusCode -ne 200) { throw "Health endpoint returned $($h.StatusCode)" }
-            if ($h.Content -notmatch '"status"\s*:\s*"ok"') { throw "Health endpoint did not report ok" }
-
-            # 6b. Root returns HTTP 200 and non-empty HTML.
-            $root = Invoke-WebRequest -Uri "http://127.0.0.1:8080/" -UseBasicParsing
-            if ($root.StatusCode -ne 200) { throw "GET / returned $($root.StatusCode)" }
-            if ([string]::IsNullOrWhiteSpace($root.Content)) { throw "GET / returned empty HTML" }
-
-            # 6c. Parse all <script src> and <link href> assets; verify JS/CSS MIME.
-            $scriptPattern = '(?i)<script\s+[^>]*src="(/assets/[^"]+)"'
-            $linkPattern   = '(?i)<link\s+[^>]*href="(/assets/[^"]+)"'
-            $scriptMatches = [regex]::Matches($root.Content, $scriptPattern)
-            $linkMatches   = [regex]::Matches($root.Content, $linkPattern)
-            $assetUrls = @()
-            foreach ($m in $scriptMatches) { $assetUrls += $m.Groups[1].Value }
-            foreach ($m in $linkMatches)   { $assetUrls += $m.Groups[1].Value }
-            if ($assetUrls.Count -eq 0) { throw "No <script src> or <link href> assets found in index.html" }
-            $jsFound = $false; $cssFound = $false
-            foreach ($assetUrl in $assetUrls) {
-              $fullUrl = "http://127.0.0.1:8080$assetUrl"
-              $a = Invoke-WebRequest -Uri $fullUrl -UseBasicParsing
-              if ($a.StatusCode -ne 200) { throw "Asset $fullUrl returned $($a.StatusCode)" }
-              if ([string]::IsNullOrWhiteSpace($a.Content)) { throw "Asset $fullUrl returned empty body" }
-              $contentType = $a.Headers['Content-Type']
-              if ($contentType -match 'text/html') { throw "Asset $fullUrl returned text/html MIME (likely SPA fallback). Content-Type: $contentType" }
-              if ($assetUrl -match '\.js$') { $jsFound = $true }
-              if ($assetUrl -match '\.css$') { $cssFound = $true }
-              $physicalPath = Join-Path $extract "web$assetUrl"
-              if (Test-Path $physicalPath) {
-                $physicalSize = (Get-Item $physicalPath).Length
-                $remoteSize   = $a.RawContentStream.Length
-                if ($remoteSize -ne $physicalSize) { throw "Asset $fullUrl size mismatch: remote=$remoteSize physical=$physicalSize" }
-              }
-              Write-Host "ASSET OK: $assetUrl ($contentType) $($a.RawContentStream.Length)B"
-            }
-            if (-not $jsFound) { throw "No JavaScript asset found in index.html" }
-            if (-not $cssFound) { throw "No CSS asset found in index.html" }
-
-            # 6d. Shutdown POST without token must be rejected (403).
-            try {
-              Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -UseBasicParsing
-              throw "POST /api/shutdown without token returned 200 (expected 403)"
-            } catch {
-              if ($_.Exception.Message -match "403") {
-                Write-Host "SHUTDOWN SECURITY OK: POST without token rejected (403)"
-              } else { throw }
-            }
-
-            # 6e. Shutdown GET method rejection (405).
-            try {
-              Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method GET -UseBasicParsing
-              throw "GET /api/shutdown returned 200 (expected 405)"
-            } catch {
-              if ($_.Exception.Message -match "405") {
-                Write-Host "SHUTDOWN SECURITY OK: GET on shutdown endpoint rejected (405)"
-              } else { throw }
-            }
-
-            # 6f. Obtain shutdown token (print length only, never the value).
-            Write-Host "CHECK 6f: GET /api/shutdown/token (expect 200)"
-            $tokenRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown/token" -UseBasicParsing
-            if ($tokenRes.StatusCode -ne 200) { throw "GET /api/shutdown/token returned $($tokenRes.StatusCode)" }
-            $tokenObj      = $tokenRes.Content | ConvertFrom-Json
-            $shutdownToken = $tokenObj.token
-            if ([string]::IsNullOrWhiteSpace($shutdownToken)) { throw "Shutdown token is empty" }
-            Write-Host "SHUTDOWN TOKEN OK: obtained token ($($shutdownToken.Length) chars) [value never printed]"
-
-            # 6g. Shutdown POST with wrong token must be rejected (403).
-            try {
-              Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -Headers @{"X-RTWiki-Shutdown-Token"="wrong-token"} -UseBasicParsing
-              throw "POST /api/shutdown with wrong token returned 200 (expected 403)"
-            } catch {
-              if ($_.Exception.Message -match "403") {
-                Write-Host "SHUTDOWN SECURITY OK: wrong token rejected (403)"
-              } else { throw }
-            }
-            Write-Host "ENDPOINT MATRIX PASSED: health, root, JS/CSS MIME, shutdown security"
-
-            # --- 7. Single-instance: second instance must detect first and exit ---
-            $secondOut = Join-Path $diag "smoke2.out.txt"
-            $secondErr = Join-Path $diag "smoke2.err.txt"
-            $secondP = Start-Process -FilePath $exe -ArgumentList "--no-open" -WorkingDirectory $runDir -NoNewWindow -PassThru -RedirectStandardOutput $secondOut -RedirectStandardError $secondErr
-            $exited = $false
-            for ($i = 0; $i -lt 10; $i++) {
-              if ($secondP.HasExited) { $exited = $true; break }
-              Start-Sleep -Seconds 1
-            }
-            if (-not $exited) {
-              Stop-Process -Id $secondP.Id -Force -ErrorAction SilentlyContinue
-              throw "Second RTWiki instance did not exit within 10s (should detect existing and exit)"
-            }
-            if ($secondP.ExitCode -ne 0) {
-              throw "Second RTWiki instance exited with code $($secondP.ExitCode)"
-            }
-            # Re-verify first instance still owns port after single-instance test.
-            $conn2 = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
-            if (-not $conn2 -or $conn2[0].OwningProcess -ne $p.Id) {
-              throw "After second-instance test, port 8080 not owned by captured PID $($p.Id)"
-            }
-            $verifyHealth = Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing
-            if ($verifyHealth.StatusCode -ne 200) { throw "First instance health failed after second launch" }
-            Write-Host "SINGLE-INSTANCE OK: second exited 0, first (PID $($p.Id)) still owns 8080"
-
-            # --- 8. Authorized shutdown: correct token triggers clean stop (202) ---
-            $shutdownRes = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -Headers @{"X-RTWiki-Shutdown-Token"=$shutdownToken} -UseBasicParsing
-            if ($shutdownRes.StatusCode -ne 202) { throw "Authorized shutdown returned $($shutdownRes.StatusCode) (expected 202)" }
-            $shutdownBody = $shutdownRes.Content | ConvertFrom-Json
-            if ($shutdownBody.status -ne "shutting_down") { throw "Shutdown response status: $($shutdownBody.status)" }
-            $stopped = $false
-            for ($i = 0; $i -lt 10; $i++) {
-              Start-Sleep -Seconds 1
-              try { Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing -TimeoutSec 1 | Out-Null } catch { $stopped = $true; break }
-            }
-            if (-not $stopped) { throw "Server did not stop within 10s after authorized shutdown" }
-            Write-Host "SHUTDOWN OK: server stopped cleanly after authorized request"
-
-            # Confirm port 8080 released.
-            try {
-              Invoke-WebRequest -Uri "http://127.0.0.1:8080/health" -UseBasicParsing -TimeoutSec 2
-              throw "Port 8080 still accepts connections after shutdown"
-            } catch {
-              Write-Host "PORT RELEASED: 8080 no longer accepts connections"
-            }
-
-            # Verify no orphan processes.
-            $orphanCheck = Get-Process -Name "RTWiki" -ErrorAction SilentlyContinue
-            if ($orphanCheck) {
-              Stop-Process -Id $orphanCheck.Id -Force -ErrorAction SilentlyContinue
-              throw "Orphan RTWiki process found after shutdown"
-            }
-            Write-Host "NO ORPHANS: all RTWiki processes terminated"
-            Write-Host "SMOKE TEST PASSED"
-            Write-Host "CAPTURED PID=$($p.Id) OWNED PORT 8080 -- HASHES MATCH -- ROUTES WORK"
-
-          } catch {
-            # Allow diagnostic dumping: Write-Error would otherwise terminate
-            # immediately because $ErrorActionPreference is Stop.
-            $ErrorActionPreference = 'Continue'
-            Write-Host "SMOKE FAILURE: $_"
-            Write-Host "=== STDOUT ==="
-            Get-Content $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
-            Write-Host "=== STDERR ==="
-            Get-Content $err -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
-            Write-Host "=== IDENTITY ==="
-            Get-Content $identity -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
-            Write-Host "=== EXTRACTED TREE ==="
-            Get-ChildItem -Recurse $extract | ForEach-Object { Write-Host "  $($_.FullName)" }
-            throw
-          } finally {
-            # Copy RTWiki log into diag dir for upload.
-            try { Copy-Item -Path $log -Destination $diagLog -Force -ErrorAction SilentlyContinue } catch {}
-            # Redact any shutdown token that may have leaked into diagnostic files.
-            if ($shutdownToken) {
-              @($out, $err, $diagLog) | ForEach-Object {
-                if (Test-Path $_) {
-                  $raw = Get-Content $_ -Raw -ErrorAction SilentlyContinue
-                  if ($raw -and $raw.Contains($shutdownToken)) {
-                    ($raw -replace [regex]::Escape($shutdownToken), '[REDACTED]') | Set-Content $_ -NoNewline -ErrorAction SilentlyContinue
-                  }
-                }
-              }
-            }
-            # Stop second instance by exact PID if lingering.
-            if ($secondP -and -not $secondP.HasExited) { Stop-Process -Id $secondP.Id -Force -ErrorAction SilentlyContinue }
-            # Stop captured PID: prefer graceful shutdown, then exact-PID force.
-            if ($p -and -not $p.HasExited) {
-              if ($shutdownToken) {
-                try {
-                  Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/shutdown" -Method POST -Headers @{"X-RTWiki-Shutdown-Token"=$shutdownToken} -UseBasicParsing -TimeoutSec 5 -ErrorAction SilentlyContinue | Out-Null
-                } catch { }
-                for ($i = 0; $i -lt 10; $i++) { Start-Sleep -Seconds 1; $p.Refresh(); if ($p.HasExited) { break } }
-              }
-              if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-            }
-            # Verify captured PID is gone.
-            if ($p) {
-              $p.Refresh()
-              if (-not $p.HasExited) {
-                Write-Warning "Cleanup: PID $($p.Id) still running after force termination"
-              } else {
-                Write-Host "CLEANUP OK: captured PID $($p.Id) is gone"
-              }
-            }
-          }
-
-      # Upload diagnostic files only on failure (diagnostic dir contains no shutdown token — redacted in finally).
       - name: Upload diagnostics on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rtwiki-smoke-diagnostics
-          path: |
-            ${{ runner.temp }}/rtwiki-diag/smoke.out.txt
-            ${{ runner.temp }}/rtwiki-diag/smoke.err.txt
-            ${{ runner.temp }}/rtwiki-diag/identity.txt
-            ${{ runner.temp }}/rtwiki-diag/rtwiki.log
-          if-no-files-found: warn
-          retention-days: 7
-
-      # Upload the staged portable tree directly as a directory artifact.
-      # No intermediate zip is created, so downloaders get the portable layout
-      # (RTWiki.exe + web/) at the root — not a nested zip.
-      - name: Upload portable package artifact
-        if: success()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: RTWiki-0.1.0-windows-x64
-          path: package/RTWiki/
-          if-no-files-found: error
+          path: ${{ runner.temp }}/rtwiki-diag/
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Report artifact hash
@@ -440,8 +84,16 @@ jobs:
         shell: pwsh
         run: |
           $exe = Get-Item "package/RTWiki/RTWiki.exe"
+          $exeHash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
           Write-Host "ARTIFACT_NAME=RTWiki-0.1.0-windows-x64"
           Write-Host "EXE_SIZE_BYTES=$($exe.Length)"
-          Write-Host "EXE_SHA256=$(Get-FileHash $exe.FullName -Algorithm SHA256).Hash)"
-          Write-Host "=== STAGED TREE ==="
-          Get-ChildItem -Recurse "package/RTWiki" | ForEach-Object { Write-Host "  $($_.FullName)" }
+          Write-Host "EXE_SHA256=$exeHash"
+
+      - name: Upload portable package artifact
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: RTWiki-0.1.0-windows-x64
+          path: package/RTWiki/
+          if-no-files-found: error
+          retention-days: 7

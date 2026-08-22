@@ -99,6 +99,10 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   ensureDirectory(paths.dataDir)
   ensureDirectory(paths.logDir)
   ensureDirectory(paths.frontendDistDir)
+  // ADR-005 portable layout: attachments/ and backups/ are part of the required
+  // runtime structure and must exist after first launch.
+  ensureDirectory(paths.attachmentsDir)
+  ensureDirectory(paths.backupsDir)
 
   // Probe for existing RTWiki instance before binding the port.
   const existing = await probeExistingInstance(port, logger)
