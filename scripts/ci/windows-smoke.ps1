@@ -126,6 +126,23 @@ try {
   }
   Write-Host 'RUNTIME DIRS OK: data/, data/attachments/, data/backups/, logs/ created by application'
 
+  # Persistent diagnostic log: must exist, be non-empty, valid JSONL, and
+  # contain a startup event. This script never writes the file, so its
+  # existence proves RTWiki created it.
+  $logPath = Join-Path $appDir 'logs/rtwiki.log'
+  if (-not (Test-Path $logPath -PathType Leaf)) { throw 'Application did not create logs/rtwiki.log' }
+  $logSize = (Get-Item $logPath).Length
+  if ($logSize -le 0) { throw 'logs/rtwiki.log exists but is empty' }
+  $startupSeen = $false
+  foreach ($line in Get-Content $logPath) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    try { $null = $line | ConvertFrom-Json } catch { throw 'logs/rtwiki.log contains an invalid JSONL line' }
+    $entry = $line | ConvertFrom-Json
+    if ($entry.event -eq 'startup') { $startupSeen = $true }
+  }
+  if (-not $startupSeen) { throw 'startup event missing from logs/rtwiki.log' }
+  Write-Host "LOG OK: logs/rtwiki.log non-empty ($logSize bytes), valid JSONL, startup event present"
+
   # --- Endpoint matrix -------------------------------------------------
   $health = Invoke-WebRequest "$Base/health" -UseBasicParsing
   if ($health.StatusCode -ne 200) { throw "Health returned $($health.StatusCode)" }
@@ -241,6 +258,23 @@ try {
   $released = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
   if ($released) { throw "Port $Port still has a listener after shutdown" }
   Write-Host 'SHUTDOWN OK: clean stop, port released'
+
+  # Post-shutdown log assertions: completion persisted, token never leaked.
+  $finalLogLines = Get-Content $logPath -ErrorAction SilentlyContinue
+  if (-not $finalLogLines) { throw 'logs/rtwiki.log missing or empty after shutdown' }
+  $completeSeen = $false
+  foreach ($line in $finalLogLines) {
+    try { $null = $line | ConvertFrom-Json } catch { throw 'logs/rtwiki.log has an invalid JSONL line after shutdown' }
+    $entry = $line | ConvertFrom-Json
+    if ($entry.event -eq 'shutdown_complete') { $completeSeen = $true }
+  }
+  if (-not $completeSeen) { throw 'shutdown_complete event missing after authorized shutdown' }
+  if ($shutdownToken) {
+    foreach ($line in $finalLogLines) {
+      if ($line.Contains($shutdownToken)) { throw 'Shutdown token leaked into logs/rtwiki.log' }
+    }
+  }
+  Write-Host 'LOG FINAL OK: shutdown_complete persisted; shutdown token absent'
 
   Write-Host 'SMOKE TEST PASSED'
 } catch {
