@@ -249,3 +249,129 @@ describe('page API integration', () => {
     expect(pages.some((p) => p.title.includes('Unicorn'))).toBe(true)
   })
 })
+
+describe('HTML-page content API validation', () => {
+  let tempDir: string
+  let db: ReturnType<typeof getDb>
+  let serverPort: number
+
+  beforeAll(async () => {
+    tempDir = makeTempDir()
+    db = initDatabase(tempDir)
+    await runMigrations(db)
+
+    const server = Bun.serve({
+      fetch: app.fetch,
+      port: 0,
+      hostname: '127.0.0.1'
+    })
+    serverPort = server.port as number
+  })
+
+  afterAll(async () => {
+    await closeDatabase()
+    cleanup(tempDir)
+  })
+
+  const API = () => `http://127.0.0.1:${serverPort}`
+
+  async function createHtmlPage(content?: string): Promise<{ status: number; page?: Page }> {
+    const payload: Record<string, unknown> = { title: `HTML API ${Date.now()}`, pageType: 'html' }
+    if (content !== undefined) {
+      payload.content = content
+    }
+    const res = await fetch(`${API()}/api/pages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const body = (await res.json()) as { page?: Page }
+    return { status: res.status, page: body.page }
+  }
+
+  it('creates an html page without content as the canonical empty document', async () => {
+    const { status, page } = await createHtmlPage()
+    expect(status).toBe(201)
+    expect(page?.pageType).toBe('html')
+    expect(page?.content).toBe('{"version":1,"html":"","css":"","javascript":""}')
+  })
+
+  it('rejects malformed non-empty html content with the structured error format', async () => {
+    const { status } = await createHtmlPage('<div>not json</div>')
+    expect(status).toBe(400)
+  })
+
+  it('creates and reloads populated canonical html content verbatim', async () => {
+    const canonical = '{"version":1,"html":"<p>round trip</p>","css":"p{}","javascript":""}'
+    const { status, page } = await createHtmlPage(canonical)
+    expect(status).toBe(201)
+
+    const getRes = await fetch(`${API()}/api/pages/${page!.id}`)
+    expect(getRes.status).toBe(200)
+    const fetched = (await getRes.json()) as { page: Page }
+    expect(fetched.page.content).toBe(canonical)
+  })
+
+  it('rejects invalid html content on update with a 400', async () => {
+    const { page } = await createHtmlPage()
+    const res = await fetch(`${API()}/api/pages/${page!.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'not canonical json' })
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string }
+    expect(typeof body.error).toBe('string')
+    expect(body.error.length).toBeGreaterThan(0)
+  })
+
+  it('accepts valid canonical html content on update', async () => {
+    const { page } = await createHtmlPage()
+    const next = '{"version":1,"html":"<i>ok</i>","css":"","javascript":""}'
+    const res = await fetch(`${API()}/api/pages/${page!.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: next })
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { page: Page }
+    expect(body.page.content).toBe(next)
+  })
+
+  it('rejects page-type conversion explicitly', async () => {
+    const { page } = await createHtmlPage()
+    const res = await fetch(`${API()}/api/pages/${page!.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Renamed', pageType: 'rich' })
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string }
+    expect(body.error).toContain('Page type conversion')
+  })
+
+  it('returns 413 for oversized request bodies before parsing', async () => {
+    const oversized = JSON.stringify({
+      title: 'Too Big',
+      pageType: 'html',
+      content: `{"version":1,"html":"${'a'.repeat(5 * 1024 * 1024)}","css":"","javascript":""}`
+    })
+    const res = await fetch(`${API()}/api/pages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: oversized
+    })
+    expect(res.status).toBe(413)
+  })
+
+  it('returns 400 for malformed JSON bodies', async () => {
+    const res = await fetch(`${API()}/api/pages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not json'
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string }
+    expect(body.error).toBe('Invalid JSON')
+  })
+})

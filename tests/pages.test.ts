@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDatabase, type getDb, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
+import * as repo from '../src/server/repositories/page-repository.js'
 import * as service from '../src/server/services/page-service.js'
 
 function makeTempDir(): string {
@@ -85,10 +86,15 @@ describe('page CRUD', () => {
     expect(updated?.content).toBe('v2')
   })
 
-  it('updates page type', () => {
-    const page = service.createPage(db, { title: 'Type Test', pageType: 'rich', content: '' })
-    const updated = service.updatePage(db, page.id, { pageType: 'html' })
-    expect(updated?.pageType).toBe('html')
+  it('drops pageType from update input (no conversion in Phase 4A)', async () => {
+    const { UpdatePageSchema } = await import('@rtwiki/shared/schemas/pages')
+    const parsed = UpdatePageSchema.safeParse({ title: 'New Title', pageType: 'html' })
+    // The schema strips the field silently; the route layer rejects its
+    // presence explicitly (see pages-controller API tests).
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect('pageType' in parsed.data).toBe(false)
+    }
   })
 
   it('returns null when updating non-existent page', () => {
@@ -228,7 +234,7 @@ describe('rich-content JSON round trip', () => {
   })
 })
 
-describe('HTML content round trip', () => {
+describe('HTML-page canonical content lifecycle', () => {
   let tempDir: string
   let db: ReturnType<typeof getDb>
 
@@ -243,25 +249,93 @@ describe('HTML content round trip', () => {
     cleanup(tempDir)
   })
 
-  it('stores and retrieves HTML page content', () => {
-    const htmlContent = JSON.stringify({
-      html: '<h1>Title</h1><p>Body</p>',
-      css: 'body { color: red; }',
-      js: 'console.log("hi")',
-      jsEnabled: false,
-      schemaVersion: 1,
-      sandboxPolicyVersion: 1
-    })
-    const page = service.createPage(db, {
-      title: 'HTML Test',
-      pageType: 'html',
-      content: htmlContent
-    })
+  it('lenient create: omitted content becomes the canonical empty document', () => {
+    const page = service.createPage(db, { title: 'Empty HTML', pageType: 'html', content: '' })
+    expect(page.pageType).toBe('html')
+    expect(page.content).toBe('{"version":1,"html":"","css":"","javascript":""}')
+  })
+
+  it('stores and retrieves populated canonical content verbatim', () => {
+    // Key order and formatting are preserved exactly as submitted.
+    const canonical = '{"version":1,"html":"<h1>Title</h1>","css":"h1{color:red}","javascript":""}'
+    const page = service.createPage(db, { title: 'HTML Test', pageType: 'html', content: canonical })
     const fetched = service.getPage(db, page.id)
     expect(fetched?.pageType).toBe('html')
-    const parsed = JSON.parse(fetched?.content as string)
-    expect(parsed.html).toBe('<h1>Title</h1><p>Body</p>')
-    expect(parsed.jsEnabled).toBe(false)
+    expect(fetched?.content).toBe(canonical)
+  })
+
+  it('rejects malformed non-empty content on create', () => {
+    expect(() =>
+      service.createPage(db, { title: 'Bad HTML', pageType: 'html', content: '<div>not json</div>' })
+    ).toThrow(service.PageValidationError)
+  })
+
+  it('rejects non-canonical JSON shapes on create (wrong version, unknown keys)', () => {
+    expect(() =>
+      service.createPage(db, {
+        title: 'Wrong Version',
+        pageType: 'html',
+        content: '{"version":2,"html":"","css":"","javascript":""}'
+      })
+    ).toThrow(service.PageValidationError)
+    expect(() =>
+      service.createPage(db, {
+        title: 'Unknown Keys',
+        pageType: 'html',
+        content:
+          '{"version":1,"html":"","css":"","javascript":"","jsEnabled":false,"schemaVersion":1}'
+      })
+    ).toThrow(service.PageValidationError)
+  })
+
+  it('validates strictly on update and stores valid content verbatim', () => {
+    const page = service.createPage(db, { title: 'Update HTML', pageType: 'html', content: '' })
+    expect(() =>
+      service.updatePage(db, page.id, { content: '{"version":9,"html":"","css":"","javascript":""}' })
+    ).toThrow(service.PageValidationError)
+
+    const next = '{"version":1,"html":"<p>v2</p>","css":"","javascript":"console.log(2)"}'
+    const updated = service.updatePage(db, page.id, { content: next })
+    expect(updated?.content).toBe(next)
+  })
+
+  it('leaves rich-page content validation unchanged (any string accepted)', () => {
+    const page = service.createPage(db, { title: 'Rich Any', pageType: 'rich', content: '<raw>' })
+    expect(page.content).toBe('<raw>')
+    const updated = service.updatePage(db, page.id, { content: 'still anything' })
+    expect(updated?.content).toBe('still anything')
+  })
+
+  it('preserves stored legacy/malformed content verbatim (validate-on-write only)', () => {
+    // Simulate legacy rows written before canonical validation existed by
+    // inserting through the repository directly.
+    const legacy = service.createPage(db, { title: 'Legacy', pageType: 'rich', content: '' })
+    repo.createPage(db, crypto.randomUUID(), 'Legacy HTML', 'html', '<p>pre-canonical garbage</p>')
+
+    // Read returns the stored bytes untouched.
+    const listed = service.listPages(db, { search: 'Legacy HTML' })
+    const legacyPage = listed.pages.find((p) => p.title === 'Legacy HTML')
+    expect(legacyPage?.content).toBe('<p>pre-canonical garbage</p>')
+
+    // Title-only updates succeed without rewriting content.
+    const renamed = service.updatePage(db, legacyPage!.id, { title: 'Legacy Renamed' })
+    expect(renamed?.content).toBe('<p>pre-canonical garbage</p>')
+
+    // Duplicates copy the malformed content verbatim.
+    const copy = service.duplicatePage(db, legacyPage!.id)
+    expect(copy?.content).toBe('<p>pre-canonical garbage</p>')
+
+    void legacy
+  })
+
+  it('duplicates and deletes html pages unchanged', () => {
+    const canonical = '{"version":1,"html":"<b>x</b>","css":"","javascript":""}'
+    const page = service.createPage(db, { title: 'Dup Delete', pageType: 'html', content: canonical })
+    const copy = service.duplicatePage(db, page.id)
+    expect(copy?.content).toBe(canonical)
+    expect(copy?.pageType).toBe('html')
+    expect(service.softDeletePage(db, page.id)).toBe(true)
+    expect(service.getPage(db, page.id)).toBeNull()
   })
 })
 

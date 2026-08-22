@@ -20,7 +20,7 @@ export interface CreatePageRequest {
 export interface UpdatePageRequest {
   title?: string
   content?: string
-  pageType?: PageType
+  // pageType deliberately absent: conversion is not supported in Phase 4A.
 }
 
 export interface PageListResponse {

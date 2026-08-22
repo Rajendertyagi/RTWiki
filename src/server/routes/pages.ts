@@ -1,7 +1,51 @@
+import { MAX_PAGE_JSON_BODY_BYTES } from '@rtwiki/shared/constants'
 import { CreatePageSchema, UpdatePageSchema } from '@rtwiki/shared/schemas/pages'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { getDb } from '../database/index.js'
 import * as service from '../services/page-service.js'
+
+const requestTextEncoder = new TextEncoder()
+
+type BodyResult = { ok: true; body: unknown } | { ok: false; handled: false }
+type HandledBodyResult = { ok: false; handled: true; response: Response }
+
+/**
+ * Reads the request body with an enforced byte ceiling before any parsing.
+ *
+ * The Content-Length header is checked first (cheap rejection), then the raw
+ * byte length of the actually-read text (authoritative). Malformed JSON is a
+ * client error (400), not a server fault.
+ */
+async function readJsonBody(c: Context): Promise<BodyResult | HandledBodyResult> {
+  const contentLength = Number(c.req.header('content-length') ?? '0')
+  if (Number.isFinite(contentLength) && contentLength > MAX_PAGE_JSON_BODY_BYTES) {
+    return {
+      ok: false,
+      handled: true,
+      response: c.json({ error: 'Request body too large' }, 413)
+    }
+  }
+
+  const raw = await c.req.text()
+  if (requestTextEncoder.encode(raw).byteLength > MAX_PAGE_JSON_BODY_BYTES) {
+    return {
+      ok: false,
+      handled: true,
+      response: c.json({ error: 'Request body too large' }, 413)
+    }
+  }
+
+  try {
+    return { ok: true, body: JSON.parse(raw) as unknown }
+  } catch {
+    return {
+      ok: false,
+      handled: true,
+      response: c.json({ error: 'Invalid JSON' }, 400)
+    }
+  }
+}
 
 export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono {
   const routes = new Hono()
@@ -21,9 +65,15 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
   })
 
   routes.post('/', async (c) => {
+    const bodyResult = await readJsonBody(c)
+    if (!bodyResult.ok && bodyResult.handled) {
+      return bodyResult.response
+    }
+    if (!bodyResult.ok) {
+      return c.json({ error: 'Invalid input' }, 400)
+    }
     try {
-      const body = await c.req.json()
-      const parsed = CreatePageSchema.safeParse(body)
+      const parsed = CreatePageSchema.safeParse(bodyResult.body)
       if (!parsed.success) {
         return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
       }
@@ -31,6 +81,9 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       const page = service.createPage(db, parsed.data)
       return c.json({ page }, 201)
     } catch (err) {
+      if (err instanceof service.PageValidationError) {
+        return c.json({ error: err.message }, 400)
+      }
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
     }
@@ -52,9 +105,27 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
   })
 
   routes.patch('/:id', async (c) => {
+    const bodyResult = await readJsonBody(c)
+    if (!bodyResult.ok && bodyResult.handled) {
+      return bodyResult.response
+    }
+    if (!bodyResult.ok) {
+      return c.json({ error: 'Invalid input' }, 400)
+    }
+
+    // Page-type conversion is not supported in Phase 4A. The shared update
+    // schema strips unknown keys silently, so presence is rejected here to
+    // give clients an explicit, actionable error.
+    if (
+      bodyResult.body !== null &&
+      typeof bodyResult.body === 'object' &&
+      'pageType' in bodyResult.body
+    ) {
+      return c.json({ error: 'Page type conversion is not supported' }, 400)
+    }
+
     try {
-      const body = await c.req.json()
-      const parsed = UpdatePageSchema.safeParse(body)
+      const parsed = UpdatePageSchema.safeParse(bodyResult.body)
       if (!parsed.success) {
         return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
       }
@@ -66,6 +137,9 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       }
       return c.json({ page })
     } catch (err) {
+      if (err instanceof service.PageValidationError) {
+        return c.json({ error: err.message }, 400)
+      }
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
     }
