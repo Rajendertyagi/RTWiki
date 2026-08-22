@@ -37,12 +37,17 @@ export function usePagesController(): PagesController {
   const mutationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadPages = useCallback((query: string | undefined, signal?: AbortSignal) => {
+    // Sequence token: a newer load (e.g. the refresh after createPage) must
+    // never be overwritten by an older in-flight response resolving later —
+    // that stale snapshot once evicted a just-created page from the list and
+    // kicked the user back to the dashboard.
+    const seq = ++searchSeqRef.current
     setLoading(true)
     setError(null)
     api
       .listPages(signal, query ? { q: query } : undefined)
       .then((result) => {
-        if (!signal?.aborted) {
+        if (seq === searchSeqRef.current && !signal?.aborted) {
           setPages(result.pages)
           setLoading(false)
         }
