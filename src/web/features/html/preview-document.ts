@@ -115,6 +115,21 @@ const BOOTSTRAP_SCRIPT = [
 export class PreviewBuildError extends Error {}
 
 /**
+ * Per-preview channel ID: 16 cryptographically random bytes, hex-encoded.
+ * Lives in this pure module so tests and non-DOM consumers never need to
+ * import the React component graph.
+ */
+export function generateChannelId(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  let id = ''
+  for (const byte of bytes) {
+    id += byte.toString(16).padStart(2, '0')
+  }
+  return id
+}
+
+/**
  * Builds the complete srcdoc string. Throws PreviewBuildError on invalid
  * inputs (bad nonce/channel) — callers must render recoverable UI.
  */

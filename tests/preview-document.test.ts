@@ -4,9 +4,9 @@ import {
   buildPreviewDocument,
   escapeScriptContent,
   escapeStyleContent,
+  generateChannelId,
   PreviewBuildError
 } from '../src/web/features/html/preview-document.js'
-import { generateChannelId } from '../src/web/features/html/preview-frame.js'
 
 const NONCE = 'AbCdEf123456='
 const CHANNEL = 'a'.repeat(32)
@@ -113,8 +113,9 @@ describe('preview document construction', () => {
   it('omits empty CSS and JavaScript blocks entirely', () => {
     const doc = build({ css: '   ', javascript: '' })
     expect(doc).not.toContain('<style>')
-    expect(doc).not.toContain('<script nonce')
-    // Bootstrap is always present.
+    // Only the ever-present bootstrap script remains — no JS-pane script.
+    const scripts = [...doc.matchAll(/<script nonce="([^"]+)">/g)]
+    expect(scripts.length).toBe(1)
     expect(doc).toContain('rtwiki-preview-ready')
   })
 

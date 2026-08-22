@@ -6,7 +6,7 @@ import { UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
 import classes from './html-preview.module.css'
 import { normalizePreviewHtml } from './normalize-html.js'
-import { buildPreviewDocument } from './preview-document.js'
+import { buildPreviewDocument, generateChannelId } from './preview-document.js'
 import { isValidPreviewMessage, type PreviewMessage } from './preview-messages.js'
 
 /**
@@ -20,17 +20,6 @@ import { isValidPreviewMessage, type PreviewMessage } from './preview-messages.j
  *   source identity, strict schema, and the exact per-preview channel ID.
  *   Anything else is silently ignored — never logged, never surfaced.
  */
-
-/** 16 cryptographically random bytes, hex-encoded (32 chars). */
-export function generateChannelId(): string {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  let id = ''
-  for (const byte of bytes) {
-    id += byte.toString(16).padStart(2, '0')
-  }
-  return id
-}
 
 export interface PreviewFrameProps {
   content: HtmlPageContent
