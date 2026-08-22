@@ -79,10 +79,18 @@ export default function HtmlEditorWorkspace({
 
   useEffect(() => {
     if (onSaveStateChange) {
-      onSaveStateChange({
-        isDirty: status !== 'idle' && status !== 'saved',
-        saveState: status === 'idle' ? 'clean' : status
-      })
+      // Map the autosave lifecycle onto the header's display states: a dirty
+      // page simply hasn't started saving yet, so it presents as clean there
+      // while isDirty carries the real signal.
+      const saveState =
+        status === 'saving'
+          ? ('saving' as const)
+          : status === 'saved'
+            ? ('saved' as const)
+            : status === 'error'
+              ? ('error' as const)
+              : ('clean' as const)
+      onSaveStateChange({ isDirty: status !== 'idle' && status !== 'saved', saveState })
     }
   }, [status, onSaveStateChange])
 
