@@ -72,7 +72,7 @@ export default function HtmlEditorWorkspace({
 
   // The autosave hook is content-agnostic: it persists whatever string we
   // hand it — here always canonical v2 JSON.
-  const { status, error, notifyEdit, save, retry, flush } = useAutosave({
+  const { status, notifyEdit, save, flush } = useAutosave({
     pageId,
     onSave: handleSave
   })
