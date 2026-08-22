@@ -44,8 +44,9 @@ The following are **not** in scope for the Visual MVP:
 | 0 | Discovery and Tracker | Owner approved | 0c1010b | #71 | — |
 | 1 | Page Persistence and CRUD API | Owner approved | fe8f418 | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) | build/#79 |
 | 2 | Visual Workspace and Page Management | Correction 3 pending CI | 00c3678 | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) | RTWiki-0.1.0-windows-x64 |
-| 3 | Rich Note Editor and Autosave | Not started | — | — | — |
-| 4 | Sandboxed HTML/CSS/JavaScript Pages | Not started | — | — | — |
+| 3 | Rich Note Editor and Autosave | CI verified | 405dc01b | [#32570059083](https://github.com/Rajendertyagi/RTWiki/actions/runs/32570059083) | RTWiki-0.1.0-windows-x64 |
+| 4A | Secure HTML Page Foundation (preview, no editor UI) | Implemented — awaiting CI | 228daa1 | pending first full run | pending |
+| 4B | HTML/CSS/JS Editor Tabs and Live Editing | Not started | — | — | — |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
 
 ### Status Definitions
@@ -669,3 +670,169 @@ The logger buffered up to 100 lines in memory and flushed via `BunFile.write()`,
 - Unit/integration suites added for logger, path sanitization, lifecycle persistence, client-error endpoint and reporter semantics; Playwright suite extended to 11 scenarios including correlation-id-in-log assertions; `bun test` isolation from Playwright via `.pwspec.ts`.
 - Green end to end: run [32569818202](https://github.com/Rajendertyagi/RTWiki/actions/runs/32569818202) (Verify + Browser tests + Windows smoke all success). Artifact `RTWiki-0.1.0-windows-x64`, SHA-256 `84D46EB75ABF3EC5C269F9FBC7CB0EC47EABD35CC88FCBE78ECFB2801A934B8E`. Smoke evidence: `LOG OK ... valid JSONL, startup event present`, `LOG FINAL OK: shutdown_complete persisted; shutdown token absent`.
 - Phase 4 has not started.
+
+## Phase 4A — Secure HTML Page Foundation
+
+**Branch:** `feature/html-page-editor` (created from exactly `405dc01b`, the CI-verified Phase 3 base, run [32570059083](https://github.com/Rajendertyagi/RTWiki/actions/runs/32570059083)).
+**Status:** Implemented — awaiting first full CI run. Phase 4B (visible editor UI) has **not** been started.
+
+### Scope
+
+Canonical HTML-page content format, server-side persistence validation,
+parse5-based search extraction, per-response CSP nonce infrastructure, and a
+modular sandboxed preview builder with secure parent↔frame messaging. No
+CodeMirror, no editor tabs, no split-pane UI — opening an HTML page shows the
+secure read-only preview of stored content.
+
+### Canonical Format (single source of truth)
+
+`src/shared/schemas/html-content.ts` — imported by both frontend and server;
+no duplicate schemas:
+
+```json
+{ "version": 1, "html": "", "css": "", "javascript": "" }
+```
+
+- Exact supported version: `z.literal(1)`. Strings only. Unknown keys
+  **rejected** (`z.strictObject`) — silent key loss can never masquerade as a
+  successful save. Empty HTML/CSS/JS is valid.
+- UTF-8 **byte** limits via `TextEncoder` (not UTF-16 code units), owner-approved:
+  HTML 2 MiB, CSS 512 KiB, JavaScript 512 KiB; page create/update JSON bodies
+  capped at 4 MiB before parsing (`MAX_PAGE_JSON_BODY_BYTES`). Rich Note
+  content paths are untouched.
+
+### Persistence Validation
+
+- Create: omitted or empty content for `pageType: "html"` becomes the
+  canonical empty document (lenient, owner decision); any other value must be
+  canonical JSON and is stored verbatim.
+- Update: strict — canonical JSON required; stored verbatim on success.
+- Page-type conversion is rejected explicitly (400) in Phase 4A; the update
+  schema no longer carries `pageType`.
+- Invalid content returns the existing structured `{ error }` format (400);
+  oversized bodies return 413; malformed JSON returns 400.
+- Legacy/malformed stored content: validate-on-write only. Reads return stored
+  bytes verbatim, duplicates copy verbatim, title updates never rewrite
+  content — nothing is silently overwritten or migrated.
+
+### Search Behavior
+
+`src/server/services/search-extraction.ts` parses authored HTML with
+**parse5 8.0.1** (WHATWG-compliant tree walk — no regex parsing): readable
+body text is indexed; `script`, `style`, `template` subtrees, comments, and
+head metadata are excluded; entities arrive decoded from parse5; whitespace is
+collapsed; output capped at 100k chars. Rich pages keep their exact previous
+behavior (raw stored JSON indexed). The index refreshes on create/update/
+duplicate and is removed on delete. Malformed legacy HTML content indexes as
+empty rather than leaking JSON punctuation into results.
+
+### Security Model — including a standards conflict and its authorized resolution
+
+**Conflict discovered:** the mandated `<iframe sandbox="allow-scripts"
+srcdoc="...">` design inherits the application's own CSP header
+(`script-src 'self'`), because srcdoc frames clone the parent's policy
+container ([HTML Standard](https://html.spec.whatwg.org/multipage/origin.html#policy-containers);
+[webappsec-csp#700](https://github.com/w3c/webappsec-csp/issues/700) — closed
+wontfix: a srcdoc child can never relax its parent's policy;
+[CVE-2017-7788](https://nvd.nist.gov/vuln/detail/cve-2017-7788) proves modern
+browsers enforce inheritance even when sandboxed). A client-generated nonce
+inside the child cannot satisfy the inherited policy, so the JS pane could
+never execute — the design contradicted itself.
+
+**Authorized resolution (Option A, owner-approved):** Hono's official
+`secureHeaders` + `NONCE` middleware generates a cryptographically random
+per-response nonce (16 bytes, `crypto.getRandomValues()`, base64), places it
+in the CSP header, and exposes it to handlers; both HTML-serving paths
+(direct `/` and SPA fallback) inject it as non-executable
+`<meta name="rtwiki-preview-nonce">`. Preview bootstrap and JavaScript-pane
+scripts carry that exact nonce, satisfying inherited and child policies
+simultaneously. Precedent: Cap.js resolved an identical failure this way
+([cap#229](https://github.com/tiagozip/cap/issues/229)).
+
+Additional guarantees:
+
+- Child meta CSP (stricter, intersects with inherited policy):
+  `default-src 'none'; script-src 'nonce-…'; script-src-attr 'none';
+  style-src 'unsafe-inline'; img-src data:; connect-src/font-src/media-src/
+  object-src/frame-src/worker-src/base-uri/form-action 'none'`.
+  `img-src` stays `data:`-only; no `blob:` anywhere (owner decision).
+- Sandbox attribute is exactly `allow-scripts`; never allow-same-origin,
+  allow-top-navigation, allow-popups, or allow-forms.
+- Closing `</script` / `</style` sequences escaped case-insensitively; no
+  eval, no `new Function`, no unsafe-eval, no script unsafe-inline.
+- Preview normalization uses browser `DOMParser` on a copy: removes `script`,
+  `iframe`, `object`, `embed`, `base`, external stylesheets,
+  `meta[http-equiv]`, and inline `on*` attributes; complete documents are
+  extracted head/body-wise and never nest `<html>` inside `<html>`. Stored
+  source is never modified.
+- postMessage: opaque origin forces `targetOrigin="*"`; every message must
+  pass three checks — `event.source === iframe.contentWindow`, strict Zod
+  schema, exact per-preview channel ID (16 random bytes hex, regenerated per
+  rebuild). Wrong source/schema/channel is silently ignored, never logged.
+- Errors report only safe event type, operation, sanitized error name/message
+  (canned), top-frame location, correlation/channel ID — never HTML/CSS/JS
+  source or titles. Builder failure renders recoverable UI (Retry), never a
+  blanked app; missing nonce fails closed.
+
+### Tests and CI
+
+- Unit/integration (`bun test`): schema validity/limits/strictness
+  (`tests/html-content.test.ts`), persistence lifecycle incl. lenient create,
+  strict update, legacy preservation, API 400/413 semantics
+  (`tests/pages.test.ts`, `tests/pages-controller.test.ts`), parse5 extraction
+  (`tests/search-extraction.test.ts`), preview-document construction and
+  escaping (`tests/preview-document.test.ts`), message schema
+  (`tests/preview-messages.test.ts`), nonce pairing against the real app
+  (`tests/nonce.test.ts`).
+- Real-Chromium security suite (`tests/browser/html-preview.pwspec.ts`,
+  Playwright): nonce pairing/uniqueness across responses; JS-pane execution;
+  HTML-pane scripts stripped; inline handlers dead; eval blocked; unnonced
+  injected scripts blocked; external scripts, fetch, WebSocket, nested frames
+  blocked (proven via `securitypolicyviolation` events recorded inside the
+  frame); form submission and anchor/top navigation blocked; sandbox attribute
+  exactly `allow-scripts`; valid current-channel message accepted while wrong-
+  channel, stale-channel, and spoofed-source messages are rejected; sanitized
+  runtime-error surfacing; stripped-nonce fail-closed recovery UI with
+  sanitized `client_error` log entry.
+- CI jobs unchanged (Verify → Browser tests → Windows smoke → artifact);
+  frozen-lockfile install throughout.
+
+### Dependency Evidence
+
+- `parse5@8.0.1` pinned exact, direct production dependency. npm registry:
+  v8.0.1 published 2026-04-19, MIT, maintained by the Cheerio/rehype/Lit team
+  (inikulin/parse5), relied on by jsdom, Angular, Lit, Cheerio; 0 known
+  vulnerabilities (Snyk).
+- Single declared runtime dependency: `entities@^8.0.0` (entity decoding),
+  visible in `bun.lock`; never imported directly by RTWiki code.
+- Lockfile updated without local tooling: temporary push-triggered workflow
+  (branch-scoped, `contents: read`, `bun install --lockfile-only`, artifact
+  upload only) produced `bun.lock`; the artifact was verified to contain only
+  the expected additions and committed normally; the temporary workflow was
+  deleted in the same corrective push (`5b0fa16`). No self-pushing workflow
+  existed at any point; no GitHub token was used or stored.
+
+### Commits
+
+| SHA | Message |
+|-----|---------|
+| 06185a2 | chore(deps): declare parse5 8.0.1 and temporary lockfile-artifact workflow |
+| 5b0fa16 | chore(deps): sync bun.lock for parse5 8.0.1 and remove temporary lockfile workflow |
+| 548112d | feat: canonical HTML-page content schema with UTF-8 byte limits |
+| 25e35bf | feat: validate HTML-page content in persistence flow with lenient create and strict updates |
+| c71841b | feat: extract searchable text from HTML pages via parse5 |
+| 6e2ae53 | feat: per-response CSP nonce via Hono secureHeaders injected into SPA HTML |
+| b3dc2af | feat: sandboxed HTML preview builder with nonce'd scripts and channel messaging |
+| f46300f | chore: expose preview status attribute for browser-test observability |
+| 228daa1 | test: real-Chromium security suite for sandboxed HTML previews |
+
+Intermediate note: run #244 on `06185a2` failed at frozen-lockfile install —
+expected and documented before the lockfile landed.
+
+### Remaining Phase 4B Work (not started)
+
+Visible editing surface only: CodeMirror-based HTML/CSS/JavaScript tabs,
+split-pane live editing, per-page JavaScript enable/disable toggle, paste and
+.html import through the shared pipeline, full-page preview mode, revisit of
+the page-type-conversion restriction. All Phase 4A foundations above are
+built to be consumed unchanged by 4B.
