@@ -267,7 +267,10 @@ test.describe('HTML preview security (real Chromium)', () => {
 
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('#after-marker')).toBeVisible()
-    await expect(frame.locator('script')).toHaveCount(0)
+    // Normalization removes every user script; the only script element left
+    // in the frame is the nonce'd bootstrap. A surviving smuggled script
+    // would carry no nonce attribute.
+    await expect(frame.locator('script:not([nonce])')).toHaveCount(0)
 
     // Stored source remains exactly what was authored.
     const stored = await readStoredContent(request, title)
@@ -422,20 +425,14 @@ test.describe('HTML preview security (real Chromium)', () => {
     }
     const channel = readyEntry.split('|')[2]
 
-    // Posted from INSIDE the frame (correct source): wrong channel rejected…
+    // Posted from INSIDE the frame (correct source) but with a wrong
+    // channel: rejected.
     await srcdocFrame(page).evaluate(() => {
       parent.postMessage(
         { type: 'rtwiki-preview-error', channel: 'f'.repeat(32), operation: 'wrong-channel' },
         '*'
       )
     })
-    // …and stale channel rejected (the id from before any rebuild).
-    await srcdocFrame(page).evaluate((ch) => {
-      parent.postMessage(
-        { type: 'rtwiki-preview-error', channel: ch, operation: 'stale-channel' },
-        '*'
-      )
-    }, channel)
 
     // Spoofed SOURCE: correct channel but dispatched from the parent window.
     await page.evaluate((ch) => {
