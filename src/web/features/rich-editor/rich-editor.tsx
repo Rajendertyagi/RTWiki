@@ -1,6 +1,6 @@
 import type { PartialBlock } from '@blocknote/core'
 import { BlockNoteView } from '@blocknote/mantine'
-import { FormattingToolbar, useCreateBlockNote } from '@blocknote/react'
+import { useCreateBlockNote } from '@blocknote/react'
 import { useComputedColorScheme } from '@mantine/core'
 import type { AutosaveStatus } from './autosave-controller.js'
 import '@blocknote/core/fonts/inter.css'
@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { updatePage } from '../../services/pages-api.js'
 import { createDefaultDocument, parseStoredDocument } from './document.js'
+import { EditorErrorBoundary } from './editor-error-boundary.js'
 import classes from './rich-editor.module.css'
 import { useAutosave } from './use-autosave.js'
 
@@ -34,6 +35,7 @@ export function RichEditor({
   const parseResult = parseStoredDocument(storedContent)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [hasReset, setHasReset] = useState(false)
+  const [resetSeq, setResetSeq] = useState(0)
 
   const handleSave = async (pid: string, content: string): Promise<void> => {
     await updatePage(pid, { content })
@@ -65,12 +67,12 @@ export function RichEditor({
     setShowResetConfirm(false)
   }, [pageId])
 
-  // Handle reset after malformed content
+  // Handle reset after malformed content or a contained editor failure.
   const handleReset = (): void => {
     setShowResetConfirm(false)
     setHasReset(true)
-    const defaultContent = JSON.stringify(createDefaultDocument())
-    notifyEdit(defaultContent)
+    setResetSeq((seq) => seq + 1)
+    notifyEdit(JSON.stringify(createDefaultDocument()))
   }
 
   if (parseResult.status === 'error' && !hasReset) {
@@ -132,14 +134,16 @@ export function RichEditor({
 
   return (
     <div className={classes.editorRoot} data-testid="rich-editor">
-      <RichEditorInner
-        key={pageId}
-        pageId={pageId}
-        initialDocument={initialDocument}
-        notifyEdit={notifyEdit}
-        status={status}
-        error={error}
-      />
+      <EditorErrorBoundary onReset={handleReset}>
+        <RichEditorInner
+          key={`${pageId}-${resetSeq}`}
+          pageId={pageId}
+          initialDocument={initialDocument}
+          notifyEdit={notifyEdit}
+          status={status}
+          error={error}
+        />
+      </EditorErrorBoundary>
     </div>
   )
 }
@@ -186,10 +190,6 @@ function RichEditorInner({
           <Text size="sm">{error ?? UI_TEXT.saveFailedRetryHint}</Text>
         </Alert>
       ) : null}
-
-      <div className={classes.toolbarArea} role="toolbar" aria-label="Permanent formatting toolbar">
-        <FormattingToolbar />
-      </div>
 
       <div className={classes.blockNoteWrapper}>
         <BlockNoteView editor={editor} theme={blocknoteTheme} />

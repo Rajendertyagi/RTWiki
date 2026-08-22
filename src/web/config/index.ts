@@ -64,6 +64,9 @@ export const UI_TEXT = {
   htmlPlaceholderHint: 'HTML pages remain viewable as stored content.',
   richEditorLoadError:
     'This Rich Note could not be loaded. The stored content appears to be corrupted.',
+  richEditorCrashTitle: 'The editor encountered a problem',
+  richEditorCrashMessage:
+    'The rich text editor stopped unexpectedly. Your saved content is safe.',
   richEditorPreserveNotice:
     'Original content has been preserved. Reset the document to start fresh.',
   richEditorResetButton: 'Reset document',

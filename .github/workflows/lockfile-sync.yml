@@ -1,0 +1,42 @@
+name: Lockfile sync
+
+# Resolves bun.lock against package.json using GitHub-hosted automation only.
+# When a push changes dependencies without an updated lockfile, this workflow
+# installs with Bun (which rewrites bun.lock) and commits the result, so the
+# frozen-lockfile install in Build and Package can succeed on the next run.
+on:
+  push:
+    branches: [main, 'feature/**']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lockfile-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync bun.lock with package.json
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.0"
+      - name: Install (updates bun.lock when package.json changed)
+        run: bun install
+      - name: Commit updated lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- bun.lock; then
+            echo "bun.lock already in sync"
+            exit 0
+          fi
+          git config user.name "rtwiki-lockfile-bot"
+          git config user.email "rtwiki-lockfile-bot@users.noreply.github.com"
+          git add bun.lock
+          git commit -m "chore: sync bun.lock with package.json"
+          git push

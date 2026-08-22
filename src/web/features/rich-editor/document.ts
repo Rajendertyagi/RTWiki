@@ -11,10 +11,12 @@ export interface DocumentParseResult {
   errorMessage?: string
 }
 
+// Canonical empty BlockNote document: a single paragraph without inline
+// content. Omitting `content` is the valid PartialBlock form for an empty
+// paragraph (verified against @blocknote/core 0.54 typings and docs).
 const DEFAULT_DOCUMENT: BlockNoteDocument = [
   {
-    type: 'paragraph',
-    content: []
+    type: 'paragraph'
   }
 ]
 
