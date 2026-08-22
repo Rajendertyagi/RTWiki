@@ -50,6 +50,7 @@ export function useAutosave(options: UseAutosaveOptions): {
 
   // Reset status when page changes
   useEffect(() => {
+    void pageId
     setStatus('idle')
     setError(null)
   }, [pageId])
