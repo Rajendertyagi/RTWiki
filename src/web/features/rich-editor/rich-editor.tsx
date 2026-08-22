@@ -20,6 +20,8 @@ interface RichEditorProps {
   pageId: string
   storedContent: string
   pageTitle: string
+  /** Persists content; when provided it also syncs the pages list. */
+  onSaveContent?: (id: string, content: string) => Promise<boolean>
   /** Returns to the pages dashboard from recovery UIs. */
   onBack?: () => void
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
@@ -32,6 +34,7 @@ interface RichEditorProps {
 export function RichEditor({
   pageId,
   storedContent,
+  onSaveContent,
   onBack,
   onFlushRef,
   onSaveStateChange
@@ -42,6 +45,11 @@ export function RichEditor({
   const [resetSeq, setResetSeq] = useState(0)
 
   const handleSave = async (pid: string, content: string): Promise<void> => {
+    if (onSaveContent) {
+      const ok = await onSaveContent(pid, content)
+      if (!ok) throw new Error('Failed to save')
+      return
+    }
     await updatePage(pid, { content })
   }
 

@@ -13,6 +13,8 @@ export interface PagesController {
   setSearchQuery: (query: string) => void
   selectPage: (id: string | null) => void
   createPage: (title: string, pageType: PageType) => Promise<Page | null>
+  /** Persists editor content and merges the server-returned page into local state. */
+  savePageContent: (id: string, content: string) => Promise<boolean>
   renamePage: (id: string, title: string) => Promise<boolean>
   duplicatePage: (id: string) => Promise<Page | null>
   deletePage: (id: string) => Promise<boolean>
@@ -170,6 +172,22 @@ export function usePagesController(): PagesController {
     [refreshPages, scheduleReset]
   )
 
+  const savePageContent = useCallback(
+    async (id: string, content: string): Promise<boolean> => {
+      try {
+        const updated = await api.updatePage(id, { content })
+        // Merge the server-returned page so a later reopen (without a full
+        // reload) reads the persisted content, not a stale list snapshot.
+        setPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+        setSelectedPage((prev) => (prev && prev.id === updated.id ? updated : prev))
+        return true
+      } catch {
+        return false
+      }
+    },
+    []
+  )
+
   const renamePage = useCallback(
     async (id: string, title: string): Promise<boolean> => {
       setMutationStatus('saving')
@@ -244,6 +262,7 @@ export function usePagesController(): PagesController {
     setSearchQuery,
     selectPage,
     createPage,
+    savePageContent,
     renamePage,
     duplicatePage,
     deletePage,

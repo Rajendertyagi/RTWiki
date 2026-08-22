@@ -7,6 +7,8 @@ import classes from './page-workspace.module.css'
 
 interface PageWorkspaceProps {
   page: Page
+  /** Persists editor content and syncs the pages list. */
+  onSaveContent?: (id: string, content: string) => Promise<boolean>
   isDirty: boolean
   saveState: 'clean' | 'saving' | 'saved' | 'error'
   onSave: () => Promise<boolean>
@@ -24,6 +26,7 @@ interface PageWorkspaceProps {
 
 export function PageWorkspace({
   page,
+  onSaveContent,
   isDirty,
   saveState,
   onSave,
@@ -57,6 +60,7 @@ export function PageWorkspace({
             pageId={page.id}
             storedContent={page.content}
             pageTitle={page.title}
+            onSaveContent={onSaveContent}
             onBack={onBack}
             onFlushRef={onFlushRef}
             onSaveStateChange={onSaveStateChange}

@@ -264,6 +264,7 @@ export function App(): JSX.Element {
           {controller.selectedPage ? (
             <PageWorkspace
               page={controller.selectedPage}
+              onSaveContent={controller.savePageContent}
               isDirty={isDirty}
               saveState={saveState}
               onSave={handleSave}
