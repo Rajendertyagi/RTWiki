@@ -115,10 +115,13 @@ describe('preview document construction', () => {
     // The real closing tag appears only after the complete CSS rule.
     const styleEnd = doc.indexOf('</style>')
     expect(styleEnd).toBeGreaterThan(doc.indexOf('"; }'))
-    // Both dangerous sequences inside the CSS text are escaped, not raw.
+    // Both dangerous properties are prevented: the injected closing style
+    // sequence is escaped, and the raw `</script>` text inside the style
+    // block stays inert (a style element is parsed as raw text until its
+    // own — single, real — closing tag, proven by the assertions above).
     const headSection = doc.slice(0, styleEnd)
     expect(headSection).toContain('<\\/style>')
-    expect(headSection).toContain('<\\/script>')
+    expect(headSection).not.toContain('</style>')
   })
 
   it('omits empty CSS and JavaScript blocks entirely', () => {
