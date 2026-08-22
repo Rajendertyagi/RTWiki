@@ -15,30 +15,41 @@ export function useAutosave(options: UseAutosaveOptions): {
   retry: () => Promise<boolean>
   flush: () => Promise<boolean>
 } {
-  const { pageId, onSave } = options
+  const { pageId } = options
   const [status, setStatus] = useState<AutosaveStatus>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  const controllerRef = useRef<ReturnType<typeof createAutosaveController> | null>(null)
-
+  // One controller for the component's lifetime. Recreating it whenever the
+  // caller's onSave identity changed (an inline arrow does, every render)
+  // disposed the pending debounce timer and silently cancelled scheduled
+  // saves - the editor showed dirty forever and never persisted.
+  // onSave is routed through a ref so callers may pass inline callbacks.
+  const onSaveRef = useRef(options.onSave)
   useEffect(() => {
-    const controller = createAutosaveController({
-      onSave,
+    onSaveRef.current = options.onSave
+  })
+
+  const controllerRef = useRef<ReturnType<typeof createAutosaveController> | null>(null)
+  if (!controllerRef.current) {
+    controllerRef.current = createAutosaveController({
+      onSave: (pid: string, content: string) => onSaveRef.current(pid, content),
       onStatusChange: (state) => {
         setStatus(state.status)
         setError(state.error)
       }
     })
-    controllerRef.current = controller
+  }
+  const controller = controllerRef.current
+
+  useEffect(() => {
     return () => {
       controller.dispose()
       controllerRef.current = null
     }
-  }, [onSave])
+  }, [controller])
 
   // Reset status when page changes
   useEffect(() => {
-    void pageId
     setStatus('idle')
     setError(null)
   }, [pageId])
@@ -47,24 +58,16 @@ export function useAutosave(options: UseAutosaveOptions): {
 
   const notifyEdit = useCallback(
     (content: string): void => {
-      controllerRef.current?.notifyEdit(pageId, content)
+      controller.notifyEdit(pageId, content)
     },
-    [pageId]
+    [controller, pageId]
   )
 
-  const save = useCallback(async (): Promise<boolean> => {
-    const result = await controllerRef.current?.save()
-    return result ?? true
-  }, [])
+  const save = useCallback((): Promise<boolean> => controller.save(), [controller])
 
-  const retry = useCallback(async (): Promise<boolean> => {
-    return (await controllerRef.current?.retry()) ?? false
-  }, [])
+  const retry = useCallback((): Promise<boolean> => controller.retry(), [controller])
 
-  const flush = useCallback(async (): Promise<boolean> => {
-    const result = await controllerRef.current?.flush()
-    return result ?? true
-  }, [])
+  const flush = useCallback((): Promise<boolean> => controller.flush(), [controller])
 
   return { status, error, isDirty, notifyEdit, save, retry, flush }
 }
