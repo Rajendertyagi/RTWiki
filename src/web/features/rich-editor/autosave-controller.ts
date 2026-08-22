@@ -38,7 +38,16 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   dispose: () => void
 } {
   const debounceMs = options.debounceMs ?? 2000
-  const scheduler = options.scheduler ?? { setTimeout, clearTimeout }
+  // Wrapper arrows (not the bare methods): in browsers setTimeout/clearTimeout
+  // are Window scope methods and throw "Illegal invocation" when invoked with
+  // any other `this` — e.g. as properties of a plain scheduler object.
+  const scheduler = options.scheduler ?? {
+    setTimeout: (fn: () => void, ms: number): number =>
+      globalThis.setTimeout(fn, ms) as unknown as number,
+    clearTimeout: (id: number): void => {
+      globalThis.clearTimeout(id)
+    }
+  }
 
   // Monotonic counter — never derived from snapshot state
   let currentRevision = 0
