@@ -3,7 +3,10 @@ import { resolve } from 'node:path'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 
 const editorRoot = '[data-testid="rich-editor"]'
-const editable = '.bn-editor .ProseMirror'
+// BlockNote 0.54 (tiptap v3): the editable element carries BOTH classes on a
+// single node (`<div class="tiptap ProseMirror bn-editor">`), so this must be
+// a compound selector, not a descendant combinator.
+const editable = '.bn-editor.ProseMirror'
 const toolbar = '.bn-formatting-toolbar'
 
 // Shared across the ordered scenarios: the note created through the UI flow.
@@ -73,6 +76,9 @@ test.describe('Rich Note lifecycle (real application)', () => {
         editorRoot: !!document.querySelector('[data-testid="rich-editor"]'),
         bnContainer: !!document.querySelector('.bn-container'),
         bnEditorHtml: document.querySelector('.bn-editor')?.outerHTML?.slice(0, 400) ?? null,
+        toggleCount: document.querySelectorAll('[aria-label="Toggle color scheme"]').length,
+        railHtml:
+          document.querySelector('nav[aria-label="RTWiki"]')?.outerHTML?.slice(0, 300) ?? null,
         prosemirror: !!document.querySelector('.ProseMirror'),
         recoveryUi: document.body.innerText.includes('encountered a problem'),
         rootChildren: document.getElementById('root')?.children.length ?? -1
@@ -171,12 +177,12 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await openNote(page, title)
     const surface = page.locator('.bn-container')
     const lightBg = await surface.evaluate((el) => getComputedStyle(el).backgroundColor)
-    await page.locator('[aria-label="Toggle color scheme"]').click()
+    await page.getByRole('button', { name: 'Toggle color scheme' }).click()
     await expect(page.locator('html[data-mantine-color-scheme="dark"]')).toHaveCount(1)
     const darkBg = await surface.evaluate((el) => getComputedStyle(el).backgroundColor)
     expect(darkBg).not.toBe(lightBg)
     expect(darkBg).not.toBe('rgb(255, 255, 255)')
-    await page.locator('[aria-label="Toggle color scheme"]').click()
+    await page.getByRole('button', { name: 'Toggle color scheme' }).click()
   })
 
   test('HTML pages show their placeholder and never mount BlockNote', async ({ page, request }) => {

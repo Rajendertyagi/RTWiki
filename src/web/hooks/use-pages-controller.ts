@@ -145,6 +145,11 @@ export function usePagesController(): PagesController {
       setMutationError(null)
       try {
         const page = await api.createPage({ title, pageType })
+        // Insert into the local list BEFORE refreshing: the selection-sync
+        // effect clears selectedPage whenever the list lacks its id, so a
+        // bare refreshPages() would bounce the user back to the dashboard
+        // while the refetch is in flight.
+        setPages((prev) => [page, ...prev.filter((p) => p.id !== page.id)])
         setSelectedPage(page)
         setMutationStatus('saved')
         scheduleReset()
@@ -186,6 +191,7 @@ export function usePagesController(): PagesController {
       setMutationError(null)
       try {
         const page = await api.duplicatePage(id)
+        setPages((prev) => [page, ...prev.filter((p) => p.id !== page.id)])
         setSelectedPage(page)
         setMutationStatus('saved')
         scheduleReset()
