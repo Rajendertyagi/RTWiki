@@ -57,6 +57,7 @@ function randomId(): string {
 function sanitizeToken(value: string | undefined, max: number): string | undefined {
   if (!value) return undefined
   const cleaned = value
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally strips control characters from error text
     .replace(/[\x00-\x1F\x7F]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

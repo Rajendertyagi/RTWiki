@@ -43,10 +43,13 @@ function scrubField(value: string | undefined, secrets: string[]): string | unde
   for (const secret of secrets) {
     if (secret) scrubbed = scrubbed.split(secret).join('[redacted]')
   }
-  return scrubbed
-    .replace(/[\x00-\x1F\x7F]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return (
+    scrubbed
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally strips control characters from client-supplied text
+      .replace(/[\x00-\x1F\x7F]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
 }
 
 /**

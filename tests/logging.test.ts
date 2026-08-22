@@ -128,7 +128,6 @@ describe('FileLogger', () => {
       warnings.push(String(message))
     }
 
-    let threw = false
     try {
       const log = new FileLogger(logPath, { maxBytes: 100, maxRotatedFiles: 1 })
       for (let i = 0; i < 5; i++) {
@@ -139,7 +138,6 @@ describe('FileLogger', () => {
       console.warn = originalWarn
     }
 
-    expect(threw).toBe(false)
     expect(warnings.some((w) => w.includes('rotate log file'))).toBe(true)
     expect(warnings.filter((w) => w.includes('rotate log file')).length).toBe(1)
     // Appending continued despite failed rotation.
@@ -159,7 +157,6 @@ describe('FileLogger', () => {
       warnings.push(String(message))
     }
 
-    let threw = false
     try {
       const log = new FileLogger(logPath)
       log.info('terminal only', { event: 'nosink' })
@@ -169,7 +166,6 @@ describe('FileLogger', () => {
       console.warn = originalWarn
     }
 
-    expect(threw).toBe(false)
     expect(existsSync(logPath)).toBe(false)
     expect(warnings.length).toBe(1)
     expect(warnings[0]).toContain('open log file')

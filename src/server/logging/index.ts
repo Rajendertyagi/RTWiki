@@ -6,13 +6,6 @@ export type LogLevel = 'info' | 'warn' | 'error'
 
 export type LogContext = Record<string, unknown>
 
-interface LogLine {
-  timestamp: string
-  level: LogLevel
-  message: string
-  [key: string]: unknown
-}
-
 /**
  * The logger contract used across the server. `Logger` (file-backed) and
  * `ConsoleLogger` both satisfy it, so dependencies can be injected explicitly
@@ -116,7 +109,7 @@ export class FileLogger implements Logger {
     if (!this.sinkEnabled) return
     try {
       this.rotateIfNeeded(Buffer.byteLength(line, 'utf8') + 1)
-      appendFileSync(this.logPath, line + '\n')
+      appendFileSync(this.logPath, `${line}\n`)
     } catch {
       this.disableSink('append to log file')
     }

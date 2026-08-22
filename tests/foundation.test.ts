@@ -343,7 +343,7 @@ describe('static serving', () => {
   it('serves assets when root uses forward slashes (ported executable path)', async () => {
     // Simulates the production path: joinPaths() produces forward-slash roots
     // like 'D:/a/_temp/rtwiki-smoke/web' which path.join must resolve correctly.
-    const fwdRoot = dir.replace(/\\/g, '/') + '/web'
+    const fwdRoot = `${dir.replace(/\\/g, '/')}/web`
     mkdirSync(fwdRoot, { recursive: true })
     writeFileSync(join(fwdRoot, 'index.html'), '<html><body>RTWiki</body></html>')
     mkdirSync(join(fwdRoot, 'assets'), { recursive: true })
