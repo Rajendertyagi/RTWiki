@@ -127,9 +127,9 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
     await page.reload()
     await openHtmlPage(page, title)
-    await expect(
-      page.locator('[data-testid="code-editor-html"] .cm-content').toContainText('reload me')
-    ).toBeTruthy()
+    await expect(page.locator('[data-testid="code-editor-html"] .cm-content')).toContainText(
+      'reload me'
+    )
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('#persist-marker')).toBeVisible()
   })
@@ -191,9 +191,9 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
 
     await openHtmlPage(page, title)
-    await expect(
-      page.locator('[data-testid="code-editor-html"] .cm-content').toContainText('flushed')
-    ).toBeTruthy()
+    await expect(page.locator('[data-testid="code-editor-html"] .cm-content')).toContainText(
+      'flushed'
+    )
   })
 
   test('JavaScript is disabled by default and seeded code does not execute', async ({
