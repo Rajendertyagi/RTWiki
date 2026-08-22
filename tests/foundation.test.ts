@@ -268,9 +268,9 @@ describe('static serving', () => {
     expect(res.headers.get('cache-control')).toContain('immutable')
   })
 
-  it('serves index.html with no-cache', async () => {
+  it('serves index.html with no-store (nonce pairing guarantee)', async () => {
     const res = await staticApp().request('/')
-    expect(res.headers.get('cache-control')).toBe('no-cache')
+    expect(res.headers.get('cache-control')).toBe('no-store')
   })
 
   it('returns 404 for missing asset with extension', async () => {

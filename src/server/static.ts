@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { HEALTH_PATH } from '@rtwiki/shared/constants'
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import type { Logger } from './logging/index.js'
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -22,6 +22,91 @@ const CONTENT_TYPES: Record<string, string> = {
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
   '.map': 'application/json; charset=utf-8'
+}
+
+/** Non-executable carrier for the per-request CSP nonce (Option A design). */
+const PREVIEW_NONCE_META_NAME = 'rtwiki-preview-nonce'
+
+/**
+ * Reads the per-request CSP nonce set by the secureHeaders middleware.
+ * Declared structurally so this middleware stays mountable on any Hono app —
+ * tests mount it on bare instances that have no security middleware, in
+ * which case this returns undefined and HTML is served without the meta tag
+ * (previews then fail closed; basic serving keeps working).
+ */
+function readRequestNonce(c: Context): string | undefined {
+  const get = c.get as (key: string) => unknown
+  const nonce = get('secureHeadersNonce')
+  return typeof nonce === 'string' && nonce.length > 0 ? nonce : undefined
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/**
+ * Injects `<meta name="rtwiki-preview-nonce">` before `</head>` of the SPA
+ * document. Returns null when no insertion point exists — callers then serve
+ * the unmodified document rather than guessing at malformed markup.
+ *
+ * The nonce value comes from Hono's NONCE generator (base64), but it is
+ * attribute-escaped defensively anyway.
+ */
+function injectNonceMeta(html: string, nonce: string): string | null {
+  const meta = `<meta name="${PREVIEW_NONCE_META_NAME}" content="${escapeHtmlAttribute(nonce)}">`
+  if (html.includes('</head>')) {
+    return html.replace('</head>', `${meta}</head>`)
+  }
+  if (html.includes('<head>')) {
+    return html.replace('<head>', `<head>${meta}`)
+  }
+  return null
+}
+
+/**
+ * Builds the response for an HTML document with the request's nonce injected
+ * and `no-store` caching. The pairing guarantee lives here: header and body
+ * are produced from the same request context, and no-store prevents any
+ * stored copy from being paired with a different response's CSP header.
+ */
+async function htmlResponse(
+  c: Context,
+  path: string,
+  logger: Logger | undefined,
+  pathname: string
+): Promise<Response> {
+  const file = Bun.file(path)
+  let html = await file.text()
+  const nonce = readRequestNonce(c)
+  if (nonce) {
+    const injected = injectNonceMeta(html, nonce)
+    if (injected !== null) {
+      html = injected
+    } else {
+      logger?.error('Nonce injection skipped: no head element in served HTML', {
+        event: 'nonce_injection_skipped',
+        pathname
+      })
+    }
+  } else {
+    logger?.error('CSP nonce missing for HTML response', {
+      event: 'nonce_missing',
+      pathname
+    })
+  }
+  return new Response(html, {
+    headers: {
+      'content-type': CONTENT_TYPES['.html'],
+      // no-store: a cached body must never be paired with a later response's
+      // nonce-bearing CSP header.
+      'cache-control': 'no-store'
+    }
+  })
 }
 
 export interface StaticOptions {
@@ -104,10 +189,11 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
         const file = Bun.file(resolvedNoQuery)
         const ext = resolvedNoQuery.slice(resolvedNoQuery.lastIndexOf('.'))
         const contentType = CONTENT_TYPES[ext] ?? file.type ?? 'application/octet-stream'
-        const cacheControl = ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable'
-
+        if (ext === '.html') {
+          return await htmlResponse(c, resolvedNoQuery, logger, pathname)
+        }
         return new Response(file, {
-          headers: { 'content-type': contentType, 'cache-control': cacheControl }
+          headers: { 'content-type': contentType, 'cache-control': 'public, max-age=31536000, immutable' }
         })
       } catch (err) {
         logger?.error('Unexpected static-serving failure', {
@@ -138,10 +224,7 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
 
     const indexFile = join(root, 'index.html')
     if (existsSync(indexFile)) {
-      const file = Bun.file(indexFile)
-      return new Response(file, {
-        headers: { 'content-type': CONTENT_TYPES['.html'], 'cache-control': 'no-cache' }
-      })
+      return await htmlResponse(c, indexFile, logger, pathname)
     }
 
     // No index.html — fall through to Hono router's notFound.

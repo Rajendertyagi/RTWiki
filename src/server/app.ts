@@ -1,5 +1,6 @@
 import { APP_NAME, APP_VERSION, HEALTH_PATH } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
+import { secureHeaders, type SecureHeadersVariables } from 'hono/secure-headers'
 import { checkIntegrity, getDb } from './database/index.js'
 import { createConsoleLogger, type Logger } from './logging/index.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
@@ -8,16 +9,39 @@ import { createShutdownRoutes } from './routes/shutdown.js'
 import type { ShutdownCoordinator } from './shutdown-coordinator.js'
 import { serveStatic } from './static.js'
 
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "frame-ancestors 'none'"
-].join('; ')
+export type AppVariables = SecureHeadersVariables & {
+  db: ReturnType<typeof getDb>
+}
+
+/**
+ * Security headers via Hono's official secureHeaders middleware.
+ *
+ * The per-request CSP nonce (NONCE) is generated with crypto.getRandomValues
+ * inside the middleware before handlers run and is exposed to HTML-serving
+ * handlers through the context (`secureHeadersNonce`), so the header value
+ * and the value injected into served HTML always originate from the same
+ * request. Preview bootstrap/user scripts inside sandboxed srcdoc frames
+ * inherit this policy and therefore must carry this exact nonce.
+ */
+const securityHeaders = secureHeaders({
+  contentSecurityPolicy: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", NONCE],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    imgSrc: ["'self'", 'data:'],
+    fontSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    frameAncestors: ["'none'"]
+  },
+  xFrameOptions: 'DENY',
+  referrerPolicy: 'no-referrer',
+  permissionsPolicy: {
+    geolocation: [],
+    microphone: [],
+    camera: []
+  }
+})
 
 export interface AppDependencies {
   coordinator: ShutdownCoordinator
@@ -33,17 +57,12 @@ export interface AppDependencies {
  */
 export function createApp(
   deps: AppDependencies
-): Hono<{ Variables: { db: ReturnType<typeof getDb> } }> {
-  const app = new Hono<{ Variables: { db: ReturnType<typeof getDb> } }>()
+): Hono<{ Variables: AppVariables }> {
+  const app = new Hono<{ Variables: AppVariables }>()
 
-  app.use('*', async (c, next) => {
-    await next()
-    c.res.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY)
-    c.res.headers.set('X-Content-Type-Options', 'nosniff')
-    c.res.headers.set('X-Frame-Options', 'DENY')
-    c.res.headers.set('Referrer-Policy', 'no-referrer')
-    c.res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
-  })
+  // Registered before all routes so the nonce exists in context by the time
+  // HTML-serving handlers execute.
+  app.use('*', securityHeaders)
 
   app.get(HEALTH_PATH, (c) => {
     const timestamp = new Date().toISOString()
