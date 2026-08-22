@@ -45,7 +45,7 @@ The following are **not** in scope for the Visual MVP:
 | 1 | Page Persistence and CRUD API | Owner approved | fe8f418 | [#79](https://github.com/Rajendertyagi/RTWiki/actions/runs/32376828943) | build/#79 |
 | 2 | Visual Workspace and Page Management | Correction 3 pending CI | 00c3678 | [#32393535423](https://github.com/Rajendertyagi/RTWiki/actions/runs/32393535423) | RTWiki-0.1.0-windows-x64 |
 | 3 | Rich Note Editor and Autosave | CI verified | 405dc01b | [#32570059083](https://github.com/Rajendertyagi/RTWiki/actions/runs/32570059083) | RTWiki-0.1.0-windows-x64 |
-| 4A | Secure HTML Page Foundation (preview, no editor UI) | Implemented — awaiting CI | 228daa1 | pending first full run | pending |
+| 4A | Secure HTML Page Foundation (preview, no editor UI) | CI verified | 3a1d4f3 | [#32584637817](https://github.com/Rajendertyagi/RTWiki/actions/runs/32584637817) | RTWiki-0.1.0-windows-x64 |
 | 4B | HTML/CSS/JS Editor Tabs and Live Editing | Not started | — | — | — |
 | 5 | Polish and Release Candidate | Not started | — | — | — |
 
@@ -674,7 +674,7 @@ The logger buffered up to 100 lines in memory and flushed via `BunFile.write()`,
 ## Phase 4A — Secure HTML Page Foundation
 
 **Branch:** `feature/html-page-editor` (created from exactly `405dc01b`, the CI-verified Phase 3 base, run [32570059083](https://github.com/Rajendertyagi/RTWiki/actions/runs/32570059083)).
-**Status:** Implemented — awaiting first full CI run. Phase 4B (visible editor UI) has **not** been started.
+**Status:** CI verified — Verify (format, lint, typecheck, 290 tests, web+server build), Browser tests (Playwright, real Chromium) and Windows portable smoke all green on `3a1d4f3` ([run 32584637817](https://github.com/Rajendertyagi/RTWiki/actions/runs/32584637817)). Phase 4B (visible editor UI) has **not** been started.
 
 ### Scope
 
@@ -825,9 +825,41 @@ Additional guarantees:
 | b3dc2af | feat: sandboxed HTML preview builder with nonce'd scripts and channel messaging |
 | f46300f | chore: expose preview status attribute for browser-test observability |
 | 228daa1 | test: real-Chromium security suite for sandboxed HTML previews |
+| 8c0f58f | docs: record Phase 4A canonical format, security model, and search behavior |
+| 3d32a1c / 33601ac | chore: temporary format-diagnostics workflow (read-only artifact; deleted in 63ed42a) |
+| 63ed42a | fix: apply canonical formatting and resolve lint/typecheck findings; remove diagnostics workflow |
+| d930c75 | fix: move channel-id generator into pure module; correct empty-block assertion |
+| cdf5431 | fix: escape-test slicing logic; legacy html CRUD test to canonical content |
+| 2bbbaa8 | fix: preserve authored casing when escaping closing script/style sequences |
+| 6597be7 | fix: style-escape test asserts the actual raw-text contract |
+| 1ed5147 | test: correct channel-rejection probes and nonceless-script assertion |
+| 32960df | test: html pages render sandboxed preview instead of placeholder |
+| 3a1d4f3 | fix: report missing-nonce preview failures; assert sandbox form blocking directly |
 
 Intermediate note: run #244 on `06185a2` failed at frozen-lockfile install —
 expected and documented before the lockfile landed.
+
+### Validation
+
+- **Green end to end:** run [32584637817](https://github.com/Rajendertyagi/RTWiki/actions/runs/32584637817)
+  on `3a1d4f3` — Verify (format, lint, typecheck, 290 tests across 19 files,
+  web build, server build), Browser tests (Playwright/Chromium, 30 scenarios:
+  28 preview-security + rich-note suite incl. updated html-page scenario),
+  Windows portable smoke — all success.
+- Artifact `RTWiki-0.1.0-windows-x64`, 41,827,103 bytes
+  ([download](https://github.com/Rajendertyagi/RTWiki/actions/runs/32584637817/artifacts/9478742210)).
+- Documentation Quality workflow passed on `8c0f58f`
+  ([run 32578294107](https://github.com/Rajendertyagi/RTWiki/actions/runs/32578294107)).
+- Convergence honesty: reaching green took several correction rounds after the
+  initial implementation — Biome canonical formatting applied via a temporary
+  read-only CI artifact workflow (owner-approved; deleted in `63ed42a`), plus
+  test-only fixes (escape-test slicing/case expectations, legacy CRUD test to
+  canonical content, channel-probe correctness, nonceless-script assertion,
+  html-placeholder scenario superseded by the preview) and one product fix
+  (missing-nonce failures now report through the sanitized client-error
+  reporter). No logic, dependency, lockfile or workflow changes rode along
+  with formatting; every intermediate failure was diagnosed from owner-provided
+  logs because job logs require authentication this environment lacks.
 
 ### Remaining Phase 4B Work (not started)
 
