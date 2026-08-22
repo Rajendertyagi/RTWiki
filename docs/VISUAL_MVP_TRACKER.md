@@ -586,3 +586,26 @@ Previous reports listed inconsistent breakdowns (e.g., 27+22). Verified via sour
 ## Final Verification Status
 
 Phase 0: Owner approved (#71). Phase 1: Owner approved (#79). Phase 2: Correction 3 + Dependency Migration verified — format, lint, typecheck, test (94), web build, server build, Windows smoke test all pass on `8902da26`. Documentation Quality pending final run. Ready for Phase 3.
+
+## CI Hardening and Simplification (Post-Baseline)
+
+**Branch:** `feature/rich-note-editor`
+
+### Packaged-Asset 404 — Root Cause and Fix
+
+- **Root cause:** the smoke test's wildcard copy (`Copy-Item -Path "$src/*" -Destination <non-existent-dir> -Recurse`) flattened the staged package's top-level `web/` folder into the extraction root (`index.html` and `assets/` landed beside `RTWiki.exe`). The server resolved `frontendDistDir=<exe>/web` correctly, but `index.html` was not there, so `GET /` and every asset returned 404 while `/health` passed.
+- **Fix:** copy the staged directory itself (no wildcard) so the proven layout — `RTWiki.exe` beside `web/` — is preserved exactly.
+- **Fixed at:** `be5c85c5`, verified by CI run [32550718811](https://github.com/Rajendertyagi/RTWiki/actions/runs/32550718811) (Verify + Windows smoke both success).
+
+### Workflow Simplification
+
+- `.github/workflows/build.yml` reduced from 447 to 99 lines — orchestration only.
+- Packaging moved to `scripts/ci/package-windows.ps1` (staging, validation, nesting rejection, no runtime dirs).
+- Windows verification moved to `scripts/ci/windows-smoke.ps1` (identity hashes across build/staged/copied trees, port-free pre-check, captured-PID launch and port-ownership proof, runtime-directory assertion, full endpoint matrix with numeric status inspection, exact MIME and byte-size asset checks, missing-asset 404 and traversal rejection, second-instance behavior, shutdown security matrix, authorized shutdown, exact-PID-only cleanup with token redaction).
+- `upload-artifact` pinned to officially released v7.0.1.
+- Runtime-directory correction: the application now creates `data/`, `data/attachments/`, `data/backups/`, and `logs/` itself at startup (ADR-005 portable layout); CI asserts their existence after first launch instead of pre-creating them.
+
+### Validation
+
+- Refactor verified: run [32551658371](https://github.com/Rajendertyagi/RTWiki/actions/runs/32551658371) — all gates pass on `5d974b54`.
+- Phase 4 has **not** started; design remains provisionally accepted only.
