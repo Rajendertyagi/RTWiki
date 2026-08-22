@@ -25,6 +25,8 @@ interface SeedOptions {
   html?: string
   css?: string
   javascript?: string
+  /** Defaults to true: the security probes exercise the executing-JS path. */
+  jsEnabled?: boolean
 }
 
 async function seedHtmlPage(
@@ -33,10 +35,11 @@ async function seedHtmlPage(
   options: SeedOptions = {}
 ): Promise<void> {
   const content = JSON.stringify({
-    version: 1,
+    version: 2,
     html: options.html ?? '<p id="seed-body">seed body</p>',
     css: options.css ?? '',
-    javascript: options.javascript ?? ''
+    javascript: options.javascript ?? '',
+    jsEnabled: options.jsEnabled ?? true
   })
   const res = await request.post('/api/pages', {
     data: { title, pageType: 'html', content }
