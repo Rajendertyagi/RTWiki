@@ -61,9 +61,9 @@ async function typeIntoEditor(page: Page, text: string): Promise<void> {
 async function expectSaved(page: Page): Promise<void> {
   // The header also relabels its Save button to "Saved" once clean, so the
   // assertion must target the aria-live status paragraph specifically.
-  await expect(
-    page.locator('p[aria-live="polite"]').filter({ hasText: 'Saved' })
-  ).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('p[aria-live="polite"]').filter({ hasText: 'Saved' })).toBeVisible({
+    timeout: 10_000
+  })
 }
 
 /**
