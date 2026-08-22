@@ -60,18 +60,29 @@ test.describe('Rich Note lifecycle (real application)', () => {
     consoleMessages = []
     page.on('pageerror', (err) => pageErrors.push(err))
     page.on('console', (msg) => {
-      if (msg.type() === 'error' || msg.type() === 'warning') {
-        consoleMessages.push(`[${msg.type()}] ${msg.text()}`)
-      }
+      consoleMessages.push(`[${msg.type()}] ${msg.text()}`)
     })
   })
 
-  test.afterEach(() => {
-    // Forensics first: stacks and browser console make CI failures debuggable.
+  test.afterEach(async ({ page }) => {
+    // Forensics first: stacks, browser console and an editor-DOM probe make
+    // CI failures debuggable without artifact downloads.
+    const probe = await page
+      .evaluate(() => ({
+        url: location.href,
+        editorRoot: !!document.querySelector('[data-testid="rich-editor"]'),
+        bnContainer: !!document.querySelector('.bn-container'),
+        bnEditorHtml: document.querySelector('.bn-editor')?.outerHTML?.slice(0, 400) ?? null,
+        prosemirror: !!document.querySelector('.ProseMirror'),
+        recoveryUi: document.body.innerText.includes('encountered a problem'),
+        rootChildren: document.getElementById('root')?.children.length ?? -1
+      }))
+      .catch((err) => `probe failed: ${err.message}`)
+    console.log(`PAGEPROBE: ${JSON.stringify(probe)}`)
     for (const err of pageErrors) {
       console.log(`PAGEERROR: ${err.message}\n${err.stack ?? '(no stack)'}`)
     }
-    for (const msg of consoleMessages.slice(0, 40)) {
+    for (const msg of consoleMessages.slice(0, 60)) {
       console.log(`BROWSER ${msg}`)
     }
     expect(pageErrors, 'no uncaught browser exceptions').toEqual([])
