@@ -145,7 +145,10 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await page.locator(editable).click()
     await page.keyboard.type(' Manual save line.')
     await page.getByLabel('Save note').click()
-    await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 10_000 })
+    // Completion signal: the header button disables once the save lands
+    // (both its label and the status paragraph read 'Saved', so text alone
+    // trips strict mode).
+    await expect(page.getByLabel('Save note')).toBeDisabled({ timeout: 10_000 })
 
     // Reload reproduces the saved content.
     await page.reload()
