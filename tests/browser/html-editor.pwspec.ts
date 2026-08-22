@@ -86,6 +86,10 @@ function nextSave(page: Page): {
     .then((req) => {
       const postData = req.postData() ?? ''
       void req.response().then((resp) => {
+        if (!resp) {
+          resolve({ ok: false, status: 0, body: postData })
+          return
+        }
         resolve({ ok: resp.ok(), status: resp.status(), body: postData })
       })
     })
