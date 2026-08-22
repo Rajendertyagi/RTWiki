@@ -18,6 +18,20 @@ type SaveState = 'clean' | 'saving' | 'saved' | 'error'
 
 export function App(): JSX.Element {
   const controller = usePagesController()
+
+  // Display-only parent chain for the open page (Workspace Hierarchy).
+  const breadcrumb = useMemo(() => {
+    const byId = new Map(controller.pages.map((p) => [p.id, p]))
+    const chain: string[] = []
+    let cursor = controller.selectedPage?.parentId ?? null
+    while (cursor !== null) {
+      const parent = byId.get(cursor)
+      if (!parent) break
+      chain.unshift(parent.title || UI_TEXT.untitledPage)
+      cursor = parent.parentId ?? null
+    }
+    return chain
+  }, [controller.pages, controller.selectedPage])
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [newDialogType, setNewDialogType] = useState<PageType>('rich')
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
@@ -221,6 +235,12 @@ export function App(): JSX.Element {
             selectedId={controller.selectedPage?.id ?? null}
             onSelect={handleSelectPage}
             searchInputRef={searchInputRef}
+            onRename={handleRename}
+            onDuplicate={(id) => void controller.duplicatePage(id)}
+            onDelete={handleDeleteRequest}
+            onCreateChild={(parentId) => void controller.createChild(parentId)}
+            onMoveTo={(id, newParentId) => controller.moveTo(id, newParentId)}
+            onMoveRelative={(id, delta) => controller.moveRelative(id, delta)}
           />
         }
       >
@@ -264,6 +284,7 @@ export function App(): JSX.Element {
           {controller.selectedPage ? (
             <PageWorkspace
               page={controller.selectedPage}
+              breadcrumb={breadcrumb}
               onSaveContent={controller.savePageContent}
               isDirty={isDirty}
               saveState={saveState}

@@ -1,9 +1,9 @@
 import { Alert, Loader, NavLink, ScrollArea, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { IconAlertCircle, IconFileText, IconHome } from '@tabler/icons-react'
-import { PageTypeBadge } from '../components/page-type-badge.js'
+import { IconAlertCircle, IconHome } from '@tabler/icons-react'
 import { SearchInput } from '../components/search-input.js'
 import { UI_TEXT } from '../config/index.js'
+import { PageTree } from '../features/sidebar/page-tree.js'
 import classes from './sidebar.module.css'
 
 interface SidebarProps {
@@ -15,6 +15,13 @@ interface SidebarProps {
   selectedId: string | null
   onSelect: (id: string | null) => void
   searchInputRef?: React.RefObject<HTMLInputElement | null>
+  /** Hierarchy mutation hooks supplied by the page controller owner. */
+  onRename: (id: string, title: string) => Promise<boolean>
+  onDuplicate: (id: string) => void
+  onDelete: (id: string) => void
+  onCreateChild: (parentId: string) => void
+  onMoveTo: (id: string, newParentId: string | null) => void
+  onMoveRelative: (id: string, delta: number) => void
 }
 
 export function Sidebar({
@@ -25,7 +32,13 @@ export function Sidebar({
   onSearchChange,
   selectedId,
   onSelect,
-  searchInputRef
+  searchInputRef,
+  onRename,
+  onDuplicate,
+  onDelete,
+  onCreateChild,
+  onMoveTo,
+  onMoveRelative
 }: SidebarProps): JSX.Element {
   return (
     <div className={classes.sidebarRoot}>
@@ -47,7 +60,7 @@ export function Sidebar({
           </Alert>
         ) : (
           <Stack gap={2}>
-            {/* Home / Dashboard entry — always visible */}
+            {/* Home / Dashboard entry — always visible, outside role=tree */}
             <NavLink
               label={UI_TEXT.dashboardTitle}
               leftSection={<IconHome size={16} />}
@@ -57,23 +70,24 @@ export function Sidebar({
               aria-label={UI_TEXT.dashboardTitle}
             />
 
-            {pages.length === 0 && !loading ? (
+            {loading ? null : pages.length === 0 && !loading ? (
               <Text size="sm" c="dimmed" ta="center" className={classes.listEmpty}>
                 {searchQuery.trim() ? UI_TEXT.noResults : UI_TEXT.emptyDescription}
               </Text>
             ) : (
-              pages.map((page) => (
-                <NavLink
-                  key={page.id}
-                  label={page.title || UI_TEXT.untitledPage}
-                  leftSection={<IconFileText size={16} />}
-                  rightSection={<PageTypeBadge pageType={page.pageType} />}
-                  active={selectedId === page.id}
-                  onClick={() => onSelect(page.id)}
-                  className={classes.navItem}
-                  aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
-                />
-              ))
+              <PageTree
+                pages={pages}
+                activePageId={selectedId}
+                onOpen={(id) => onSelect(id)}
+                hooks={{
+                  onRename,
+                  onDuplicate,
+                  onDelete,
+                  onCreateChild,
+                  onMoveTo,
+                  onMoveRelative
+                }}
+              />
             )}
           </Stack>
         )}

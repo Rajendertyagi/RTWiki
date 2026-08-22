@@ -44,6 +44,37 @@ export async function createPage(request: CreatePageRequest, signal?: AbortSigna
   return data.page
 }
 
+export interface MovePageRequest {
+  newParentId: string | null
+  newPosition: number
+}
+
+export interface MoveReconciliation {
+  movedPage: Page
+  originParentId: string | null
+  originSiblings: Array<{ id: string; position: number }>
+  destinationParentId: string | null
+  destinationSiblings: Array<{ id: string; position: number }>
+}
+
+export async function movePage(
+  id: string,
+  request: MovePageRequest,
+  signal?: AbortSignal
+): Promise<MoveReconciliation> {
+  const res = await fetch(`${API_BASE}/pages/${encodeURIComponent(id)}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    signal
+  })
+  if (!res.ok) {
+    const body = (await res.json()) as ApiError
+    throw new Error(body.error || `Failed to move page (${res.status})`)
+  }
+  return (await res.json()) as MoveReconciliation
+}
+
 export async function updatePage(
   id: string,
   request: UpdatePageRequest,

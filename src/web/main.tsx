@@ -8,6 +8,9 @@ import { App } from './App.js'
 import { AppErrorBoundary } from './diagnostics/app-error-boundary.js'
 import { installGlobalErrorReporting } from './diagnostics/error-reporter.js'
 import { rtwikiCssVariablesResolver, theme } from './theme/index.js'
+// Centralized customization entry: loaded last so hierarchy/layout variables
+// can override defaults without touching component CSS modules.
+import './theme/customization.css'
 
 // Report uncaught browser errors and promise rejections to the local
 // diagnostics endpoint. Inner React boundaries mark their errors as handled,

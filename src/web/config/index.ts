@@ -98,6 +98,11 @@ export const UI_TEXT = {
   appCrashTitle: 'Something went wrong',
   appCrashMessage: 'The application hit an unexpected problem. Reload to continue.',
   appCrashReload: 'Reload RTWiki',
+  newChildPage: 'New child page',
+  openAction: 'Open',
+  moveToLabel: 'Move',
+  moveUpLabel: 'Move up',
+  moveDownLabel: 'Move down',
   hierarchyFutureNote: 'Hierarchical page organization is planned for a future release.',
   saveFailedRetryHint: 'Save failed. You can retry or keep editing.',
   unsavedChangesWarning:

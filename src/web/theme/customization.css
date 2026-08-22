@@ -1,0 +1,11 @@
+/*
+ * Hierarchy-specific layout variables (Workspace Hierarchy phase).
+ *
+ * This file is the single place where tree density and indentation can be
+ * tuned without touching component CSS modules. Values intentionally derive
+ * from Mantine tokens so light/dark stay consistent.
+ */
+:root {
+  --rtwiki-tree-indent-step: 16px;
+  --rtwiki-tree-row-min-height: 32px;
+}

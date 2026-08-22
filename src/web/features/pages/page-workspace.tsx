@@ -1,4 +1,4 @@
-import { Box, Skeleton, Stack } from '@mantine/core'
+import { Box, Skeleton, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
 import { lazy, Suspense } from 'react'
@@ -14,6 +14,8 @@ const HtmlEditorWorkspace = lazy(() => import('../html-editor/html-editor.js'))
 
 interface PageWorkspaceProps {
   page: Page
+  /** Display-only parent chain for the open page (no navigation). */
+  breadcrumb?: string[]
   /** Persists editor content and syncs the pages list. */
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   isDirty: boolean
@@ -33,6 +35,7 @@ interface PageWorkspaceProps {
 
 export function PageWorkspace({
   page,
+  breadcrumb = [],
   onSaveContent,
   isDirty,
   saveState,
@@ -61,6 +64,11 @@ export function PageWorkspace({
         onDelete={onDelete}
       />
 
+      {breadcrumb.length > 0 ? (
+        <Text size="xs" c="dimmed" aria-label="Page location" data-testid="page-breadcrumb">
+          {breadcrumb.join(' / ')}
+        </Text>
+      ) : null}
       <div className={classes.content}>
         {page.pageType === 'rich' ? (
           <RichEditor
