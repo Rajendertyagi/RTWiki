@@ -86,11 +86,6 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
     // Resolve the candidate file path.
     const resolved = join(root, rel)
 
-    // DIAGNOSTIC: remove after packaged-asset 404 root cause is proven.
-    if (!existsSync(resolved) && rel.includes('.')) {
-      console.error(`[rtwiki-static] miss rel=${rel} root=${root} resolved=${resolved}`)
-    }
-
     // Path traversal check — the resolved path must stay inside root.
     if (!isInsideRoot(resolved, root)) {
       logger?.warn('Asset path rejected: path traversal', {

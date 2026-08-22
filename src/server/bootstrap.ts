@@ -194,11 +194,6 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
 
   logger.info('HTTP server listening', { event: 'startup', host: '127.0.0.1', port: server.port })
 
-  // DIAGNOSTIC: log frontend dist dir existence for debugging packaged-asset 404s.
-  // Remove after root cause is confirmed fixed.
-  const distExists = existsSync(paths.frontendDistDir)
-  console.error(`[rtwiki-startup] frontendDistDir=${paths.frontendDistDir} exists=${distExists}`)
-
   if (openBrowser) {
     const launcher = options.launcher ?? launchBrowser
     await launcher(`http://127.0.0.1:${server.port}/`)
