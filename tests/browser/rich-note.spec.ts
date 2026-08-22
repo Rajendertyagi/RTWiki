@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 
 const editorRoot = '[data-testid="rich-editor"]'
 const editable = '.bn-editor .ProseMirror'
@@ -151,10 +151,7 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await page.locator('[aria-label="Toggle color scheme"]').click()
   })
 
-  test('HTML pages show their placeholder and never mount BlockNote', async ({
-    page,
-    request
-  }) => {
+  test('HTML pages show their placeholder and never mount BlockNote', async ({ page, request }) => {
     const title = uniqueTitle('Static HTML page')
     await seedPage(request, title, 'html', '')
     await page.goto('/')

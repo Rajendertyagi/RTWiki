@@ -1,10 +1,6 @@
 import { afterAll, describe, expect, it } from 'bun:test'
 import type { ClientErrorReport } from '../src/shared/schemas/client-error.js'
-import {
-  isHandled,
-  markHandled,
-  reportClientError
-} from '../src/web/diagnostics/error-reporter.js'
+import { isHandled, markHandled, reportClientError } from '../src/web/diagnostics/error-reporter.js'
 
 interface CapturedRequest {
   input: unknown

@@ -7,8 +7,8 @@ import {
   DATABASE_FILENAME,
   DEFAULT_HOST,
   DEFAULT_PORT,
-  LOG_FILENAME,
   LOGS_DIR,
+  LOG_FILENAME,
   MAX_REQUEST_SIZE
 } from '@rtwiki/shared/constants'
 

@@ -91,7 +91,8 @@ The Hono backend must set the following headers on every response:
 | `X-Content-Type-Options` | `nosniff` | Prevent MIME-type sniffing |
 | `X-Frame-Options` | `DENY` | Prevent clickjacking (internal app, not framed) |
 | `Content-Security-Policy` | `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'` | Restrict resource loading to local assets |
-| `Referrer-Policy` | `no-referrer` | Prevent leaking internal paths |
+| 
+eferrer-Policy` | `no-referrer` | Prevent leaking internal paths |
 | `Cache-Control` | `no-store` (for API responses) | Prevent caching of dynamic data |
 
 ## 6. Upload and Request Limits
@@ -117,7 +118,8 @@ Before any restore operation begins, the backup service must validate:
 
 1. The ZIP archive is readable and not corrupted (CRC check).
 2. The archive contains a valid `manifest.json` with expected structure.
-3. The `rtwiki_version` in the manifest matches a compatible version range.
+3. The 
+twiki_version` in the manifest matches a compatible version range.
 4. The SQLite database inside the archive passes `integrity_check`.
 5. All attachment references in the manifest point to existing files in the archive.
 
@@ -129,7 +131,54 @@ If any validation step fails, the restore is aborted and the user is shown a cle
 - The `.gitignore` excludes `.env` and `.env.*` (while keeping `.env.example`).
 - Configuration values that are secrets use environment variables at runtime only.
 
-## 10. Cross-References
+## 10. Local Diagnostics Endpoint and Log Privacy
+
+### Client-Error Reporting (`POST /api/client-errors`)
+
+The frontend reports sanitized failure diagnostics (React error-boundary catches,
+`window.error`, unhandled promise rejections, Rich Note parse/save/init
+failures) to this local-only endpoint.
+
+Protections, in evaluation order:
+
+1. **Same-origin** enforcement via fetch metadata (`Sec-Fetch-Site`, `Origin`,
+   
+eferer`) compared against the *actual* request URL origin — no hardcoded
+   host, so the check keeps working if RTWiki is ever served from another
+   loopback or LAN address in an authorized future phase.
+2. **JSON only**: `application/json` content type required.
+3. **8 KB payload cap** enforced through `Content-Length` and the raw byte
+   length of the body **before** any JSON parsing.
+4. **Rate limit**: rolling window of 20 reports per minute → `429`.
+5. **Shared schema** (`src/shared/schemas/client-error.ts`): closed event-name
+   enum, page-type enum, strict field caps (component ≤100, error name ≤120,
+   message ≤300, stack location ≤200, correlation ID ≤64), unknown fields
+   stripped. No arbitrary context objects are accepted.
+6. **Secret scrubbing**: the per-process shutdown token is removed from every
+   accepted field before the report reaches the log file.
+
+Accepted reports are written only to `logs/rtwiki.log` through the structured
+logger as `client_error` events. There is deliberately **no HTTP endpoint that
+can read log files**.
+
+The frontend reporter never transmits page titles, page content, BlockNote
+document JSON, cookies, or authorization headers. Known failure classes use
+canned messages; stacks are reduced to a single top-frame basename with
+line/column; correlation IDs are generated with `crypto.getRandomValues()`.
+
+### Log File Privacy
+
+- Location: `<RTWiki.exe directory>/logs/rtwiki.log` with bounded rotation
+  (
+twiki.1.log` … 
+twiki.3.log`, 1 MB threshold, oldest deleted first).
+- Directory paths are redacted before logging (`%USERPROFILE%`, `%TEMP%`,
+  `<repo>`, `<exe-dir>`); the Windows username must never appear.
+- Never logged: shutdown tokens, page content, BlockNote JSON, request bodies,
+  cookies, authorization headers.
+- Normal successful HTTP and static-asset requests are not logged.
+
+## 11. Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — where sanitization and validation happen in each layer
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding standards that enforce these requirements
