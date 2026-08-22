@@ -378,7 +378,10 @@ jobs:
             Write-Host "CAPTURED PID=$($p.Id) OWNED PORT 8080 -- HASHES MATCH -- ROUTES WORK"
 
           } catch {
-            Write-Error "SMOKE FAILURE: $_"
+            # Allow diagnostic dumping: Write-Error would otherwise terminate
+            # immediately because $ErrorActionPreference is Stop.
+            $ErrorActionPreference = 'Continue'
+            Write-Host "SMOKE FAILURE: $_"
             # Emit diagnostics as ::error:: annotations (readable via public API).
             $errDump = Get-Content $err -Raw -ErrorAction SilentlyContinue
             if ($errDump) {
@@ -448,10 +451,10 @@ jobs:
         with:
           name: rtwiki-smoke-diagnostics
           path: |
-            ${{ env.RUNNER_TEMP }}/rtwiki-diag/smoke.out.txt
-            ${{ env.RUNNER_TEMP }}/rtwiki-diag/smoke.err.txt
-            ${{ env.RUNNER_TEMP }}/rtwiki-diag/identity.txt
-            ${{ env.RUNNER_TEMP }}/rtwiki-diag/rtwiki.log
+            ${{ runner.temp }}/rtwiki-diag/smoke.out.txt
+            ${{ runner.temp }}/rtwiki-diag/smoke.err.txt
+            ${{ runner.temp }}/rtwiki-diag/identity.txt
+            ${{ runner.temp }}/rtwiki-diag/rtwiki.log
           if-no-files-found: warn
           retention-days: 7
 
