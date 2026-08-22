@@ -76,8 +76,7 @@ export function RichEditor({
     if (parseResult.status === 'error' && !hasReset) {
       reportClientError('rich_note_parse_error', {
         pageType: 'rich',
-        component:
-ichEditor.parse:${pageId}`
+        component: `RichEditor.parse:${pageId}`
       })
     }
   }, [parseResult.status, hasReset, pageId])
@@ -87,8 +86,7 @@ ichEditor.parse:${pageId}`
     if (status === 'error') {
       reportClientError('rich_note_save_error', {
         pageType: 'rich',
-        component:
-ichEditor.autosave:${pageId}`
+        component: `RichEditor.autosave:${pageId}`
       })
     }
   }, [status, pageId])

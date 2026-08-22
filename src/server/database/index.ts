@@ -4,7 +4,7 @@ export type { Database } from 'bun:sqlite'
 
 import { DATABASE_FILENAME } from '@rtwiki/shared/constants'
 import { joinPaths } from '../config/index.js'
-import { createConsoleLogger, type Logger } from '../logging/index.js'
+import { type Logger, createConsoleLogger } from '../logging/index.js'
 
 let dbInstance: Database | null = null
 let dbPath: string | null = null

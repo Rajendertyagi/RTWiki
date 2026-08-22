@@ -1,4 +1,4 @@
-import { getDatabaseLogger, type getDb } from './index.js'
+import { type getDb, getDatabaseLogger } from './index.js'
 
 export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void> {
   await applyMigration(db, '001_create_pages', (db) => {

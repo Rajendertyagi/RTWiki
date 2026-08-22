@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 
 const editorRoot = '[data-testid="rich-editor"]'
 const editable = '.bn-editor .ProseMirror'

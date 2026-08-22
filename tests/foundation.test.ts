@@ -24,8 +24,7 @@ import { FileLogger } from '../src/server/logging/index.js'
 import { serveStatic } from '../src/server/static.js'
 
 function makeTempDir(): string {
-  const dir = join(tmpdir(),
-`rtwiki-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const dir = join(tmpdir(), `rtwiki-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -192,8 +191,7 @@ describe('static serving', () => {
   let dir: string
 
   beforeEach(() => {
-    dir = join(tmpdir(),
-`rtwiki-static-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    dir = join(tmpdir(), `rtwiki-static-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'index.html'), '<html><body>RTWiki</body></html>')
     writeFileSync(join(dir, 'app.js'), 'console.log("hi")')
@@ -399,8 +397,7 @@ describe('logger', () => {
   it('writes valid JSONL lines with no paths or secrets', async () => {
     const file = join(
       tmpdir(),
-
-`rtwiki-log-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
+      `rtwiki-log-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
     )
     const log = new FileLogger(file)
     log.info('started', { event: 'init' })
@@ -424,8 +421,7 @@ describe('logger', () => {
   it('flush is safe to call repeatedly and after close', async () => {
     const file = join(
       tmpdir(),
-
-`rtwiki-log2-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
+      `rtwiki-log2-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
     )
     const log = new FileLogger(file)
     log.info('one', { event: 'x' })

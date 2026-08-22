@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { APP_VERSION } from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
-import { joinPaths, resolveRuntimePaths, type RuntimePaths } from './config/index.js'
+import { type RuntimePaths, joinPaths, resolveRuntimePaths } from './config/index.js'
 import {
   checkIntegrity,
   closeDatabase,
@@ -12,7 +12,7 @@ import {
 } from './database/index.js'
 import { runMigrations } from './database/migrations.js'
 import { type Launcher, launchBrowser } from './launcher.js'
-import { createLogger, type Logger } from './logging/index.js'
+import { type Logger, createLogger } from './logging/index.js'
 import { sanitizePathForLog } from './logging/sanitize-path.js'
 import { ShutdownCoordinator } from './shutdown-coordinator.js'
 

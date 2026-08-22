@@ -65,8 +65,7 @@ export const UI_TEXT = {
   richEditorLoadError:
     'This Rich Note could not be loaded. The stored content appears to be corrupted.',
   richEditorCrashTitle: 'The editor encountered a problem',
-  richEditorCrashMessage:
-    'The rich text editor stopped unexpectedly. Your saved content is safe.',
+  richEditorCrashMessage: 'The rich text editor stopped unexpectedly. Your saved content is safe.',
   richEditorPreserveNotice:
     'Original content has been preserved. Reset the document to start fresh.',
   richEditorResetButton: 'Reset document',

@@ -21,6 +21,6 @@ export const LOG_MAX_ROTATED_FILES = 3 as const
 
 // Sanitized frontend-error reporting endpoint and its provisional limits.
 export const CLIENT_ERRORS_PATH = '/api/client-errors' as const
-export const MAX_CLIENT_ERROR_BODY_BYTES = 8 * 1024 as const
+export const MAX_CLIENT_ERROR_BODY_BYTES = (8 * 1024) as const
 export const CLIENT_ERROR_RATE_LIMIT_MAX = 20 as const
 export const CLIENT_ERROR_RATE_LIMIT_WINDOW_MS = 60_000 as const

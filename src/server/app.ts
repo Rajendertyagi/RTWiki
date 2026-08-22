@@ -1,7 +1,7 @@
 import { APP_NAME, APP_VERSION, HEALTH_PATH } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { checkIntegrity, getDb } from './database/index.js'
-import { createConsoleLogger, type Logger } from './logging/index.js'
+import { type Logger, createConsoleLogger } from './logging/index.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
 import { createPageRoutes } from './routes/pages.js'
 import { createShutdownRoutes } from './routes/shutdown.js'

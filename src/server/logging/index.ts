@@ -173,8 +173,7 @@ export class FileLogger implements Logger {
       this.sinkWarningEmitted = true
       // eslint-disable-next-line no-console
       console.warn(
-
-TWiki logging warning: could not ${operation}; file logging is disabled for this session`
+        `RTWiki logging warning: could not ${operation}; file logging is disabled for this session`
       )
     }
   }

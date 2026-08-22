@@ -56,7 +56,10 @@ function randomId(): string {
 
 function sanitizeToken(value: string | undefined, max: number): string | undefined {
   if (!value) return undefined
-  const cleaned = value.replace(/[\x00-\x1F\x7F]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const cleaned = value
+    .replace(/[\x00-\x1F\x7F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   return cleaned ? cleaned.slice(0, max) : undefined
 }
 
