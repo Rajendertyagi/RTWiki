@@ -1,6 +1,6 @@
 import { APP_NAME, APP_VERSION, HEALTH_PATH } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
-import { secureHeaders, type SecureHeadersVariables } from 'hono/secure-headers'
+import { NONCE, type SecureHeadersVariables, secureHeaders } from 'hono/secure-headers'
 import { checkIntegrity, getDb } from './database/index.js'
 import { createConsoleLogger, type Logger } from './logging/index.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
@@ -55,9 +55,7 @@ export interface AppDependencies {
  * Creates a fresh Hono app with all routes mounted.
  * Each bootstrap() invocation must call this to get an isolated app instance.
  */
-export function createApp(
-  deps: AppDependencies
-): Hono<{ Variables: AppVariables }> {
+export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables }> {
   const app = new Hono<{ Variables: AppVariables }>()
 
   // Registered before all routes so the nonce exists in context by the time

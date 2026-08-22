@@ -1,5 +1,5 @@
-import type { HtmlPageContent } from '@rtwiki/shared/schemas/html-content'
 import { Alert, Box, Button, Group, Stack, Text } from '@mantine/core'
+import type { HtmlPageContent } from '@rtwiki/shared/schemas/html-content'
 import { IconAlertCircle, IconShieldLock } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
@@ -60,18 +60,19 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
   const nonceFromDocument = useMemo(readParentNonce, [])
   const nonce = nonceProp ?? nonceFromDocument
 
-  const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<PreviewStatus>({ kind: 'idle' })
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const channelIdRef = useRef<string>('')
 
-  const result = useMemo<BuildResult>(() => {
+  // Builds (or rebuilds) the srcdoc document. Every call regenerates the
+  // channel ID so stale messages from a previous preview can never be
+  // accepted by the listener; failures are reported and rendered as a
+  // recoverable error instead of crashing the workspace.
+  const buildPreview = useCallback((): BuildResult => {
     try {
       if (!nonce) {
         return { error: UI_TEXT.htmlPreviewNonceMissing }
       }
-      // Regenerate the channel on every rebuild so stale messages from a
-      // previous preview can never be accepted by the new listener.
       channelIdRef.current = generateChannelId()
       const normalized = normalizePreviewHtml(content.html)
       return {
@@ -92,8 +93,19 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
       })
       return { error: UI_TEXT.htmlPreviewBuildFailed }
     }
-    // `attempt` intentionally forces a rebuild on retry.
-  }, [content, nonce, attempt])
+  }, [content, nonce])
+
+  const [result, setResult] = useState<BuildResult>(() => buildPreview())
+
+  // Rebuild whenever the page content or the serving nonce changes.
+  useEffect(() => {
+    setResult(buildPreview())
+  }, [buildPreview])
+
+  const retry = useCallback((): void => {
+    setStatus({ kind: 'idle' })
+    setResult(buildPreview())
+  }, [buildPreview])
 
   const handleMessage = useCallback((event: MessageEvent): void => {
     // Check 1: identity — only our own iframe's window may talk to us.
@@ -142,7 +154,7 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
           </Text>
         </Alert>
         <Box>
-          <Button variant="light" onClick={() => setAttempt((value) => value + 1)}>
+          <Button variant="light" onClick={retry}>
             {UI_TEXT.retry}
           </Button>
         </Box>

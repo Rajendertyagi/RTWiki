@@ -20,9 +20,9 @@ export const HTML_CONTENT_VERSION = 1 as const
  * Limits count UTF-8 bytes, not UTF-16 code units, so multi-byte characters
  * cannot smuggle oversized payloads past validation.
  */
-export const MAX_HTML_BYTES = 2 * 1024 * 1024 as const
-export const MAX_CSS_BYTES = 512 * 1024 as const
-export const MAX_JAVASCRIPT_BYTES = 512 * 1024 as const
+export const MAX_HTML_BYTES = 2 * 1024 * 1024
+export const MAX_CSS_BYTES = 512 * 1024
+export const MAX_JAVASCRIPT_BYTES = 512 * 1024
 
 const textEncoder = new TextEncoder()
 

@@ -20,7 +20,10 @@ import { runMigrations } from '../src/server/database/migrations.js'
  */
 
 function makeTempDir(): string {
-  const dir = join(tmpdir(), `rtwiki-nonce-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const dir = join(
+    tmpdir(),
+    `rtwiki-nonce-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  )
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -47,6 +50,7 @@ describe('per-response CSP nonce pairing', () => {
     writeFileSync(join(distDir, 'index.html'), INDEX_HTML)
     writeFileSync(join(distDir, 'assets', 'index-test.js'), 'console.log("app")')
 
+    const db = initDatabase(tempDir)
     deps = {
       coordinator: {
         state: 'running' as const,
@@ -54,16 +58,16 @@ describe('per-response CSP nonce pairing', () => {
         requestShutdown: () => Promise.resolve({ ok: true, forced: false })
       } as unknown as AppDependencies['coordinator'],
       token: 'test-token',
-      getDb: initDatabase(tempDir),
+      getDb: () => db,
       logger: {
         info: () => {},
         warn: () => {},
         error: () => {},
         close: async () => {}
-      },
+      } as unknown as import('../src/server/logging/index.js').Logger,
       frontendDistDir: distDir
     }
-    await runMigrations(deps.getDb())
+    await runMigrations(db)
   })
 
   afterAll(async () => {
@@ -78,8 +82,7 @@ describe('per-response CSP nonce pairing', () => {
   }
 
   function extractMetaNonce(html: string): string | null {
-    const match =
-      /<meta name="rtwiki-preview-nonce" content="([A-Za-z0-9+/=]+)">/.exec(html)
+    const match = /<meta name="rtwiki-preview-nonce" content="([A-Za-z0-9+/=]+)">/.exec(html)
     return match?.[1] ?? null
   }
 

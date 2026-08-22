@@ -258,7 +258,11 @@ describe('HTML-page canonical content lifecycle', () => {
   it('stores and retrieves populated canonical content verbatim', () => {
     // Key order and formatting are preserved exactly as submitted.
     const canonical = '{"version":1,"html":"<h1>Title</h1>","css":"h1{color:red}","javascript":""}'
-    const page = service.createPage(db, { title: 'HTML Test', pageType: 'html', content: canonical })
+    const page = service.createPage(db, {
+      title: 'HTML Test',
+      pageType: 'html',
+      content: canonical
+    })
     const fetched = service.getPage(db, page.id)
     expect(fetched?.pageType).toBe('html')
     expect(fetched?.content).toBe(canonical)
@@ -266,7 +270,11 @@ describe('HTML-page canonical content lifecycle', () => {
 
   it('rejects malformed non-empty content on create', () => {
     expect(() =>
-      service.createPage(db, { title: 'Bad HTML', pageType: 'html', content: '<div>not json</div>' })
+      service.createPage(db, {
+        title: 'Bad HTML',
+        pageType: 'html',
+        content: '<div>not json</div>'
+      })
     ).toThrow(service.PageValidationError)
   })
 
@@ -291,7 +299,9 @@ describe('HTML-page canonical content lifecycle', () => {
   it('validates strictly on update and stores valid content verbatim', () => {
     const page = service.createPage(db, { title: 'Update HTML', pageType: 'html', content: '' })
     expect(() =>
-      service.updatePage(db, page.id, { content: '{"version":9,"html":"","css":"","javascript":""}' })
+      service.updatePage(db, page.id, {
+        content: '{"version":9,"html":"","css":"","javascript":""}'
+      })
     ).toThrow(service.PageValidationError)
 
     const next = '{"version":1,"html":"<p>v2</p>","css":"","javascript":"console.log(2)"}'
@@ -308,21 +318,32 @@ describe('HTML-page canonical content lifecycle', () => {
 
   it('preserves stored legacy/malformed content verbatim (validate-on-write only)', () => {
     // Simulate legacy rows written before canonical validation existed by
-    // inserting through the repository directly.
+    // inserting through the repository directly. Legacy garbage indexes as
+    // empty search text, matching extractSearchableContent's contract.
     const legacy = service.createPage(db, { title: 'Legacy', pageType: 'rich', content: '' })
-    repo.createPage(db, crypto.randomUUID(), 'Legacy HTML', 'html', '<p>pre-canonical garbage</p>')
+    repo.createPage(
+      db,
+      crypto.randomUUID(),
+      'Legacy HTML',
+      'html',
+      '<p>pre-canonical garbage</p>',
+      ''
+    )
 
     // Read returns the stored bytes untouched.
     const listed = service.listPages(db, { search: 'Legacy HTML' })
     const legacyPage = listed.pages.find((p) => p.title === 'Legacy HTML')
-    expect(legacyPage?.content).toBe('<p>pre-canonical garbage</p>')
+    if (!legacyPage) {
+      throw new Error('legacy page should be listed')
+    }
+    expect(legacyPage.content).toBe('<p>pre-canonical garbage</p>')
 
     // Title-only updates succeed without rewriting content.
-    const renamed = service.updatePage(db, legacyPage!.id, { title: 'Legacy Renamed' })
+    const renamed = service.updatePage(db, legacyPage.id, { title: 'Legacy Renamed' })
     expect(renamed?.content).toBe('<p>pre-canonical garbage</p>')
 
     // Duplicates copy the malformed content verbatim.
-    const copy = service.duplicatePage(db, legacyPage!.id)
+    const copy = service.duplicatePage(db, legacyPage.id)
     expect(copy?.content).toBe('<p>pre-canonical garbage</p>')
 
     void legacy
@@ -330,7 +351,11 @@ describe('HTML-page canonical content lifecycle', () => {
 
   it('duplicates and deletes html pages unchanged', () => {
     const canonical = '{"version":1,"html":"<b>x</b>","css":"","javascript":""}'
-    const page = service.createPage(db, { title: 'Dup Delete', pageType: 'html', content: canonical })
+    const page = service.createPage(db, {
+      title: 'Dup Delete',
+      pageType: 'html',
+      content: canonical
+    })
     const copy = service.duplicatePage(db, page.id)
     expect(copy?.content).toBe(canonical)
     expect(copy?.pageType).toBe('html')
@@ -405,7 +430,11 @@ describe('HTML-page search indexing', () => {
       css: '',
       javascript: ''
     })
-    const page = service.createPage(db, { title: 'Delete Search', pageType: 'html', content: canonical })
+    const page = service.createPage(db, {
+      title: 'Delete Search',
+      pageType: 'html',
+      content: canonical
+    })
     expect(service.listPages(db, { search: 'DeleteableSearchTerm' }).pages).toHaveLength(1)
 
     service.softDeletePage(db, page.id)
@@ -422,9 +451,9 @@ describe('HTML-page search indexing', () => {
     // Rich content continues to be indexed verbatim — searching a term that
     // only exists inside the stored JSON still finds the page, exactly as
     // before this phase.
-    expect(service.listPages(db, { search: 'RichRawIndexTerm' }).pages.some((p) => p.id === page.id)).toBe(
-      true
-    )
+    expect(
+      service.listPages(db, { search: 'RichRawIndexTerm' }).pages.some((p) => p.id === page.id)
+    ).toBe(true)
   })
 
   it('duplicates refresh the index for html copies', () => {
@@ -434,7 +463,11 @@ describe('HTML-page search indexing', () => {
       css: '',
       javascript: ''
     })
-    const page = service.createPage(db, { title: 'Dup Search', pageType: 'html', content: canonical })
+    const page = service.createPage(db, {
+      title: 'Dup Search',
+      pageType: 'html',
+      content: canonical
+    })
     const copy = service.duplicatePage(db, page.id)
     expect(copy).not.toBeNull()
     expect(service.listPages(db, { search: 'DuplicateIndexTerm' }).pages).toHaveLength(2)

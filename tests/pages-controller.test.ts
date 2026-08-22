@@ -275,7 +275,8 @@ describe('HTML-page content API validation', () => {
 
   const API = () => `http://127.0.0.1:${serverPort}`
 
-  async function createHtmlPage(content?: string): Promise<{ status: number; page?: Page }> {
+  /** Creates an HTML page and returns it; throws unless the API returned 201. */
+  async function createHtmlPage(content?: string): Promise<Page> {
     const payload: Record<string, unknown> = { title: `HTML API ${Date.now()}`, pageType: 'html' }
     if (content !== undefined) {
       payload.content = content
@@ -286,35 +287,44 @@ describe('HTML-page content API validation', () => {
       body: JSON.stringify(payload)
     })
     const body = (await res.json()) as { page?: Page }
-    return { status: res.status, page: body.page }
+    if (res.status !== 201 || !body.page) {
+      throw new Error(`expected 201 with page, got ${res.status}`)
+    }
+    return body.page
   }
 
   it('creates an html page without content as the canonical empty document', async () => {
-    const { status, page } = await createHtmlPage()
-    expect(status).toBe(201)
-    expect(page?.pageType).toBe('html')
-    expect(page?.content).toBe('{"version":1,"html":"","css":"","javascript":""}')
+    const page = await createHtmlPage()
+    expect(page.pageType).toBe('html')
+    expect(page.content).toBe('{"version":1,"html":"","css":"","javascript":""}')
   })
 
   it('rejects malformed non-empty html content with the structured error format', async () => {
-    const { status } = await createHtmlPage('<div>not json</div>')
-    expect(status).toBe(400)
+    const res = await fetch(`${API()}/api/pages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Bad ${Date.now()}`,
+        pageType: 'html',
+        content: '<div>x</div>'
+      })
+    })
+    expect(res.status).toBe(400)
   })
 
   it('creates and reloads populated canonical html content verbatim', async () => {
     const canonical = '{"version":1,"html":"<p>round trip</p>","css":"p{}","javascript":""}'
-    const { status, page } = await createHtmlPage(canonical)
-    expect(status).toBe(201)
+    const page = await createHtmlPage(canonical)
 
-    const getRes = await fetch(`${API()}/api/pages/${page!.id}`)
+    const getRes = await fetch(`${API()}/api/pages/${page.id}`)
     expect(getRes.status).toBe(200)
     const fetched = (await getRes.json()) as { page: Page }
     expect(fetched.page.content).toBe(canonical)
   })
 
   it('rejects invalid html content on update with a 400', async () => {
-    const { page } = await createHtmlPage()
-    const res = await fetch(`${API()}/api/pages/${page!.id}`, {
+    const page = await createHtmlPage()
+    const res = await fetch(`${API()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: 'not canonical json' })
@@ -326,9 +336,9 @@ describe('HTML-page content API validation', () => {
   })
 
   it('accepts valid canonical html content on update', async () => {
-    const { page } = await createHtmlPage()
+    const page = await createHtmlPage()
     const next = '{"version":1,"html":"<i>ok</i>","css":"","javascript":""}'
-    const res = await fetch(`${API()}/api/pages/${page!.id}`, {
+    const res = await fetch(`${API()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: next })
@@ -339,8 +349,8 @@ describe('HTML-page content API validation', () => {
   })
 
   it('rejects page-type conversion explicitly', async () => {
-    const { page } = await createHtmlPage()
-    const res = await fetch(`${API()}/api/pages/${page!.id}`, {
+    const page = await createHtmlPage()
+    const res = await fetch(`${API()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'Renamed', pageType: 'rich' })

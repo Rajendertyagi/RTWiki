@@ -66,9 +66,9 @@ describe('canonical HTML-page content schema', () => {
   })
 
   it('enforces the CSS byte limit at the exact boundary', () => {
-    expect(HtmlContentSchema.safeParse(htmlContent({ css: 'a'.repeat(MAX_CSS_BYTES) })).success).toBe(
-      true
-    )
+    expect(
+      HtmlContentSchema.safeParse(htmlContent({ css: 'a'.repeat(MAX_CSS_BYTES) })).success
+    ).toBe(true)
     expect(
       HtmlContentSchema.safeParse(htmlContent({ css: ` ${'a'.repeat(MAX_CSS_BYTES)}` })).success
     ).toBe(false)
@@ -80,8 +80,9 @@ describe('canonical HTML-page content schema', () => {
         .success
     ).toBe(true)
     expect(
-      HtmlContentSchema.safeParse(htmlContent({ javascript: ` ${'a'.repeat(MAX_JAVASCRIPT_BYTES)}` }))
-        .success
+      HtmlContentSchema.safeParse(
+        htmlContent({ javascript: ` ${'a'.repeat(MAX_JAVASCRIPT_BYTES)}` })
+      ).success
     ).toBe(false)
   })
 

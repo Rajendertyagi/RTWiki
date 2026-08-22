@@ -1,7 +1,7 @@
 import { MAX_PAGE_JSON_BODY_BYTES } from '@rtwiki/shared/constants'
 import { CreatePageSchema, UpdatePageSchema } from '@rtwiki/shared/schemas/pages'
-import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { Hono } from 'hono'
 import type { getDb } from '../database/index.js'
 import * as service from '../services/page-service.js'
 

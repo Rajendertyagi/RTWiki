@@ -193,7 +193,10 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
           return await htmlResponse(c, resolvedNoQuery, logger, pathname)
         }
         return new Response(file, {
-          headers: { 'content-type': contentType, 'cache-control': 'public, max-age=31536000, immutable' }
+          headers: {
+            'content-type': contentType,
+            'cache-control': 'public, max-age=31536000, immutable'
+          }
         })
       } catch (err) {
         logger?.error('Unexpected static-serving failure', {

@@ -1,5 +1,5 @@
-import { parse, type DefaultTreeAdapterTypes } from 'parse5'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
+import { type DefaultTreeAdapterTypes, parse } from 'parse5'
 
 /**
  * Server-side search-text extraction for HTML pages.
@@ -76,11 +76,7 @@ export function extractSearchableHtml(html: string): string {
     collectText(root, chunks)
   }
 
-  return chunks
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, SEARCH_EXTRACTION_MAX_CHARS)
+  return chunks.join(' ').replace(/\s+/g, ' ').trim().slice(0, SEARCH_EXTRACTION_MAX_CHARS)
 }
 
 /**

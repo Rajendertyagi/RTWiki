@@ -1,10 +1,10 @@
 import type { Database } from 'bun:sqlite'
+import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import {
   createEmptyHtmlContent,
   parseHtmlContent,
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
-import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
 import * as repo from '../repositories/page-repository.js'
 import { extractSearchableContent } from './search-extraction.js'

@@ -1,10 +1,4 @@
-import {
-  type APIRequestContext,
-  expect,
-  type Frame,
-  type Page,
-  test
-} from '@playwright/test'
+import { type APIRequestContext, expect, type Frame, type Page, test } from '@playwright/test'
 
 /**
  * Real-Chromium security suite for sandboxed HTML previews (Phase 4A).
@@ -70,12 +64,12 @@ type AppWindow = Window & {
 
 async function installMessageRecorder(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const w = window as AppWindow
-    w.__msgs = []
+    const messages: string[] = []
+    ;(window as AppWindow).__msgs = messages
     window.addEventListener('message', (event) => {
       const data = event.data as { type?: unknown; operation?: unknown; channel?: unknown } | null
       if (data && typeof data === 'object') {
-        w.__msgs!.push(
+        messages.push(
           `${String(data.type)}|${String(data.operation ?? '')}|${String(data.channel ?? '')}`
         )
       }
@@ -214,10 +208,12 @@ test.describe('HTML preview security (real Chromium)', () => {
   test('separate HTML responses receive different nonces', async ({ request }) => {
     const first = await request.get('/')
     const second = await request.get('/')
-    const nonceA = /'nonce-([A-Za-z0-9+/=]+)'/.exec(first.headers()['content-security-policy'] ?? '')
-      ?.[1]
-    const nonceB = /'nonce-([A-Za-z0-9+/=]+)'/.exec(second.headers()['content-security-policy'] ?? '')
-      ?.[1]
+    const nonceA = /'nonce-([A-Za-z0-9+/=]+)'/.exec(
+      first.headers()['content-security-policy'] ?? ''
+    )?.[1]
+    const nonceB = /'nonce-([A-Za-z0-9+/=]+)'/.exec(
+      second.headers()['content-security-policy'] ?? ''
+    )?.[1]
     expect(nonceA).toBeTruthy()
     expect(nonceB).toBeTruthy()
     expect(nonceA).not.toBe(nonceB)
@@ -421,8 +417,10 @@ test.describe('HTML preview security (real Chromium)', () => {
 
     const msgs = await readMessages(page)
     const readyEntry = msgs.find((m) => m.startsWith('rtwiki-preview-ready|'))
-    expect(readyEntry).toBeTruthy()
-    const channel = readyEntry!.split('|')[2]
+    if (!readyEntry) {
+      throw new Error('preview ready message should have been recorded')
+    }
+    const channel = readyEntry.split('|')[2]
 
     // Posted from INSIDE the frame (correct source): wrong channel rejected…
     await srcdocFrame(page).evaluate(() => {
@@ -465,10 +463,7 @@ test.describe('HTML preview security (real Chromium)', () => {
     })
     await openWithRecorder(page, title)
 
-    await expect(page.locator(PREVIEW_ROOT)).toHaveAttribute(
-      'data-preview-status',
-      'runtime-issue'
-    )
+    await expect(page.locator(PREVIEW_ROOT)).toHaveAttribute('data-preview-status', 'runtime-issue')
     await expect(page.getByText(RUNTIME_ISSUE_TEXT)).toBeVisible()
 
     const msgs = await readMessages(page)

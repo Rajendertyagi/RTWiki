@@ -5,9 +5,7 @@ const CHANNEL = 'a'.repeat(32)
 
 describe('preview message validation', () => {
   it('accepts a valid ready message', () => {
-    expect(
-      isValidPreviewMessage({ type: 'rtwiki-preview-ready', channel: CHANNEL })
-    ).toBe(true)
+    expect(isValidPreviewMessage({ type: 'rtwiki-preview-ready', channel: CHANNEL })).toBe(true)
   })
 
   it('accepts a valid error message with sanitized fields', () => {
