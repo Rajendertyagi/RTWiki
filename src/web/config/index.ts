@@ -74,6 +74,18 @@ export const UI_TEXT = {
   htmlPreviewRuntimeTitle: 'The preview reported a problem',
   htmlPreviewRuntimeMessage:
     'Code inside the sandboxed preview stopped unexpectedly. The rest of RTWiki is unaffected.',
+  editorTabsLabel: 'HTML page editors',
+  editorTabHtml: 'HTML',
+  editorTabCss: 'CSS',
+  editorTabJs: 'JavaScript',
+  editorPaneLabelHtml: 'HTML source editor',
+  editorPaneLabelCss: 'CSS source editor',
+  editorPaneLabelJs: 'JavaScript source editor',
+  jsEnabledToggleLabel: 'Enable JavaScript in preview',
+  htmlEditorLoadError:
+    'This HTML page could not be loaded. The stored content appears to be corrupted.',
+  htmlEditorCrashMessage: 'The HTML editor stopped unexpectedly.',
+  htmlEditorLoadingLabel: 'Loading the HTML editor…'
   richEditorLoadError:
     'This Rich Note could not be loaded. The stored content appears to be corrupted.',
   richEditorCrashTitle: 'The editor encountered a problem',

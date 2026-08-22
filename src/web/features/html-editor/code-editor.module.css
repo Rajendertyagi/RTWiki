@@ -1,0 +1,80 @@
+.host {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+
+  &:focus-within {
+    border-color: var(--mantine-color-primary-filled);
+  }
+}
+
+/* Syntax token colors — classHighlighter emits these stable classes.
+   Light scheme values, dark overrides below. */
+.host .tok-keyword,
+.host .tok-moduleKeyword {
+  color: var(--mantine-color-violet-7);
+}
+.host .tok-string,
+.host .tok-string2 {
+  color: var(--mantine-color-teal-7);
+}
+.host .tok-number,
+.host .tok-bool,
+.host .tok-null {
+  color: var(--mantine-color-blue-7);
+}
+.host .tok-comment,
+.host .tok-meta {
+  color: var(--mantine-color-dimmed);
+  font-style: italic;
+}
+.host .tok-tagName {
+  color: var(--mantine-color-pink-7);
+}
+.host .tok-attributeName {
+  color: var(--mantine-color-orange-7);
+}
+.host .tok-propertyName {
+  color: var(--mantine-color-blue-7);
+}
+.host .tok-definitionKeyword,
+.host .tok-operator {
+  color: var(--mantine-color-grape-7);
+}
+.host .tok-invalid {
+  color: var(--mantine-color-red-7);
+}
+
+[data-mantine-color-scheme='dark'] .host .tok-keyword,
+[data-mantine-color-scheme='dark'] .host .tok-moduleKeyword {
+  color: var(--mantine-color-violet-4);
+}
+[data-mantine-color-scheme='dark'] .host .tok-string,
+[data-mantine-color-scheme='dark'] .host .tok-string2 {
+  color: var(--mantine-color-teal-4);
+}
+[data-mantine-color-scheme='dark'] .host .tok-number,
+[data-mantine-color-scheme='dark'] .host .tok-bool,
+[data-mantine-color-scheme='dark'] .host .tok-null {
+  color: var(--mantine-color-blue-4);
+}
+[data-mantine-color-scheme='dark'] .host .tok-comment,
+[data-mantine-color-scheme='dark'] .host .tok-meta {
+  color: var(--mantine-color-dimmed);
+}
+[data-mantine-color-scheme='dark'] .host .tok-tagName {
+  color: var(--mantine-color-pink-4);
+}
+[data-mantine-color-scheme='dark'] .host .tok-attributeName {
+  color: var(--mantine-color-orange-4);
+}
+[data-mantine-color-scheme='dark'] .host .tok-propertyName {
+  color: var(--mantine-color-blue-4);
+}
+[data-mantine-color-scheme='dark'] .host .tok-definitionKeyword,
+[data-mantine-color-scheme='dark'] .host .tok-operator {
+  color: var(--mantine-color-grape-4);
+}

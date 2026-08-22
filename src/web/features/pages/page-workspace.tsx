@@ -1,11 +1,18 @@
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
+import { Box, Skeleton, Stack } from '@mantine/core'
+import { lazy, Suspense } from 'react'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
-import { PreviewFrame } from '../html/preview-frame.js'
+import {
+  HtmlEditorErrorBoundary
+} from '../html-editor/html-editor-error-boundary.js'
 import { RichEditor } from '../rich-editor/rich-editor.js'
 import { EditorHeader } from './editor-header.js'
 import { PageTab } from './page-tab.js'
 import classes from './page-workspace.module.css'
+
+// CodeMirror is heavy and only needed on HTML pages — loaded as its own chunk.
+const HtmlEditorWorkspace = lazy(() => import('../html-editor/html-editor.js'))
 
 interface PageWorkspaceProps {
   page: Page
@@ -68,7 +75,13 @@ export function PageWorkspace({
             onSaveStateChange={onSaveStateChange}
           />
         ) : (
-          <HtmlPreviewOrPlaceholder storedContent={page.content} />
+          <HtmlEditorSurface
+            page={page}
+            onSaveContent={onSaveContent}
+            onBack={onBack}
+            onFlushRef={onFlushRef}
+            onSaveStateChange={onSaveStateChange}
+          />
         )}
       </div>
     </div>
@@ -76,14 +89,56 @@ export function PageWorkspace({
 }
 
 /**
- * Renders the sandboxed preview for canonical HTML-page content. Stored
- * content that predates canonical validation (or is malformed) keeps the
- * placeholder — it is never overwritten and never silently "fixed".
+ * HTML-page surface. Malformed stored content keeps the placeholder — it is
+ * never overwritten and never silently "fixed". Valid content (v1 or v2)
+ * opens the lazily loaded editable workspace with its live preview.
  */
-function HtmlPreviewOrPlaceholder({ storedContent }: { storedContent: string }): JSX.Element {
-  const parsed = parseHtmlContent(storedContent)
+function HtmlEditorSurface({
+  page,
+  onSaveContent,
+  onBack,
+  onFlushRef,
+  onSaveStateChange
+}: {
+  page: Page
+  onSaveContent?: (id: string, content: string) => Promise<boolean>
+  onBack: () => void
+  onFlushRef: (fn: (() => Promise<boolean>) | null) => void
+  onSaveStateChange: (state: {
+    isDirty: boolean
+    saveState: 'clean' | 'saving' | 'saved' | 'error'
+  }) => void
+}): JSX.Element {
+  const parsed = parseHtmlContent(page.content)
   if (!parsed.ok) {
     return <HtmlPlaceholder />
   }
-  return <PreviewFrame content={parsed.content} />
+  return (
+    <HtmlEditorErrorBoundary onBack={onBack}>
+      <Suspense fallback={<HtmlEditorSkeleton />}>
+        <HtmlEditorWorkspace
+          key={page.id}
+          pageId={page.id}
+          storedContent={page.content}
+          onSaveContent={onSaveContent}
+          onBack={onBack}
+          onFlushRef={onFlushRef}
+          onSaveStateChange={onSaveStateChange}
+        />
+      </Suspense>
+    </HtmlEditorErrorBoundary>
+  )
+}
+
+function HtmlEditorSkeleton(): JSX.Element {
+  return (
+    <Stack gap="sm" p="md" aria-busy="true" aria-label="Loading the HTML editor…">
+      <Box w="100%" h={22}>
+        <Skeleton height={22} radius="sm" />
+      </Box>
+      <Box w="100%" flex={1}>
+        <Skeleton height="100%" radius="sm" />
+      </Box>
+    </Stack>
+  )
 }

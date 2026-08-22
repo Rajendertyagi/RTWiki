@@ -1,5 +1,5 @@
 import { Alert, Box, Button, Group, Stack, Text } from '@mantine/core'
-import type { HtmlPageContent } from '@rtwiki/shared/schemas/html-content'
+import type { HtmlPageContentV2 } from '@rtwiki/shared/schemas/html-content'
 import { IconAlertCircle, IconShieldLock } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
@@ -22,7 +22,8 @@ import { isValidPreviewMessage, type PreviewMessage } from './preview-messages.j
  */
 
 export interface PreviewFrameProps {
-  content: HtmlPageContent
+  /** Current (already normalized to v2) page content. */
+  content: HtmlPageContentV2
   /** Per-response parent CSP nonce read from the served document's meta tag. */
   nonce?: string
 }
@@ -76,6 +77,7 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
           normalizedBody: normalized.body,
           css: content.css,
           javascript: content.javascript,
+          jsEnabled: content.jsEnabled,
           nonce,
           channelId: channelIdRef.current
         })

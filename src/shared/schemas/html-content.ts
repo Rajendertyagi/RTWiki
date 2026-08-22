@@ -5,12 +5,18 @@ import { z } from 'zod'
  * frontend and the server. Stored in `pages.content` as the JSON
  * serialization of this schema whenever `page_type` is `html`.
  *
+ * Version history:
+ * - v1: { version, html, css, javascript } — Phase 4A shape. Still accepted
+ *   everywhere; legacy documents normalize to v2 on load.
+ * - v2 (Phase 4B): adds `jsEnabled`. New documents are created as v2 with
+ *   `jsEnabled: false`; serialization always emits v2.
+ *
  * Rich Note pages are unaffected: they continue to store canonical BlockNote
  * JSON (see ADR-004). This schema exists so both sides validate one format
  * definition; there is deliberately no duplicate frontend/server copy.
  */
 
-export const HTML_CONTENT_VERSION = 1 as const
+export const HTML_CONTENT_VERSION_LATEST = 2 as const
 
 /**
  * Provisional centralized limits (owner-approved 2026-08-22):
@@ -36,30 +42,63 @@ function byteBoundedString(maxBytes: number, field: string) {
   })
 }
 
-/**
- * `strictObject` rejects unknown keys instead of stripping them: stored page
- * content must be exactly the canonical shape, so silent key loss can never
- * masquerade as a successful save.
- */
-export const HtmlContentSchema = z.strictObject({
-  version: z.literal(HTML_CONTENT_VERSION),
+const contentFields = {
   html: byteBoundedString(MAX_HTML_BYTES, 'html'),
   css: byteBoundedString(MAX_CSS_BYTES, 'css'),
   javascript: byteBoundedString(MAX_JAVASCRIPT_BYTES, 'javascript')
+} as const
+
+/** Phase 4A shape — accepted for reads and writes, never emitted by saves. */
+export const HtmlContentV1Schema = z.strictObject({
+  version: z.literal(1),
+  ...contentFields
 })
 
-export type HtmlPageContent = z.infer<typeof HtmlContentSchema>
+/** Current shape — adds the per-page JavaScript enable flag. */
+export const HtmlContentV2Schema = z.strictObject({
+  version: z.literal(HTML_CONTENT_VERSION_LATEST),
+  ...contentFields,
+  jsEnabled: z.boolean()
+})
 
-export function createEmptyHtmlContent(): HtmlPageContent {
+/**
+ * `strictObject` rejects unknown keys instead of stripping them: stored page
+ * content must be exactly a canonical shape, so silent key loss can never
+ * masquerade as a successful save.
+ */
+export const HtmlContentSchema = z.union([HtmlContentV1Schema, HtmlContentV2Schema])
+
+export type HtmlPageContentV1 = z.infer<typeof HtmlContentV1Schema>
+export type HtmlPageContentV2 = z.infer<typeof HtmlContentV2Schema>
+export type HtmlPageContent = HtmlPageContentV1 | HtmlPageContentV2
+
+export function isHtmlContentV2(content: HtmlPageContent): content is HtmlPageContentV2 {
+  return content.version === HTML_CONTENT_VERSION_LATEST
+}
+
+/**
+ * Normalizes any stored document to the current shape. Legacy v1 documents
+ * gain `jsEnabled: false` in memory only — their stored bytes stay v1 until
+ * an actual edit re-serializes them.
+ */
+export function normalizeHtmlContent(content: HtmlPageContent): HtmlPageContentV2 {
+  if (isHtmlContentV2(content)) {
+    return content
+  }
+  return { ...content, version: HTML_CONTENT_VERSION_LATEST, jsEnabled: false }
+}
+
+export function createEmptyHtmlContent(): HtmlPageContentV2 {
   return {
-    version: HTML_CONTENT_VERSION,
+    version: HTML_CONTENT_VERSION_LATEST,
     html: '',
     css: '',
-    javascript: ''
+    javascript: '',
+    jsEnabled: false
   }
 }
 
-export function serializeHtmlContent(content: HtmlPageContent): string {
+export function serializeHtmlContent(content: HtmlPageContentV2): string {
   return JSON.stringify(content)
 }
 
@@ -69,8 +108,8 @@ export type ParsedHtmlContent =
 
 /**
  * Parses and validates a stored or submitted content string against the
- * canonical schema. Returns the first issue's message so API errors keep the
- * existing `{ error: string }` response shape.
+ * canonical schema (either version). Returns the first issue's message so
+ * API errors keep the existing `{ error: string }` response shape.
  */
 export function parseHtmlContent(raw: string): ParsedHtmlContent {
   let parsedJson: unknown

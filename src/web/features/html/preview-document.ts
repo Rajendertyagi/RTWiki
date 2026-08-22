@@ -22,6 +22,12 @@ export interface PreviewDocumentInput {
   normalizedBody: string
   css: string
   javascript: string
+  /**
+   * Whether the page's JavaScript pane is allowed to execute. When false the
+   * user script element is omitted entirely; the bootstrap (our own code,
+   * required for navigation defense and status reporting) always runs.
+   */
+  jsEnabled: boolean
   /** Per-response parent CSP nonce (base64). */
   nonce: string
   /** Per-preview channel ID (32 hex chars). */
@@ -152,7 +158,7 @@ export function buildPreviewDocument(input: PreviewDocumentInput): string {
     input.css.trim().length > 0 ? `<style>\n${escapeStyleContent(input.css)}\n</style>` : ''
 
   const scriptBlock =
-    input.javascript.trim().length > 0
+    input.jsEnabled && input.javascript.trim().length > 0
       ? `<script nonce="${escapeHtmlAttribute(nonce)}">\n${escapeScriptContent(
           input.javascript
         )}\n</script>`
