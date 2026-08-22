@@ -395,6 +395,18 @@ jobs:
               if ($oneLine2.Length -gt 450) { $oneLine2 = $oneLine2.Substring(0, 450) }
               Write-Host "::error::[diag-stdout] $oneLine2"
             }
+            # Compact file listings: extracted tree vs staged tree.
+            $exFiles = Get-ChildItem -Recurse $extract -File -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.FullName.Substring($extract.Length + 1) }
+            $exLine = "[diag-extract] count=$($exFiles.Count): $($exFiles -join ', ')"
+            if ($exLine.Length -gt 480) { $exLine = $exLine.Substring(0, 480) }
+            Write-Host "::error::$exLine"
+            $stgRoot = Join-Path $env:GITHUB_WORKSPACE 'package/RTWiki'
+            $stFiles = Get-ChildItem -Recurse $stgRoot -File -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.FullName.Substring($stgRoot.Length + 1) }
+            $stLine = "[diag-staged] count=$($stFiles.Count): $($stFiles -join ', ')"
+            if ($stLine.Length -gt 480) { $stLine = $stLine.Substring(0, 480) }
+            Write-Host "::error::$stLine"
             Write-Host "=== STDOUT ==="
             Get-Content $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
             Write-Host "=== STDERR ==="
