@@ -20,11 +20,12 @@ import {
 } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import { type Launcher, launchBrowser } from '../src/server/launcher.js'
-import { Logger } from '../src/server/logging/index.js'
+import { FileLogger } from '../src/server/logging/index.js'
 import { serveStatic } from '../src/server/static.js'
 
 function makeTempDir(): string {
-  const dir = join(tmpdir(), `rtwiki-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const dir = join(tmpdir(),
+`rtwiki-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -48,6 +49,7 @@ describe('resolveRuntimePaths', () => {
   it('should derive paths from exeDir consistently', () => {
     const paths = resolveRuntimePaths()
     expect(paths.exeDir).toBeDefined()
+    expect(typeof paths.compiled).toBe('boolean')
     expect(paths.dataDir).toBe(joinPaths(paths.exeDir, 'data'))
     expect(paths.databasePath).toBe(joinPaths(paths.exeDir, 'data', 'rtwiki.sqlite'))
     expect(paths.attachmentsDir).toBe(joinPaths(paths.exeDir, 'data', 'attachments'))
@@ -190,7 +192,8 @@ describe('static serving', () => {
   let dir: string
 
   beforeEach(() => {
-    dir = join(tmpdir(), `rtwiki-static-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    dir = join(tmpdir(),
+`rtwiki-static-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'index.html'), '<html><body>RTWiki</body></html>')
     writeFileSync(join(dir, 'app.js'), 'console.log("hi")')
@@ -396,9 +399,10 @@ describe('logger', () => {
   it('writes valid JSONL lines with no paths or secrets', async () => {
     const file = join(
       tmpdir(),
-      `rtwiki-log-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
+
+`rtwiki-log-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
     )
-    const log = new Logger(file)
+    const log = new FileLogger(file)
     log.info('started', { event: 'init' })
     log.warn('careful', { event: 'warn' })
     log.error('boom', { event: 'err' })
@@ -420,9 +424,10 @@ describe('logger', () => {
   it('flush is safe to call repeatedly and after close', async () => {
     const file = join(
       tmpdir(),
-      `rtwiki-log2-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
+
+`rtwiki-log2-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
     )
-    const log = new Logger(file)
+    const log = new FileLogger(file)
     log.info('one', { event: 'x' })
     await log.flush()
     await log.flush()
@@ -464,7 +469,9 @@ describe('single-instance detection', () => {
       const runtime = await bootstrap({
         port,
         openBrowser: true,
-        launcher: fakeLauncher
+        launcher: fakeLauncher,
+        logPath: join(makeTempDir(), 'rtwiki.log'),
+        dataDir: makeTempDir()
       })
 
       // Should not start a real server (null server indicates detection).
@@ -502,7 +509,9 @@ describe('single-instance detection', () => {
       const runtime = await bootstrap({
         port,
         openBrowser: false,
-        launcher: fakeLauncher
+        launcher: fakeLauncher,
+        logPath: join(makeTempDir(), 'rtwiki.log'),
+        dataDir: makeTempDir()
       })
 
       expect(runtime.server).toBeNull()
@@ -528,7 +537,12 @@ describe('single-instance detection', () => {
       // Bootstrap then attempts to bind and gets EADDRINUSE (not a single-instance exit).
       let error: unknown = null
       try {
-        await bootstrap({ port, openBrowser: false })
+        await bootstrap({
+          port,
+          openBrowser: false,
+          logPath: join(makeTempDir(), 'rtwiki.log'),
+          dataDir: makeTempDir()
+        })
       } catch (err) {
         error = err
       }
@@ -559,7 +573,12 @@ describe('single-instance detection', () => {
     })
 
     try {
-      const runtime = await bootstrap({ port, openBrowser: false })
+      const runtime = await bootstrap({
+        port,
+        openBrowser: false,
+        logPath: join(makeTempDir(), 'rtwiki.log'),
+        dataDir: makeTempDir()
+      })
 
       // Null server/db means no resources were allocated.
       expect(runtime.server).toBeNull()
@@ -575,7 +594,12 @@ describe('single-instance detection', () => {
 
   it('starts normally when port is free', async () => {
     const port = freePort()
-    const runtime = await bootstrap({ port, openBrowser: false })
+    const runtime = await bootstrap({
+      port,
+      openBrowser: false,
+      logPath: join(makeTempDir(), 'rtwiki.log'),
+      dataDir: makeTempDir()
+    })
 
     expect(runtime.server).not.toBeNull()
     expect(runtime.db).not.toBeNull()
@@ -591,7 +615,12 @@ describe('single-instance detection', () => {
 describe('startup and shutdown', () => {
   it('shutdown is idempotent and the server stops', async () => {
     const port = freePort()
-    const rt = await bootstrap({ openBrowser: false, port })
+    const rt = await bootstrap({
+      openBrowser: false,
+      port,
+      logPath: join(makeTempDir(), 'rtwiki.log'),
+      dataDir: makeTempDir()
+    })
     expect(rt.server).toBeDefined()
     await rt.shutdown()
     await rt.shutdown()

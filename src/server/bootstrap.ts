@@ -1,12 +1,19 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { APP_VERSION } from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
-import { resolveRuntimePaths } from './config/index.js'
-import { checkIntegrity, closeDatabase, type Database, initDatabase } from './database/index.js'
+import { joinPaths, resolveRuntimePaths, type RuntimePaths } from './config/index.js'
+import {
+  checkIntegrity,
+  closeDatabase,
+  type Database,
+  initDatabase,
+  setDatabaseLogger
+} from './database/index.js'
 import { runMigrations } from './database/migrations.js'
 import { type Launcher, launchBrowser } from './launcher.js'
 import { createLogger, type Logger } from './logging/index.js'
+import { sanitizePathForLog } from './logging/sanitize-path.js'
 import { ShutdownCoordinator } from './shutdown-coordinator.js'
 
 export interface BootstrapOptions {
@@ -15,12 +22,22 @@ export interface BootstrapOptions {
   openBrowser?: boolean
   /** Listening port. Defaults to 8080; tests may pass 0 for auto-assignment. */
   port?: number
+  /**
+   * Overrides the log file location. Tests must inject a temporary path so
+   * they never write to production or development runtime directories.
+   */
+  logPath?: string
+  /**
+   * Overrides the data directory (database, attachments, backups). Tests must
+   * inject a temporary path so they never write to production/dev locations.
+   */
+  dataDir?: string
 }
 
 export interface Runtime {
   server: Awaited<ReturnType<typeof Bun.serve>>
   logger: Logger
-  paths: ReturnType<typeof resolveRuntimePaths>
+  paths: RuntimePaths
   db: Database
   shutdownToken: string
   coordinator: ShutdownCoordinator
@@ -81,28 +98,52 @@ async function probeExistingInstance(
  * coordinator singletons. Each call creates an isolated app and coordinator.
  *
  * Construction order (deterministic, no races):
- *  1. Create coordinator with late-bound server-stop capability.
- *  2. Create a fresh Hono app with the coordinator injected.
- *  3. Call Bun.serve() to start the server.
- *  4. Synchronously attach the real server handle before returning.
- *     No request can arrive between steps 3 and 4 because JavaScript
+ *  1. Resolve runtime paths and create every runtime directory.
+ *  2. Create the file logger (eagerly creates logs/rtwiki.log) and install it
+ *     as the database module's logger.
+ *  3. Create a fresh Hono app with the coordinator injected.
+ *  4. Call Bun.serve() to start the server.
+ *  5. Synchronously attach the real server handle before returning.
+ *     No request can arrive between steps 4 and 5 because JavaScript
  *     cannot process another event while the current synchronous call
  *     stack is still executing.
  */
 export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime> {
   const port = options.port ?? 8080
   const paths = resolveRuntimePaths()
-  const logger = options.logger ?? createLogger(paths.logPath)
+
+  // Effective data directory (tests may inject a temporary location).
+  const dataDir = options.dataDir ?? paths.dataDir
+  const attachmentsDir = joinPaths(dataDir, 'attachments')
+  const backupsDir = joinPaths(dataDir, 'backups')
+
+  // ADR-005 portable layout: every runtime directory must exist after launch.
+  ensureDirectory(dataDir)
+  ensureDirectory(attachmentsDir)
+  ensureDirectory(backupsDir)
+  ensureDirectory(paths.logDir)
+  ensureDirectory(paths.frontendDistDir)
+
+  // The logger constructor eagerly creates <logDir>/rtwiki.log, so it must be
+  // constructed only after the directory exists.
+  const logger = options.logger ?? createLogger(options.logPath ?? paths.logPath)
+  setDatabaseLogger(logger)
+
   const openBrowser = options.openBrowser ?? true
   const shutdownToken = randomUUID()
 
-  ensureDirectory(paths.dataDir)
-  ensureDirectory(paths.logDir)
-  ensureDirectory(paths.frontendDistDir)
-  // ADR-005 portable layout: attachments/ and backups/ are part of the required
-  // runtime structure and must exist after first launch.
-  ensureDirectory(paths.attachmentsDir)
-  ensureDirectory(paths.backupsDir)
+  // Privacy-redacted runtime directories: the Windows username never appears.
+  const redaction = { repoRoot: paths.compiled ? undefined : paths.exeDir, exeDir: paths.exeDir }
+  const effectiveLogDir = options.logPath
+    ? options.logPath.replace(/[/\\][^/\\]+$/, '')
+    : paths.logDir
+  logger.info('RTWiki starting', {
+    event: 'startup',
+    version: APP_VERSION,
+    dataDir: sanitizePathForLog(dataDir, redaction),
+    logDir: sanitizePathForLog(effectiveLogDir, redaction),
+    webDir: sanitizePathForLog(paths.frontendDistDir, redaction)
+  })
 
   // Probe for existing RTWiki instance before binding the port.
   const existing = await probeExistingInstance(port, logger)
@@ -119,6 +160,9 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
         })
       }
     }
+    logger.info('Exiting: existing RTWiki instance already running', {
+      event: 'single_instance'
+    })
     // Close the logger created for this second process — it has no server to serve.
     await logger.close()
     return {
@@ -141,7 +185,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     }
   }
 
-  const writeTest = join(paths.dataDir, '.write-test')
+  const writeTest = joinPaths(dataDir, '.write-test')
   try {
     await Bun.write(writeTest, 'test')
     rmSync(writeTest, { force: true })
@@ -150,7 +194,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     throw new Error('RTWiki data directory is not writable')
   }
 
-  const db = initDatabase(paths.dataDir)
+  const db = initDatabase(dataDir)
   await runMigrations(db)
   if (!checkIntegrity()) {
     logger.error('Database failed integrity check', { event: 'startup', action: 'abort' })

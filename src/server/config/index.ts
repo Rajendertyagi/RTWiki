@@ -1,4 +1,16 @@
 import { existsSync } from 'node:fs'
+import {
+  APP_NAME,
+  APP_VERSION,
+  ATTACHMENTS_DIR,
+  BACKUPS_DIR,
+  DATABASE_FILENAME,
+  DEFAULT_HOST,
+  DEFAULT_PORT,
+  LOG_FILENAME,
+  LOGS_DIR,
+  MAX_REQUEST_SIZE
+} from '@rtwiki/shared/constants'
 
 export interface AppConfig {
   name: string
@@ -24,25 +36,27 @@ export interface CreateConfigOverrides {
 
 export function createConfig(baseDir: string, overrides: CreateConfigOverrides = {}): AppConfig {
   return {
-    name: 'RTWiki',
-    version: '0.1.0',
-    host: overrides.host ?? '127.0.0.1',
-    port: overrides.port ?? 8080,
+    name: APP_NAME,
+    version: APP_VERSION,
+    host: overrides.host ?? DEFAULT_HOST,
+    port: overrides.port ?? DEFAULT_PORT,
     apiPrefix: '/api',
     healthPath: '/health',
     frontendDistDir: joinPaths(baseDir, 'dist', 'web'),
     dataDir: joinPaths(baseDir, 'data'),
-    databaseFilename: 'rtwiki.sqlite',
-    attachmentDir: 'attachments',
-    backupDir: 'backups',
-    logDir: joinPaths(baseDir, 'logs'),
-    logFilename: 'rtwiki.log',
-    maxRequestSize: 100 * 1024 * 1024
+    databaseFilename: DATABASE_FILENAME,
+    attachmentDir: ATTACHMENTS_DIR,
+    backupDir: BACKUPS_DIR,
+    logDir: joinPaths(baseDir, LOGS_DIR),
+    logFilename: LOG_FILENAME,
+    maxRequestSize: MAX_REQUEST_SIZE
   }
 }
 
 export interface RuntimePaths {
   exeDir: string
+  /** True when running as the compiled portable executable. */
+  compiled: boolean
   dataDir: string
   databasePath: string
   attachmentsDir: string
@@ -56,7 +70,8 @@ export interface RuntimePaths {
  * Resolves the executable directory for portable storage.
  *
  * In compiled mode (RTWiki.exe), derives all paths from the executable's directory.
- * In development mode (bun run), derives paths from import.meta.dirname (source root).
+ * In development mode (bun run), derives paths from the repository root so runtime
+ * data lives in <repo>/data and <repo>/logs instead of inside the source tree.
  * Never derives from process.cwd().
  */
 export function resolveRuntimePaths(): RuntimePaths {
@@ -65,20 +80,20 @@ export function resolveRuntimePaths(): RuntimePaths {
   // Frontend asset directory.
   // - Compiled: RTWiki.exe lives in <app>/dist and Vite emits the SPA to
   //   <app>/dist/web, so the assets are a direct sibling of the executable.
-  // - Development: the module sits under <repo>/src/server/config and the build
-  //   output is <repo>/dist/web.
+  // - Development: the build output is <repo>/build/web (vite.config.ts outDir).
   const frontendDistDir = compiled
     ? joinPaths(exeDir, 'web')
-    : joinPaths(findProjectRoot(exeDir), 'dist', 'web')
+    : joinPaths(findProjectRoot(exeDir), 'build', 'web')
 
   return {
     exeDir,
+    compiled,
     dataDir: joinPaths(exeDir, 'data'),
-    databasePath: joinPaths(exeDir, 'data', 'rtwiki.sqlite'),
-    attachmentsDir: joinPaths(exeDir, 'data', 'attachments'),
-    backupsDir: joinPaths(exeDir, 'data', 'backups'),
-    logDir: joinPaths(exeDir, 'logs'),
-    logPath: joinPaths(exeDir, 'logs', 'rtwiki.log'),
+    databasePath: joinPaths(exeDir, 'data', DATABASE_FILENAME),
+    attachmentsDir: joinPaths(exeDir, 'data', ATTACHMENTS_DIR),
+    backupsDir: joinPaths(exeDir, 'data', BACKUPS_DIR),
+    logDir: joinPaths(exeDir, LOGS_DIR),
+    logPath: joinPaths(exeDir, LOGS_DIR, LOG_FILENAME),
     frontendDistDir
   }
 }
@@ -87,7 +102,7 @@ export function resolveRuntimePaths(): RuntimePaths {
  * Returns the base directory and whether RTWiki is running as a compiled
  * executable.
  * - Compiled: directory containing RTWiki.exe (from process.execPath)
- * - Development: directory of the entry module (from import.meta)
+ * - Development: repository root (from import.meta)
  */
 function getRuntimeBase(): { baseDir: string; compiled: boolean } {
   // Compiled executable: process.execPath points to RTWiki.exe
@@ -99,11 +114,13 @@ function getRuntimeBase(): { baseDir: string; compiled: boolean } {
     }
   }
 
-  // Development: use import.meta.dirname (Bun/Node ESM)
-  // This gives the directory of the module that calls this function
+  // Development: use import.meta.dirname (Bun/Node ESM). This is the directory
+  // of this config module (<repo>/src/server/config); walk up to the repository
+  // root so runtime data stays beside the project, not inside the source tree.
   if (typeof import.meta !== 'undefined' && 'dirname' in import.meta) {
+    const moduleDir = (import.meta as unknown as { dirname: string }).dirname
     return {
-      baseDir: (import.meta as unknown as { dirname: string }).dirname,
+      baseDir: findProjectRoot(moduleDir),
       compiled: false
     }
   }
@@ -118,7 +135,8 @@ function getRuntimeBase(): { baseDir: string; compiled: boolean } {
 /**
  * Walks up from `start` to locate the repository root (the directory that
  * contains package.json). Used in development to map the module location back
- * to the project root so the Vite build output (<root>/dist/web) can be found.
+ * to the project root so runtime data and the Vite build output resolve to
+ * stable repository-level locations.
  */
 function findProjectRoot(start: string): string {
   let dir = start

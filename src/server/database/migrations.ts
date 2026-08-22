@@ -1,5 +1,4 @@
-import { logger } from '../logging/index.js'
-import type { getDb } from './index.js'
+import { getDatabaseLogger, type getDb } from './index.js'
 
 export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void> {
   await applyMigration(db, '001_create_pages', (db) => {
@@ -60,7 +59,7 @@ async function applyMigration(
     const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get(name)
     if (existing) {
       db.run('COMMIT')
-      logger.info('Migration already applied', {
+      getDatabaseLogger().info('Migration already applied', {
         event: 'migration',
         name,
         skipped: true
@@ -70,11 +69,11 @@ async function applyMigration(
     up(db)
     db.run('INSERT INTO _migrations (name) VALUES (?)', [name])
     db.run('COMMIT')
-    logger.info('Migration applied', { event: 'migration', name })
+    getDatabaseLogger().info('Migration applied', { event: 'migration', name })
   } catch (err) {
     db.run('ROLLBACK')
     const message = err instanceof Error ? err.message : String(err)
-    logger.error('Migration failed', {
+    getDatabaseLogger().error('Migration failed', {
       event: 'migration',
       name,
       error: message

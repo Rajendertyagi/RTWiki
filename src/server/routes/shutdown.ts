@@ -2,52 +2,11 @@ import { timingSafeEqual } from 'node:crypto'
 import { Hono } from 'hono'
 import { SHUTDOWN_TOKEN_HEADER } from '../../shared/constants/index.js'
 import type { ShutdownCoordinator } from '../shutdown-coordinator.js'
+import { isSameOrigin } from '../utils/request-origin.js'
 
 export interface ShutdownRouteOptions {
   coordinator: ShutdownCoordinator
   token: string
-}
-
-/**
- * Validates that a request originates from the local machine by checking
- * fetch-metadata headers against the request URL's origin.
- *
- * Security model:
- * - When Sec-Fetch-Site is present, require exactly "same-origin".
- * - When Origin is present: reject "null", reject malformed values,
- *   require exact equality with `new URL(request.url).origin`.
- * - When Referer is present: reject malformed values, require exact origin equality.
- * - When no browser headers are present (CLI/automation path): accept; the
- *   POST token requirement provides CSRF protection.
- */
-function isSameOrigin(req: Request): boolean {
-  const fetchSite = req.headers.get('sec-fetch-site')
-  if (fetchSite !== null && fetchSite !== 'same-origin') return false
-
-  const requestOrigin = new URL(req.url).origin
-
-  const origin = req.headers.get('origin')
-  if (origin !== null) {
-    if (origin === 'null') return false
-    try {
-      if (new URL(origin).origin !== requestOrigin) return false
-    } catch {
-      return false // malformed Origin
-    }
-    return true
-  }
-
-  const referer = req.headers.get('referer')
-  if (referer !== null) {
-    try {
-      if (new URL(referer).origin !== requestOrigin) return false
-    } catch {
-      return false // malformed Referer
-    }
-    return true
-  }
-
-  return true // CLI/automation path — token required on POST for CSRF protection
 }
 
 export function timingSafeEqualStrings(a: string, b: string): boolean {

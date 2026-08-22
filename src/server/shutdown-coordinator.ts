@@ -58,6 +58,7 @@ export class ShutdownCoordinator {
     if (this.currentState !== 'running') {
       return this.pendingResult as Promise<ShutdownResult>
     }
+    this.caps.logInfo('Shutdown requested', { event: 'shutdown_requested' })
     this.pendingResult = this.runSafely()
     this.pendingResult.then((result) => {
       this.completedResolve(result)
@@ -88,6 +89,7 @@ export class ShutdownCoordinator {
       const error = err instanceof Error ? err : new Error(String(err))
       return { ok: false, stage: 'server', error }
     }
+    this.caps.logInfo('HTTP server stopped', { event: 'shutdown_server_stopped' })
 
     // Phase 2: close database (only after server is confirmed stopped).
     try {
@@ -107,9 +109,10 @@ export class ShutdownCoordinator {
       }
       return { ok: false, stage: 'database', error }
     }
+    this.caps.logInfo('Database closed', { event: 'shutdown_database_closed' })
 
     // Phase 3: log completion before closing logger.
-    this.caps.logInfo('Shutdown complete', { event: 'shutdown' })
+    this.caps.logInfo('Shutdown complete', { event: 'shutdown_complete' })
 
     // Phase 4: close logger.
     try {

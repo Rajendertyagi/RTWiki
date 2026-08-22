@@ -52,11 +52,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Build web
         run: bun run build:web
-      # The dev-mode server serves the SPA from <repo>/dist/web.
-      - name: Place built frontend for the runtime layout
-        run: |
-          mkdir -p dist
-          cp -r build/web dist/web
+      # The development-mode server resolves the SPA to <repo>/build/web.
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
       - name: Run browser tests against the built application
