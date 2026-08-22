@@ -86,13 +86,9 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
     // Resolve the candidate file path.
     const resolved = join(root, rel)
 
-    // DIAGNOSTIC: log path resolution for debugging packaged-asset 404s.
-    // Remove after root cause is confirmed fixed.
-    const exists = existsSync(resolved.split('?')[0])
-    if (!exists && rel.includes('.')) {
-      console.error(
-        `[rtwiki-static] ROOT=${root} REL=${rel} RESOLVED=${resolved} EXISTS=${exists}`
-      )
+    // DIAGNOSTIC: remove after packaged-asset 404 root cause is proven.
+    if (!existsSync(resolved) && rel.includes('.')) {
+      console.error(`[rtwiki-static] miss rel=${rel} root=${root} resolved=${resolved}`)
     }
 
     // Path traversal check — the resolved path must stay inside root.

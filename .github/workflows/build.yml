@@ -379,6 +379,19 @@ jobs:
 
           } catch {
             Write-Error "SMOKE FAILURE: $_"
+            # Emit diagnostics as ::error:: annotations (readable via public API).
+            $errDump = Get-Content $err -Raw -ErrorAction SilentlyContinue
+            if ($errDump) {
+              $oneLine = ($errDump.Trim() -replace "`r?`n", ' ~ ')
+              if ($oneLine.Length -gt 450) { $oneLine = $oneLine.Substring(0, 450) }
+              Write-Host "::error::[diag-stderr] $oneLine"
+            }
+            $outDump = Get-Content $out -Raw -ErrorAction SilentlyContinue
+            if ($outDump) {
+              $oneLine2 = ($outDump.Trim() -replace "`r?`n", ' ~ ')
+              if ($oneLine2.Length -gt 450) { $oneLine2 = $oneLine2.Substring(0, 450) }
+              Write-Host "::error::[diag-stdout] $oneLine2"
+            }
             Write-Host "=== STDOUT ==="
             Get-Content $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
             Write-Host "=== STDERR ==="

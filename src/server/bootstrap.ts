@@ -196,9 +196,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
 
   // DIAGNOSTIC: log frontend dist dir existence for debugging packaged-asset 404s.
   // Remove after root cause is confirmed fixed.
-  console.error(
-    `[rtwiki-startup] frontendDistDir=${paths.frontendDistDir} exists=${existsSync(paths.frontendDistDir)}`
-  )
+  const distExists = existsSync(paths.frontendDistDir)
+  console.error(`[rtwiki-startup] frontendDistDir=${paths.frontendDistDir} exists=${distExists}`)
 
   if (openBrowser) {
     const launcher = options.launcher ?? launchBrowser
