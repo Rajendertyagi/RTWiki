@@ -6,7 +6,8 @@ export function createPage(
   id: string,
   title: string,
   pageType: PageType,
-  content: string
+  content: string,
+  searchContent: string
 ): Page {
   const now = new Date().toISOString()
   db.run(
@@ -16,7 +17,7 @@ export function createPage(
   db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [
     id,
     title,
-    content
+    searchContent
   ])
   return getPageOrThrow(db, id)
 }
@@ -42,7 +43,7 @@ export function getPageOrThrow(db: Database, id: string): Page {
 export function updatePage(
   db: Database,
   id: string,
-  fields: { title?: string; content?: string; pageType?: PageType }
+  fields: { title?: string; content?: string; pageType?: PageType; searchContent?: string }
 ): Page | null {
   const existing = getPage(db, id)
   if (!existing) return null
@@ -73,15 +74,18 @@ export function updatePage(
   db.run(`UPDATE pages SET ${sets.join(', ')} WHERE id = ?`, values)
 
   const updated = getPageOrThrow(db, id)
+  // The service layer resolves the searchable text for every write; falling
+  // back to the stored content preserves the legacy rich-page behavior.
+  const indexedContent = fields.searchContent ?? updated.content
   db.run(
     'INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?) ON CONFLICT(page_id) DO UPDATE SET title = ?, content = ?',
-    [id, updated.title, updated.content, updated.title, updated.content]
+    [id, updated.title, indexedContent, updated.title, indexedContent]
   )
 
   return updated
 }
 
-export function duplicatePage(db: Database, id: string): Page | null {
+export function duplicatePage(db: Database, id: string, searchContent?: string): Page | null {
   const source = getPage(db, id)
   if (!source) return null
 
@@ -95,7 +99,7 @@ export function duplicatePage(db: Database, id: string): Page | null {
   db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [
     newId,
     `${source.title} - Copy`,
-    source.content
+    searchContent ?? source.content
   ])
 
   return getPageOrThrow(db, newId)

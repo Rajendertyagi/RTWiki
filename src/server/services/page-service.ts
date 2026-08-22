@@ -7,6 +7,7 @@ import {
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
 import * as repo from '../repositories/page-repository.js'
+import { extractSearchableContent } from './search-extraction.js'
 
 /**
  * Raised when submitted content violates the canonical format for its page
@@ -42,7 +43,8 @@ function resolveCreatedContent(pageType: PageType, content: string): string {
 export function createPage(db: Database, input: CreatePageInput): Page {
   const id = crypto.randomUUID()
   const content = resolveCreatedContent(input.pageType, input.content)
-  return repo.createPage(db, id, input.title, input.pageType, content)
+  const searchContent = extractSearchableContent(input.pageType, content)
+  return repo.createPage(db, id, input.title, input.pageType, content, searchContent)
 }
 
 export function getPage(db: Database, id: string): Page | null {
@@ -63,21 +65,32 @@ export function getPageOrThrow(db: Database, id: string): Page {
  * applies to writes only, so reads keep returning stored bytes verbatim.
  */
 export function updatePage(db: Database, id: string, input: UpdatePageInput): Page | null {
+  const existing = repo.getPage(db, id)
+  if (!existing) return null
+
+  // Search text is recomputed on every write so the index always reflects
+  // the current stored content for the page's (immutable) type.
+  let searchContent: string | undefined
   if (input.content !== undefined) {
-    const existing = repo.getPage(db, id)
-    if (!existing) return null
     if (existing.pageType === 'html') {
       const parsed = parseHtmlContent(input.content)
       if (!parsed.ok) {
         throw new PageValidationError(parsed.error)
       }
     }
+    searchContent = extractSearchableContent(existing.pageType, input.content)
+  } else {
+    searchContent = extractSearchableContent(existing.pageType, existing.content)
   }
-  return repo.updatePage(db, id, input)
+
+  return repo.updatePage(db, id, { ...input, searchContent })
 }
 
 export function duplicatePage(db: Database, id: string): Page | null {
-  return repo.duplicatePage(db, id)
+  const source = repo.getPage(db, id)
+  if (!source) return null
+  const searchContent = extractSearchableContent(source.pageType, source.content)
+  return repo.duplicatePage(db, id, searchContent)
 }
 
 export function softDeletePage(db: Database, id: string): boolean {

@@ -339,6 +339,108 @@ describe('HTML-page canonical content lifecycle', () => {
   })
 })
 
+describe('HTML-page search indexing', () => {
+  let tempDir: string
+  let db: ReturnType<typeof getDb>
+
+  beforeAll(async () => {
+    tempDir = makeTempDir()
+    db = initDatabase(tempDir)
+    await runMigrations(db)
+  })
+
+  afterAll(async () => {
+    await closeDatabase()
+    cleanup(tempDir)
+  })
+
+  it('indexes readable HTML text, not markup, CSS or JavaScript', () => {
+    const canonical = JSON.stringify({
+      version: 1,
+      html: '<h1>Photosynthesis Overview</h1><p>Chloroplasts convert light energy.</p>',
+      css: '.cssOnlyMarker { color: red; }',
+      javascript: 'var jsOnlyMarker = 1;'
+    })
+    const page = service.createPage(db, {
+      title: 'Biology Notes',
+      pageType: 'html',
+      content: canonical
+    })
+
+    const found = service.listPages(db, { search: 'Chloroplasts' })
+    expect(found.pages.some((p) => p.id === page.id)).toBe(true)
+
+    // Markup/CSS/JS source must not match.
+    expect(service.listPages(db, { search: 'cssOnlyMarker' }).pages).toHaveLength(0)
+    expect(service.listPages(db, { search: 'jsOnlyMarker' }).pages).toHaveLength(0)
+    expect(service.listPages(db, { search: '<h1>' }).pages).toHaveLength(0)
+  })
+
+  it('refreshes the index when html content is updated', () => {
+    const v1 = JSON.stringify({
+      version: 1,
+      html: '<p>OriginalSearchTerm lives here</p>',
+      css: '',
+      javascript: ''
+    })
+    const page = service.createPage(db, { title: 'Refresh Test', pageType: 'html', content: v1 })
+    expect(service.listPages(db, { search: 'OriginalSearchTerm' }).pages).toHaveLength(1)
+
+    const v2 = JSON.stringify({
+      version: 1,
+      html: '<p>ReplacementSearchTerm lives here</p>',
+      css: '',
+      javascript: ''
+    })
+    service.updatePage(db, page.id, { content: v2 })
+
+    expect(service.listPages(db, { search: 'OriginalSearchTerm' }).pages).toHaveLength(0)
+    expect(service.listPages(db, { search: 'ReplacementSearchTerm' }).pages).toHaveLength(1)
+  })
+
+  it('removes the search entry on deletion', () => {
+    const canonical = JSON.stringify({
+      version: 1,
+      html: '<p>DeleteableSearchTerm</p>',
+      css: '',
+      javascript: ''
+    })
+    const page = service.createPage(db, { title: 'Delete Search', pageType: 'html', content: canonical })
+    expect(service.listPages(db, { search: 'DeleteableSearchTerm' }).pages).toHaveLength(1)
+
+    service.softDeletePage(db, page.id)
+    expect(service.listPages(db, { search: 'DeleteableSearchTerm' }).pages).toHaveLength(0)
+  })
+
+  it('keeps rich-page search behavior unchanged (raw JSON indexed)', () => {
+    const richJson = '[{"type":"paragraph","content":[{"type":"text","text":"RichRawIndexTerm"}]}]'
+    const page = service.createPage(db, {
+      title: 'Rich Search',
+      pageType: 'rich',
+      content: richJson
+    })
+    // Rich content continues to be indexed verbatim — searching a term that
+    // only exists inside the stored JSON still finds the page, exactly as
+    // before this phase.
+    expect(service.listPages(db, { search: 'RichRawIndexTerm' }).pages.some((p) => p.id === page.id)).toBe(
+      true
+    )
+  })
+
+  it('duplicates refresh the index for html copies', () => {
+    const canonical = JSON.stringify({
+      version: 1,
+      html: '<p>DuplicateIndexTerm</p>',
+      css: '',
+      javascript: ''
+    })
+    const page = service.createPage(db, { title: 'Dup Search', pageType: 'html', content: canonical })
+    const copy = service.duplicatePage(db, page.id)
+    expect(copy).not.toBeNull()
+    expect(service.listPages(db, { search: 'DuplicateIndexTerm' }).pages).toHaveLength(2)
+  })
+})
+
 describe('API validation', () => {
   it('CreatePageSchema rejects empty title', async () => {
     const { CreatePageSchema } = await import('@rtwiki/shared/schemas/pages')
