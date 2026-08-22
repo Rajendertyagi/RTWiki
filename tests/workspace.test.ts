@@ -10,6 +10,8 @@ function makePage(overrides: Partial<Page> = {}): Page {
     title: 'Test',
     content: '',
     pageType: 'rich',
+    parentId: null,
+    position: 0,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,

@@ -39,6 +39,8 @@ describe('pages-controller-utils', () => {
     title: 'Test Page',
     content: 'Hello',
     pageType: 'rich',
+    parentId: null,
+    position: 0,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,

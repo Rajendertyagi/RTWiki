@@ -7,6 +7,9 @@ import {
 } from '@rtwiki/shared/schemas/html-content'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
 import * as repo from '../repositories/page-repository.js'
+import { HierarchyError } from '../repositories/page-repository.js'
+
+export { HierarchyError }
 import { extractSearchableContent } from './search-extraction.js'
 
 /**
@@ -15,6 +18,10 @@ import { extractSearchableContent } from './search-extraction.js'
  * it must never surface as a 500.
  */
 export class PageValidationError extends Error {}
+
+// Hierarchy violations originate in the repository transaction; re-exported
+// here so routes map `status` onto HTTP without importing the repository.
+export { HierarchyError } from '../repositories/page-repository.js'
 
 /**
  * Resolves the stored content string for a newly created HTML page.
@@ -44,7 +51,47 @@ export function createPage(db: Database, input: CreatePageInput): Page {
   const id = crypto.randomUUID()
   const content = resolveCreatedContent(input.pageType, input.content)
   const searchContent = extractSearchableContent(input.pageType, content)
-  return repo.createPage(db, id, input.title, input.pageType, content, searchContent)
+
+  // Parent validation and position allocation share one write transaction so
+  // concurrent creates serialize into distinct sibling positions.
+  db.run('BEGIN IMMEDIATE')
+  try {
+    if (input.parentId != null) {
+      const parent = repo.getPage(db, input.parentId)
+      if (!parent) {
+        throw new HierarchyError('Parent page not found', 404)
+      }
+    }
+    const position = repo.nextChildPosition(db, input.parentId ?? null)
+    const page = repo.createPage(
+      db,
+      id,
+      input.title,
+      input.pageType,
+      content,
+      searchContent,
+      { parentId: input.parentId ?? null, position }
+    )
+    db.run('COMMIT')
+    return page
+  } catch (err) {
+    db.run('ROLLBACK')
+    throw err
+  }
+}
+
+/**
+ * Transactional hierarchy move. All validation reads happen after the write
+ * lock is acquired (BEGIN IMMEDIATE), so concurrent moves serialize and the
+ * ancestor walk can never race a competing structural change.
+ */
+export function movePage(
+  db: Database,
+  pageId: string,
+  newParentId: string | null,
+  newPosition: number
+): import('../repositories/page-repository.js').MovePageResult {
+  return repo.movePage(db, pageId, newParentId, newPosition)
 }
 
 export function getPage(db: Database, id: string): Page | null {

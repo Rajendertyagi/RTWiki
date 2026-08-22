@@ -5,6 +5,10 @@ export interface Page {
   title: string
   content: string
   pageType: PageType
+  /** Parent page id; `null` for root pages. */
+  parentId: string | null
+  /** Zero-based position among living siblings. */
+  position: number
   createdAt: string
   updatedAt: string
   deletedAt: string | null
@@ -15,6 +19,8 @@ export interface CreatePageRequest {
   title: string
   pageType?: PageType
   content?: string
+  /** Optional parent; omitted/NULL creates a root page. */
+  parentId?: string | null
 }
 
 export interface UpdatePageRequest {

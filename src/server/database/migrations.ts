@@ -40,6 +40,37 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
   await applyMigration(db, '002_add_page_type', (db) => {
     db.run("ALTER TABLE pages ADD COLUMN page_type TEXT NOT NULL DEFAULT 'rich'")
   })
+
+  await applyMigration(db, '003_page_hierarchy', (db) => {
+    // Adjacency-list hierarchy (ADR: Page Hierarchy Data Model).
+    // Adding an FK column via ADD COLUMN requires a NULL default - satisfied here.
+    db.run(
+      'ALTER TABLE pages ADD COLUMN parent_id TEXT REFERENCES pages(id) ON DELETE SET NULL'
+    )
+    db.run('ALTER TABLE pages ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
+
+    // Deterministic backfill: every living page becomes a root positioned to
+    // mirror the previous flat display order (updated_at DESC, rowid DESC).
+    // Soft-deleted rows are excluded from sibling arithmetic.
+    db.run(`
+      UPDATE pages
+      SET position = (
+        SELECT COUNT(*)
+        FROM pages AS p2
+        WHERE p2.parent_id IS NULL
+          AND p2.deleted_at IS NULL
+          AND (
+            p2.updated_at > pages.updated_at
+            OR (p2.updated_at = pages.updated_at AND p2.rowid > pages.rowid)
+          )
+      )
+      WHERE parent_id IS NULL AND deleted_at IS NULL
+    `)
+
+    db.run(
+      'CREATE INDEX idx_pages_parent_position ON pages(parent_id, position) WHERE deleted_at IS NULL'
+    )
+  })
 }
 
 async function applyMigration(

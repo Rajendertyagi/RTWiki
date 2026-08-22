@@ -1,4 +1,5 @@
 import { MAX_PAGE_JSON_BODY_BYTES } from '@rtwiki/shared/constants'
+import { PageMoveSchema } from '@rtwiki/shared/schemas/page-move'
 import { CreatePageSchema, UpdatePageSchema } from '@rtwiki/shared/schemas/pages'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -84,6 +85,9 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       if (err instanceof service.PageValidationError) {
         return c.json({ error: err.message }, 400)
       }
+      if (err instanceof service.HierarchyError) {
+        return c.json({ error: err.message }, err.status)
+      }
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
     }
@@ -124,6 +128,20 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       return c.json({ error: 'Page type conversion is not supported' }, 400)
     }
 
+    // Hierarchy changes are out of scope for PATCH: moves happen only through
+    // the dedicated move endpoint so cycle and sibling-order validation cannot
+    // be bypassed.
+    if (
+      bodyResult.body !== null &&
+      typeof bodyResult.body === 'object' &&
+      'parentId' in bodyResult.body
+    ) {
+      return c.json(
+        { error: 'Use POST /api/pages/:id/move to change page hierarchy' },
+        400
+      )
+    }
+
     try {
       const parsed = UpdatePageSchema.safeParse(bodyResult.body)
       if (!parsed.success) {
@@ -139,6 +157,32 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     } catch (err) {
       if (err instanceof service.PageValidationError) {
         return c.json({ error: err.message }, 400)
+      }
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  routes.post('/:id/move', async (c) => {
+    const bodyResult = await readJsonBody(c)
+    if (!bodyResult.ok && bodyResult.handled) {
+      return bodyResult.response
+    }
+    if (!bodyResult.ok) {
+      return c.json({ error: 'Invalid input' }, 400)
+    }
+    try {
+      const parsed = PageMoveSchema.safeParse(bodyResult.body)
+      if (!parsed.success) {
+        return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
+      }
+      const db = getDbFn()
+      const id = c.req.param('id')
+      const result = service.movePage(db, id, parsed.data.newParentId, parsed.data.newPosition)
+      return c.json(result)
+    } catch (err) {
+      if (err instanceof service.HierarchyError) {
+        return c.json({ error: err.message }, err.status)
       }
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
@@ -170,6 +214,9 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       }
       return c.json({ ok: true })
     } catch (err) {
+      if (err instanceof service.HierarchyError) {
+        return c.json({ error: err.message }, err.status)
+      }
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
     }
