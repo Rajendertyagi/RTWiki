@@ -192,12 +192,19 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
   })
 
-  test('HTML pages show their placeholder and never mount BlockNote', async ({ page, request }) => {
+  test('HTML pages show their sandboxed preview and never mount BlockNote', async ({
+    page,
+    request
+  }) => {
     const title = uniqueTitle('Static HTML page')
+    // Empty content leniently becomes the canonical empty HTML document,
+    // which renders as a sandboxed preview — never as the Rich editor.
     await seedPage(request, title, 'html', '')
     await page.goto('/')
     await openNote(page, title)
-    await expect(page.getByText('HTML / CSS / JavaScript editor')).toBeVisible()
+    const preview = page.locator('[data-testid="preview-iframe"]')
+    await expect(preview).toBeVisible()
+    await expect(preview).toHaveAttribute('sandbox', 'allow-scripts')
     await expect(page.locator(editorRoot)).toHaveCount(0)
     await expect(page.locator('.bn-editor')).toHaveCount(0)
   })
