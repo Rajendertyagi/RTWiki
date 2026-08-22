@@ -5,7 +5,9 @@ const baseURL = `http://127.0.0.1:${PORT}`
 
 export default defineConfig({
   testDir: './tests/browser',
-  testMatch: '**/*.spec.ts',
+  // .pwspec.ts keeps the Playwright suite out of `bun test` discovery
+  // (bun matches *.spec.* and cannot run Playwright's describe registry).
+  testMatch: '**/*.pwspec.ts',
   timeout: 30_000,
   retries: 0,
   workers: 1,

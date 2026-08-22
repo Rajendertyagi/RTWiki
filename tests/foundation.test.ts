@@ -57,10 +57,18 @@ describe('resolveRuntimePaths', () => {
     expect(paths.logPath).toBe(joinPaths(paths.exeDir, 'logs', 'rtwiki.log'))
   })
 
-  it('should not derive from cwd', () => {
-    const cwd = process.cwd()
-    const paths = resolveRuntimePaths()
-    expect(paths.exeDir).not.toBe(cwd)
+  it('does not derive from cwd', () => {
+    // Dev-mode base is the repository root, which may legitimately equal the
+    // working directory; the invariant under test is that CHANGING the cwd
+    // never changes the resolved paths.
+    const original = process.cwd()
+    const fromRepo = resolveRuntimePaths()
+    process.chdir(tmpdir())
+    const fromTemp = resolveRuntimePaths()
+    process.chdir(original)
+    expect(fromTemp.exeDir).toBe(fromRepo.exeDir)
+    expect(fromTemp.logPath).toBe(fromRepo.logPath)
+    expect(fromTemp.dataDir).toBe(fromRepo.dataDir)
   })
 
   it('is independent of current working directory', () => {

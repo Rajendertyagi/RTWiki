@@ -123,8 +123,9 @@ describe('ShutdownCoordinator', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.stage).toBe('logger')
     expect(coord.state).toBe('failed')
-    // The "Shutdown complete" log must have been written before logger close.
-    expect(logInfoSpy).toHaveBeenCalledTimes(2)
+    // The full stage sequence must be logged before logger close:
+    // requested, shutting down, server stopped, database closed, complete.
+    expect(logInfoSpy).toHaveBeenCalledTimes(5)
   })
 
   it('completed does not resolve before requestShutdown() is called', async () => {
