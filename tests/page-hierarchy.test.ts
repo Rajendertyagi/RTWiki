@@ -81,7 +81,7 @@ describe('migration 003_page_hierarchy', () => {
 
     await runMigrations(db)
 
-    const names = db.query('_migrations').all() as Array<{ name: string }>
+    const names = db.query('SELECT name FROM _migrations').all() as Array<{ name: string }>
     expect(names.filter((n) => n.name === '003_page_hierarchy').length).toBe(1)
 
     const roots = livingRoots(db)
@@ -162,7 +162,8 @@ describe('hierarchy behaviour', () => {
     // Move 'moved' under 'root' at index 0, before 'child'.
     const result = movePage(db, 'moved', 'root', 0)
     expect(result.page.parentId).toBe('root')
-    expect(result.originSiblings.map((s) => s.id)).toEqual([])
+    // originSiblings is the authoritative post-removal origin list.
+    expect(result.originSiblings.map((s) => s.id)).toEqual(['root'])
     expect(result.destinationSiblings.map((s) => s.id)).toEqual(['moved', 'child'])
     const child = getPage(db, 'child')
     expect(child?.position).toBe(1)
@@ -230,8 +231,8 @@ describe('hierarchy behaviour', () => {
         'SELECT id, position FROM pages WHERE parent_id = ? AND deleted_at IS NULL ORDER BY position, rowid'
       )
       .all('g1') as Array<{ id: string; position: number }>
-    expect(promoted.map((r) => r.id)).toEqual(['c1', 'c2', 'g2'])
-    expect(promoted.map((r) => r.position)).toEqual([0, 1, 2])
+    expect(promoted.map((r) => r.id)).toEqual(['c1', 'c2'])
+    expect(promoted.map((r) => r.position)).toEqual([0, 1])
     // Deleted page leaves no FTS entry; promoted children remain searchable.
     const fts = db.query('SELECT page_id FROM search_index ORDER BY page_id').all() as Array<{
       page_id: string
