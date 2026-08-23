@@ -35,7 +35,7 @@ jobs:
       - name: Emit output annotation chunks (first half)
         run: |
           {
-            grep -E '✘|failed|passed|Error:|DNDEVENTS|POSTS|CONSOLE' pw-full.txt | head -n 120 || true
+            grep -E '✘|failed|passed|Error:|DNDEVENTS|POSTS|CONSOLE|MOVE_RESP' pw-full.txt | head -n 120 || true
             echo '--- tail ---'
             tail -n 25 pw-full.txt
           } > combined.txt
@@ -50,7 +50,7 @@ jobs:
       - name: Emit output annotation chunks (remainder)
         run: |
           {
-            grep -E '✘|failed|passed|Error:|DNDEVENTS|POSTS|CONSOLE' pw-full.txt | head -n 120 || true
+            grep -E '✘|failed|passed|Error:|DNDEVENTS|POSTS|CONSOLE|MOVE_RESP' pw-full.txt | head -n 120 || true
             echo '--- tail ---'
             tail -n 25 pw-full.txt
           } > combined.txt

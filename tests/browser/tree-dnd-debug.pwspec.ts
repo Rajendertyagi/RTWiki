@@ -33,6 +33,17 @@ test('debug: drag event pipeline and network truth', async ({ page, request }) =
   page.on('request', (r) => {
     if (r.method() === 'POST') posts.push(r.url())
   })
+  page.on('response', async (r) => {
+    if (r.url().includes('/move')) {
+      let bodyText = ''
+      try {
+        bodyText = await r.text()
+      } catch {
+        bodyText = '(body unavailable)'
+      }
+      console.log(`MOVE_RESP ${r.status()} ${bodyText.slice(0, 500)}`)
+    }
+  })
   const a = await seedPage(request, uniqueTitle('DbgA'))
   const c = await seedPage(request, uniqueTitle('DbgC'))
   await page.goto('/')
