@@ -1,7 +1,7 @@
 import { ActionIcon, Menu, Text, TextInput } from '@mantine/core'
+import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconChevronRight, IconDots, IconFileText } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './page-tree.module.css'
 

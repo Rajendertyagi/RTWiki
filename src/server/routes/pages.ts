@@ -136,10 +136,7 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       typeof bodyResult.body === 'object' &&
       'parentId' in bodyResult.body
     ) {
-      return c.json(
-        { error: 'Use POST /api/pages/:id/move to change page hierarchy' },
-        400
-      )
+      return c.json({ error: 'Use POST /api/pages/:id/move to change page hierarchy' }, 400)
     }
 
     try {

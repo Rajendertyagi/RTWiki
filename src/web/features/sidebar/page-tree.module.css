@@ -6,7 +6,7 @@
   position: relative;
 }
 
-.row[data-focused='true'] {
+.row[data-focused="true"] {
   outline: none;
 }
 

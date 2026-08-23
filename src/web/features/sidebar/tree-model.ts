@@ -12,10 +12,7 @@ import type { Page } from '@rtwiki/shared/contracts/pages'
  * disappearing or looping forever.
  */
 
-export type PageLike = Pick<
-  Page,
-  'id' | 'title' | 'pageType' | 'parentId' | 'position'
->
+export type PageLike = Pick<Page, 'id' | 'title' | 'pageType' | 'parentId' | 'position'>
 
 export interface TreeNode<T extends PageLike> {
   page: T

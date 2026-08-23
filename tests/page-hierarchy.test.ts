@@ -1,15 +1,15 @@
-import { describe, expect, it } from 'bun:test'
 import { Database } from 'bun:sqlite'
+import { describe, expect, it } from 'bun:test'
+import { Hono } from 'hono'
+import { runMigrations } from '../src/server/database/migrations.js'
 import {
   createPage,
   HierarchyError,
   movePage,
   nextChildPosition
 } from '../src/server/repositories/page-repository.js'
-import { getPage, softDeletePage } from '../src/server/services/page-service.js'
-import { runMigrations } from '../src/server/database/migrations.js'
-import { Hono } from 'hono'
 import { createPageRoutes } from '../src/server/routes/pages.js'
+import { getPage, softDeletePage } from '../src/server/services/page-service.js'
 
 /**
  * Legacy pre-003 database: only migration 001 is recorded, so running the
@@ -56,13 +56,11 @@ interface HierarchyRow {
 }
 
 function livingRoots(db: Database): HierarchyRow[] {
-  return (
-    db
-      .query(
-        'SELECT id, parent_id, position, deleted_at FROM pages WHERE deleted_at IS NULL AND parent_id IS NULL ORDER BY position, rowid'
-      )
-      .all() as HierarchyRow[]
-  )
+  return db
+    .query(
+      'SELECT id, parent_id, position, deleted_at FROM pages WHERE deleted_at IS NULL AND parent_id IS NULL ORDER BY position, rowid'
+    )
+    .all() as HierarchyRow[]
 }
 
 function addLegacyPage(db: Database, id: string, updatedAt: string): void {
@@ -127,15 +125,10 @@ describe('hierarchy behaviour', () => {
   /** Seeds a living page at the end of its parent's children. */
   function seed(db: Database, id: string, title: string, parentId: string | null = null): void {
     const position = nextChildPosition(db, parentId)
-    createPage(
-      db,
-      id,
-      title,
-      'rich',
-      JSON.stringify([{ type: 'paragraph' }]),
-      title,
-      { parentId, position }
-    )
+    createPage(db, id, title, 'rich', JSON.stringify([{ type: 'paragraph' }]), title, {
+      parentId,
+      position
+    })
   }
 
   it('allocates contiguous sibling positions on create', () => {
@@ -232,12 +225,11 @@ describe('hierarchy behaviour', () => {
     seed(db, 'c2', 'C2', 'p')
     // g1 children: [P]; promote C1,C2 into g1 at P's former position (0).
     softDeletePage(db, 'p')
-    const promoted =
-      db
-        .query(
-          'SELECT id, position FROM pages WHERE parent_id = ? AND deleted_at IS NULL ORDER BY position, rowid'
-        )
-        .all('g1') as Array<{ id: string; position: number }>
+    const promoted = db
+      .query(
+        'SELECT id, position FROM pages WHERE parent_id = ? AND deleted_at IS NULL ORDER BY position, rowid'
+      )
+      .all('g1') as Array<{ id: string; position: number }>
     expect(promoted.map((r) => r.id)).toEqual(['c1', 'c2', 'g2'])
     expect(promoted.map((r) => r.position)).toEqual([0, 1, 2])
     // Deleted page leaves no FTS entry; promoted children remain searchable.

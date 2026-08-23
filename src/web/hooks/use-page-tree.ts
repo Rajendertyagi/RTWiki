@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Page } from '@rtwiki/shared/contracts/pages'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildTree,
+  type FlatRow,
   flattenVisible,
   isSelfOrDescendant,
   nextTypeAheadMatch,
-  parentMap,
-  type FlatRow
+  parentMap
 } from '../features/sidebar/tree-model.js'
 
 const TYPE_AHEAD_RESET_MS = 500
@@ -59,7 +59,8 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
   // Roving tabindex fallback: before any keyboard exploration, the open page
   // row (or the first row) participates in the tab order.
   const activeVisible = rows.some((r) => r.id === activePageId)
-  const effectiveFocusedId = focusedId ?? (activeVisible ? activePageId : null) ?? rows[0]?.id ?? null
+  const effectiveFocusedId =
+    focusedId ?? (activeVisible ? activePageId : null) ?? rows[0]?.id ?? null
 
   const focusDomRow = useCallback((id: string): void => {
     const el = containerRef.current?.querySelector<HTMLElement>(
@@ -83,9 +84,7 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
       if (rows.length === 0) return
       const currentIndex = rows.findIndex((r) => r.id === effectiveFocusedId)
       const nextIndex =
-        currentIndex < 0
-          ? 0
-          : Math.min(Math.max(currentIndex + delta, 0), rows.length - 1)
+        currentIndex < 0 ? 0 : Math.min(Math.max(currentIndex + delta, 0), rows.length - 1)
       setFocusAndDom(rows[nextIndex].id)
     },
     [rows, effectiveFocusedId, setFocusAndDom]
@@ -194,15 +193,7 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
         event.preventDefault()
       }
     },
-    [
-      rows,
-      effectiveFocusedId,
-      moveFocus,
-      setFocusAndDom,
-      toggleExpand,
-      expandAllSiblings,
-      onOpen
-    ]
+    [rows, effectiveFocusedId, moveFocus, setFocusAndDom, toggleExpand, expandAllSiblings, onOpen]
   )
 
   /**

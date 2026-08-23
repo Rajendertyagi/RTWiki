@@ -285,11 +285,11 @@ export function getParentId(db: Database, pageId: string): string | null | undef
 export function listChildRefs(db: Database, parentId: string | null): SiblingRef[] {
   const rows =
     parentId === null
-      ? db
+      ? (db
           .query(
             'SELECT id, position FROM pages WHERE parent_id IS NULL AND deleted_at IS NULL ORDER BY position, rowid'
           )
-          .all() as SiblingRef[]
+          .all() as SiblingRef[])
       : (db
           .query(
             'SELECT id, position FROM pages WHERE parent_id = ? AND deleted_at IS NULL ORDER BY position, rowid'
@@ -366,26 +366,23 @@ export function movePage(
     const withoutPage = originSiblings.filter((s) => s.id !== pageId)
 
     const sameParent = originParentId === newParentId
-    const destinationSiblings = sameParent
-      ? withoutPage
-      : listChildRefs(db, newParentId)
+    const destinationSiblings = sameParent ? withoutPage : listChildRefs(db, newParentId)
 
     const clamped = Math.max(0, Math.min(newPosition, destinationSiblings.length))
     destinationSiblings.splice(clamped, 0, { id: pageId, position: clamped })
 
     if (!sameParent) {
-      db.run(
-        'UPDATE pages SET parent_id = ?, updated_at = ?, version = version + 1 WHERE id = ?',
-        [newParentId, new Date().toISOString(), pageId]
-      )
+      db.run('UPDATE pages SET parent_id = ?, updated_at = ?, version = version + 1 WHERE id = ?', [
+        newParentId,
+        new Date().toISOString(),
+        pageId
+      ])
       reindexSiblings(db, withoutPage)
     }
     reindexSiblings(db, destinationSiblings)
 
     const movedPage = getPageOrThrow(db, pageId)
-    const finalOriginSiblings = sameParent
-      ? destinationSiblings
-      : listChildRefs(db, originParentId)
+    const finalOriginSiblings = sameParent ? destinationSiblings : listChildRefs(db, originParentId)
 
     db.run('COMMIT')
     return {

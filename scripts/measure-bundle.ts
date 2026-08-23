@@ -11,13 +11,7 @@
  * Run on GitHub-hosted runners after `bun run build:web`:
  *   bun scripts/measure-bundle.ts
  */
-import {
-  appendFileSync,
-  existsSync,
-  readdirSync,
-  readFileSync,
-  statSync
-} from 'node:fs'
+import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const repoRoot = join(import.meta.dir, '..', '..')

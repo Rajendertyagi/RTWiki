@@ -10,6 +10,7 @@ import * as repo from '../repositories/page-repository.js'
 import { HierarchyError } from '../repositories/page-repository.js'
 
 export { HierarchyError }
+
 import { extractSearchableContent } from './search-extraction.js'
 
 /**
@@ -63,15 +64,10 @@ export function createPage(db: Database, input: CreatePageInput): Page {
       }
     }
     const position = repo.nextChildPosition(db, input.parentId ?? null)
-    const page = repo.createPage(
-      db,
-      id,
-      input.title,
-      input.pageType,
-      content,
-      searchContent,
-      { parentId: input.parentId ?? null, position }
-    )
+    const page = repo.createPage(db, id, input.title, input.pageType, content, searchContent, {
+      parentId: input.parentId ?? null,
+      position
+    })
     db.run('COMMIT')
     return page
   } catch (err) {

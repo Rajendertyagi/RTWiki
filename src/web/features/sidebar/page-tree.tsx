@@ -1,12 +1,9 @@
 import { Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
+import { type UsePageTreeResult, usePageTree } from '../../../hooks/use-page-tree.js'
 import { UI_TEXT } from '../../config/index.js'
-import {
-  usePageTree,
-  type UsePageTreeResult
-} from '../../../hooks/use-page-tree.js'
-import { PageTreeRow } from './page-tree-row.js'
 import classes from './page-tree.module.css'
+import { PageTreeRow } from './page-tree-row.js'
 
 export interface MoveTarget {
   id: string
@@ -110,8 +107,7 @@ function buildMoveTargets(pages: Page[]): MoveTarget[] {
   return [...pages]
     .sort((a, b) => a.position - b.position)
     .map((page) => {
-      const typeLabel =
-        page.pageType === 'rich' ? UI_TEXT.richNote : UI_TEXT.htmlPage
+      const typeLabel = page.pageType === 'rich' ? UI_TEXT.richNote : UI_TEXT.htmlPage
       return {
         id: page.id,
         label: `${page.title || UI_TEXT.untitledPage} (${typeLabel})`

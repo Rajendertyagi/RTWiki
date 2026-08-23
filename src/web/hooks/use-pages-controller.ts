@@ -1,8 +1,8 @@
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
-import { UI_TEXT } from '../config/index.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import * as api from '../services/pages-api.js'
+import { UI_TEXT } from '../config/index.js'
 import type { MoveReconciliation } from '../services/pages-api.js'
+import * as api from '../services/pages-api.js'
 
 export type MutationStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -156,9 +156,7 @@ export function usePagesController(): PagesController {
         return position === undefined ? page : { ...page, position }
       })
     })
-    setSelectedPage((prev) =>
-      prev && prev.id === result.movedPage.id ? result.movedPage : prev
-    )
+    setSelectedPage((prev) => (prev && prev.id === result.movedPage.id ? result.movedPage : prev))
   }, [])
 
   /** Reparents a page, appending it at the end of the destination children. */
@@ -202,25 +200,22 @@ export function usePagesController(): PagesController {
   )
 
   /** Creates an untitled child under an existing parent and opens it. */
-  const createChild = useCallback(
-    async (parentId: string): Promise<void> => {
-      try {
-        const page = await api.createPage({
-          title: UI_TEXT.untitledPage,
-          pageType: 'rich',
-          content: '',
-          parentId
-        })
-        setPages((prev) => [...prev, page])
-        setSelectedPage(page)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to create page'
-        setMutationStatus('error')
-        setMutationError(message)
-      }
-    },
-    []
-  )
+  const createChild = useCallback(async (parentId: string): Promise<void> => {
+    try {
+      const page = await api.createPage({
+        title: UI_TEXT.untitledPage,
+        pageType: 'rich',
+        content: '',
+        parentId
+      })
+      setPages((prev) => [...prev, page])
+      setSelectedPage(page)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create page'
+      setMutationStatus('error')
+      setMutationError(message)
+    }
+  }, [])
 
   const scheduleReset = useCallback(() => {
     if (mutationTimeoutRef.current) {

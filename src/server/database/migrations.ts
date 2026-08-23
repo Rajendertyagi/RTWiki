@@ -44,9 +44,7 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
   await applyMigration(db, '003_page_hierarchy', (db) => {
     // Adjacency-list hierarchy (ADR: Page Hierarchy Data Model).
     // Adding an FK column via ADD COLUMN requires a NULL default - satisfied here.
-    db.run(
-      'ALTER TABLE pages ADD COLUMN parent_id TEXT REFERENCES pages(id) ON DELETE SET NULL'
-    )
+    db.run('ALTER TABLE pages ADD COLUMN parent_id TEXT REFERENCES pages(id) ON DELETE SET NULL')
     db.run('ALTER TABLE pages ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
 
     // Deterministic backfill: every living page becomes a root positioned to
