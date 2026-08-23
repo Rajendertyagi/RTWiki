@@ -7,7 +7,6 @@ const editorRoot = '[data-testid="rich-editor"]'
 // single node (`<div class="tiptap ProseMirror bn-editor">`), so this must be
 // a compound selector, not a descendant combinator.
 const editable = '.bn-editor.ProseMirror'
-const toolbar = '.bn-formatting-toolbar'
 
 // Shared across the ordered scenarios: the note created through the UI flow.
 let savedTitle = ''
@@ -119,16 +118,16 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await page.goto('/')
     await page.locator('[aria-label="New page"]').first().click()
     await page.getByLabel('Title').fill(title)
-    await page.getByRole('button', { name: 'Create' }).click()
+    await page.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(page.locator(editorRoot)).toBeVisible()
     await expect(page.locator('.bn-editor')).toBeVisible()
     await expectNotBlank(page)
 
-    // Formatting toolbar appears when text is selected.
+    // The persistent Rich Document toolbar is always visible (it does not
+    // depend on text selection) and exposes the formatting commands.
     await page.locator(editable).click()
     await page.keyboard.type('Toolbar probe text')
-    await page.keyboard.press('ControlOrMeta+a')
-    await expect(page.locator(toolbar)).toBeVisible()
+    await expect(page.getByRole('toolbar', { name: 'Formatting' })).toBeVisible()
 
     // Autosave reaches the Saved state after the debounce window. The header
     // save button's label flips Saving... -> Saved and becomes disabled once
