@@ -62,8 +62,14 @@ async function dragRowOnto(
   targetId: string,
   fractionY: number
 ): Promise<void> {
-  const sourceBox = await rowLocator(page, sourceId).boundingBox()
-  const targetBox = await rowLocator(page, targetId).boundingBox()
+  const source = rowLocator(page, sourceId)
+  const target = rowLocator(page, targetId)
+  // Accumulated pages from earlier scenarios can push rows below the
+  // sidebar's scroll fold; bring both rows into view before measuring.
+  await source.scrollIntoViewIfNeeded()
+  await target.scrollIntoViewIfNeeded()
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
   if (!sourceBox || !targetBox) {
     throw new Error('drag rows are not visible')
   }
@@ -77,6 +83,17 @@ async function dragRowOnto(
     { steps: 15 }
   )
   await page.mouse.up()
+}
+
+/** Expands a collapsed parent row so its children become visible. */
+async function expandRow(page: Page, pageId: string): Promise<void> {
+  const row = rowLocator(page, pageId)
+  await row.scrollIntoViewIfNeeded()
+  const expand = row.locator('[aria-label="Expand"]')
+  if ((await expand.count()) > 0) {
+    await expand.click()
+    await expect(row).toHaveAttribute('aria-expanded', 'true')
+  }
 }
 
 async function waitForServerOrder(
@@ -144,6 +161,7 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     const child = await seedPage(request, uniqueTitle('Child'), parent.id)
     const other = await seedPage(request, uniqueTitle('Other'))
     await page.goto('/')
+    await expandRow(page, parent)
     await rowLocator(page, other.id).waitFor()
     await dragRowOnto(page, other.id, child.id, 0.5)
     const pages = await listPages(request)
@@ -156,6 +174,7 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     const c1 = await seedPage(request, uniqueTitle('C1'), root.id)
     const c2 = await seedPage(request, uniqueTitle('C2'), root.id)
     await page.goto('/')
+    await expandRow(page, root)
     await rowLocator(page, c2.id).waitFor()
     await dragRowOnto(page, c2.id, c1.id, 0.1)
     const pages = await listPages(request)
@@ -290,7 +309,9 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
   test('works in the narrow sidebar layout', async ({ page, request }) => {
     const a = await seedPage(request, uniqueTitle('NarA'))
     const b = await seedPage(request, uniqueTitle('NarB'))
-    await page.setViewportSize({ width: 375, height: 720 })
+    // Narrow-but-not-mobile: the sidebar stays visible below the desktop
+    // width while exercising the compact layout.
+    await page.setViewportSize({ width: 640, height: 800 })
     await page.goto('/')
     await rowLocator(page, b.id).waitFor()
     await dragRowOnto(page, b.id, a.id, 0.1)
