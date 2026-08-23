@@ -1002,3 +1002,35 @@ explicitly enable JS where probes require execution).
   42,005,562 bytes) from green run 32659192827.
 - `main` untouched throughout; no pull request opened; work remains on
   `feature/workspace-hierarchy`.
+
+## Workspace Rich-Document Prototype (feature/rich-workspace-prototype)
+
+**Status:** Implemented on `feature/rich-workspace-prototype` (branched from
+`5806c95e`, the workspace-hierarchy tip). Local verification green; CI result
+recorded in the commit history. **Not owner-tested; not a release candidate.**
+
+### Delivered
+
+- Trilium-inspired workspace arrangement using RTWiki's own tokens/themes:
+  global action rail, page-tree panel, in-session document tabs, persistent
+  Rich Document toolbar, central document, collapsible right sidebar.
+- Session tabs: open/dedupe/activate/close with pending-save flushing through
+  the existing guarded controller flow; rename/delete/duplicate reconcile.
+- Persistent Rich Document toolbar (paragraph/headings, bold, italic,
+  underline, lists, link, undo, redo) wired to installed BlockNote 0.54 APIs;
+  default bubble toolbar disabled.
+- New-note first contact: dictionary placeholder, bounded autofocus claim,
+  immediate typing, normal Enter behaviour.
+- Right sidebar: heading outline (live), page type/created/modified, collapse.
+- Dashboard cards render per-type readable previews (never raw JSON); whole
+  card body opens the page through the same tab flow as the tree.
+- Obsolete hierarchy banner removed.
+
+### Out of scope (unchanged backlog)
+
+Attachments, math, Mermaid, mind maps, cards/tabs blocks, import pipeline,
+`.rtwiki.zip`, FTS content search UI, backup/restore UI.
+
+### Owner manual testing
+
+Pending. The owner has not tested this artifact.

@@ -237,3 +237,13 @@ Frontend assets (the built `dist/` folder from Vite) are bundled alongside the b
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding rules that govern implementation
 - [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
 - [REFERENCE_RESEARCH.md](REFERENCE_RESEARCH.md) — comparable tools and libraries researched
+
+## Workspace tab state ownership
+
+Session document tabs live in `App` (`OpenTab[]` from
+`src/web/features/tabs/tabs-model.ts`) and are derived from, but never own,
+page data: every selection path funnels through one deduplicating effect keyed
+on the controller's `selectedPage`. Tab close/rename/delete reconcile against
+the controller and reuse its flush guards; persistence remains exclusively
+server-side. The persistent Rich Document toolbar receives the editor instance
+from the editor surface and issues commands through BlockNote's public API.

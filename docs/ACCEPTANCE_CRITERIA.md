@@ -173,3 +173,19 @@ These criteria validate the rich-content model (native blocks, `rt-*` HTML, and 
 - [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
+
+## Working Prototype acceptance criteria (interim, owner-manual)
+
+The following manual checklist gates the Working Prototype on the Windows
+artifact. It supplements, and does not replace, the MVP criteria above.
+
+1. Launch with empty `data/` shows a self-explanatory Home state.
+2. "New page" creates a Rich Note; it appears in tree and tab immediately.
+3. The editor opens with the caret in the first line and a visible prompt.
+4. Typing works without clicking; Enter reliably starts a new paragraph.
+5. A formatting toolbar is persistently visible and applies bold/headings.
+6. Autosave reaches Saved; content survives process restart.
+7. Dashboard cards and sidebar rows both open pages into tabs.
+8. Cards show readable previews; raw serialized JSON is never displayed.
+9. Search filters pages by title.
+10. No obsolete placeholder copy remains in the UI.
