@@ -84,23 +84,45 @@ function resolveRowUnderPointer(
  * hit-test utility: during drags a honey-pot element sits under the cursor,
  * so plain document.elementFromPoint would only ever see that overlay and
  * every drop would resolve as root-append.
+ *
+ * The latest valid hint computed during dragenter/dragover is cached and
+ * committed verbatim on drop. Geometry is NEVER recomputed at drop time:
+ * the sidebar scroll position can shift between the final dragover and the
+ * drop event, and recomputing clientY against live row rects there flips
+ * the edge (observed as an after-drop committing as before). Committing the
+ * cached hint guarantees the move matches the indicator the user last saw.
  */
 export function registerContainerDnd(options: ContainerDndOptions): () => void {
+  // Latest valid hint of the CURRENT drag. Every drop on this target is
+  // always preceded by onDragEnter/onDrag of that same drag, which rewrite
+  // this cache — including after an Escape-cancelled drag — so a stale hint
+  // from an earlier drag can never be committed. Invalid resolutions (null)
+  // clear it, preserving empty-space root-append semantics.
+  let lastRowHint: RowHint | null = null
+
+  const updateHint = (clientX: number, clientY: number): void => {
+    lastRowHint = resolveRowUnderPointer(options.element, clientX, clientY)
+    options.onHintChange(lastRowHint)
+  }
+
   const cleanupDropTarget = dropTargetForElements({
     element: options.element,
     canDrop: ({ source }) => isPageTreeDragData(source.data),
     onDrag: ({ location }) => {
       const { clientX, clientY } = location.current.input
-      options.onHintChange(resolveRowUnderPointer(options.element, clientX, clientY))
+      updateHint(clientX, clientY)
     },
     onDragEnter: ({ location }) => {
       const { clientX, clientY } = location.current.input
-      options.onHintChange(resolveRowUnderPointer(options.element, clientX, clientY))
+      updateHint(clientX, clientY)
     },
-    onDragLeave: () => options.onHintChange(null),
-    onDrop: ({ location }) => {
-      const { clientX, clientY } = location.current.input
-      const hint = resolveRowUnderPointer(options.element, clientX, clientY)
+    onDragLeave: () => {
+      lastRowHint = null
+      options.onHintChange(null)
+    },
+    onDrop: () => {
+      const hint = lastRowHint
+      lastRowHint = null
       options.onHintChange(null)
       if (hint) {
         options.onDropIntent(hint.rowId, hint.edge)
