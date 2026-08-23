@@ -29,13 +29,13 @@ jobs:
         run: |
           set +e
           bunx playwright install --with-deps chromium
-          bunx playwright test tests/browser/tree-dnd.pwspec.ts --reporter=line > pw-full.txt 2>&1
+          bunx playwright test tests/browser/tree-dnd-debug.pwspec.ts tests/browser/tree-dnd.pwspec.ts --reporter=line > pw-full.txt 2>&1
           echo "playwright exit: $?" >> pw-full.txt
           true
       - name: Emit output annotation chunks (first half)
         run: |
           {
-            grep -E '✘|failed|passed|Error:|Timed out|waiting for|PAGEPROBE' pw-full.txt | head -n 120 || true
+            grep -E '✘|failed|passed|Error:|Timed out|waiting for|DNDEVENTS|PROBE' pw-full.txt | head -n 120 || true
             echo '--- tail ---'
             tail -n 25 pw-full.txt
           } > combined.txt
@@ -50,7 +50,7 @@ jobs:
       - name: Emit output annotation chunks (remainder)
         run: |
           {
-            grep -E '✘|failed|passed|Error:|Timed out|waiting for|PAGEPROBE' pw-full.txt | head -n 120 || true
+            grep -E '✘|failed|passed|Error:|Timed out|waiting for|DNDEVENTS|PROBE' pw-full.txt | head -n 120 || true
             echo '--- tail ---'
             tail -n 25 pw-full.txt
           } > combined.txt
