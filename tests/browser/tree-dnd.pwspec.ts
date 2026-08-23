@@ -77,11 +77,20 @@ async function dragRowOnto(
   await page.mouse.down()
   // Small initial movement triggers the native dragstart threshold.
   await page.mouse.move(sourceBox.x + sourceBox.width / 2 + 12, sourceBox.y + 8, { steps: 5 })
-  await page.mouse.move(
-    targetBox.x + targetBox.width / 2,
-    targetBox.y + targetBox.height * fractionY,
-    { steps: 15 }
-  )
+  // Phase 1: approach the target centre. Native drags can auto-scroll the
+  // sidebar while travelling, which invalidates pre-measured coordinates.
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+    steps: 10
+  })
+  // Phase 2: re-measure NOW and apply the final edge offset, so scroll
+  // drift cannot land the drop on a neighbouring row.
+  const settled = await target.boundingBox()
+  if (!settled) {
+    throw new Error('target row disappeared mid-drag')
+  }
+  await page.mouse.move(settled.x + settled.width / 2, settled.y + settled.height * fractionY, {
+    steps: 4
+  })
   await page.mouse.up()
 }
 
