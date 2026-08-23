@@ -35,7 +35,7 @@ jobs:
       - name: Emit output annotation chunks (first half)
         run: |
           {
-            grep -E '✘|failed|passed|Error:|Timed out|expect\(|at .*pwspec' pw-full.txt | head -n 140 || true
+            grep -E '✘|failed|passed|Error:|Expected:|Received:|Timed out' pw-full.txt | head -n 160 || true
             echo '--- tail ---'
             tail -n 30 pw-full.txt
           } > combined.txt
@@ -50,7 +50,7 @@ jobs:
       - name: Emit output annotation chunks (remainder)
         run: |
           {
-            grep -E '✘|failed|passed|Error:|Timed out|expect\(|at .*pwspec' pw-full.txt | head -n 140 || true
+            grep -E '✘|failed|passed|Error:|Expected:|Received:|Timed out' pw-full.txt | head -n 160 || true
             echo '--- tail ---'
             tail -n 30 pw-full.txt
           } > combined.txt
