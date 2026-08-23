@@ -4,9 +4,13 @@ import type { Page } from '@rtwiki/shared/contracts/pages'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { type UsePageTreeResult, usePageTree } from '../../hooks/use-page-tree.js'
-import classes from './page-tree.module.css'
 import { PageTreeRow } from './page-tree-row.js'
-import { type DropEdge, isPageTreeDragData, registerRootContainerDnd } from './tree-dnd.js'
+import {
+  type DropEdge,
+  isPageTreeDragData,
+  registerContainerDnd,
+  type RowHint
+} from './tree-dnd.js'
 
 export interface MoveTarget {
   id: string
@@ -43,50 +47,6 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
 
   const moveTargets = buildMoveTargets(pages)
 
-  // Drag-and-drop: the container is a fallback root-level target (innermost
-  // target wins, so it only receives drops on empty space), and a global
-  // monitor tracks the dragging source and bumps a reset tick so rows clear
-  // stale indicators on any drag end — including Escape/cancel.
-  const [dndResetTick, setDndResetTick] = useState(0)
-  const [rootHover, setRootHover] = useState(false)
-  const containerElementRef = useRef<HTMLDivElement | null>(null)
-  const hooksRef = useRef(hooks)
-  hooksRef.current = hooks
-  const draggingSourceIdRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    return monitorForElements({
-      onDragStart: ({ source }) => {
-        if (isPageTreeDragData(source.data)) {
-          draggingSourceIdRef.current = source.data.pageId
-        }
-      },
-      // Fires for both real drops and cancellations (empty targets), which
-      // is exactly the reset signal rows need.
-      onDrop: () => {
-        draggingSourceIdRef.current = null
-        setDndResetTick((tick) => tick + 1)
-        setRootHover(false)
-      }
-    })
-  }, [])
-
-  useEffect(() => {
-    const element = containerElementRef.current
-    if (!element) return
-    return registerRootContainerDnd({
-      element,
-      canAccept: () => true,
-      onHoverChange: setRootHover,
-      onDropInRoot: () => {
-        const sourceId = draggingSourceIdRef.current
-        if (sourceId === null) return
-        // Root append: oversized position clamps to the destination end.
-        hooksRef.current.onDropMove(sourceId, null, Number.MAX_SAFE_INTEGER)
-      }
-    })
-  }, [])
-
   /**
    * Commits a completed row drop. Before/after targets compute the
    * final-index-after-removal position among the target's siblings;
@@ -115,6 +75,52 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
     }
     tree.restoreFocusAfterChange(sourceId)
   }
+
+  // Drag-and-drop: the container is the SINGLE drop target. It resolves the
+  // hovered row and edge itself (elementFromPoint), so empty container space
+  // naturally means root placement, and a global monitor tracks the dragged
+  // source for the commit path.
+  const [dropHint, setDropHint] = useState<RowHint | null>(null)
+  const containerElementRef = useRef<HTMLDivElement | null>(null)
+  const hooksRef = useRef(hooks)
+  hooksRef.current = hooks
+  const draggingSourceIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    return monitorForElements({
+      onDragStart: ({ source }) => {
+        if (isPageTreeDragData(source.data)) {
+          draggingSourceIdRef.current = source.data.pageId
+        }
+      },
+      // Fires for both real drops and cancellations (empty targets), which
+      // is exactly the reset signal rows need.
+      onDrop: () => {
+        draggingSourceIdRef.current = null
+        setDropHint(null)
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    const element = containerElementRef.current
+    if (!element) return
+    return registerContainerDnd({
+      element,
+      onHintChange: setDropHint,
+      onDropIntent: (rowId, edge) => {
+        const sourceId = draggingSourceIdRef.current
+        if (sourceId === null) return
+        if (rowId === null) {
+          // Root append: oversized position clamps to the destination end.
+          hooksRef.current.onDropMove(sourceId, null, Number.MAX_SAFE_INTEGER)
+          tree.restoreFocusAfterChange(sourceId)
+          return
+        }
+        handleRowDrop(sourceId, rowId, edge)
+      }
+    })
+  }, [])
 
   const handleRenameCommit = (id: string, title: string): void => {
     void hooks.onRename(id, title).then(() => {
@@ -145,7 +151,6 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
       aria-label={UI_TEXT.dashboardTitle}
       onKeyDown={tree.handleTreeKeyDown}
       data-testid="page-tree"
-      className={rootHover ? classes.rootHover : undefined}
     >
       {tree.rows.length === 0 ? (
         <Text size="sm" c="dimmed" ta="center">
@@ -177,9 +182,7 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
             onMoveDown={() => hooks.onMoveRelative(row.id, 1)}
             moveTargets={moveTargets.filter((t) => t.id !== row.id)}
             onMoveTo={(newParentId) => handleMoveTo(row.id, newParentId)}
-            canAcceptDrop={(sourcePageId) => !tree.isSelfOrDescendantChecker(sourcePageId, row.id)}
-            onDropOnRow={(sourceId, edge) => handleRowDrop(sourceId, row.id, edge)}
-            dndResetTick={dndResetTick}
+            dropHint={dropHint?.rowId === row.id ? dropHint.edge : null}
           />
         ))
       )}

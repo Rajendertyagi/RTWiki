@@ -50,7 +50,8 @@ export interface MovePageRequest {
 }
 
 export interface MoveReconciliation {
-  movedPage: Page
+  /** The authoritative moved-page snapshot under the server's `page` key. */
+  page: Page
   originParentId: string | null
   originSiblings: Array<{ id: string; position: number }>
   destinationParentId: string | null

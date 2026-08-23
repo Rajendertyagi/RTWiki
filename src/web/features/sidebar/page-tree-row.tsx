@@ -4,7 +4,11 @@ import { IconChevronRight, IconDots, IconFileText } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './page-tree.module.css'
-import { type DropEdge, registerRowDnd } from './tree-dnd.js'
+import {
+  PAGE_TREE_DND_TYPE,
+  type DropEdge,
+  registerRowDraggable
+} from './tree-dnd.js'
 
 export interface PageTreeRowProps {
   pageId: string
@@ -32,12 +36,8 @@ export interface PageTreeRowProps {
   /** Parent candidates for the keyboard/touch "Move to." parity menu. */
   moveTargets: Array<{ id: string; label: string }>
   onMoveTo: (newParentId: string) => void
-  /** Rejects a drag onto this row when the source is a descendant. */
-  canAcceptDrop: (sourcePageId: string) => boolean
-  /** Commits a completed drop on this row (before/after/inside). */
-  onDropOnRow: (sourceId: string, edge: DropEdge) => void
-  /** Increments whenever a drag ends anywhere, forcing hint cleanup. */
-  dndResetTick: number
+  /** Controlled drop indicator owned by the tree container. */
+  dropHint?: DropEdge | null
 }
 
 /**
@@ -68,45 +68,27 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     onMoveDown,
     moveTargets,
     onMoveTo,
-    canAcceptDrop,
-    onDropOnRow,
-    dndResetTick
+    dropHint
   } = props
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
-  const [dropHint, setDropHint] = useState<DropEdge | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
 
   const displayTitle = title || UI_TEXT.untitledPage
 
-  // Core-only drag-and-drop: this row is both a draggable source and an
-  // edge-aware drop target. Registration is effect-scoped so cleanup runs
-  // on unmount; callbacks read latest props through a ref-free pattern by
-  // re-registering only when identity-relevant values change.
-  const canAcceptDropRef = useRef(canAcceptDrop)
-  canAcceptDropRef.current = canAcceptDrop
-  const onDropOnRowRef = useRef(onDropOnRow)
-  onDropOnRowRef.current = onDropOnRow
-
+  // Core-only drag-and-drop: this row is a draggable source. Drop handling
+  // lives entirely in the tree container's single drop target.
   useEffect(() => {
     const element = rowRef.current
     if (!element) return
-    return registerRowDnd({
-      element,
-      data: { type: 'rtwiki/page-tree-item', pageId, parentId },
-      canAccept: (source) => canAcceptDropRef.current(source.pageId),
-      onHintChange: setDropHint,
-      onDropOnRow: (edge) => onDropOnRowRef.current(pageId, edge)
+    return registerRowDraggable(element, {
+      type: PAGE_TREE_DND_TYPE,
+      pageId,
+      parentId
     })
   }, [pageId, parentId])
-
-  // Any drag ending anywhere (including Escape/cancel) clears stale hints.
-  // The tick is referenced in the body so the dependency is intentional.
-  useEffect(() => {
-    if (dndResetTick >= 0) setDropHint(null)
-  }, [dndResetTick])
 
   useEffect(() => {
     if (editing) {

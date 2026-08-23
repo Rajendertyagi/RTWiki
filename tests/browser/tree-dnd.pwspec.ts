@@ -134,8 +134,9 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     const b = await seedPage(request, uniqueTitle('SibB'))
     await page.goto('/')
     await rowLocator(page, b.id).waitFor()
-    await dragRowOnto(page, b.id, a.id, 0.9)
-    await waitForServerOrder(request, [a.id, b.id])
+    // Drag the FIRST root after the second: [A,B] -> [B,A].
+    await dragRowOnto(page, a.id, b.id, 0.9)
+    await waitForServerOrder(request, [b.id, a.id])
   })
 
   test('drops inside a sibling to reparent across levels', async ({ page, request }) => {
@@ -171,8 +172,7 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     const mover = await seedPage(request, uniqueTitle('Mover'))
     await page.goto('/')
     await rowLocator(page, mover.id).waitFor()
-    // Collapse the root row first.
-    await rowLocator(page, root.id).locator('[aria-label="Collapse"]').click()
+    // Parents start collapsed; confirm before dropping into the hidden tree.
     await expect(rowLocator(page, root.id)).toHaveAttribute('aria-expanded', 'false')
     await dragRowOnto(page, mover.id, root.id, 0.5)
     const pages = await listPages(request)
@@ -193,6 +193,8 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     const kid = await seedPage(request, uniqueTitle('DescKid'), root.id)
     const before = await listPages(request)
     await page.goto('/')
+    // Expand the collapsed root so the child row is visible.
+    await rowLocator(page, root.id).locator('[aria-label="Expand"]').click()
     await rowLocator(page, kid.id).waitFor()
     await dragRowOnto(page, root.id, kid.id, 0.5)
     await expectUnchanged(request, JSON.stringify(before))
@@ -272,8 +274,10 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     const b = await seedPage(request, uniqueTitle('ActB'))
     await page.goto('/')
     await rowLocator(page, b.id).waitFor()
-    // Open page A so it becomes the active selection with its editor mounted.
+    // Open page A so it becomes the active selection with its editor mounted:
+    // clicking the focused row and pressing Enter follows the tree pattern.
     await rowLocator(page, a.id).click()
+    await page.keyboard.press('Enter')
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
     await dragRowOnto(page, b.id, a.id, 0.9)
     await waitForServerOrder(request, [a.id, b.id])

@@ -211,12 +211,12 @@ export function usePagesController(): PagesController {
       for (const s of result.originSiblings) positions.set(s.id, s.position)
       for (const s of result.destinationSiblings) positions.set(s.id, s.position)
       return prev.map((page) => {
-        if (page.id === result.movedPage.id) return result.movedPage
+        if (page.id === result.page.id) return result.page
         const position = positions.get(page.id)
         return position === undefined ? page : { ...page, position }
       })
     })
-    setSelectedPage((prev) => (prev && prev.id === result.movedPage.id ? result.movedPage : prev))
+    setSelectedPage((prev) => (prev && prev.id === result.page.id ? result.page : prev))
   }, [])
 
   /** Reparents a page, appending it at the end of the destination children. */
