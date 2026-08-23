@@ -243,7 +243,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
     await typeIntoEditor(page, '<p id="flush-marker">flushed</p>')
     // Leave immediately — before the autosave debounce fires.
-    await page.locator('[aria-label="Back to pages"]').click()
+    await page.locator('[aria-label="Home"]').click()
     await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
 
     await openHtmlPage(page, title)
@@ -320,7 +320,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await openHtmlPage(page, title)
     await expect(page.locator(JS_TOGGLE)).toBeChecked()
 
-    await page.locator('[aria-label="Back to pages"]').click()
+    await page.locator('[aria-label="Home"]').click()
     await openHtmlPage(page, title)
     await expect(page.locator(JS_TOGGLE)).toBeChecked()
   })

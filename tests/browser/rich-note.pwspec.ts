@@ -41,7 +41,7 @@ async function openNote(page: Page, title: string): Promise<void> {
 }
 
 async function goHome(page: Page): Promise<void> {
-  await page.locator('[aria-label="Back to pages"]').click()
+  await page.locator('[aria-label="Home"]').click()
   await expect(page.locator(editorRoot)).toHaveCount(0)
 }
 

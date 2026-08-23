@@ -107,8 +107,15 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
       aria-level={indentLevel + 1}
       tabIndex={tabIndex}
       ref={(el) => {
-        if (focused && !editing && el && document.activeElement !== el) {
-          // Roving tabindex keeps DOM focus in sync with focusedId.
+        const active = document.activeElement
+        const treeOwnsFocus =
+          active === null ||
+          active === document.body ||
+          (active instanceof HTMLElement && active.closest('[role="tree"]') !== null)
+        if (focused && !editing && el && active !== el && treeOwnsFocus) {
+          // Roving tabindex keeps DOM focus in sync with focusedId — but
+          // only while the tree already owns focus. It must never steal
+          // focus from the editor or another control mid-interaction.
           el.focus({ preventScroll: false })
         }
       }}
