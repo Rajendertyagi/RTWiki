@@ -56,14 +56,14 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
 
   useEffect(() => {
     return monitorForElements({
-      onMonitorDragStart: ({ source }) => {
+      onDragStart: ({ source }) => {
         if (isPageTreeDragData(source.data)) {
           draggingSourceIdRef.current = source.data.pageId
         }
       },
       // Fires for both real drops and cancellations (empty targets), which
       // is exactly the reset signal rows need.
-      onMonitorDrop: () => {
+      onDrop: () => {
         draggingSourceIdRef.current = null
         setDndResetTick((tick) => tick + 1)
         setRootHover(false)
