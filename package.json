@@ -21,6 +21,7 @@
     "db:migrate": "bun run src/server/database/migrations.ts"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "3.0.0",
     "@blocknote/core": "0.54.0",
     "@blocknote/mantine": "0.54.0",
     "@blocknote/react": "0.54.0",
