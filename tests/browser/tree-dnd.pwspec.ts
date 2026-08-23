@@ -64,34 +64,19 @@ async function dragRowOnto(
 ): Promise<void> {
   const source = rowLocator(page, sourceId)
   const target = rowLocator(page, targetId)
-  // Accumulated pages from earlier scenarios can push rows below the
-  // sidebar's scroll fold; bring both rows into view before measuring.
-  await source.scrollIntoViewIfNeeded()
   await target.scrollIntoViewIfNeeded()
-  const sourceBox = await source.boundingBox()
-  const targetBox = await target.boundingBox()
-  if (!sourceBox || !targetBox) {
-    throw new Error('drag rows are not visible')
+  // Vertical fraction maps onto the hand-maintained edge geometry
+  // (top third = before, middle = inside, bottom third = after).
+  const box = await target.boundingBox()
+  if (!box) {
+    throw new Error('target row is not visible')
   }
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
-  await page.mouse.down()
-  // Small initial movement triggers the native dragstart threshold.
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2 + 12, sourceBox.y + 8, { steps: 5 })
-  // Phase 1: approach the target centre. Native drags can auto-scroll the
-  // sidebar while travelling, which invalidates pre-measured coordinates.
-  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
-    steps: 10
+  await source.dragTo(target, {
+    targetPosition: {
+      x: Math.round(box.width / 2),
+      y: Math.max(2, Math.round(box.height * fractionY))
+    }
   })
-  // Phase 2: re-measure NOW and apply the final edge offset, so scroll
-  // drift cannot land the drop on a neighbouring row.
-  const settled = await target.boundingBox()
-  if (!settled) {
-    throw new Error('target row disappeared mid-drag')
-  }
-  await page.mouse.move(settled.x + settled.width / 2, settled.y + settled.height * fractionY, {
-    steps: 4
-  })
-  await page.mouse.up()
 }
 
 /** Expands a collapsed parent row so its children become visible. */
