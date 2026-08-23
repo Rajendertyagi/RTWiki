@@ -103,8 +103,9 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
   }, [pageId, parentId])
 
   // Any drag ending anywhere (including Escape/cancel) clears stale hints.
+  // The tick is referenced in the body so the dependency is intentional.
   useEffect(() => {
-    setDropHint(null)
+    if (dndResetTick >= 0) setDropHint(null)
   }, [dndResetTick])
 
   useEffect(() => {

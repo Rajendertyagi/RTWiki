@@ -28,7 +28,9 @@ export function arrangeOptimisticMove(
     .sort((a, b) => a.position - b.position)
   const clamped = Math.max(0, Math.min(newPosition, destination.length))
   const destinationPositions = new Map<string, number>()
-  destination.forEach((page, index) => destinationPositions.set(page.id, index))
+  destination.forEach((page, index) => {
+    destinationPositions.set(page.id, index)
+  })
 
   // Remaining origin siblings compact back to contiguous positions.
   const originPositions = new Map<string, number>()
@@ -36,7 +38,9 @@ export function arrangeOptimisticMove(
     const remainingOrigin = others
       .filter((p) => (p.parentId ?? null) === originParentId && !destinationPositions.has(p.id))
       .sort((a, b) => a.position - b.position)
-    remainingOrigin.forEach((page, index) => originPositions.set(page.id, index))
+    remainingOrigin.forEach((page, index) => {
+      originPositions.set(page.id, index)
+    })
   }
 
   return pages.map((page) => {
