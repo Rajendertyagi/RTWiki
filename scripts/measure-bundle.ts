@@ -14,7 +14,8 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-const repoRoot = join(import.meta.dir, '..', '..')
+// import.meta.dir is <repo>/scripts; one level up is the repository root.
+const repoRoot = join(import.meta.dir, '..')
 const assetsDir = join(repoRoot, 'build', 'web', 'assets')
 
 if (!existsSync(assetsDir)) {
