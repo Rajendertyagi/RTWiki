@@ -42,11 +42,25 @@ jobs:
             echo '--- tail ---'
             tail -n 40 full.txt
           } > test-output.txt
+      - name: Run Playwright suite, capture output
+        run: |
+          set +e
+          bunx playwright test --reporter=line > pw-full.txt 2>&1
+          echo "playwright exit: $?" >> pw-full.txt
+          true
+      - name: Reduce Playwright output to failures and summary
+        run: |
+          {
+            grep -E '✘|failed|passed|Error:|flaky|did not|Timed out|waiting for' pw-full.txt | head -n 120 || true
+            echo '--- tail ---'
+            tail -n 30 pw-full.txt
+          } > pw-output.txt
       - name: Publish output annotations (first half)
         run: |
-          TOTAL=$(base64 -w0 test-output.txt | fold -w 4000 | wc -l)
+          cat test-output.txt pw-output.txt > combined.txt
+          TOTAL=$(base64 -w0 combined.txt | fold -w 4000 | wc -l)
           N=0
-          for CHUNK in $(base64 -w0 test-output.txt | fold -w 4000); do
+          for CHUNK in $(base64 -w0 combined.txt | fold -w 4000); do
             N=$((N+1))
             if [ "$N" -le 4 ]; then
               echo "::error title=tstout part $N of $TOTAL::$CHUNK"
@@ -54,9 +68,10 @@ jobs:
           done
       - name: Publish output annotations (remainder)
         run: |
-          TOTAL=$(base64 -w0 test-output.txt | fold -w 4000 | wc -l)
+          cat test-output.txt pw-output.txt > combined.txt
+          TOTAL=$(base64 -w0 combined.txt | fold -w 4000 | wc -l)
           N=0
-          for CHUNK in $(base64 -w0 test-output.txt | fold -w 4000); do
+          for CHUNK in $(base64 -w0 combined.txt | fold -w 4000); do
             N=$((N+1))
             if [ "$N" -gt 4 ]; then
               echo "::error title=tstout part $N of $TOTAL::$CHUNK"
