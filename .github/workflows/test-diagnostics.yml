@@ -46,13 +46,13 @@ jobs:
         run: |
           set +e
           bunx playwright install --with-deps chromium
-          bunx playwright test --reporter=line > pw-full.txt 2>&1
+          bunx playwright test tests/browser/rich-note.pwspec.ts --reporter=line > pw-full.txt 2>&1
           echo "playwright exit: $?" >> pw-full.txt
           true
       - name: Reduce Playwright output to failures and summary
         run: |
           {
-            grep -E '✘|failed|passed|Error:|flaky|did not|Timed out|waiting for' pw-full.txt | head -n 120 || true
+            grep -E '✘|failed|passed|Error:|flaky|did not|Timed out|waiting for|PAGEPROBE|PAGEERROR|BROWSER \[' pw-full.txt | head -n 160 || true
             echo '--- tail ---'
             tail -n 30 pw-full.txt
           } > pw-output.txt
