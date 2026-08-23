@@ -4,11 +4,14 @@ import { IconChevronRight, IconDots, IconFileText } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './page-tree.module.css'
+import { type DropEdge, registerRowDnd } from './tree-dnd.js'
 
 export interface PageTreeRowProps {
   pageId: string
   title: string
   pageType: PageType
+  /** Canonical parent id of this row (drag payload identity field). */
+  parentId: string | null
   hasChildren: boolean
   expanded: boolean
   focused: boolean
@@ -26,9 +29,15 @@ export interface PageTreeRowProps {
   onDelete: () => void
   onMoveUp: () => void
   onMoveDown: () => void
-  /** Parent candidates for the keyboard/touch "Move to…" parity menu. */
+  /** Parent candidates for the keyboard/touch "Move to." parity menu. */
   moveTargets: Array<{ id: string; label: string }>
   onMoveTo: (newParentId: string) => void
+  /** Rejects a drag onto this row when the source is a descendant. */
+  canAcceptDrop: (sourcePageId: string) => boolean
+  /** Commits a completed drop on this row (before/after/inside). */
+  onDropOnRow: (sourceId: string, edge: DropEdge) => void
+  /** Increments whenever a drag ends anywhere, forcing hint cleanup. */
+  dndResetTick: number
 }
 
 /**
@@ -40,6 +49,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     pageId,
     title,
     pageType,
+    parentId,
     hasChildren,
     expanded,
     focused,
@@ -57,14 +67,45 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     onMoveUp,
     onMoveDown,
     moveTargets,
-    onMoveTo
+    onMoveTo,
+    canAcceptDrop,
+    onDropOnRow,
+    dndResetTick
   } = props
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
+  const [dropHint, setDropHint] = useState<DropEdge | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const rowRef = useRef<HTMLDivElement | null>(null)
 
   const displayTitle = title || UI_TEXT.untitledPage
+
+  // Core-only drag-and-drop: this row is both a draggable source and an
+  // edge-aware drop target. Registration is effect-scoped so cleanup runs
+  // on unmount; callbacks read latest props through a ref-free pattern by
+  // re-registering only when identity-relevant values change.
+  const canAcceptDropRef = useRef(canAcceptDrop)
+  canAcceptDropRef.current = canAcceptDrop
+  const onDropOnRowRef = useRef(onDropOnRow)
+  onDropOnRowRef.current = onDropOnRow
+
+  useEffect(() => {
+    const element = rowRef.current
+    if (!element) return
+    return registerRowDnd({
+      element,
+      data: { type: 'rtwiki/page-tree-item', pageId, parentId },
+      canAccept: (source) => canAcceptDropRef.current(source.pageId),
+      onHintChange: setDropHint,
+      onDropOnRow: (edge) => onDropOnRowRef.current(pageId, edge)
+    })
+  }, [pageId, parentId])
+
+  // Any drag ending anywhere (including Escape/cancel) clears stale hints.
+  useEffect(() => {
+    setDropHint(null)
+  }, [dndResetTick])
 
   useEffect(() => {
     if (editing) {
@@ -95,9 +136,11 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     paddingLeft: `calc(${indentLevel} * var(--rtwiki-tree-indent-step, 16px))`
   }
 
+  const rowClassName = dropHint === 'inside' ? `${classes.row} ${classes.dropInside}` : classes.row
+
   return (
     <div
-      className={classes.row}
+      className={rowClassName}
       style={rowStyle}
       data-page-id={pageId}
       data-focused={focused || undefined}
@@ -107,6 +150,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
       aria-level={indentLevel + 1}
       tabIndex={tabIndex}
       ref={(el) => {
+        rowRef.current = el
         const active = document.activeElement
         const treeOwnsFocus =
           active === null ||
@@ -135,6 +179,12 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
         if (!editing) setEditing(true)
       }}
     >
+      {dropHint === 'before' ? (
+        <span aria-hidden="true" className={`${classes.insertLine} ${classes.insertLineTop}`} />
+      ) : null}
+      {dropHint === 'after' ? (
+        <span aria-hidden="true" className={`${classes.insertLine} ${classes.insertLineBottom}`} />
+      ) : null}
       <div className={classes.rowInner}>
         {hasChildren ? (
           <ActionIcon

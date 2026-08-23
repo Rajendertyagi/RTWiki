@@ -6,6 +6,53 @@ import * as api from '../services/pages-api.js'
 
 export type MutationStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+/**
+ * Pure optimistic arrangement for a positional move: mirrors the server's
+ * final-index-after-removal semantics so the UI does not wait for the
+ * round trip. The authoritative reconciliation replaces this afterwards.
+ */
+export function arrangeOptimisticMove(
+  pages: Page[],
+  id: string,
+  newParentId: string | null,
+  newPosition: number
+): Page[] {
+  const moved = pages.find((p) => p.id === id)
+  if (!moved) return pages
+  const originParentId = moved.parentId ?? null
+  const others = pages.filter((p) => p.id !== id)
+
+  // Destination siblings (excluding the moved page), insert at the clamped slot.
+  const destination = others
+    .filter((p) => (p.parentId ?? null) === newParentId)
+    .sort((a, b) => a.position - b.position)
+  const clamped = Math.max(0, Math.min(newPosition, destination.length))
+  const destinationPositions = new Map<string, number>()
+  destination.forEach((page, index) => destinationPositions.set(page.id, index))
+
+  // Remaining origin siblings compact back to contiguous positions.
+  const originPositions = new Map<string, number>()
+  if (newParentId !== originParentId) {
+    const remainingOrigin = others
+      .filter(
+        (p) => (p.parentId ?? null) === originParentId && !destinationPositions.has(p.id)
+      )
+      .sort((a, b) => a.position - b.position)
+    remainingOrigin.forEach((page, index) => originPositions.set(page.id, index))
+  }
+
+  return pages.map((page) => {
+    if (page.id === id) {
+      return { ...moved, parentId: newParentId, position: clamped }
+    }
+    const destinationPosition = destinationPositions.get(page.id)
+    if (destinationPosition !== undefined) return { ...page, position: destinationPosition }
+    const originPosition = originPositions.get(page.id)
+    if (originPosition !== undefined) return { ...page, position: originPosition }
+    return page
+  })
+}
+
 export interface PagesController {
   pages: Page[]
   selectedPage: Page | null
@@ -209,6 +256,35 @@ export function usePagesController(): PagesController {
     [pages, applyMoveReconciliation, scheduleReset]
   )
 
+  /**
+   * Moves a page to an explicit destination position (drag-and-drop path).
+   *
+   * Applies the expected arrangement optimistically, then replaces local
+   * state with the authoritative server reconciliation payload. On failure
+   * the pre-move snapshot is restored (rollback) and the error status is
+   * surfaced. The reconciliation maps by id onto the latest state, so a
+   * late response can never clobber newer updates.
+   */
+  const moveToPosition = useCallback(
+    (id: string, newParentId: string | null, newPosition: number): void => {
+      let rollback: Page[] | null = null
+      setPages((prev) => {
+        rollback = prev
+        return arrangeOptimisticMove(prev, id, newParentId, newPosition)
+      })
+      api
+        .movePage(id, { newParentId, newPosition })
+        .then(applyMoveReconciliation)
+        .catch((err: Error) => {
+          if (rollback) setPages(rollback)
+          setMutationStatus('error')
+          setMutationError(err.message)
+          scheduleReset()
+        })
+    },
+    [applyMoveReconciliation, scheduleReset]
+  )
+
   /** Creates an untitled child under an existing parent and opens it. */
   const createChild = useCallback(async (parentId: string): Promise<void> => {
     try {
@@ -343,6 +419,7 @@ export function usePagesController(): PagesController {
     savePageContent,
     moveTo,
     moveRelative,
+    moveToPosition,
     createChild,
     renamePage,
     duplicatePage,

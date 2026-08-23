@@ -58,3 +58,9 @@
   max-height: 320px;
   overflow-y: auto;
 }
+
+.rootHover {
+  outline: 2px dashed var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
+  outline-offset: -2px;
+  border-radius: var(--mantine-radius-sm);
+}

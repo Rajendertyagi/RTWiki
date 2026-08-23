@@ -241,6 +241,7 @@ export function App(): JSX.Element {
             onCreateChild={(parentId) => void controller.createChild(parentId)}
             onMoveTo={(id, newParentId) => controller.moveTo(id, newParentId)}
             onMoveRelative={(id, delta) => controller.moveRelative(id, delta)}
+            onDropMove={controller.moveToPosition}
           />
         }
       >

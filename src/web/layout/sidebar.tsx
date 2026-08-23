@@ -22,6 +22,8 @@ interface SidebarProps {
   onCreateChild: (parentId: string) => void
   onMoveTo: (id: string, newParentId: string | null) => void
   onMoveRelative: (id: string, delta: number) => void
+  /** Positional move used by drag-and-drop (optimistic + rollback). */
+  onDropMove: (id: string, newParentId: string | null, newPosition: number) => void
 }
 
 export function Sidebar({
@@ -38,7 +40,8 @@ export function Sidebar({
   onDelete,
   onCreateChild,
   onMoveTo,
-  onMoveRelative
+  onMoveRelative,
+  onDropMove
 }: SidebarProps): JSX.Element {
   return (
     <div className={classes.sidebarRoot}>
@@ -85,7 +88,8 @@ export function Sidebar({
                   onDelete,
                   onCreateChild,
                   onMoveTo,
-                  onMoveRelative
+                  onMoveRelative,
+                  onDropMove
                 }}
               />
             )}

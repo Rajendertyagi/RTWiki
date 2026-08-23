@@ -25,7 +25,9 @@ export interface UsePageTreeResult {
   rows: FlatRow[]
   focusedId: string | null
   expandedIds: ReadonlySet<string>
-  containerRef: React.RefObject<HTMLDivElement | null>
+  // Mutable shape so composition sites can merge additional refs onto the
+  // same element (drag-and-drop registration shares this container node).
+  containerRef: { current: HTMLDivElement | null }
   handleTreeKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void
   toggleExpand: (id: string) => void
   focusRow: (id: string) => void
