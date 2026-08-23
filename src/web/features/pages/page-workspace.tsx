@@ -6,7 +6,6 @@ import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
 import { RichEditor } from '../rich-editor/rich-editor.js'
 import { EditorHeader } from './editor-header.js'
-import { PageTab } from './page-tab.js'
 import classes from './page-workspace.module.css'
 
 // CodeMirror is heavy and only needed on HTML pages — loaded as its own chunk.
@@ -50,8 +49,6 @@ export function PageWorkspace({
 }: PageWorkspaceProps): JSX.Element {
   return (
     <div className={classes.workspace}>
-      <PageTab page={page} onClose={onBack} />
-
       <EditorHeader
         page={page}
         isDirty={isDirty}
@@ -75,6 +72,8 @@ export function PageWorkspace({
             pageId={page.id}
             storedContent={page.content}
             pageTitle={page.title}
+            createdDate={page.createdAt}
+            updatedDate={page.updatedAt}
             onSaveContent={onSaveContent}
             onBack={onBack}
             onFlushRef={onFlushRef}

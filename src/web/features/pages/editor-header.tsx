@@ -142,7 +142,7 @@ export function EditorHeader({
           <Menu.Target>
             <ActionIcon
               variant="subtle"
-              aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
+              aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`} data-testid="editor-actions"
             >
               <IconDots size={16} />
             </ActionIcon>

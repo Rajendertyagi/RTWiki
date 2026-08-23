@@ -24,3 +24,30 @@
   background: var(--rtwiki-surface, var(--mantine-color-body));
   min-height: 300px;
 }
+
+.richRow {
+  display: flex;
+  align-items: stretch;
+  gap: var(--mantine-spacing-sm);
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebarExpand {
+  align-self: flex-start;
+  margin-top: 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+  cursor: pointer;
+  padding: 6px;
+}
+
+.richColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
