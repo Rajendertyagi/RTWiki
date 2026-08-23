@@ -96,10 +96,6 @@ export function Sidebar({
           </Stack>
         )}
       </ScrollArea>
-
-      <Text size="xs" c="dimmed" ta="center" className={classes.hierarchyNote}>
-        {UI_TEXT.hierarchyFutureNote}
-      </Text>
     </div>
   )
 }

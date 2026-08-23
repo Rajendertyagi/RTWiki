@@ -3,6 +3,7 @@ import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
 import { PageTypeBadge } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
+import { pagePreviewText } from '../../util/page-preview-text.js'
 import classes from './dashboard.module.css'
 
 interface PageCardProps {
@@ -69,7 +70,7 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
       </Group>
 
       <Text size="sm" c="dimmed" lineClamp={3} mt="xs" className={classes.cardContent}>
-        {page.content ? page.content.slice(0, 120) : UI_TEXT.editorPlaceholderContent}
+        {pagePreviewText(page) || UI_TEXT.editorPlaceholderContent}
       </Text>
 
       <div className={`${classes.cardFooter} ${classes.cardContent}`}>
