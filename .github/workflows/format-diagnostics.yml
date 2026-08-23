@@ -34,6 +34,16 @@ jobs:
         run: bun run format:fix || true
       - name: Capture formatting patch
         run: git diff > format.patch
+      - name: Publish patch to step summary
+        # Logs and artifact downloads require authentication; the run
+        # summary page is publicly readable, so surface the patch there.
+        run: |
+          {
+            echo '### Canonical formatting patch'
+            echo '<pre>'
+            cat format.patch
+            echo '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload formatting patch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
