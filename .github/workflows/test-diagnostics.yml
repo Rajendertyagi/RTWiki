@@ -30,9 +30,18 @@ jobs:
       - name: Run tests, capture output
         run: |
           set +e
-          bun test > test-output.txt 2>&1
-          echo "test exit: $?" >> test-output.txt
+          bun test > full.txt 2>&1
+          echo "test exit: $?" >> full.txt
           true
+      - name: Reduce output to failures and summary
+        # Keep the payload under the public-annotation budget: only failing
+        # test lines, the final counters, and any unhandled-error blocks.
+        run: |
+          {
+            grep -E '\(fail\)|Unhandled error|error:|^ [0-9]+ (pass|fail)|Ran [0-9]+ tests' full.txt || true
+            echo '--- tail ---'
+            tail -n 40 full.txt
+          } > test-output.txt
       - name: Publish output annotations (first half)
         run: |
           TOTAL=$(base64 -w0 test-output.txt | fold -w 4000 | wc -l)
