@@ -49,6 +49,12 @@ for (const name of jsFiles) {
 
 console.log(`JS TOTAL: raw=${totalRaw} gzip=${totalGzip}`)
 
+// Surface the totals as a check-run annotation: job logs require
+// authentication, annotations are readable without it.
+if (process.env.GITHUB_ACTIONS === 'true') {
+  console.log(`::notice title=Bundle totals::raw=${totalRaw} gzip=${totalGzip} bytes`)
+}
+
 // Append a markdown summary when running inside GitHub Actions.
 const summaryPath = process.env.GITHUB_STEP_SUMMARY
 if (summaryPath) {
