@@ -16,7 +16,7 @@ export const PageMoveSchema = z.object({
 export type PageMoveInput = z.infer<typeof PageMoveSchema>
 
 export interface MoveReconciliationResponse {
-  movedPage: {
+  page: {
     id: string
     title: string
     pageType: 'rich' | 'html'
