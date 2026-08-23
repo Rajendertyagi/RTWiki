@@ -9,8 +9,6 @@ import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pa
 import * as repo from '../repositories/page-repository.js'
 import { HierarchyError } from '../repositories/page-repository.js'
 
-export { HierarchyError }
-
 import { extractSearchableContent } from './search-extraction.js'
 
 /**

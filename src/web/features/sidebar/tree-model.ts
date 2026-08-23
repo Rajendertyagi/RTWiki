@@ -74,19 +74,19 @@ export function buildTree<T extends PageLike>(pages: T[]): TreeNode<T>[] {
 export interface FlatRow {
   id: string
   depth: number
-  node: TreeNode
+  node: TreeNode<Page>
   /** True when the row has children and is currently expanded. */
   expanded: boolean
 }
 
 /** Depth-first flattening of the expanded portion of the tree. */
 export function flattenVisible(
-  nodes: TreeNode[],
+  nodes: TreeNode<Page>[],
   expandedIds: ReadonlySet<string>,
   indentClampLevels = Number.POSITIVE_INFINITY
 ): FlatRow[] {
   const rows: FlatRow[] = []
-  const walk = (levelNodes: TreeNode[], depth: number): void => {
+  const walk = (levelNodes: TreeNode<Page>[], depth: number): void => {
     for (const node of levelNodes) {
       const hasChildren = node.children.length > 0
       const expanded = hasChildren && expandedIds.has(node.page.id)

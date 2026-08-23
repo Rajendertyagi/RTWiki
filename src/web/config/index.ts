@@ -103,6 +103,7 @@ export const UI_TEXT = {
   moveToLabel: 'Move',
   moveUpLabel: 'Move up',
   moveDownLabel: 'Move down',
+  moveToParentLabel: 'Move to parent page',
   hierarchyFutureNote: 'Hierarchical page organization is planned for a future release.',
   saveFailedRetryHint: 'Save failed. You can retry or keep editing.',
   unsavedChangesWarning:

@@ -1,7 +1,7 @@
 import { Alert, Stack, Text } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from './config/index.js'
 import { Dashboard } from './features/dashboard/dashboard.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'

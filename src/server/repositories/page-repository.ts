@@ -21,7 +21,8 @@ export interface MovePageResult {
 export class HierarchyError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    // Literal union so Hono's typed c.json(status) overload accepts it.
+    readonly status: 400 | 404 | 500
   ) {
     super(message)
     this.name = 'HierarchyError'

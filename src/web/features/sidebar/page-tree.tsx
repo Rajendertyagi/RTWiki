@@ -1,6 +1,6 @@
 import { Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { type UsePageTreeResult, usePageTree } from '../../../hooks/use-page-tree.js'
+import { type UsePageTreeResult, usePageTree } from '../../hooks/use-page-tree.js'
 import { UI_TEXT } from '../../config/index.js'
 import { PageTreeRow } from './page-tree-row.js'
 

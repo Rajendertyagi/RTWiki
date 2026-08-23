@@ -191,7 +191,6 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
         ) : null}
 
         <Menu
-          trigger="contextmenu"
           position="bottom-start"
           withinPortal
           closeOnEscape
@@ -210,7 +209,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
           <Menu.Dropdown className={classes.menuScroll}>
             <Menu.Item onClick={onOpen}>{UI_TEXT.openAction}</Menu.Item>
             <Menu.Item onClick={onCreateChild}>{UI_TEXT.newChildPage}</Menu.Item>
-            <Menu.Item closeOnItemClick={false} onClick={() => setEditing(true)}>
+            <Menu.Item onClick={() => setEditing(true)}>
               {UI_TEXT.renameAction}
             </Menu.Item>
             <Menu.Item onClick={onDuplicate}>{UI_TEXT.duplicateAction}</Menu.Item>
