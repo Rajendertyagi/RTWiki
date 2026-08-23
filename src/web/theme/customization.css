@@ -6,7 +6,7 @@
  * from Mantine tokens so light/dark stay consistent.
  */
 :root {
---rtwiki-tree-indent-step: 16px;
---rtwiki-tree-row-min-height: 32px;
---rtwiki-drop-target-border: var(--mantine-color-blue-6);
+  --rtwiki-tree-indent-step: 16px;
+  --rtwiki-tree-row-min-height: 32px;
+  --rtwiki-drop-target-border: var(--mantine-color-blue-6);
 }

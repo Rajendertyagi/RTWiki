@@ -4,9 +4,9 @@ import type { Page } from '@rtwiki/shared/contracts/pages'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { type UsePageTreeResult, usePageTree } from '../../hooks/use-page-tree.js'
-import { type DropEdge, isPageTreeDragData, registerRootContainerDnd } from './tree-dnd.js'
 import classes from './page-tree.module.css'
 import { PageTreeRow } from './page-tree-row.js'
+import { type DropEdge, isPageTreeDragData, registerRootContainerDnd } from './tree-dnd.js'
 
 export interface MoveTarget {
   id: string

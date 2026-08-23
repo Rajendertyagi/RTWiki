@@ -34,9 +34,7 @@ export function arrangeOptimisticMove(
   const originPositions = new Map<string, number>()
   if (newParentId !== originParentId) {
     const remainingOrigin = others
-      .filter(
-        (p) => (p.parentId ?? null) === originParentId && !destinationPositions.has(p.id)
-      )
+      .filter((p) => (p.parentId ?? null) === originParentId && !destinationPositions.has(p.id))
       .sort((a, b) => a.position - b.position)
     remainingOrigin.forEach((page, index) => originPositions.set(page.id, index))
   }

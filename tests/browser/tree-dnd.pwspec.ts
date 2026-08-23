@@ -37,9 +37,9 @@ async function seedPage(
   return body.page
 }
 
-async function listPages(request: APIRequestContext): Promise<
-  Array<{ id: string; title: string; parentId: string | null; position: number }>
-> {
+async function listPages(
+  request: APIRequestContext
+): Promise<Array<{ id: string; title: string; parentId: string | null; position: number }>> {
   const res = await request.get('/api/pages')
   expect(res.status()).toBe(200)
   const body = (await res.json()) as {
@@ -96,10 +96,7 @@ async function waitForServerOrder(
 }
 
 /** Asserts the full server page list is byte-identical to the snapshot. */
-async function expectUnchanged(
-  request: APIRequestContext,
-  snapshot: string
-): Promise<void> {
+async function expectUnchanged(request: APIRequestContext, snapshot: string): Promise<void> {
   await expect
     .poll(async () => JSON.stringify(await listPages(request)), { timeout: 10_000 })
     .toBe(snapshot)
