@@ -65,11 +65,10 @@ export interface ContainerDndOptions {
 
 function resolveRowUnderPointer(
   container: HTMLElement,
-  clientX: number,
+  startElement: Element | null,
   clientY: number
 ): RowHint | null {
-  const hit = document.elementFromPoint(clientX, clientY)
-  const row = hit?.closest('[role="treeitem"]') as HTMLElement | null
+  const row = startElement?.closest('[role="treeitem"]') as HTMLElement | null
   if (!row || !container.contains(row)) return null
   const rowId = row.getAttribute('data-page-id')
   if (!rowId) return null
@@ -77,26 +76,49 @@ function resolveRowUnderPointer(
 }
 
 /**
- * Registers the tree container as the single drop target. Rows resolve
- * through elementFromPoint, so drops on empty space yield a null rowId
- * (root append) without any nested-target routing.
+ * Registers the tree container as the single drop target.
+ *
+ * Row resolution deliberately uses the NATIVE drag event's target captured
+ * in the capture phase: pragmatic-drag-and-drop mounts a honey-pot element
+ * under the cursor during drags, so document.elementFromPoint would only
+ * ever see that overlay and every drop would resolve as root-append.
  */
 export function registerContainerDnd(options: ContainerDndOptions): () => void {
-  return dropTargetForElements({
+  // The most recent real element under the pointer, per native drag events.
+  let lastNativeTarget: Element | null = null
+  const captureNativeTarget = (event: DragEvent): void => {
+    lastNativeTarget = event.target instanceof Element ? event.target : null
+  }
+  const captureOptions: AddEventListenerOptions = { capture: true }
+
+  const cleanupDropTarget = dropTargetForElements({
     element: options.element,
     canDrop: ({ source }) => isPageTreeDragData(source.data),
     onDrag: ({ location }) => {
-      const input = location.current.input
-      options.onHintChange(resolveRowUnderPointer(options.element, input.clientX, input.clientY))
+      options.onHintChange(
+        resolveRowUnderPointer(
+          options.element,
+          lastNativeTarget,
+          location.current.input.clientY
+        )
+      )
     },
     onDragEnter: ({ location }) => {
-      const input = location.current.input
-      options.onHintChange(resolveRowUnderPointer(options.element, input.clientX, input.clientY))
+      options.onHintChange(
+        resolveRowUnderPointer(
+          options.element,
+          lastNativeTarget,
+          location.current.input.clientY
+        )
+      )
     },
     onDragLeave: () => options.onHintChange(null),
     onDrop: ({ location }) => {
-      const input = location.current.input
-      const hint = resolveRowUnderPointer(options.element, input.clientX, input.clientY)
+      const hint = resolveRowUnderPointer(
+        options.element,
+        lastNativeTarget,
+        location.current.input.clientY
+      )
       options.onHintChange(null)
       if (hint) {
         options.onDropIntent(hint.rowId, hint.edge)
@@ -105,4 +127,13 @@ export function registerContainerDnd(options: ContainerDndOptions): () => void {
       }
     }
   })
+
+  options.element.addEventListener('dragover', captureNativeTarget, captureOptions)
+  options.element.addEventListener('drop', captureNativeTarget, captureOptions)
+
+  return () => {
+    options.element.removeEventListener('dragover', captureNativeTarget, captureOptions)
+    options.element.removeEventListener('drop', captureNativeTarget, captureOptions)
+    cleanupDropTarget()
+  }
 }
