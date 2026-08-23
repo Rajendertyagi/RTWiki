@@ -1,4 +1,5 @@
 import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
+import { getElementFromPointWithoutHoneypot } from '@atlaskit/pragmatic-drag-and-drop/get-element-from-point-without-honey-pot'
 
 /**
  * Core-only drag-and-drop wiring for the sidebar page tree.
@@ -65,10 +66,11 @@ export interface ContainerDndOptions {
 
 function resolveRowUnderPointer(
   container: HTMLElement,
-  startElement: Element | null,
+  clientX: number,
   clientY: number
 ): RowHint | null {
-  const row = startElement?.closest('[role="treeitem"]') as HTMLElement | null
+  const underPointer = getElementFromPointWithoutHoneypot({ x: clientX, y: clientY })
+  const row = underPointer?.closest('[role="treeitem"]') as HTMLElement | null
   if (!row || !container.contains(row)) return null
   const rowId = row.getAttribute('data-page-id')
   if (!rowId) return null
@@ -78,39 +80,27 @@ function resolveRowUnderPointer(
 /**
  * Registers the tree container as the single drop target.
  *
- * Row resolution deliberately uses the NATIVE drag event's target captured
- * in the capture phase: pragmatic-drag-and-drop mounts a honey-pot element
- * under the cursor during drags, so document.elementFromPoint would only
- * ever see that overlay and every drop would resolve as root-append.
+ * Row resolution uses pragmatic-drag-and-drop's exported honey-pot-aware
+ * hit-test utility: during drags a honey-pot element sits under the cursor,
+ * so plain document.elementFromPoint would only ever see that overlay and
+ * every drop would resolve as root-append.
  */
 export function registerContainerDnd(options: ContainerDndOptions): () => void {
-  // The most recent real element under the pointer, per native drag events.
-  let lastNativeTarget: Element | null = null
-  const captureNativeTarget = (event: DragEvent): void => {
-    lastNativeTarget = event.target instanceof Element ? event.target : null
-  }
-  const captureOptions: AddEventListenerOptions = { capture: true }
-
   const cleanupDropTarget = dropTargetForElements({
     element: options.element,
     canDrop: ({ source }) => isPageTreeDragData(source.data),
     onDrag: ({ location }) => {
-      options.onHintChange(
-        resolveRowUnderPointer(options.element, lastNativeTarget, location.current.input.clientY)
-      )
+      const { clientX, clientY } = location.current.input
+      options.onHintChange(resolveRowUnderPointer(options.element, clientX, clientY))
     },
     onDragEnter: ({ location }) => {
-      options.onHintChange(
-        resolveRowUnderPointer(options.element, lastNativeTarget, location.current.input.clientY)
-      )
+      const { clientX, clientY } = location.current.input
+      options.onHintChange(resolveRowUnderPointer(options.element, clientX, clientY))
     },
     onDragLeave: () => options.onHintChange(null),
     onDrop: ({ location }) => {
-      const hint = resolveRowUnderPointer(
-        options.element,
-        lastNativeTarget,
-        location.current.input.clientY
-      )
+      const { clientX, clientY } = location.current.input
+      const hint = resolveRowUnderPointer(options.element, clientX, clientY)
       options.onHintChange(null)
       if (hint) {
         options.onDropIntent(hint.rowId, hint.edge)
@@ -120,12 +110,5 @@ export function registerContainerDnd(options: ContainerDndOptions): () => void {
     }
   })
 
-  options.element.addEventListener('dragover', captureNativeTarget, captureOptions)
-  options.element.addEventListener('drop', captureNativeTarget, captureOptions)
-
-  return () => {
-    options.element.removeEventListener('dragover', captureNativeTarget, captureOptions)
-    options.element.removeEventListener('drop', captureNativeTarget, captureOptions)
-    cleanupDropTarget()
-  }
+  return cleanupDropTarget
 }
