@@ -96,20 +96,12 @@ export function registerContainerDnd(options: ContainerDndOptions): () => void {
     canDrop: ({ source }) => isPageTreeDragData(source.data),
     onDrag: ({ location }) => {
       options.onHintChange(
-        resolveRowUnderPointer(
-          options.element,
-          lastNativeTarget,
-          location.current.input.clientY
-        )
+        resolveRowUnderPointer(options.element, lastNativeTarget, location.current.input.clientY)
       )
     },
     onDragEnter: ({ location }) => {
       options.onHintChange(
-        resolveRowUnderPointer(
-          options.element,
-          lastNativeTarget,
-          location.current.input.clientY
-        )
+        resolveRowUnderPointer(options.element, lastNativeTarget, location.current.input.clientY)
       )
     },
     onDragLeave: () => options.onHintChange(null),
