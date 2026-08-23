@@ -46,11 +46,26 @@ jobs:
             echo '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"
           B64=$(base64 -w0 format.patch)
+          TOTAL=$(printf '%s' "$B64" | fold -w 3000 | wc -l)
+          echo "PATCH_PARTS=$TOTAL" >> "$GITHUB_ENV"
           N=0
           while IFS= read -r CHUNK; do
             N=$((N+1))
-            echo "::error title=fmtpatch part $N::$CHUNK"
+            if [ "$N" -le 5 ]; then
+              echo "::error title=fmtpatch part $N::$CHUNK"
+            fi
           done < <(printf '%s' "$B64" | fold -w 3000)
+      - name: Publish patch annotations (second half)
+        # Split across steps: GitHub keeps only ~10 annotations per step.
+        run: |
+          N=0
+          while IFS= read -r CHUNK; do
+            N=$((N+1))
+            if [ "$N" -gt 5 ]; then
+              echo "::error title=fmtpatch part $N::$CHUNK"
+            fi
+          done < <(base64 -w0 format.patch | fold -w 3000)
+          echo "emitted parts 6..${PATCH_PARTS:-?}"
       - name: Upload formatting patch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
