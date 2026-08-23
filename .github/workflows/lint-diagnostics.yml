@@ -30,7 +30,7 @@ jobs:
       - name: Run linter, capture output
         run: |
           set +e
-          bun run lint > lint-output.txt 2>&1
+          bun run typecheck > lint-output.txt 2>&1
           echo "lint exit: $?" >> lint-output.txt
           true
       - name: Publish output annotations (first half)
