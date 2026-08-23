@@ -38,6 +38,8 @@ jobs:
         # Logs, artifacts, and summaries require authentication; check-run
         # annotations are publicly readable via the REST API. Emit the patch
         # as indexed base64 chunks so it can be reassembled without auth.
+        # A `for` over word-split tokens is used because `while read` drops
+        # a final chunk lacking a trailing newline.
         run: |
           {
             echo '### Canonical formatting patch'
@@ -45,31 +47,21 @@ jobs:
             cat format.patch
             echo '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"
-          B64=$(base64 -w0 format.patch)
-          TOTAL=$(printf '%s' "$B64" | fold -w 4000 | wc -l)
-          echo "PATCH_PARTS=$TOTAL" >> "$GITHUB_ENV"
+          TOTAL=$(base64 -w0 format.patch | fold -w 4000 | wc -l)
           N=0
-          while IFS= read -r CHUNK; do
+          for CHUNK in $(base64 -w0 format.patch | fold -w 4000); do
             N=$((N+1))
-            if [ "$N" -le 5 ]; then
-              echo "::error title=fmtpatch part $N::$CHUNK"
+            if [ "$N" -le 4 ]; then
+              echo "::error title=fmtpatch part $N of $TOTAL::$CHUNK"
             fi
-          done < <(printf '%s' "$B64" | fold -w 4000)
-      - name: Publish patch annotations (second half)
-        # Split across steps: GitHub keeps only ~10 annotations per step.
+          done
+      - name: Publish patch annotations (remainder)
         run: |
+          TOTAL=$(base64 -w0 format.patch | fold -w 4000 | wc -l)
           N=0
-          while IFS= read -r CHUNK; do
+          for CHUNK in $(base64 -w0 format.patch | fold -w 4000); do
             N=$((N+1))
-            if [ "$N" -gt 5 ]; then
-              echo "::error title=fmtpatch part $N::$CHUNK"
+            if [ "$N" -gt 4 ]; then
+              echo "::error title=fmtpatch part $N of $TOTAL::$CHUNK"
             fi
-          done < <(base64 -w0 format.patch | fold -w 4000)
-          echo "emitted parts 6..${PATCH_PARTS:-?}"
-      - name: Upload formatting patch
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: format-patch
-          path: format.patch
-          if-no-files-found: error
-          retention-days: 7
+          done
