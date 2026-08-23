@@ -315,7 +315,7 @@ src/web/components/search-input.tsx (new)
 - `App.tsx` is a small composition root delegating to `usePagesController`.
 - Portable artifact produced on every successful build; smoke test verifies exe + web assets + portable layout per ADR-005.
 - Dashboard cards use ghost-button overlay pattern for accessible full-card click with separate menu button. No nested interactive elements.
-- Sidebar uses Trilium-inspired persistent nav pattern with visible Stop RTWiki power icon in footer. No nested hierarchy, tabs, draggable tree, backlinks, or cloning.
+- Sidebar uses Trilium-inspired persistent nav pattern with visible Stop RTWiki power icon in footer. (At Phase 2 there was no nested hierarchy or draggable tree; the page tree arrived later on `feature/workspace-hierarchy` — see ADR-008 and the Workspace Hierarchy section below. Tabs, backlinks, and cloning remain out of scope.)
 - Windows PE metadata (title, description) set via `Bun.build()` JS API when compiled natively on Windows. On Linux cross-compilation, metadata is skipped — process shows as "Bun" in Task Manager.
 - Shutdown token is per-process and not persisted. If the server crashes, the token is lost (which is acceptable — the server is already stopped).
 
@@ -960,3 +960,45 @@ explicitly enable JS where probes require execution).
 | 2c96a91 | fix: handle null response in save watcher |
 | 9c6ff2c | test: assert save persistence via PATCH request truth; header owns list-Retry |
 | fb0bcb4 | fix: restore editor-owned content-save retry control |
+
+## Workspace Hierarchy — Page Tree, Reordering, and Drag-and-Drop
+
+**Branch:** `feature/workspace-hierarchy`
+**Status:** CI verified — Build and Package fully green (Verify, Browser tests, Windows portable smoke) on `52fb0a0` ([run 32659192827](https://github.com/Rajendertyagi/RTWiki/actions/runs/32659192827)). Owner manual testing has **not** been performed yet.
+
+### Scope delivered
+
+- Page hierarchy: adjacency-list `parent_id` + sibling `position` (migration
+  `003_page_hierarchy` with deterministic legacy backfill and partial index);
+  transactional move endpoint with cycle/descendant rejection and an
+  authoritative reconciliation payload. See [ADR-008](adr/ADR-008-page-hierarchy-and-workspace-tree.md).
+- Accessible sidebar tree: WAI-ARIA tree/treeitem roles, roving-tabindex
+  keyboard focus independent of active-page selection, Enter-to-open,
+  expand/collapse, drop-hint indicators.
+- Drag-and-drop reorder/reparent via core-only
+  `@atlaskit/pragmatic-drag-and-drop@3.0.0` with honey-pot-aware pointer
+  lookup, cached rendered hint committed at drop, and a drop-time fallback for
+  sparse drag event streams. No hitbox or auto-scroll layer.
+- Keyboard/context-menu move alternative ("Move to…", Move up/Move down)
+  sharing the same validated endpoint as DnD.
+- Complete-page pagination in the controller: the full living-page collection
+  is retrieved through bounded windows of the existing list API before the
+  hierarchy is built or moves commit — absolute sibling indexes require it;
+  windowed loads placed rows incorrectly beyond 50 siblings (fixed and
+  regression-tested).
+- Shared contract fix: `MoveReconciliationResponse` now declares the moved-page
+  snapshot under the authoritative `page` key (was stale `movedPage`).
+
+### Validation
+
+- Unit/integration: **317 tests passing** (`bun test`, 0 failures).
+- Browser (Playwright, real Chromium): **56 scenarios passing**, including all
+  13 original tree-DnD scenarios unchanged plus a deterministic >50-page
+  regression performing `[a,b,c] → [a,c,b]` with active-page and zero-PATCH
+  assertions.
+- Bundle measurement: raw `2,307,568` / gzip `670,647` bytes (+357/+164 over
+  the pre-hierarchy run; no dependency changes).
+- Artifact `RTWiki-0.1.0-windows-x64` (artifact ID `9498309204`,
+  42,005,562 bytes) from green run 32659192827.
+- `main` untouched throughout; no pull request opened; work remains on
+  `feature/workspace-hierarchy`.

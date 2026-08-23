@@ -59,11 +59,12 @@ Each layer has a single responsibility and communicates only with its adjacent l
 - **Technology:** Hono routes
 - **Responsibility:** Expose RESTful endpoints for pages, attachments, search, backups, and imports. Validate all incoming requests using schema validators (e.g., Zod).
 - **Endpoints:**
-  - `GET /api/pages` — list pages
+  - `GET /api/pages` — list pages (bounded windows with `limit`/`offset` plus full-count `total`)
   - `POST /api/pages` — create page
   - `GET /api/pages/:id` — get page by ID
   - `PATCH /api/pages/:id` — update page
   - `DELETE /api/pages/:id` — soft-delete page
+  - `POST /api/pages/:id/move` — transactional hierarchy move (parent + sibling index) with authoritative reconciliation payload
   - `GET /api/pages/:id/attachments` — list attachments
   - `POST /api/pages/:id/attachments` — upload attachment
   - `GET /api/search?q=...` — full-text search
@@ -158,11 +159,41 @@ RTWiki uses a **modular block architecture**. Each rich block type is owned by i
 
 All block modules register themselves in a **block registry**. A single **composition root** reads the registries and wires the editor, renderer, import pipeline, and search extractor together. There is **no central switch statement** over block types; behaviour is discovered through registry metadata. The same registry pattern applies to import adapters, export adapters, sanitization policies, asset storage, theme/token providers, package validators, and the schema migrator. A future AI-provider adapter would also register here rather than being hard-wired. See [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) for the enforceable module rules and [ADR-006](adr/ADR-006-rich-content-and-import-contract.md).
 
-### 3.13 Custom Content Sandbox (L3)
+### 3.13 Workspace Tree (Sidebar Page Hierarchy)
+
+The sidebar renders pages as an accessible WAI-ARIA tree (`role="tree"` /
+`role="treeitem"`, `aria-level`, `aria-expanded`, `aria-selected`) backed by the
+adjacency-list data model (see [ADR-008](adr/ADR-008-page-hierarchy-and-workspace-tree.md)).
+
+Responsibilities are split cleanly:
+
+- **Controller (`use-pages-controller`):** owns page state; loads the
+  *complete* living-page collection through bounded windows of the paginated
+  list endpoint before any hierarchy work — sibling indexes are absolute
+  ordinals and a truncated most-recent window would place rows incorrectly.
+  Applies optimistic arrangements for moves and replaces them with the server's
+  authoritative reconciliation payload; content autosave/PATCH behavior is
+  unchanged by hierarchy operations.
+- **Tree hook (`use-page-tree`):** owns keyboard exploration only — roving
+  tabindex focus (`focusedId`), expansion state, Enter-to-open. Keyboard focus
+  is independent of active-page selection: the open page stays selected with
+  its editor mounted while other rows are explored.
+- **DnD module (`tree-dnd`):** core-only
+  `@atlaskit/pragmatic-drag-and-drop@3.0.0`. Rows are draggable sources; the
+  tree container is the single drop target that resolves the hovered row and
+  edge via honey-pot-aware pointer lookup. The latest hover hint is cached and
+  committed at drop, with a drop-time recomputation fallback for sparse drag
+  event streams. No hitbox or auto-scroll layer exists — targets scroll into
+  view before drops instead.
+- **Row component:** renders indent level, expand/collapse, drop-hint
+  indicators, rename, and the context-menu move alternative ("Move to…",
+  Move up/Move down) that shares the same validated move endpoint as DnD.
+
+### 3.14 Custom Content Sandbox (L3)
 
 When a page supplies optional custom HTML/CSS/JS, it is rendered only inside an isolated sandbox (iframe) with `sandbox` attributes that deny same-origin access, disable forms/scripts where unsafe, and block all network egress. The sandbox has no access to the application's database, filesystem, or parent DOM. Active content (scripts) is **off by default** and toggleable per setting. See [ADR-007](adr/ADR-007-sandboxed-custom-content.md) and [SECURITY.md](SECURITY.md).
 
-### 3.14 Logging
+### 3.15 Logging
 
 - **Responsibility:** Structured logging (JSON lines) for errors, warnings, and operational events. Log entries must never contain sensitive page content.
 - **Constraint:** No secrets, no user-provided page content, and no attachment data in logs. Log files use rotation and retention limits so they cannot grow indefinitely.
@@ -200,6 +231,7 @@ Frontend assets (the built `dist/` folder from Vite) are bundled alongside the b
 - [ADR-005](adr/ADR-005-portable-data-layout.md) — data directory decision
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
+- [ADR-008](adr/ADR-008-page-hierarchy-and-workspace-tree.md) — page hierarchy and the workspace tree
 - [DATA_MODEL.md](DATA_MODEL.md) — detailed entity and relationship specification
 - [SECURITY.md](SECURITY.md) — security requirements for each layer
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding rules that govern implementation

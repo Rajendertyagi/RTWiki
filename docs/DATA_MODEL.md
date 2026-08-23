@@ -85,12 +85,25 @@ The central entity. Each row represents one wiki page.
 | `title` | TEXT | Human-readable page title. Required, trimmed, max 200 characters. |
 | `content` | JSON | Canonical RTWiki-extended BlockNote JSON document — the single canonical page document. `NULL` is not permitted for active pages. Non-lossless HTML/Markdown conversions are preserved as a typed `richHtml` block stored inside this JSON (see [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md)); there is no separate HTML column. |
 | `content_schema_version` | TEXT | Version string of the RTWiki-extended BlockNote schema used by `content`; enables migration on startup. |
+| `parent_id` | UUID, nullable | Owning parent page (`NULL` = root). Foreign key → `pages.id` with `ON DELETE SET NULL`, so deleting a parent promotes its children to roots at the parent's former position. Added by migration `003_page_hierarchy`. |
+| `position` | INTEGER | Zero-based ordinal among siblings under the same parent, counted over living rows only (`deleted_at IS NULL`). Reordered transactionally by the move endpoint (final-index-after-removal semantics, clamped); always read back sorted, never treated as a stable identifier. Added by migration `003_page_hierarchy`. |
 | `created_at` | TEXT | ISO 8601 UTC timestamp of creation. |
 | `updated_at` | TEXT | ISO 8601 UTC timestamp of last content change. |
 | `deleted_at` | TEXT | `NULL` for active pages. Set on soft delete. |
 | `version` | INTEGER | Monotonically increasing content revision number. Increments on every save. |
 
 **Backlinks** are derived from `page_links` (see §3.4), not stored redundantly.
+
+**Hierarchy (workspace tree):** pages form an adjacency-list tree via
+`parent_id` with sibling ordering by `position`. A partial index
+`idx_pages_parent_position ON pages(parent_id, position) WHERE deleted_at IS NULL`
+(added by migration `003_page_hierarchy`) serves child reads. Structural
+mutations — create, duplicate, delete-promotion, and move — are transactional
+(`BEGIN IMMEDIATE`), reject self/ancestor cycles server-side, and return an
+authoritative reconciliation payload (`page`, origin/destination sibling
+lists). Sibling indexes are absolute ordinals, so clients must hold the
+complete page collection before computing them; windowed list responses are
+not sufficient. See [ADR-008](adr/ADR-008-page-hierarchy-and-workspace-tree.md).
 
 ### 3.2 Page Versions
 
@@ -154,3 +167,4 @@ Each backup record points to a ZIP archive on disk. The archive path is relative
 - [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
+- [ADR-008](adr/ADR-008-page-hierarchy-and-workspace-tree.md) — page hierarchy and the workspace tree
