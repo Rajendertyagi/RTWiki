@@ -109,7 +109,33 @@ export const UI_TEXT = {
   unsavedChangesWarning:
     'You have unsaved changes that failed to save. Please retry before leaving or your recent edits may be lost.',
   abruptExitNotice:
-    'If the browser or app is closed abruptly, only the current unsaved debounce window may be lost.'
+    'If the browser or app is closed abruptly, only the current unsaved debounce window may be lost.',
+  // Workspace tabs
+  tabStripLabel: 'Open pages',
+  tabCloseLabel: 'Close tab',
+  // Rich Document toolbar
+  richToolbarLabel: 'Formatting',
+  undoLabel: 'Undo',
+  redoLabel: 'Redo',
+  paragraphLabel: 'Paragraph',
+  headingLabel: 'Heading',
+  boldLabel: 'Bold',
+  italicLabel: 'Italic',
+  underlineLabel: 'Underline',
+  bulletListLabel: 'Bulleted list',
+  numberedListLabel: 'Numbered list',
+  linkLabel: 'Link',
+  linkApply: 'Apply link',
+  richPlaceholder: 'Type here…',
+  // Right sidebar
+  rightSidebarLabel: 'Page details',
+  collapseSidebarLabel: 'Collapse sidebar',
+  outlineTitle: 'Outline',
+  outlineEmpty: 'No headings yet. Add a heading to build the outline.',
+  pageInfoTitle: 'Page info',
+  pageInfoType: 'Type',
+  pageInfoCreated: 'Created',
+  pageInfoUpdated: 'Modified'
 } as const
 
 export const STATUS_TEXT = {

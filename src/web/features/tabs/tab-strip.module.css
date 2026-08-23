@@ -1,0 +1,63 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  min-height: 36px;
+  padding: 0 var(--mantine-spacing-xs);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
+}
+
+.tabScroller {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rtwiki-gap-xs, 4px);
+  max-width: 200px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: var(--mantine-radius-sm) var(--mantine-radius-sm) 0 0;
+  border: 1px solid transparent;
+  border-bottom: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+.tabActive {
+  background: var(--mantine-color-body);
+  border-color: var(--mantine-color-default-border);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-outline);
+  outline-offset: -2px;
+}
+
+.tabTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.tabClose {
+  flex: 0 0 auto;
+}
+
+.newButton {
+  flex: 0 0 auto;
+}

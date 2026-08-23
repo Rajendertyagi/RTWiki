@@ -9,6 +9,8 @@ import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
+import { TabStrip } from './features/tabs/tab-strip.js'
+import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
 import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
@@ -18,6 +20,15 @@ type SaveState = 'clean' | 'saving' | 'saved' | 'error'
 
 export function App(): JSX.Element {
   const controller = usePagesController()
+  const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
+
+  // Any selection (tree click, dashboard card, create, duplicate) opens or
+  // activates that page's tab. openInTabs deduplicates by page id.
+  useEffect(() => {
+    const page = controller.selectedPage
+    if (!page) return
+    setOpenTabs((prev) => openInTabs(prev, page, UI_TEXT.untitledPage))
+  }, [controller.selectedPage])
 
   // Display-only parent chain for the open page (Workspace Hierarchy).
   const breadcrumb = useMemo(() => {
@@ -133,7 +144,29 @@ export function App(): JSX.Element {
   const handleDeleteConfirm = async (): Promise<void> => {
     if (!deleteTarget) return
     await controller.deletePage(deleteTarget.id)
+    const tabResult = closeInTabs(openTabs, deleteTarget.id, controller.selectedPage?.id ?? null)
+    setOpenTabs(tabResult.tabs)
+    if (tabResult.activatePageId !== (controller.selectedPage?.id ?? null)) {
+      controller.selectPage(tabResult.activatePageId)
+    }
     setDeleteTarget(null)
+  }
+
+  const handleTabClose = async (pageId: string): Promise<void> => {
+    const isActive = controller.selectedPage?.id === pageId
+    if (isActive && flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    const result = closeInTabs(openTabs, pageId, controller.selectedPage?.id ?? null)
+    setOpenTabs(result.tabs)
+    if (isActive) {
+      controller.selectPage(result.activatePageId)
+    }
   }
 
   const handleDuplicate = async (id: string): Promise<void> => {
@@ -170,8 +203,13 @@ export function App(): JSX.Element {
   }
 
   const handleRename = async (title: string): Promise<boolean> => {
-    if (!controller.selectedPage) return false
-    return controller.renamePage(controller.selectedPage.id, title)
+    const selected = controller.selectedPage
+    if (!selected) return false
+    const ok = await controller.renamePage(selected.id, title)
+    if (ok) {
+      setOpenTabs((prev) => renameInTabs(prev, selected.id, title, UI_TEXT.untitledPage))
+    }
+    return ok
   }
 
   const handleWorkspaceClose = async (): Promise<void> => {
@@ -216,6 +254,15 @@ export function App(): JSX.Element {
   return (
     <>
       <AppShellLayout
+        tabStrip={
+          <TabStrip
+            tabs={openTabs}
+            activePageId={controller.selectedPage?.id ?? null}
+            onSelect={(id) => void handleSelectPage(id)}
+            onClose={(id) => void handleTabClose(id)}
+            onNew={handleNewPage}
+          />
+        }
         utilityRail={
           <UtilityRail
             activeHome={controller.selectedPage === null}

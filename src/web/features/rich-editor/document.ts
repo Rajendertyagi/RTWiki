@@ -90,3 +90,35 @@ export function parseStoredDocument(storedValue: string): DocumentParseResult {
 export function serializeDocument(document: BlockNoteDocument): string {
   return JSON.stringify(document)
 }
+
+export interface DocumentOutlineEntry {
+  blockId: string
+  level: number
+  text: string
+}
+
+interface OutlineBlock {
+  id?: string
+  type?: string
+  props?: { level?: number }
+  content?: Array<{ text?: string }>
+}
+
+/**
+ * Derives a heading outline from a canonical BlockNote document. Pure and
+ * total: malformed or empty documents yield an empty outline.
+ */
+export function extractOutline(document: BlockNoteDocument): DocumentOutlineEntry[] {
+  const entries: DocumentOutlineEntry[] = []
+  for (const raw of document) {
+    const block = raw as OutlineBlock
+    if (block.type !== 'heading' || !block.id) continue
+    const level = typeof block.props?.level === 'number' ? block.props.level : 1
+    const text = (block.content ?? [])
+      .map((inline) => (typeof inline.text === 'string' ? inline.text : ''))
+      .join('')
+      .trim()
+    entries.push({ blockId: block.id, level, text })
+  }
+  return entries
+}

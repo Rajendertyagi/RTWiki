@@ -6,12 +6,15 @@ import classes from './app-shell.module.css'
 interface AppShellLayoutProps {
   utilityRail: React.ReactNode
   navbar: React.ReactNode
+  /** In-session document tabs rendered directly under the header. */
+  tabStrip?: React.ReactNode
   children: React.ReactNode
 }
 
 export function AppShellLayout({
   utilityRail,
   navbar,
+  tabStrip,
   children
 }: AppShellLayoutProps): JSX.Element {
   const [opened, setOpened] = useState(false)
@@ -45,7 +48,10 @@ export function AppShellLayout({
         </div>
       </AppShell.Navbar>
 
-      <AppShell.Main className={classes.main}>{children}</AppShell.Main>
+      <AppShell.Main className={classes.main}>
+        {tabStrip}
+        <div className={classes.mainContent}>{children}</div>
+      </AppShell.Main>
     </AppShell>
   )
 }
