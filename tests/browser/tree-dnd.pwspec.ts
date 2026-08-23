@@ -309,9 +309,10 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
   test('works in the narrow sidebar layout', async ({ page, request }) => {
     const a = await seedPage(request, uniqueTitle('NarA'))
     const b = await seedPage(request, uniqueTitle('NarB'))
-    // Narrow-but-not-mobile: the sidebar stays visible below the desktop
-    // width while exercising the compact layout.
-    await page.setViewportSize({ width: 640, height: 800 })
+    // Narrow-but-visible: Mantine's 'sm' breakpoint (768px) hides the
+    // navbar below it, so 800px exercises the most compact layout in
+    // which the persistent sidebar remains on screen.
+    await page.setViewportSize({ width: 800, height: 900 })
     await page.goto('/')
     await rowLocator(page, b.id).waitFor()
     await dragRowOnto(page, b.id, a.id, 0.1)
