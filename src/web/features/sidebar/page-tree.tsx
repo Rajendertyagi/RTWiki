@@ -85,6 +85,12 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
   const hooksRef = useRef(hooks)
   hooksRef.current = hooks
   const draggingSourceIdRef = useRef<string | null>(null)
+  // Stable refs so the container registration effect can stay mount-scoped
+  // while always invoking the latest commit/focus logic.
+  const handleRowDropRef = useRef(handleRowDrop)
+  handleRowDropRef.current = handleRowDrop
+  const restoreFocusRef = useRef(tree.restoreFocusAfterChange)
+  restoreFocusRef.current = tree.restoreFocusAfterChange
 
   useEffect(() => {
     return monitorForElements({
@@ -114,10 +120,10 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
         if (rowId === null) {
           // Root append: oversized position clamps to the destination end.
           hooksRef.current.onDropMove(sourceId, null, Number.MAX_SAFE_INTEGER)
-          tree.restoreFocusAfterChange(sourceId)
+          restoreFocusRef.current(sourceId)
           return
         }
-        handleRowDrop(sourceId, rowId, edge)
+        handleRowDropRef.current(sourceId, rowId, edge)
       }
     })
   }, [])
