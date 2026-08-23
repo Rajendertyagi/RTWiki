@@ -1,4 +1,8 @@
-import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
+import {
+  draggable,
+  dropTargetForElements,
+  monitorForElements
+} from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import { getElementFromPointWithoutHoneypot } from '@atlaskit/pragmatic-drag-and-drop/get-element-from-point-without-honey-pot'
 
 /**
@@ -86,24 +90,33 @@ function resolveRowUnderPointer(
  * every drop would resolve as root-append.
  *
  * The latest valid hint computed during dragenter/dragover is cached and
- * committed verbatim on drop. Geometry is NEVER recomputed at drop time:
- * the sidebar scroll position can shift between the final dragover and the
- * drop event, and recomputing clientY against live row rects there flips
- * the edge (observed as an after-drop committing as before). Committing the
- * cached hint guarantees the move matches the indicator the user last saw.
+ * committed on drop, so the committed move matches the indicator the user
+ * last saw. Drop-time hit testing is only a FALLBACK for sparse drag-event
+ * streams (observed in CI: drags that deliver no enter/over before the
+ * drop); the fallback recomputes once from the drop event's coordinates.
+ * The cache is reset explicitly at monitor onDragStart because CI disproved
+ * the assumption that every drag reliably emits enter/over events first.
  */
 export function registerContainerDnd(options: ContainerDndOptions): () => void {
-  // Latest valid hint of the CURRENT drag. Every drop on this target is
-  // always preceded by onDragEnter/onDrag of that same drag, which rewrite
-  // this cache — including after an Escape-cancelled drag — so a stale hint
-  // from an earlier drag can never be committed. Invalid resolutions (null)
-  // clear it, preserving empty-space root-append semantics.
+  // Latest valid hint of the CURRENT drag. Rewritten by every
+  // onDragEnter/onDrag, cleared on dragleave/drop, and reset at drag start.
   let lastRowHint: RowHint | null = null
 
   const updateHint = (clientX: number, clientY: number): void => {
     lastRowHint = resolveRowUnderPointer(options.element, clientX, clientY)
     options.onHintChange(lastRowHint)
   }
+
+  // Explicit per-drag cache reset: a stale hint from an earlier drag can
+  // never survive into the next one, even if that next drag drops without
+  // emitting any enter/over events to this target.
+  const cleanupMonitor = monitorForElements({
+    onDragStart: ({ source }) => {
+      if (!isPageTreeDragData(source.data)) return
+      lastRowHint = null
+      options.onHintChange(null)
+    }
+  })
 
   const cleanupDropTarget = dropTargetForElements({
     element: options.element,
@@ -120,17 +133,25 @@ export function registerContainerDnd(options: ContainerDndOptions): () => void {
       lastRowHint = null
       options.onHintChange(null)
     },
-    onDrop: () => {
-      const hint = lastRowHint
+    onDrop: ({ location }) => {
+      const { clientX, clientY } = location.current.input
+      const hint =
+        lastRowHint ?? resolveRowUnderPointer(options.element, clientX, clientY)
+
       lastRowHint = null
       options.onHintChange(null)
+
       if (hint) {
         options.onDropIntent(hint.rowId, hint.edge)
-      } else {
-        options.onDropIntent(null, 'root-append')
+        return
       }
+
+      options.onDropIntent(null, 'root-append')
     }
   })
 
-  return cleanupDropTarget
+  return () => {
+    cleanupMonitor()
+    cleanupDropTarget()
+  }
 }
