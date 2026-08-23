@@ -4,11 +4,7 @@ import { IconChevronRight, IconDots, IconFileText } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './page-tree.module.css'
-import {
-  PAGE_TREE_DND_TYPE,
-  type DropEdge,
-  registerRowDraggable
-} from './tree-dnd.js'
+import { type DropEdge, PAGE_TREE_DND_TYPE, registerRowDraggable } from './tree-dnd.js'
 
 export interface PageTreeRowProps {
   pageId: string

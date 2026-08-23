@@ -8,8 +8,8 @@ import { PageTreeRow } from './page-tree-row.js'
 import {
   type DropEdge,
   isPageTreeDragData,
-  registerContainerDnd,
-  type RowHint
+  type RowHint,
+  registerContainerDnd
 } from './tree-dnd.js'
 
 export interface MoveTarget {
