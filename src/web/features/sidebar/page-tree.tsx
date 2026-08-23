@@ -117,7 +117,7 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
       onDropIntent: (rowId, edge) => {
         const sourceId = draggingSourceIdRef.current
         if (sourceId === null) return
-        if (rowId === null) {
+        if (rowId === null || edge === 'root-append') {
           // Root append: oversized position clamps to the destination end.
           hooksRef.current.onDropMove(sourceId, null, Number.MAX_SAFE_INTEGER)
           restoreFocusRef.current(sourceId)
