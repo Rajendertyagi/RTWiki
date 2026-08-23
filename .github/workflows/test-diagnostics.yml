@@ -45,6 +45,7 @@ jobs:
       - name: Run Playwright suite, capture output
         run: |
           set +e
+          bun run build:web
           bunx playwright install --with-deps chromium
           bunx playwright test tests/browser/rich-note.pwspec.ts --reporter=line > pw-full.txt 2>&1
           echo "playwright exit: $?" >> pw-full.txt
