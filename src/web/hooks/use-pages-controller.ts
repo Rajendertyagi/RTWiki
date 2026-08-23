@@ -101,8 +101,11 @@ export function usePagesController(): PagesController {
     const seq = ++searchSeqRef.current
     setLoading(true)
     setError(null)
-    api
-      .listPages(signal, query ? { q: query } : undefined)
+    // The hierarchy, sibling-index math, and sidebar rendering all need the
+    // complete collection: the default list window (most-recent 50) silently
+    // drops older siblings and corrupts drag-and-drop move positions.
+    const load = query ? api.listPages(signal, { q: query }) : api.listAllPages(signal)
+    load
       .then((result) => {
         if (seq === searchSeqRef.current && !signal?.aborted) {
           setPages(result.pages)

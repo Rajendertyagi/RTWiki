@@ -19,6 +19,9 @@ interface SeededPage {
 
 let titleSeq = 0
 
+/** Fill volume that pushes the tree past the API's default 50-row window. */
+const PAGE_WINDOW_REGRESSION_SIZE = 50
+
 function uniqueTitle(base: string): string {
   titleSeq += 1
   return `${base} ${Date.now()}-${titleSeq}`
@@ -316,5 +319,68 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await rowLocator(page, b.id).waitFor()
     await dragRowOnto(page, b.id, a.id, 0.1)
     await waitForServerOrder(request, [b.id, a.id])
+  })
+
+  test('reorders roots beyond the default list window', async ({ page, request }) => {
+    const patchCalls: string[] = []
+    page.on('request', (req) => {
+      if (req.method() === 'PATCH') patchCalls.push(req.url())
+    })
+    // Fill the tree past the API's 50-row default window entirely within
+    // this test, so coverage never depends on scenarios that ran earlier.
+    const fillers: SeededPage[] = []
+    for (let i = 0; i < 55; i++) {
+      fillers.push(await seedPage(request, uniqueTitle(`Filler${i}`)))
+    }
+    const parent = await seedPage(request, uniqueTitle('WindowParent'))
+    const kid = await seedPage(request, uniqueTitle('WindowKid'), parent.id)
+    const a = await seedPage(request, uniqueTitle('DeepA'))
+    const b = await seedPage(request, uniqueTitle('DeepB'))
+    const c = await seedPage(request, uniqueTitle('DeepC'))
+
+    await page.goto('/')
+    await rowLocator(page, c.id).waitFor()
+
+    // Pages sorted outside the first response window stay in the hierarchy:
+    // the oldest filler must render even though it cannot be in the window.
+    await expect(rowLocator(page, fillers[0].id)).toBeVisible()
+
+    // A parent/child relationship spanning the window boundary survives.
+    await expandRow(page, parent.id)
+    await expect(rowLocator(page, kid.id)).toBeVisible()
+
+    // Every one of this test's seeded nodes renders. The seeds alone exceed
+    // one default window, so the oldest fillers can only be visible if the
+    // controller retrieved the complete collection rather than the most
+    // recent 50 rows.
+    const allPages: Array<{ id: string }> = []
+    for (let offset = 0; ; offset += 100) {
+      const res = await request.get(`/api/pages?limit=100&offset=${offset}`)
+      expect(res.status()).toBe(200)
+      const body = (await res.json()) as { pages: Array<{ id: string }>; total: number }
+      allPages.push(...body.pages)
+      if (allPages.length >= body.total || body.pages.length === 0) break
+    }
+    expect(allPages.length).toBeGreaterThan(PAGE_WINDOW_REGRESSION_SIZE)
+    for (const seeded of [...fillers, parent, kid, a, b, c]) {
+      await expect(rowLocator(page, seeded.id)).toBeVisible()
+    }
+
+    // Open page A so it becomes the active selection with its editor mounted.
+    await rowLocator(page, a.id).click()
+    await page.keyboard.press('Enter')
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+
+    // Genuine mid-list reorder deep past the window: dragging b DOWN after c
+    // must compute the position against the FULL root sibling set.
+    await waitForServerOrder(request, [a.id, b.id, c.id])
+    await dragRowOnto(page, b.id, c.id, 0.9)
+    await waitForServerOrder(request, [a.id, c.id, b.id])
+
+    // Active page unchanged: editor still mounted for A and A still selected,
+    // and the move emitted no content PATCH requests.
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+    await expect(rowLocator(page, a.id)).toHaveAttribute('aria-selected', 'true')
+    expect(patchCalls).toEqual([])
   })
 })

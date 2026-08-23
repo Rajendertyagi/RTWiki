@@ -11,6 +11,59 @@ export interface PagesResult {
   total: number
 }
 
+/**
+ * Batch size for complete-collection retrieval. Matches the API's default
+ * page window so each request is a normal, cacheable list call.
+ */
+export const PAGE_LIST_BATCH_LIMIT = 50
+
+/**
+ * Retrieves the complete living-page collection through successive bounded
+ * windows of the existing paginated list endpoint.
+ *
+ * Safety properties:
+ * - Batches are accumulated locally and published only on full success, so a
+ *   failed later batch can never replace state with a partial collection.
+ * - A seen-ID set drops duplicates if rows shift across window boundaries.
+ * - The offset advances by the number of rows actually received, which stays
+ *   correct even when rows are created or deleted mid-pagination.
+ * - The loop bound is derived from the server-reported total (plus one batch
+ *   of slack for concurrent inserts), so pagination always terminates.
+ */
+export async function listAllPages(signal?: AbortSignal): Promise<PagesResult> {
+  const collected: Page[] = []
+  const seenIds = new Set<string>()
+  let offset = 0
+  // Covers collections up to one full batch before the first response sizes
+  // the bound from the authoritative total.
+  let remainingBatches = 2
+
+  while (remainingBatches > 0) {
+    remainingBatches -= 1
+    const result = await listPages(signal, { limit: PAGE_LIST_BATCH_LIMIT, offset })
+
+    for (const page of result.pages) {
+      if (!seenIds.has(page.id)) {
+        seenIds.add(page.id)
+        collected.push(page)
+      }
+    }
+
+    // A short batch is the definitive end-of-collection signal; the reported
+    // total ending the loop early is the equivalent optimization.
+    if (result.pages.length < PAGE_LIST_BATCH_LIMIT || collected.length >= result.total) {
+      return { pages: collected, total: collected.length }
+    }
+
+    offset += result.pages.length
+    // One extra batch of slack absorbs rows inserted mid-pagination.
+    const outstanding = Math.max(0, result.total - collected.length)
+    remainingBatches = Math.ceil(outstanding / PAGE_LIST_BATCH_LIMIT) + 1
+  }
+
+  throw new Error('Failed to load the complete page list')
+}
+
 export async function listPages(
   signal: AbortSignal | undefined,
   params?: { q?: string; limit?: number; offset?: number }
