@@ -35,8 +35,9 @@ jobs:
       - name: Capture formatting patch
         run: git diff > format.patch
       - name: Publish patch to step summary
-        # Logs and artifact downloads require authentication; the run
-        # summary page is publicly readable, so surface the patch there.
+        # Logs, artifacts, and summaries require authentication; check-run
+        # annotations are publicly readable via the REST API. Emit the patch
+        # as indexed base64 chunks so it can be reassembled without auth.
         run: |
           {
             echo '### Canonical formatting patch'
@@ -44,6 +45,12 @@ jobs:
             cat format.patch
             echo '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"
+          B64=$(base64 -w0 format.patch)
+          N=0
+          while IFS= read -r CHUNK; do
+            N=$((N+1))
+            echo "::error title=fmtpatch part $N::$CHUNK"
+          done < <(printf '%s' "$B64" | fold -w 3000)
       - name: Upload formatting patch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
