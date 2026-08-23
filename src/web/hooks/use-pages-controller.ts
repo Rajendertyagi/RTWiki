@@ -66,6 +66,7 @@ export interface PagesController {
   createPage: (title: string, pageType: PageType) => Promise<Page | null>
   moveTo: (id: string, newParentId: string | null) => void
   moveRelative: (id: string, delta: number) => void
+  moveToPosition: (id: string, newParentId: string | null, newPosition: number) => void
   createChild: (parentId: string) => Promise<void>
   /** Persists editor content and merges the server-returned page into local state. */
   savePageContent: (id: string, content: string) => Promise<boolean>

@@ -14,7 +14,9 @@ import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-d
 
 export const PAGE_TREE_DND_TYPE = 'rtwiki/page-tree-item'
 
-export interface PageTreeDragData {
+// A type alias (not an interface) so the payload stays assignable to
+// Record<string, unknown> as required by pragmatic-drag-and-drop APIs.
+export type PageTreeDragData = {
   type: typeof PAGE_TREE_DND_TYPE
   pageId: string
   parentId: string | null

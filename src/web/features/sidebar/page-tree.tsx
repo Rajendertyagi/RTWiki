@@ -56,12 +56,14 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
 
   useEffect(() => {
     return monitorForElements({
-      onDragStart: ({ source }) => {
+      onMonitorDragStart: ({ source }) => {
         if (isPageTreeDragData(source.data)) {
           draggingSourceIdRef.current = source.data.pageId
         }
       },
-      onDragEnd: () => {
+      // Fires for both real drops and cancellations (empty targets), which
+      // is exactly the reset signal rows need.
+      onMonitorDrop: () => {
         draggingSourceIdRef.current = null
         setDndResetTick((tick) => tick + 1)
         setRootHover(false)
@@ -99,7 +101,11 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
       const target = pages.find((page) => page.id === targetId)
       if (!target) return
       const newParentId = target.parentId ?? null
-      if (tree.isSelfOrDescendantChecker(sourceId, newParentId)) return
+      // A null parent is the root list, which can never be inside the
+      // dragged subtree, so the descendant check only applies to pages.
+      if (newParentId !== null && tree.isSelfOrDescendantChecker(sourceId, newParentId)) {
+        return
+      }
       const siblings = pages
         .filter((page) => (page.parentId ?? null) === newParentId && page.id !== sourceId)
         .sort((a, b) => a.position - b.position)
@@ -152,6 +158,7 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
             pageId={row.id}
             title={row.node.page.title}
             pageType={row.node.page.pageType}
+            parentId={row.node.page.parentId ?? null}
             indentLevel={row.depth}
             hasChildren={row.node.children.length > 0}
             expanded={row.expanded}
