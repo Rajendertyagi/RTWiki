@@ -285,15 +285,20 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     })
     const a = await seedPage(request, uniqueTitle('ActA'))
     const b = await seedPage(request, uniqueTitle('ActB'))
+    const c = await seedPage(request, uniqueTitle('ActC'))
     await page.goto('/')
-    await rowLocator(page, b.id).waitFor()
+    await rowLocator(page, c.id).waitFor()
     // Open page A so it becomes the active selection with its editor mounted:
     // clicking the focused row and pressing Enter follows the tree pattern.
     await rowLocator(page, a.id).click()
     await page.keyboard.press('Enter')
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
-    await dragRowOnto(page, b.id, a.id, 0.9)
-    await waitForServerOrder(request, [a.id, b.id])
+    // Genuine mid-list reorder away from the viewport's autoscroll boundary:
+    // dragging b DOWN after c moves [a,b,c] -> [a,c,b]. A no-op drag onto the
+    // topmost row previously masked failures via accidental root-append.
+    await waitForServerOrder(request, [a.id, b.id, c.id])
+    await dragRowOnto(page, b.id, c.id, 0.9)
+    await waitForServerOrder(request, [a.id, c.id, b.id])
     // Active page unchanged: editor still mounted for A and A still selected.
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
     await expect(rowLocator(page, a.id)).toHaveAttribute('aria-selected', 'true')
