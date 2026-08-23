@@ -141,6 +141,16 @@ export function usePagesController(): PagesController {
     loadPages(searchQuery.trim() || undefined, controller.signal)
   }, [loadPages, searchQuery])
 
+  const scheduleReset = useCallback(() => {
+    if (mutationTimeoutRef.current) {
+      clearTimeout(mutationTimeoutRef.current)
+    }
+    mutationTimeoutRef.current = setTimeout(() => {
+      setMutationStatus('idle')
+      setMutationError(null)
+    }, 2000)
+  }, [])
+
   /**
    * Applies an authoritative move reconciliation to local state: the moved
    * page plus both affected sibling position sets.
@@ -215,16 +225,6 @@ export function usePagesController(): PagesController {
       setMutationStatus('error')
       setMutationError(message)
     }
-  }, [])
-
-  const scheduleReset = useCallback(() => {
-    if (mutationTimeoutRef.current) {
-      clearTimeout(mutationTimeoutRef.current)
-    }
-    mutationTimeoutRef.current = setTimeout(() => {
-      setMutationStatus('idle')
-      setMutationError(null)
-    }, 2000)
   }, [])
 
   const createPage = useCallback(

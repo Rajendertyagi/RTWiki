@@ -2,7 +2,6 @@ import { Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { type UsePageTreeResult, usePageTree } from '../../../hooks/use-page-tree.js'
 import { UI_TEXT } from '../../config/index.js'
-import classes from './page-tree.module.css'
 import { PageTreeRow } from './page-tree-row.js'
 
 export interface MoveTarget {
@@ -35,7 +34,6 @@ interface PageTreeProps {
  */
 export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps): JSX.Element {
   const tree = usePageTree({ pages, activePageId, onOpen })
-  const parents = new Map(pages.map((p) => [p.id, p.parentId ?? null]))
 
   const moveTargets = buildMoveTargets(pages)
 
@@ -77,7 +75,6 @@ export function PageTree({ pages, activePageId, onOpen, hooks }: PageTreeProps):
             pageId={row.id}
             title={row.node.page.title}
             pageType={row.node.page.pageType}
-            depth={row.depth}
             indentLevel={row.depth}
             hasChildren={row.node.children.length > 0}
             expanded={row.expanded}

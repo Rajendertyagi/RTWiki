@@ -9,7 +9,6 @@ export interface PageTreeRowProps {
   pageId: string
   title: string
   pageType: PageType
-  depth: number
   hasChildren: boolean
   expanded: boolean
   focused: boolean
@@ -41,7 +40,6 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     pageId,
     title,
     pageType,
-    depth,
     hasChildren,
     expanded,
     focused,
