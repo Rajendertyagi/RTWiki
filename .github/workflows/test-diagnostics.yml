@@ -45,6 +45,7 @@ jobs:
       - name: Run Playwright suite, capture output
         run: |
           set +e
+          bunx playwright install --with-deps chromium
           bunx playwright test --reporter=line > pw-full.txt 2>&1
           echo "playwright exit: $?" >> pw-full.txt
           true
