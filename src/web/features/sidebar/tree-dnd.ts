@@ -135,8 +135,7 @@ export function registerContainerDnd(options: ContainerDndOptions): () => void {
     },
     onDrop: ({ location }) => {
       const { clientX, clientY } = location.current.input
-      const hint =
-        lastRowHint ?? resolveRowUnderPointer(options.element, clientX, clientY)
+      const hint = lastRowHint ?? resolveRowUnderPointer(options.element, clientX, clientY)
 
       lastRowHint = null
       options.onHintChange(null)
