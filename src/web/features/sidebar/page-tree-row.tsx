@@ -209,9 +209,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
           <Menu.Dropdown className={classes.menuScroll}>
             <Menu.Item onClick={onOpen}>{UI_TEXT.openAction}</Menu.Item>
             <Menu.Item onClick={onCreateChild}>{UI_TEXT.newChildPage}</Menu.Item>
-            <Menu.Item onClick={() => setEditing(true)}>
-              {UI_TEXT.renameAction}
-            </Menu.Item>
+            <Menu.Item onClick={() => setEditing(true)}>{UI_TEXT.renameAction}</Menu.Item>
             <Menu.Item onClick={onDuplicate}>{UI_TEXT.duplicateAction}</Menu.Item>
             <Menu.Item color="red" onClick={onDelete}>
               {UI_TEXT.deleteAction}
