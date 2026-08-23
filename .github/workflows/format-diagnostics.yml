@@ -30,7 +30,8 @@ jobs:
         # Tolerate a non-zero exit so the artifact is always produced:
         # `check --write` exits 1 when unfixable diagnostics remain even
         # after applying every safe fix. Precedent: Phase 4A (33601ac).
-        run: bun run format:fix; exit 0
+        # `|| true` is required because Actions runs bash with -e.
+        run: bun run format:fix || true
       - name: Capture formatting patch
         run: git diff > format.patch
       - name: Upload formatting patch
