@@ -66,20 +66,20 @@ function livingRoots(db: Database): HierarchyRow[] {
 function addLegacyPage(db: Database, id: string, updatedAt: string): void {
   db.run(
     "INSERT INTO pages (id, title, content, created_at, updated_at, version) VALUES (?, ?, '', ?, ?, 1)",
-    [id, id, updatedAt]
+    [id, id, updatedAt, updatedAt]
   )
   db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [id, id, ''])
 }
 
 describe('migration 003_page_hierarchy', () => {
-  it('applies exactly once and backfills living roots in display order', () => {
+  it('applies exactly once and backfills living roots in display order', async () => {
     const db = makeLegacyDb()
     // Oldest first: display order (updated_at DESC) must be c(0), b(1), a(2).
     addLegacyPage(db, 'a', '2026-01-01T00:00:00.000Z')
     addLegacyPage(db, 'b', '2026-01-02T00:00:00.000Z')
     addLegacyPage(db, 'c', '2026-01-03T00:00:00.000Z')
 
-    runMigrations(db)
+    await runMigrations(db)
 
     const names = db.query('_migrations').all() as Array<{ name: string }>
     expect(names.filter((n) => n.name === '003_page_hierarchy').length).toBe(1)
@@ -90,13 +90,13 @@ describe('migration 003_page_hierarchy', () => {
     db.close()
   })
 
-  it('excludes soft-deleted rows from sibling arithmetic', () => {
+  it('excludes soft-deleted rows from sibling arithmetic', async () => {
     const db = makeLegacyDb()
     addLegacyPage(db, 'a', '2026-01-01T00:00:00.000Z')
     addLegacyPage(db, 'b', '2026-01-02T00:00:00.000Z')
     db.run("UPDATE pages SET deleted_at = '2026-01-05T00:00:00.000Z' WHERE id = 'b'")
 
-    runMigrations(db)
+    await runMigrations(db)
 
     const roots = livingRoots(db)
     expect(roots.length).toBe(1)
@@ -105,9 +105,9 @@ describe('migration 003_page_hierarchy', () => {
     db.close()
   })
 
-  it('first-run databases gain hierarchy columns without legacy rows', () => {
+  it('first-run databases gain hierarchy columns without legacy rows', async () => {
     const db = new Database(':memory:')
-    runMigrations(db)
+    await runMigrations(db)
     const cols = db.query("PRAGMA table_info('pages')").all() as Array<{ name: string }>
     expect(cols.some((c) => c.name === 'parent_id')).toBe(true)
     expect(cols.some((c) => c.name === 'position')).toBe(true)
@@ -116,9 +116,9 @@ describe('migration 003_page_hierarchy', () => {
 })
 
 describe('hierarchy behaviour', () => {
-  function makeDb(): Database {
+  async function makeDb(): Promise<Database> {
     const db = new Database(':memory:')
-    runMigrations(db)
+    await runMigrations(db)
     return db
   }
 
@@ -131,8 +131,8 @@ describe('hierarchy behaviour', () => {
     })
   }
 
-  it('allocates contiguous sibling positions on create', () => {
-    const db = makeDb()
+  it('allocates contiguous sibling positions on create', async () => {
+    const db = await makeDb()
     seed(db, 'a', 'A')
     seed(db, 'b', 'B')
     seed(db, 'c', 'C')
@@ -141,8 +141,8 @@ describe('hierarchy behaviour', () => {
     db.close()
   })
 
-  it('same-parent move reorders with final-index-after-removal semantics', () => {
-    const db = makeDb()
+  it('same-parent move reorders with final-index-after-removal semantics', async () => {
+    const db = await makeDb()
     seed(db, 'a', 'A')
     seed(db, 'b', 'B')
     seed(db, 'c', 'C')
@@ -154,8 +154,8 @@ describe('hierarchy behaviour', () => {
     db.close()
   })
 
-  it('cross-parent move reparents and reindexes both sibling sets', () => {
-    const db = makeDb()
+  it('cross-parent move reparents and reindexes both sibling sets', async () => {
+    const db = await makeDb()
     seed(db, 'root', 'Root')
     seed(db, 'child', 'Child', 'root')
     seed(db, 'moved', 'Moved')
@@ -169,8 +169,8 @@ describe('hierarchy behaviour', () => {
     db.close()
   })
 
-  it('rejects moving a page into its own descendant', () => {
-    const db = makeDb()
+  it('rejects moving a page into its own descendant', async () => {
+    const db = await makeDb()
     seed(db, 'p', 'P')
     seed(db, 'x', 'X', 'p')
     expect(() => movePage(db, 'p', 'x', 0)).toThrowError(HierarchyError)
@@ -183,15 +183,15 @@ describe('hierarchy behaviour', () => {
     db.close()
   })
 
-  it('rejects self-moves', () => {
-    const db = makeDb()
+  it('rejects self-moves', async () => {
+    const db = await makeDb()
     seed(db, 'solo', 'Solo')
     expect(() => movePage(db, 'solo', 'solo', 0)).toThrowError(HierarchyError)
     db.close()
   })
 
-  it('moving to the current position is a valid idempotent operation', () => {
-    const db = makeDb()
+  it('moving to the current position is a valid idempotent operation', async () => {
+    const db = await makeDb()
     seed(db, 'a', 'A')
     seed(db, 'b', 'B')
     const result = movePage(db, 'b', null, 1)
@@ -199,8 +199,8 @@ describe('hierarchy behaviour', () => {
     db.close()
   })
 
-  it('clamps oversized positions to the destination end', () => {
-    const db = makeDb()
+  it('clamps oversized positions to the destination end', async () => {
+    const db = await makeDb()
     seed(db, 'a', 'A')
     seed(db, 'b', 'B')
     const result = movePage(db, 'a', null, 999)
@@ -208,16 +208,16 @@ describe('hierarchy behaviour', () => {
     db.close()
   })
 
-  it('nextChildPosition appends after the highest living sibling', () => {
-    const db = makeDb()
+  it('nextChildPosition appends after the highest living sibling', async () => {
+    const db = await makeDb()
     seed(db, 'a', 'A')
     seed(db, 'b', 'B')
     expect(nextChildPosition(db, null)).toBe(2)
     db.close()
   })
 
-  it('deleting a mid-tree parent promotes children at the former position', () => {
-    const db = makeDb()
+  it('deleting a mid-tree parent promotes children at the former position', async () => {
+    const db = await makeDb()
     seed(db, 'g1', 'G1')
     seed(db, 'g2', 'G2')
     seed(db, 'p', 'P', 'g1')
@@ -244,7 +244,7 @@ describe('hierarchy behaviour', () => {
 describe('PATCH rejects hierarchy changes', () => {
   it('returns 400 when parentId is supplied to PATCH', async () => {
     const db = new Database(':memory:')
-    runMigrations(db)
+    await runMigrations(db)
     const routes = createPageRoutes(() => db)
     const app = new Hono().route('/api/pages', routes)
 
