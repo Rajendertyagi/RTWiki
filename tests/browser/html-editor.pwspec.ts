@@ -398,8 +398,9 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     })
     await openPreview(page, title)
 
-    // Loads with JavaScript disabled by normalization.
-    await expect(page.locator(JS_TOGGLE)).not.toBeChecked()
+    // Loads with JavaScript disabled by normalization (asserted through the
+    // stored bytes after the next save below); the gate itself lives in the
+    // JavaScript subfile.
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('text=legacy body')).toBeVisible()
 

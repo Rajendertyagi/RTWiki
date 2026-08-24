@@ -130,11 +130,15 @@ test.describe('stability regressions', () => {
     }
 
     async function expectTitleEverywhere(page: Page, request: APIRequestContext, title: string) {
-      // Tree row and server truth are assertable straight from the dashboard.
+      // Server truth first (authoritative), then the rendered tree.
+      await expect
+        .poll(async () => {
+          const res = await request.get('/api/pages')
+          const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
+          return list.pages.some((p) => p.title === title)
+        })
+        .toBe(true)
       await expect(pageRow(page, title)).toBeVisible()
-      const res = await request.get('/api/pages')
-      const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
-      expect(list.pages.some((p) => p.title === title)).toBe(true)
 
       // Opening the renamed page asserts the header input and tab label.
       await pageRow(page, title).click()
@@ -203,7 +207,7 @@ test.describe('stability regressions', () => {
       await pageRow(page, original).click({ button: 'right' })
       const menu = page.getByTestId('tree-context-menu')
       await menu.waitFor()
-      await menu.getByRole('menuitem', { name: 'Rename' }).click()
+      await menu.getByRole('menuitem', { name: 'Rename', exact: true }).click()
       const input = page.getByTestId('page-rename-input')
       await expect(input).toHaveValue(original)
       await input.fill('This must never persist')
@@ -250,14 +254,17 @@ test.describe('stability regressions', () => {
       await openPageByRow(page, title)
       await openSubfile(page, p.id, 'html')
 
-      const markerHtml = `<p id="m">HTML-${titleSeq}</p>`
+      // Markers without tag syntax: CodeMirror's HTML auto-closing may add a
+      // closing tag when `<p ...>` is typed, so full-markup equality is not
+      // the contract — every typed character of CONTENT must survive.
+      const markerHtml = `HTML-${titleSeq}`
       await typeIntoEditor(page, 'html', markerHtml)
       // Switch IMMEDIATELY — the autosave debounce has not fired yet.
       await openSubfile(page, p.id, 'css')
-      const markerCss = `/* CSS-${titleSeq} */`
+      const markerCss = `CSS-${titleSeq}`
       await typeIntoEditor(page, 'css', markerCss)
       await openSubfile(page, p.id, 'javascript')
-      const markerJs = `// JS-${titleSeq}`
+      const markerJs = `JS-${titleSeq}`
       await typeIntoEditor(page, 'javascript', markerJs)
 
       // Return to each previously edited field: the newest text must survive.
