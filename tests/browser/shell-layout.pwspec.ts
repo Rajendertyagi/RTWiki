@@ -146,9 +146,7 @@ test.describe('Shell layout regions', () => {
     expect(Math.round(toolbarRow.height)).toBe(42)
 
     // Real controls eventually occupy the stable slot.
-    await expect(
-      page.locator('[data-testid="rich-toolbar-row"] button').first()
-    ).toBeVisible()
+    await expect(page.locator('[data-testid="rich-toolbar-row"] button').first()).toBeVisible()
   })
 
   test('HTML pages keep their own header flow without a rich toolbar', async ({

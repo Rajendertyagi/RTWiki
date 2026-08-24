@@ -21,8 +21,8 @@ type SaveState = 'clean' | 'saving' | 'saved' | 'error'
 export function App(): JSX.Element {
   const controller = usePagesController()
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
-// Session-only desktop tree-pane visibility (no persistence by design).
-const [treeOpen, setTreeOpen] = useState(true)
+  // Session-only desktop tree-pane visibility (no persistence by design).
+  const [treeOpen, setTreeOpen] = useState(true)
 
   // Any selection (tree click, dashboard card, create, duplicate) opens or
   // activates that page's tab. openInTabs deduplicates by page id.

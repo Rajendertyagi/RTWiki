@@ -1,5 +1,5 @@
-import { Box, Skeleton, Stack, Text } from '@mantine/core'
 import type { BlockNoteEditor } from '@blocknote/core'
+import { Box, Skeleton, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
 import { lazy, Suspense, useState } from 'react'
