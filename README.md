@@ -66,6 +66,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and the ADRs for details.
 - [Development Standards](docs/DEVELOPMENT_STANDARDS.md) — enforceable coding rules and conventions
 - [CI / CD](docs/CI_CD.md) — GitHub Actions workflow plan
 - [Debug Mode](docs/DEBUG_MODE.md) — opt-in structured client diagnostics (`logs/rtwiki-debug.jsonl`)
+- [Visual Knowledge Blocks](docs/VISUAL_BLOCKS.md) — Formula, Diagram, Mind Map and Callout blocks with the Mermaid security model
 
 ### Visual MVP
 
