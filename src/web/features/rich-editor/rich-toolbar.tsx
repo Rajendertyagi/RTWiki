@@ -484,7 +484,7 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
                 type="button"
                 role="menuitem"
                 className={classes.insertItem}
-                data-testid={`insert-${entry.key}`}
+                data-testid={entry.key}
                 onClick={() => {
                   runInsertEntry(editor, entry)
                   setInsertOpened(false)
