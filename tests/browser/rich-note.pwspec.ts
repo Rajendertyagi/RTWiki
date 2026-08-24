@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { purgeUntitledPages } from './utils/cleanup.js'
 
 const editorRoot = '[data-testid="rich-editor"]'
 // BlockNote 0.54 (tiptap v3): the editable element carries BOTH classes on a
@@ -54,6 +55,9 @@ const VALID_DOC = JSON.stringify([
 ])
 
 test.describe('Rich Note lifecycle (real application)', () => {
+  test.beforeAll(async ({ request }) => {
+    await purgeUntitledPages(request)
+  })
   let pageErrors: Error[] = []
   let consoleMessages: string[] = []
 
@@ -197,13 +201,12 @@ test.describe('Rich Note lifecycle (real application)', () => {
   }) => {
     const title = uniqueTitle('Static HTML page')
     // Empty content leniently becomes the canonical empty HTML document,
-    // which renders as a sandboxed preview — never as the Rich editor.
+    // which shows the empty-page state — never the Rich editor. The sandbox
+    // frame itself is covered by the dedicated preview suites.
     await seedPage(request, title, 'html', '')
     await page.goto('/')
     await openNote(page, title)
-    const preview = page.locator('[data-testid="preview-iframe"]')
-    await expect(preview).toBeVisible()
-    await expect(preview).toHaveAttribute('sandbox', 'allow-scripts')
+    await expect(page.getByText(/no content yet/i)).toBeVisible()
     await expect(page.locator(editorRoot)).toHaveCount(0)
     await expect(page.locator('.bn-editor')).toHaveCount(0)
   })

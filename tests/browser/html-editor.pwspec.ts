@@ -1,18 +1,20 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { purgeUntitledPages } from './utils/cleanup.js'
 
 /**
- * Phase 4B browser suite — editable HTML workspace.
- *
- * Covers the CodeMirror tabs, autosave/manual save states, reload and
- * page-switch persistence, keyboard shortcuts, responsive split view, and
- * the per-page JavaScript toggle (disabled by default; v1 compatibility).
- * Security enforcement itself remains covered by html-preview.pwspec.ts;
- * this suite spot-checks that editing does not weaken it.
+ * HTML-page workspace coverage under the managed-source-subfiles model:
+ * - Opening an HTML page shows ONLY the rendered sandboxed preview.
+ * - The tree exposes virtual HTML/CSS/JavaScript subfiles; opening one shows
+ *   exactly that field's CodeMirror editor with an explicit return action.
+ * - All persistence writes canonical v2 JSON through the shared autosave
+ *   controller; all rendering flows through the unchanged secure builder.
  */
 
-const EDITOR_ROOT = '[data-testid="html-editor"]'
+const PREVIEW_VIEW = '[data-testid="html-preview-view"]'
+const SOURCE_VIEW = '[data-testid="html-source-view"]'
 const PREVIEW_FRAME = '[data-testid="preview-iframe"]'
 const JS_TOGGLE = '[data-testid="js-enabled-toggle"]'
+const EDITOR_ROOT = '[data-testid="html-editor"]'
 
 let titleSeq = 0
 
@@ -45,14 +47,34 @@ async function readStoredContent(
   return list.pages.find((p) => p.title === title)?.content
 }
 
-async function openHtmlPage(page: Page, title: string): Promise<void> {
+/** Opens the page and lands on the rendered parent view. */
+async function openPreview(page: Page, title: string): Promise<void> {
   await page.goto('/')
   await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
-  await expect(page.locator(EDITOR_ROOT)).toBeVisible()
-  await expect(page.locator(PREVIEW_FRAME)).toBeVisible()
+  await expect(page.locator(PREVIEW_VIEW)).toBeVisible()
 }
 
-/** Types text into the active CodeMirror pane. */
+/** Expands the page's tree row and opens one virtual source subfile. */
+async function openSource(
+  page: Page,
+  title: string,
+  field: 'html' | 'css' | 'javascript'
+): Promise<void> {
+  await openPreview(page, title)
+  const row = page.locator('[role="treeitem"]').filter({ hasText: title })
+  const expand = row.locator('[aria-label="Expand"]')
+  if ((await expand.count()) > 0) {
+    await expand.click()
+  }
+  await page
+    .locator(`[role="treeitem"][data-subfile-id$="::${field}"]`)
+    .waitFor({ state: 'visible' })
+  await page.locator(`[role="treeitem"][data-subfile-id$="::${field}"]`).click()
+  await expect(page.locator(SOURCE_VIEW)).toBeVisible()
+  await expect(page.locator(EDITOR_ROOT)).toBeVisible()
+}
+
+/** Types text into the single CodeMirror pane of the source view. */
 async function typeIntoEditor(page: Page, text: string): Promise<void> {
   await page.locator('[data-testid^="code-editor-"] .cm-content').click()
   await page.keyboard.type(text)
@@ -107,6 +129,9 @@ function nextSave(page: Page): {
 }
 
 test.describe('HTML editor workspace (real Chromium)', () => {
+  test.beforeAll(async ({ request }) => {
+    await purgeUntitledPages(request)
+  })
   let pageErrors: Error[] = []
 
   test.beforeEach(({ page }) => {
@@ -118,7 +143,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     expect(pageErrors, 'no uncaught exceptions in the application').toEqual([])
   })
 
-  test('editor opens with tabs, JS off by default and live preview', async ({ page, request }) => {
+  test('parent opens as rendered preview with JS off by default', async ({ page, request }) => {
     const title = uniqueTitle('Editor Open')
     await seedHtmlPage(request, title, {
       content: JSON.stringify({
@@ -129,29 +154,45 @@ test.describe('HTML editor workspace (real Chromium)', () => {
         jsEnabled: false
       })
     })
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
 
-    await expect(page.getByRole('tab', { name: 'HTML' })).toBeVisible()
-    await expect(page.getByRole('tab', { name: 'CSS' })).toBeVisible()
-    await expect(page.getByRole('tab', { name: 'JavaScript' })).toBeVisible()
+    // Rendered content only: no source editors anywhere in the workspace.
+    await expect(page.locator(PREVIEW_FRAME)).toBeVisible()
+    await expect(page.locator('[data-testid^="code-editor-"]')).toHaveCount(0)
     await expect(page.locator(JS_TOGGLE)).not.toBeChecked()
 
-    // HTML/CSS preview works while JavaScript is disabled.
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('#open-marker')).toBeVisible()
   })
 
-  test('typing updates the live preview after the centralized debounce', async ({
+  test('empty HTML page shows a simple empty state instead of a frame', async ({
     page,
     request
   }) => {
+    const title = uniqueTitle('Empty Page')
+    await seedHtmlPage(request, title, {
+      content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
+    })
+    await openPreview(page, title)
+
+    await expect(page.getByText(/no content yet/i)).toBeVisible()
+    await expect(page.locator(PREVIEW_FRAME)).toHaveCount(0)
+  })
+
+  test('editing HTML updates the rendered preview after returning', async ({ page, request }) => {
     const title = uniqueTitle('Live Preview')
     await seedHtmlPage(request, title, {
       content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
     })
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
 
+    const save = nextSave(page)
     await typeIntoEditor(page, '<p id="typed-marker">typed body</p>')
+    const result = await save.done
+    expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
+
+    // Return to the parent's rendered view; the typed body appears.
+    await page.getByTestId('return-to-preview').click()
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('#typed-marker')).toHaveText('typed body')
   })
@@ -164,7 +205,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await seedHtmlPage(request, title, {
       content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
     })
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
 
     const save = nextSave(page)
     await typeIntoEditor(page, '<p id="persist-marker">reload me</p>')
@@ -174,12 +215,10 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await expectSaved(page)
 
     await page.reload()
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
     await expect(page.locator('[data-testid="code-editor-html"] .cm-content')).toContainText(
       'reload me'
     )
-    const frame = page.frameLocator(PREVIEW_FRAME)
-    await expect(frame.locator('#persist-marker')).toBeVisible()
   })
 
   test('Mod-S performs a manual save without opening the browser dialog', async ({
@@ -190,7 +229,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await seedHtmlPage(request, title, {
       content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
     })
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
 
     const save = nextSave(page)
     await typeIntoEditor(page, '<p id="manual-marker">manual</p>')
@@ -208,7 +247,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await seedHtmlPage(request, title, {
       content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
     })
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
 
     let failNextPatch = true
     await page.route('**/api/pages/*', async (route) => {
@@ -239,14 +278,14 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await seedHtmlPage(request, title, {
       content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
     })
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
 
     await typeIntoEditor(page, '<p id="flush-marker">flushed</p>')
     // Leave immediately — before the autosave debounce fires.
     await page.locator('[aria-label="Home"]').click()
     await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
 
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
     await expect(page.locator('[data-testid="code-editor-html"] .cm-content')).toContainText(
       'flushed'
     )
@@ -266,7 +305,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
         jsEnabled: false
       })
     })
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
 
     await expect(page.locator(JS_TOGGLE)).not.toBeChecked()
     const frame = page.frameLocator(PREVIEW_FRAME)
@@ -286,7 +325,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
         jsEnabled: false
       })
     })
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
 
     const save = nextSave(page)
     await page.locator(JS_TOGGLE).click()
@@ -307,7 +346,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
       content:
         '{"version":2,"html":"","css":"","javascript":"document.documentElement.setAttribute(\\"data-probe\\", \\"ran\\")","jsEnabled":false}'
     })
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
 
     const save = nextSave(page)
     await page.locator(JS_TOGGLE).click()
@@ -317,11 +356,11 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await expectSaved(page)
 
     await page.reload()
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
     await expect(page.locator(JS_TOGGLE)).toBeChecked()
 
     await page.locator('[aria-label="Home"]').click()
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
     await expect(page.locator(JS_TOGGLE)).toBeChecked()
   })
 
@@ -333,7 +372,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await seedHtmlPage(request, title, {
       content: '{"version":1,"html":"<b>legacy body</b>","css":"b{}","javascript":"v1fn()"}'
     })
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
 
     // Loads with JavaScript disabled by normalization.
     await expect(page.locator(JS_TOGGLE)).not.toBeChecked()
@@ -342,6 +381,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
     // An edit re-serializes as v2 with jsEnabled false — stored bytes upgrade
     // only through an actual save, never silently.
+    await openSource(page, title, 'html')
     const save = nextSave(page)
     await typeIntoEditor(page, '<i> appended</i>')
     const result = await save.done
@@ -363,35 +403,50 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await seedHtmlPage(request, title, {
       content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
     })
-    await openHtmlPage(page, title)
+    await openSource(page, title, 'html')
 
     await typeIntoEditor(page, '<p>ok</p><script>window.__injected = true;</script>')
+    // Returning to the preview flushes first; the sanitized output renders.
+    await page.getByTestId('return-to-preview').click()
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('text=ok')).toBeVisible()
     await expect(frame.locator('script:not([nonce])')).toHaveCount(0)
   })
 
-  test('split view stacks vertically at mobile viewport', async ({ page, request }) => {
-    const title = uniqueTitle('Mobile Stack')
+  test('CSS and JavaScript subfiles each open their own editor only', async ({ page, request }) => {
+    const title = uniqueTitle('Subfile Isolation')
+    await seedHtmlPage(request, title, {
+      content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
+    })
+    await openSource(page, title, 'css')
+    await expect(page.locator('[data-testid="code-editor-css"]')).toBeVisible()
+    await expect(page.locator('[data-testid="code-editor-html"]')).toHaveCount(0)
+
+    await page.getByTestId('return-to-preview').click()
+    await openSource(page, title, 'javascript')
+    await expect(page.locator('[data-testid="code-editor-javascript"]')).toBeVisible()
+    await expect(page.locator('[data-testid="code-editor-css"]')).toHaveCount(0)
+  })
+
+  test('preview fills the central area at a mobile viewport', async ({ page, request }) => {
+    const title = uniqueTitle('Mobile Preview')
     await seedHtmlPage(request, title, {
       content: '{"version":2,"html":"<p>m</p>","css":"","javascript":"","jsEnabled":false}'
     })
     await page.setViewportSize({ width: 480, height: 900 })
-    await openHtmlPage(page, title)
+    await openPreview(page, title)
 
     const boxes = await page.evaluate(() => {
-      const editor = document
-        .querySelector('[data-testid^="code-editor-"]')
-        ?.getBoundingClientRect()
       const preview = document
         .querySelector('[data-testid="live-preview"]')
         ?.getBoundingClientRect()
-      if (!editor || !preview) return null
-      return { editorBottom: editor.bottom, previewTop: preview.top }
+      const workspace = document.querySelector('[data-testid="html-preview-view"]')
+      const ws = workspace?.getBoundingClientRect()
+      if (!preview || !ws) return null
+      return { previewWidth: preview.width, workspaceWidth: ws.width }
     })
-    if (!boxes) {
-      throw new Error('layout probe failed: panes not found')
-    }
-    expect(boxes.previewTop).toBeGreaterThanOrEqual(boxes.editorBottom - 1)
+    if (!boxes) throw new Error('layout probe failed: preview not found')
+    // Single-pane preview uses effectively the whole central width.
+    expect(boxes.previewWidth).toBeGreaterThan(boxes.workspaceWidth * 0.8)
   })
 })

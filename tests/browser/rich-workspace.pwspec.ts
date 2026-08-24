@@ -1,4 +1,4 @@
-import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 
 /**
  * Working rich-note flow over the Trilium-inspired workspace:
