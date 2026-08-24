@@ -1,38 +1,68 @@
-import type { BlockNoteEditor } from '@blocknote/core'
 import { useEditorState } from '@blocknote/react'
 import { ActionIcon, Button, Popover, TextInput, Tooltip } from '@mantine/core'
 import {
+  IconAlertOctagon,
+  IconAlertTriangle,
   IconAlignCenter,
   IconAlignLeft,
   IconAlignRight,
   IconArrowBackUp,
   IconArrowForwardUp,
   IconBold,
+  IconBulb,
   IconChevronDown,
   IconClearFormatting,
   IconCode,
   IconH1,
   IconH2,
   IconH3,
+  IconInfoCircle,
   IconItalic,
   IconLetterA,
   IconLink,
   IconList,
   IconListCheck,
   IconListNumbers,
+  IconNote,
   IconPencil,
+  IconPlus,
   IconQuote,
+  IconSitemap,
   IconSortAscending,
   IconSortDescending,
   IconStrikethrough,
   IconTable,
   IconUnderline
 } from '@tabler/icons-react'
+import type { JSX } from 'react'
 import { useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
 
-type AnyEditor = BlockNoteEditor
+import type { AnyRichEditor } from './schema.js'
+
+type AnyEditor = AnyRichEditor
+
+/** Icons for the shared Insert entries (one mapping, defined once). */
+const INSERT_ICONS = {
+  formula: IconLetterA,
+  diagram: IconSitemap,
+  mindMap: IconSitemap,
+  table: IconTable,
+  code: IconCode,
+  quote: IconQuote,
+  calloutInfo: IconInfoCircle,
+  calloutNote: IconNote,
+  calloutTip: IconBulb,
+  calloutWarning: IconAlertTriangle,
+  calloutDanger: IconAlertOctagon
+} as const
+
+function InsertEntryIcon({ entry }: { entry: InsertEntry }): JSX.Element {
+  const Icon = INSERT_ICONS[entry.icon]
+  return <Icon size={16} />
+}
 
 interface RichToolbarProps {
   editor: AnyEditor
@@ -65,6 +95,7 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
   const [linkOpened, setLinkOpened] = useState(false)
   const [textColorOpened, setTextColorOpened] = useState(false)
   const [highlightOpened, setHighlightOpened] = useState(false)
+  const [insertOpened, setInsertOpened] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
 
   const withEditor = (action: () => void) => (): void => {
@@ -123,23 +154,6 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
       if ('textAlignment' in block.props) {
         editor.updateBlock(block, { props: { textAlignment: alignment } } as never)
       }
-    }
-    editor.focus()
-  }
-
-  const insertTable = (): void => {
-    const current = editor.getTextCursorPosition().block
-    const table = {
-      type: 'table',
-      content: {
-        type: 'tableContent',
-        rows: [{ cells: ['', '', ''] }, { cells: ['', '', ''] }]
-      }
-    } as never
-    if (current.type === 'paragraph' && JSON.stringify(current.content) === JSON.stringify('')) {
-      editor.updateBlock(current, table)
-    } else {
-      editor.insertBlocks([table], current, 'after')
     }
     editor.focus()
   }
@@ -439,33 +453,50 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
 
       <span className={classes.divider} />
 
-      <Tooltip label={UI_TEXT.quoteLabel} position="bottom">
-        <ActionIcon
-          variant={active.blockType === 'quote' ? 'light' : 'subtle'}
-          color={active.blockType === 'quote' ? 'blue' : undefined}
-          aria-label={UI_TEXT.quoteLabel}
-          aria-pressed={active.blockType === 'quote'}
-          onClick={setBlock('quote')}
-        >
-          <IconQuote size={16} />
-        </ActionIcon>
-      </Tooltip>
-      <Tooltip label={UI_TEXT.codeBlockLabel} position="bottom">
-        <ActionIcon
-          variant={active.blockType === 'codeBlock' ? 'light' : 'subtle'}
-          color={active.blockType === 'codeBlock' ? 'blue' : undefined}
-          aria-label={UI_TEXT.codeBlockLabel}
-          aria-pressed={active.blockType === 'codeBlock'}
-          onClick={setBlock('codeBlock')}
-        >
-          <IconCode size={16} />
-        </ActionIcon>
-      </Tooltip>
-      <Tooltip label={UI_TEXT.tableLabel} position="bottom">
-        <ActionIcon variant="subtle" aria-label={UI_TEXT.tableLabel} onClick={() => insertTable()}>
-          <IconTable size={16} />
-        </ActionIcon>
-      </Tooltip>
+      {/* Insert menu: visual knowledge blocks plus the existing table/code/
+          quote conversions, kept behind one control so the toolbar stays a
+          single scrollable row. */}
+      <Popover
+        opened={insertOpened}
+        onChange={setInsertOpened}
+        position="bottom-start"
+        withinPortal
+      >
+        <Popover.Target>
+          <Tooltip label={UI_TEXT.insertMenuLabel} position="bottom">
+            <ActionIcon
+              variant={insertOpened ? 'light' : 'subtle'}
+              aria-label={UI_TEXT.insertMenuLabel}
+              aria-haspopup="menu"
+              aria-expanded={insertOpened}
+              data-testid="insert-menu-button"
+              onClick={() => setInsertOpened((open) => !open)}
+            >
+              <IconPlus size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </Popover.Target>
+        <Popover.Dropdown>
+          <div role="menu" data-testid="insert-menu" className={classes.insertMenu}>
+            {getInsertEntries(editor).map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                role="menuitem"
+                className={classes.insertItem}
+                data-testid={`insert-${entry.key}`}
+                onClick={() => {
+                  runInsertEntry(editor, entry)
+                  setInsertOpened(false)
+                }}
+              >
+                <InsertEntryIcon entry={entry} />
+                <span>{entry.label}</span>
+              </button>
+            ))}
+          </div>
+        </Popover.Dropdown>
+      </Popover>
 
       <Tooltip label={UI_TEXT.clearFormattingLabel} position="bottom">
         <ActionIcon

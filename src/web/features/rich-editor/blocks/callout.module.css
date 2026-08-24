@@ -1,0 +1,71 @@
+/*
+ * Callout visual variants. All colours derive from Mantine theme tokens so
+ * light and dark schemes stay readable without hardcoded values. The tinted
+ * surfaces use color-mix so a single filled-token reference adapts to both
+ * themes.
+ */
+
+.callout {
+  display: flex;
+  gap: var(--mantine-spacing-xs);
+  align-items: flex-start;
+  width: 100%;
+  padding: var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--mantine-color-default-border);
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+.info {
+  background: color-mix(in srgb, var(--mantine-color-blue-filled) 10%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-blue-filled) 35%, transparent);
+}
+
+.info .icon {
+  color: var(--mantine-color-blue-filled);
+}
+
+.note {
+  background: color-mix(in srgb, var(--mantine-color-gray-filled) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-gray-filled) 35%, transparent);
+}
+
+.note .icon {
+  color: var(--mantine-color-gray-light);
+}
+
+.tip {
+  background: color-mix(in srgb, var(--mantine-color-teal-filled) 10%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-teal-filled) 35%, transparent);
+}
+
+.tip .icon {
+  color: var(--mantine-color-teal-filled);
+}
+
+.warning {
+  background: color-mix(in srgb, var(--mantine-color-yellow-filled) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-yellow-filled) 40%, transparent);
+}
+
+.warning .icon {
+  color: var(--mantine-color-yellow-filled);
+}
+
+.danger {
+  background: color-mix(in srgb, var(--mantine-color-red-filled) 10%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-red-filled) 35%, transparent);
+}
+
+.danger .icon {
+  color: var(--mantine-color-red-filled);
+}

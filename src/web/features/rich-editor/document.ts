@@ -91,6 +91,41 @@ export function serializeDocument(document: BlockNoteDocument): string {
   return JSON.stringify(document)
 }
 
+/**
+ * Containment for block types the current schema does not know (e.g.
+ * documents written by a newer RTWiki with additional blocks).
+ *
+ * Contract: unknown blocks are NEVER dropped silently. Each one is converted
+ * into a code block containing its exact JSON, prefixed with a stable marker
+ * so the original data survives every autosave round-trip and can be
+ * recovered by hand or by a future version that understands the type. The
+ * rest of the page keeps loading — one foreign block can never crash the
+ * whole document.
+ */
+const UNKNOWN_BLOCK_MARKER = '[unsupported block preserved below]'
+
+export function containUnknownBlocks(
+  document: BlockNoteDocument,
+  knownTypes: ReadonlySet<string>
+): BlockNoteDocument {
+  return document.map((raw) => {
+    const block = raw as { type?: unknown }
+    if (typeof block.type === 'string' && knownTypes.has(block.type)) {
+      return raw
+    }
+    return {
+      type: 'codeBlock',
+      props: { language: 'json' },
+      content: `${UNKNOWN_BLOCK_MARKER}\n${JSON.stringify(raw, null, 2)}`
+    }
+  })
+}
+
+/** True when the block content is the preservation marker code block. */
+export function isUnknownBlockPreserved(content: string): boolean {
+  return content.startsWith(UNKNOWN_BLOCK_MARKER)
+}
+
 export interface DocumentOutlineEntry {
   blockId: string
   level: number

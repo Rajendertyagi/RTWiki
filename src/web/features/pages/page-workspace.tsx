@@ -1,4 +1,3 @@
-import type { BlockNoteEditor } from '@blocknote/core'
 import { Box, Skeleton, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
@@ -7,6 +6,7 @@ import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
 import { RichEditor } from '../rich-editor/rich-editor.js'
 import { RichToolbar } from '../rich-editor/rich-toolbar.js'
+import type { AnyRichEditor } from '../rich-editor/schema.js'
 import { EditorHeader } from './editor-header.js'
 import classes from './page-workspace.module.css'
 
@@ -64,7 +64,7 @@ export function PageWorkspace({
   // slot is unconditional with a fixed height: while the editor instance
   // initializes a same-height placeholder holds the space, so the title and
   // document never shift when the real controls arrive.
-  const [richEditor, setRichEditor] = useState<BlockNoteEditor | null>(null)
+  const [richEditor, setRichEditor] = useState<AnyRichEditor | null>(null)
 
   return (
     <div className={classes.workspace}>
@@ -144,7 +144,7 @@ function PageEditors({
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
   }) => void
-  onRichEditorReady: (editor: BlockNoteEditor | null) => void
+  onRichEditorReady: (editor: AnyRichEditor | null) => void
 }): JSX.Element | null {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {

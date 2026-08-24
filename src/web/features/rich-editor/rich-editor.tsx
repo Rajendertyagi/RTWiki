@@ -1,4 +1,3 @@
-import type { BlockNoteEditor, PartialBlock } from '@blocknote/core'
 import { en } from '@blocknote/core/locales'
 import { BlockNoteView } from '@blocknote/mantine'
 import { useCreateBlockNote } from '@blocknote/react'
@@ -14,6 +13,7 @@ import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { updatePage } from '../../services/pages-api.js'
 import { RightSidebar } from '../workspace/right-sidebar.js'
 import {
+  containUnknownBlocks,
   createDefaultDocument,
   type DocumentOutlineEntry,
   extractOutline,
@@ -22,6 +22,13 @@ import {
 import { EditorErrorBoundary } from './editor-error-boundary.js'
 import classes from './rich-editor.module.css'
 import { RichToolbar } from './rich-toolbar.js'
+import {
+  type AnyRichEditor,
+  KNOWN_BLOCK_TYPES,
+  type RTWikiPartialBlock,
+  rtwikiBlockSchema
+} from './schema.js'
+import { RTSuggestionMenu } from './slash-menu.js'
 import { useAutosave } from './use-autosave.js'
 
 interface RichEditorProps {
@@ -40,7 +47,7 @@ interface RichEditorProps {
     saveState: 'clean' | 'saving' | 'saved' | 'error'
   }) => void
   /** Hands the live editor instance to the parent once initialized. */
-  onEditorReady?: (editor: BlockNoteEditor | null) => void
+  onEditorReady?: (editor: AnyRichEditor | null) => void
   /** Renders without the built-in toolbar; the parent hosts it externally. */
   toolbarExternal?: boolean
 }
@@ -185,7 +192,7 @@ export function RichEditor({
 
   const initialDocument = hasReset
     ? createDefaultDocument()
-    : (parseResult.document ?? createDefaultDocument())
+    : containUnknownBlocks(parseResult.document ?? createDefaultDocument(), KNOWN_BLOCK_TYPES)
 
   return (
     <div className={classes.editorRoot} data-testid="rich-editor">
@@ -216,7 +223,7 @@ interface InnerProps {
   createdDate?: string
   updatedDate?: string
   /** Hands the live editor instance to the parent once initialized. */
-  onEditorReady?: (editor: BlockNoteEditor | null) => void
+  onEditorReady?: (editor: AnyRichEditor | null) => void
   /** Renders without the built-in toolbar; the parent hosts it externally. */
   toolbarExternal?: boolean
 }
@@ -233,15 +240,10 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     onEditorReady,
     toolbarExternal
   } = props
-  // TEMP-DEBUG: log what stored content reached the editor on mount.
-  useEffect(() => {
-    console.log(
-      `RICHMOUNT pageId=${pageId} len=${JSON.stringify(initialDocument).length} doc=${JSON.stringify(initialDocument).slice(0, 100)}`
-    )
-  }, [pageId, initialDocument])
   const editor = useCreateBlockNote(
     {
-      initialContent: initialDocument as PartialBlock[],
+      schema: rtwikiBlockSchema,
+      initialContent: initialDocument as unknown as RTWikiPartialBlock[],
       dictionary: {
         ...en,
         placeholders: {
@@ -330,7 +332,9 @@ function RichEditorInner(props: InnerProps): JSX.Element {
       <div className={classes.richRow}>
         <Stack gap="xs" className={classes.editorContainer}>
           <div className={classes.blockNoteWrapper}>
-            <BlockNoteView editor={editor} theme={blocknoteTheme} formattingToolbar={false} />
+            <BlockNoteView editor={editor} theme={blocknoteTheme} formattingToolbar={false}>
+              <RTSuggestionMenu editor={editor} />
+            </BlockNoteView>
           </div>
 
           <Text size="xs" c="dimmed">
