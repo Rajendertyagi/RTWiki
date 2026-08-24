@@ -20,10 +20,15 @@ interface SidebarProps {
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
   onCreateChild: (parentId: string) => void
+  onCreateChildHtml?: (parentId: string) => void
   onMoveTo: (id: string, newParentId: string | null) => void
   onMoveRelative: (id: string, delta: number) => void
   /** Positional move used by drag-and-drop (optimistic + rollback). */
   onDropMove: (id: string, newParentId: string | null, newPosition: number) => void
+  /** Creates a new ROOT page from the tree's empty-space context menu. */
+  onCreateRoot?: (pageType: 'rich' | 'html') => void
+  /** Opens an HTML page's virtual source subfile in the central workspace. */
+  onOpenHtmlSource: (pageId: string, field: 'html' | 'css' | 'javascript') => void
 }
 
 export function Sidebar({
@@ -39,9 +44,12 @@ export function Sidebar({
   onDuplicate,
   onDelete,
   onCreateChild,
+  onCreateChildHtml,
   onMoveTo,
   onMoveRelative,
-  onDropMove
+  onDropMove,
+  onCreateRoot,
+  onOpenHtmlSource
 }: SidebarProps): JSX.Element {
   return (
     <div className={classes.sidebarRoot}>
@@ -87,10 +95,13 @@ export function Sidebar({
                   onDuplicate,
                   onDelete,
                   onCreateChild,
+                  onCreateChildHtml,
                   onMoveTo,
                   onMoveRelative,
                   onDropMove
                 }}
+                onCreateRoot={onCreateRoot}
+                onOpenHtmlSource={onOpenHtmlSource}
               />
             )}
           </Stack>

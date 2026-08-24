@@ -67,7 +67,7 @@ export interface PagesController {
   moveTo: (id: string, newParentId: string | null) => void
   moveRelative: (id: string, delta: number) => void
   moveToPosition: (id: string, newParentId: string | null, newPosition: number) => void
-  createChild: (parentId: string) => Promise<void>
+  createChild: (parentId: string, pageType?: PageType) => Promise<void>
   /** Persists editor content and merges the server-returned page into local state. */
   savePageContent: (id: string, content: string) => Promise<boolean>
   renamePage: (id: string, title: string) => Promise<boolean>
@@ -292,22 +292,25 @@ export function usePagesController(): PagesController {
   )
 
   /** Creates an untitled child under an existing parent and opens it. */
-  const createChild = useCallback(async (parentId: string): Promise<void> => {
-    try {
-      const page = await api.createPage({
-        title: UI_TEXT.untitledPage,
-        pageType: 'rich',
-        content: '',
-        parentId
-      })
-      setPages((prev) => [...prev, page])
-      setSelectedPage(page)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create page'
-      setMutationStatus('error')
-      setMutationError(message)
-    }
-  }, [])
+  const createChild = useCallback(
+    async (parentId: string, pageType: PageType = 'rich'): Promise<void> => {
+      try {
+        const page = await api.createPage({
+          title: UI_TEXT.untitledPage,
+          pageType,
+          content: '',
+          parentId
+        })
+        setPages((prev) => [...prev, page])
+        setSelectedPage(page)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to create page'
+        setMutationStatus('error')
+        setMutationError(message)
+      }
+    },
+    []
+  )
 
   const createPage = useCallback(
     async (title: string, pageType: PageType): Promise<Page | null> => {

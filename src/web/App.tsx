@@ -130,6 +130,41 @@ export function App(): JSX.Element {
       setPendingFlushError(null)
     }
     controller.selectPage(id)
+    // Any normal navigation lands on the rendered parent view.
+    setHtmlSource(null)
+  }
+
+  // HTML source-subfile view: which field of which page is being edited.
+  const [htmlSource, setHtmlSource] = useState<{
+    pageId: string
+    field: 'html' | 'css' | 'javascript'
+  } | null>(null)
+
+  /** Flushes pending edits before switching the visible source/preview. */
+  const flushQuietly = async (): Promise<boolean> => {
+    if (!flushRef.current) return true
+    const ok = await flushRef.current()
+    if (!ok) setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+    return ok
+  }
+
+  const handleOpenHtmlSource = async (
+    pageId: string,
+    field: 'html' | 'css' | 'javascript'
+  ): Promise<void> => {
+    if (controller.selectedPage?.id !== pageId) {
+      const ok = await flushQuietly()
+      if (!ok) return
+      controller.selectPage(pageId)
+    } else if (!(await flushQuietly())) {
+      return
+    }
+    setHtmlSource({ pageId, field })
+  }
+
+  const handleExitHtmlSource = async (): Promise<void> => {
+    if (!(await flushQuietly())) return
+    setHtmlSource(null)
   }
 
   const handleCreatePage = async (title: string, pageType: PageType): Promise<void> => {
@@ -291,9 +326,12 @@ export function App(): JSX.Element {
             onDuplicate={(id) => void controller.duplicatePage(id)}
             onDelete={handleDeleteRequest}
             onCreateChild={(parentId) => void controller.createChild(parentId)}
+            onCreateChildHtml={(parentId) => void controller.createChild(parentId, 'html')}
             onMoveTo={(id, newParentId) => controller.moveTo(id, newParentId)}
             onMoveRelative={(id, delta) => controller.moveRelative(id, delta)}
             onDropMove={controller.moveToPosition}
+            onCreateRoot={(pageType) => void controller.createPage(UI_TEXT.untitledPage, pageType)}
+            onOpenHtmlSource={(pageId, field) => void handleOpenHtmlSource(pageId, field)}
           />
         }
       >
@@ -338,6 +376,12 @@ export function App(): JSX.Element {
             <PageWorkspace
               page={controller.selectedPage}
               breadcrumb={breadcrumb}
+              htmlSourceField={
+                htmlSource && htmlSource.pageId === controller.selectedPage.id
+                  ? htmlSource.field
+                  : null
+              }
+              onExitHtmlSource={() => void handleExitHtmlSource()}
               onSaveContent={controller.savePageContent}
               isDirty={isDirty}
               saveState={saveState}

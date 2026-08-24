@@ -7,12 +7,24 @@ import { createLogger } from './logging/index.js'
 interface CliFlags {
   smokeTest: boolean
   noOpen: boolean
+  /** Overrides the default listening port (8080). */
+  port?: number
 }
 
 function parseArgs(argv: string[]): CliFlags {
+  let port: number | undefined
+  const portIndex = argv.indexOf('--port')
+  if (portIndex >= 0) {
+    const raw = argv[portIndex + 1]
+    const parsed = raw === undefined ? Number.NaN : Number(raw)
+    if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65_535) {
+      port = parsed
+    }
+  }
   return {
     smokeTest: argv.includes('--smoke-test'),
-    noOpen: argv.includes('--no-open')
+    noOpen: argv.includes('--no-open'),
+    port
   }
 }
 
@@ -81,7 +93,10 @@ async function main(): Promise<void> {
     return
   }
 
-  const runtime = await bootstrap({ openBrowser: !flags.noOpen })
+  const runtime = await bootstrap({
+    openBrowser: !flags.noOpen,
+    ...(flags.port === undefined ? {} : { port: flags.port })
+  })
 
   // If an existing instance was detected, bootstrap returns a null server.
   // The browser was already opened (if applicable) and its exit message was
