@@ -4,41 +4,91 @@
   border-radius: var(--mantine-radius-md);
   transition: box-shadow 150ms ease;
   position: relative;
+  overflow: hidden;
 }
 
-.card:hover {
+.card:hover,
+.card:focus-within {
   box-shadow: var(--mantine-shadow-sm);
 }
 
-.cardContent {
-  pointer-events: none;
-}
-
-.cardOpenButton {
-  position: absolute;
-  inset: 0;
+/*
+ * The open control IS the card body: a real button whose visible content is
+ * styled phrasing spans. No transparent overlay, no stacking-order fragility.
+ */
+.cardOpen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  width: 100%;
+  min-height: 128px;
+  padding: var(--mantine-spacing-md);
   background: transparent;
   border: none;
-  padding: 0;
   cursor: pointer;
+  text-align: left;
   font: inherit;
   color: inherit;
 }
 
-.cardMenuWrapper {
-  position: relative;
-  z-index: 2;
-}
-
-.cardMenuWrapper button {
-  pointer-events: auto;
+.cardOpen:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-filled);
+  outline-offset: -2px;
 }
 
 .cardTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--rtwiki-text, var(--mantine-color-text));
-  pointer-events: none;
 }
 
-.cardTitle:hover {
-  cursor: pointer;
+.cardPreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+  flex: 1;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.cardType {
+  padding: 2px 8px;
+  border-radius: var(--mantine-radius-sm);
+  font-weight: 500;
+}
+
+.type-rich {
+  color: var(--mantine-color-blue-light-color);
+  background: var(--mantine-color-blue-light);
+}
+
+.type-html {
+  color: var(--mantine-color-teal-light-color);
+  background: var(--mantine-color-teal-light);
+}
+
+.cardMenuWrapper {
+  position: absolute;
+  top: var(--mantine-spacing-xs);
+  right: var(--mantine-spacing-xs);
+  z-index: 2;
+}
+
+.cardMenuButton {
+  pointer-events: auto;
 }

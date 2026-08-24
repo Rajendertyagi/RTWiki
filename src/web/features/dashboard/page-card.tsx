@@ -1,10 +1,9 @@
-import { ActionIcon, Card, Group, Menu, Text, Title } from '@mantine/core'
+import { ActionIcon, Card, Menu } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
-import { PageTypeBadge } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { pagePreviewText } from '../../util/page-preview-text.js'
-import classes from './dashboard.module.css'
+import classes from './page-card.module.css'
 
 interface PageCardProps {
   page: Page
@@ -22,62 +21,66 @@ function formatDate(value: string): string {
 }
 
 /**
- * Accessible page card using the ghost-button overlay pattern.
+ * Accessible page card.
  *
- * The card is a non-interactive container. A transparent <button> covers the
- * entire card area for the "open" action. The three-dot menu is a sibling
- * button with higher z-index. No interactive element is nested inside another,
- * satisfying the HTML spec and providing proper keyboard/screen-reader support.
+ * The open control is a REAL button containing the visible card content
+ * (title, preview, meta) as styled spans — phrasing content only, so the
+ * markup stays valid. The whole rendered surface is therefore genuinely
+ * clickable in every browser and geometry, with native Enter/Space
+ * activation and a visible focus outline. The three-dot menu is a sibling
+ * interactive element, never nested inside the button.
+ *
+ * (The previous implementation used an absolutely-positioned transparent
+ * overlay button; its inset-stretch collapsed to a 6px sliver in production
+ * CSS, so real clicks on the card body silently did nothing.)
  */
 export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps): JSX.Element {
+  const displayTitle = page.title || UI_TEXT.untitledPage
+
   return (
-    <Card withBorder padding="md" radius="md" className={classes.card}>
+    <Card withBorder padding={0} radius="md" className={classes.card}>
       <button
         type="button"
-        className={classes.cardOpenButton}
+        className={classes.cardOpen}
         onClick={() => onOpen(page.id)}
-        aria-label={`Open ${page.title || UI_TEXT.untitledPage}`}
-      />
+        aria-label={`Open ${displayTitle}`}
+      >
+        <span className={classes.cardTitle}>{displayTitle}</span>
+        <span className={classes.cardPreview}>
+          {pagePreviewText(page) || UI_TEXT.editorPlaceholderContent}
+        </span>
+        <span className={classes.cardMeta}>
+          <span className={`${classes.cardType} ${classes[`type-${page.pageType}`]}`}>
+            {page.pageType === 'rich' ? UI_TEXT.richNote : UI_TEXT.htmlPage}
+          </span>
+          <span>{formatDate(page.updatedAt)}</span>
+        </span>
+      </button>
 
-      <Group justify="space-between" gap="xs" wrap="nowrap" className={classes.cardContent}>
-        <Title order={4} lineClamp={2} className={classes.cardTitle}>
-          {page.title || UI_TEXT.untitledPage}
-        </Title>
-        <div className={classes.cardMenuWrapper}>
-          <Menu position="bottom-end" withinPortal>
-            <Menu.Target>
-              <ActionIcon
-                variant="subtle"
-                aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
-              >
-                <IconDots size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item leftSection={<IconCopy size={14} />} onClick={() => onDuplicate(page.id)}>
-                {UI_TEXT.duplicateAction}
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconTrash size={14} />}
-                color="red"
-                onClick={() => onDelete(page.id)}
-              >
-                {UI_TEXT.deleteAction}
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-        </div>
-      </Group>
-
-      <Text size="sm" c="dimmed" lineClamp={3} mt="xs" className={classes.cardContent}>
-        {pagePreviewText(page) || UI_TEXT.editorPlaceholderContent}
-      </Text>
-
-      <div className={`${classes.cardFooter} ${classes.cardContent}`}>
-        <PageTypeBadge pageType={page.pageType} />
-        <Text size="xs" c="dimmed">
-          {formatDate(page.updatedAt)}
-        </Text>
+      <div className={classes.cardMenuWrapper}>
+        <Menu position="bottom-end" withinPortal>
+          <Menu.Target>
+            <ActionIcon
+              variant="subtle"
+              className={classes.cardMenuButton}
+              aria-label={`Actions for ${displayTitle}`}
+            >
+              <IconDots size={16} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item leftSection={<IconCopy size={14} />} onClick={() => onDuplicate(page.id)}>
+              {UI_TEXT.duplicateAction}
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<IconTrash size={14} />}
+              color="red"
+              onClick={() => onDelete(page.id)}
+            >
+              {UI_TEXT.deleteAction}
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
       </div>
     </Card>
   )
