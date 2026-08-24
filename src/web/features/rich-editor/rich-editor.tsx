@@ -1,4 +1,4 @@
-import type { PartialBlock } from '@blocknote/core'
+import type { BlockNoteEditor, PartialBlock } from '@blocknote/core'
 import { en } from '@blocknote/core/locales'
 import { BlockNoteView } from '@blocknote/mantine'
 import { useCreateBlockNote } from '@blocknote/react'
@@ -39,6 +39,10 @@ interface RichEditorProps {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
   }) => void
+  /** Hands the live editor instance to the parent once initialized. */
+  onEditorReady?: (editor: BlockNoteEditor | null) => void
+  /** Renders without the built-in toolbar; the parent hosts it externally. */
+  toolbarExternal?: boolean
 }
 
 export function RichEditor({
@@ -49,7 +53,9 @@ export function RichEditor({
   onSaveContent,
   onBack,
   onFlushRef,
-  onSaveStateChange
+  onSaveStateChange,
+  onEditorReady,
+  toolbarExternal
 }: RichEditorProps): JSX.Element {
   const parseResult = parseStoredDocument(storedContent)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -193,6 +199,8 @@ export function RichEditor({
           error={error}
           createdDate={createdDate}
           updatedDate={updatedDate}
+          onEditorReady={onEditorReady}
+          toolbarExternal={toolbarExternal}
         />
       </EditorErrorBoundary>
     </div>
@@ -207,6 +215,10 @@ interface InnerProps {
   error: string | null
   createdDate?: string
   updatedDate?: string
+  /** Hands the live editor instance to the parent once initialized. */
+  onEditorReady?: (editor: BlockNoteEditor | null) => void
+  /** Renders without the built-in toolbar; the parent hosts it externally. */
+  toolbarExternal?: boolean
 }
 
 function RichEditorInner(props: InnerProps): JSX.Element {
@@ -236,6 +248,13 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     extractOutline(initialDocument)
   )
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  // Hand the live editor instance to the parent so an externally hosted
+  // toolbar can bind to it; cleared on unmount/editor replacement.
+  useEffect(() => {
+    onEditorReady?.(editor)
+    return () => onEditorReady?.(null)
+  }, [editor, onEditorReady])
 
   // Place the caret in the document on open and keep claiming focus briefly:
   // Mantine's Modal restores focus to its trigger after the create dialog
@@ -294,7 +313,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
         </Alert>
       ) : null}
 
-      <RichToolbar editor={editor} />
+      {toolbarExternal ? null : <RichToolbar editor={editor} />}
 
       <div className={classes.richRow}>
         <Stack gap="xs" className={classes.editorContainer}>

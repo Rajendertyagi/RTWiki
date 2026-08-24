@@ -1,3 +1,14 @@
+/**
+ * Shell layout dimensions. Single source of truth so the AppShell navbar
+ * width, the rail column and the collapse toggle all agree.
+ */
+export const LAYOUT = {
+  /** Narrow launcher/action rail (outermost full-height column). */
+  railWidth: 60,
+  /** Page-tree pane width when expanded. */
+  treePaneWidth: 336
+} as const
+
 export const UI_TEXT = {
   appName: 'RTWiki',
   description: 'A personal knowledge workspace for your family. Offline, private, and portable.',
@@ -113,6 +124,10 @@ export const UI_TEXT = {
   // Workspace tabs
   tabStripLabel: 'Open pages',
   tabCloseLabel: 'Close tab',
+  // Shell navigation
+  toggleNavigation: 'Toggle navigation',
+  collapseTreeLabel: 'Collapse page tree',
+  expandTreeLabel: 'Expand page tree',
   // Rich Document toolbar
   richToolbarLabel: 'Formatting',
   undoLabel: 'Undo',

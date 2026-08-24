@@ -1,10 +1,12 @@
 import { Box, Skeleton, Stack, Text } from '@mantine/core'
+import type { BlockNoteEditor } from '@blocknote/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
 import { RichEditor } from '../rich-editor/rich-editor.js'
+import { RichToolbar } from '../rich-editor/rich-toolbar.js'
 import { EditorHeader } from './editor-header.js'
 import classes from './page-workspace.module.css'
 
@@ -47,8 +49,29 @@ export function PageWorkspace({
   onFlushRef,
   onSaveStateChange
 }: PageWorkspaceProps): JSX.Element {
+  // Rich pages host the persistent toolbar OUTSIDE the editor component so
+  // it sits directly under the tab strip, above the title/actions row. The
+  // slot is unconditional with a fixed height: while the editor instance
+  // initializes a same-height placeholder holds the space, so the title and
+  // document never shift when the real controls arrive.
+  const [richEditor, setRichEditor] = useState<BlockNoteEditor | null>(null)
+
   return (
     <div className={classes.workspace}>
+      {page.pageType === 'rich' ? (
+        <div className={classes.toolbarRow} data-testid="rich-toolbar-row" aria-busy={!richEditor}>
+          {richEditor ? (
+            <RichToolbar editor={richEditor} />
+          ) : (
+            <div className={classes.toolbarSkeleton} aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          )}
+        </div>
+      ) : null}
+
       <EditorHeader
         page={page}
         isDirty={isDirty}
@@ -78,6 +101,8 @@ export function PageWorkspace({
             onBack={onBack}
             onFlushRef={onFlushRef}
             onSaveStateChange={onSaveStateChange}
+            onEditorReady={setRichEditor}
+            toolbarExternal
           />
         ) : (
           <HtmlEditorSurface

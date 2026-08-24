@@ -5,7 +5,15 @@ import {
   useComputedColorScheme,
   useMantineColorScheme
 } from '@mantine/core'
-import { IconHome, IconMoon, IconPlus, IconPower, IconSearch, IconSun } from '@tabler/icons-react'
+import {
+  IconHome,
+  IconMoon,
+  IconPanelLeft,
+  IconPlus,
+  IconPower,
+  IconSearch,
+  IconSun
+} from '@tabler/icons-react'
 import { UI_TEXT } from '../config/index.js'
 import classes from './utility-rail.module.css'
 
@@ -15,6 +23,10 @@ interface UtilityRailProps {
   onSearchFocus: () => void
   onNewPage: () => void
   onStop: () => void
+  /** Desktop-only tree-pane visibility, mirrored into the toggle state. */
+  treeOpen?: boolean
+  /** Desktop-only collapse/expand control for the page-tree pane. */
+  onToggleTree?: () => void
 }
 
 export function UtilityRail({
@@ -22,7 +34,9 @@ export function UtilityRail({
   onHome,
   onSearchFocus,
   onNewPage,
-  onStop
+  onStop,
+  treeOpen,
+  onToggleTree
 }: UtilityRailProps): JSX.Element {
   const { setColorScheme } = useMantineColorScheme()
   const computedColorScheme = useComputedColorScheme('light', {
@@ -49,6 +63,26 @@ export function UtilityRail({
             <IconHome size={18} />
           </ActionIcon>
         </Tooltip>
+
+        {onToggleTree ? (
+          <Tooltip
+            label={treeOpen ? UI_TEXT.collapseTreeLabel : UI_TEXT.expandTreeLabel}
+            position="right"
+          >
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              onClick={onToggleTree}
+              aria-label={treeOpen ? UI_TEXT.collapseTreeLabel : UI_TEXT.expandTreeLabel}
+              aria-expanded={treeOpen}
+              className={classes.action}
+              visibleFrom="sm"
+              data-testid="tree-toggle"
+            >
+              <IconPanelLeft size={18} />
+            </ActionIcon>
+          </Tooltip>
+        ) : null}
 
         <Tooltip label={UI_TEXT.utilityRailSearch} position="right">
           <ActionIcon

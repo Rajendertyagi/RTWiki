@@ -21,6 +21,8 @@ type SaveState = 'clean' | 'saving' | 'saved' | 'error'
 export function App(): JSX.Element {
   const controller = usePagesController()
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
+// Session-only desktop tree-pane visibility (no persistence by design).
+const [treeOpen, setTreeOpen] = useState(true)
 
   // Any selection (tree click, dashboard card, create, duplicate) opens or
   // activates that page's tab. openInTabs deduplicates by page id.
@@ -254,6 +256,7 @@ export function App(): JSX.Element {
   return (
     <>
       <AppShellLayout
+        treeOpen={treeOpen}
         tabStrip={
           <TabStrip
             tabs={openTabs}
@@ -270,6 +273,8 @@ export function App(): JSX.Element {
             onSearchFocus={handleSearchFocus}
             onNewPage={handleNewPage}
             onStop={handleStop}
+            treeOpen={treeOpen}
+            onToggleTree={() => setTreeOpen((o) => !o)}
           />
         }
         navbar={

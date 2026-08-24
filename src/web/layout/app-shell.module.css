@@ -3,20 +3,10 @@
   background: var(--rtwiki-background, var(--mantine-color-body));
 }
 
-.headerInner {
+.mobileBar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 100%;
-  padding-inline: var(--mantine-spacing-md);
-  background: var(--rtwiki-surface, var(--mantine-color-body));
-  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-}
-
-.headerTitle {
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--rtwiki-text, var(--mantine-color-text));
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
 }
 
 .navbarInner {
@@ -40,6 +30,17 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/*
+ * Desktop tree collapse hides the pane only at >=sm; on mobile the
+ * drawer must always expose both rail and tree, so the pane stays in
+ * the DOM and visible below the breakpoint.
+ */
+@media (min-width: 48em) {
+  .treeCollapsedDesktop {
+    display: none;
+  }
 }
 
 .mainContent {
