@@ -179,6 +179,9 @@ test.describe('stability regressions', () => {
       await expandRow(page, parent.id)
       await pageRow(page, childOriginal).waitFor()
       await renameViaTree(page, childOriginal, childRenamed)
+      // A mutation-triggered refetch remounts the tree (pre-existing
+      // behaviour), so re-expand the parent before asserting the child row.
+      await expandRow(page, parent.id)
       await expectTitleEverywhere(page, request, child.id, childRenamed)
       // The parent's title is untouched by the child rename.
       const res = await request.get('/api/pages')
@@ -207,6 +210,8 @@ test.describe('stability regressions', () => {
       await expandRow(page, root.id)
       await pageRow(page, childOriginal).waitFor()
       await renameViaTree(page, childOriginal, childRenamed)
+      // Same refetch-remount re-expansion as above.
+      await expandRow(page, root.id)
       await expectTitleEverywhere(page, request, child.id, childRenamed)
     })
 
@@ -344,7 +349,10 @@ test.describe('stability regressions', () => {
       await openPageByRow(page, title)
       await expect(page.locator('[data-testid="html-preview-view"]')).toBeVisible()
       await openSubfile(page, p.id, 'javascript')
-      expect(await readEditor(page, 'javascript')).toContain(marker)
+      // Poll: the CodeMirror view mounts one frame after the lazy chunk loads.
+      await expect
+        .poll(async () => readEditor(page, 'javascript'), { timeout: 10_000 })
+        .toContain(marker)
     })
   })
 
@@ -563,8 +571,9 @@ test.describe('stability regressions', () => {
 
       const order = async (): Promise<string[]> => {
         const res = await request.get('/api/pages')
-        const list = (await res.json()) as Array<{ id: string; position: number }>
-        return list
+        // The list endpoint returns an envelope: { pages: [...], total }.
+        const body = (await res.json()) as { pages: Array<{ id: string; position: number }> }
+        return body.pages
           .filter((x) => [a.id, b.id, c.id].includes(x.id))
           .sort((x, y) => x.position - y.position)
           .map((x) => x.id)
@@ -587,8 +596,10 @@ test.describe('stability regressions', () => {
       await expect
         .poll(async () => {
           const res = await request.get(`/api/pages`)
-          const list = (await res.json()) as Array<{ id: string; parentId: string | null }>
-          return list.find((x) => x.id === c.id)?.parentId
+          const body = (await res.json()) as {
+            pages: Array<{ id: string; parentId: string | null }>
+          }
+          return body.pages.find((x) => x.id === c.id)?.parentId
         })
         .toBe(b.id)
     })
