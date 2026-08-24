@@ -66,6 +66,8 @@ export interface ContainerDndOptions {
   onHintChange: (hint: RowHint | 'blocked' | null) => void
   /** Commit: rowId null means empty-space root append. */
   onDropIntent: (rowId: string | null, edge: DropEdge | 'root-append') => void
+  /** Debug Mode observation: a drop over a virtual subfile row was rejected. */
+  onBlockedDrop?: () => void
 }
 
 type ResolvedHint = RowHint | 'blocked' | null
@@ -147,6 +149,7 @@ export function registerContainerDnd(options: ContainerDndOptions): () => void {
 
       if (hint === 'blocked') {
         // Over a subfile row: swallow the drop entirely.
+        options.onBlockedDrop?.()
         return
       }
       if (hint) {

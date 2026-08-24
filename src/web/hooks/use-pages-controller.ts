@@ -1,6 +1,7 @@
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../config/index.js'
+import { debugLog } from '../diagnostics/debug-log.js'
 import type { MoveReconciliation } from '../services/pages-api.js'
 import * as api from '../services/pages-api.js'
 
@@ -347,6 +348,7 @@ export function usePagesController(): PagesController {
       setSelectedPage((prev) => (prev && prev.id === updated.id ? updated : prev))
       return true
     } catch {
+      debugLog('error', 'error_api_failure', { pageId: id, code: 'update_page_content' })
       return false
     }
   }, [])

@@ -3,6 +3,7 @@ import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from './config/index.js'
+import { debugLog } from './diagnostics/debug-log.js'
 import { Dashboard } from './features/dashboard/dashboard.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
@@ -29,7 +30,13 @@ export function App(): JSX.Element {
   useEffect(() => {
     const page = controller.selectedPage
     if (!page) return
-    setOpenTabs((prev) => openInTabs(prev, page, UI_TEXT.untitledPage))
+    setOpenTabs((prev) => {
+      const next = openInTabs(prev, page, UI_TEXT.untitledPage)
+      if (next !== prev) {
+        debugLog('navigation', 'nav_tab_opened', { pageId: page.id })
+      }
+      return next
+    })
   }, [controller.selectedPage])
 
   // Display-only parent chain for the open page (Workspace Hierarchy).
@@ -130,6 +137,7 @@ export function App(): JSX.Element {
       setPendingFlushError(null)
     }
     controller.selectPage(id)
+    debugLog('navigation', 'nav_active_page_changed', { pageId: id ?? undefined })
     // Any normal navigation lands on the rendered parent view.
     setHtmlSource(null)
   }
@@ -152,6 +160,7 @@ export function App(): JSX.Element {
     pageId: string,
     field: 'html' | 'css' | 'javascript'
   ): Promise<void> => {
+    debugLog('navigation', 'nav_source_view_changed', { pageId, field })
     if (controller.selectedPage?.id !== pageId) {
       const ok = await flushQuietly()
       if (!ok) return
@@ -164,6 +173,10 @@ export function App(): JSX.Element {
 
   const handleExitHtmlSource = async (): Promise<void> => {
     if (!(await flushQuietly())) return
+    debugLog('navigation', 'nav_source_view_changed', {
+      pageId: controller.selectedPage?.id,
+      field: 'preview'
+    })
     setHtmlSource(null)
   }
 
@@ -199,6 +212,7 @@ export function App(): JSX.Element {
       }
       setPendingFlushError(null)
     }
+    debugLog('navigation', 'nav_tab_closed', { pageId })
     const result = closeInTabs(openTabs, pageId, controller.selectedPage?.id ?? null)
     setOpenTabs(result.tabs)
     if (isActive) {
@@ -296,7 +310,10 @@ export function App(): JSX.Element {
           <TabStrip
             tabs={openTabs}
             activePageId={controller.selectedPage?.id ?? null}
-            onSelect={(id) => void handleSelectPage(id)}
+            onSelect={(id) => {
+              debugLog('ui', 'ui_tab_select', { tabId: id ?? undefined })
+              void handleSelectPage(id)
+            }}
             onClose={(id) => void handleTabClose(id)}
             onNew={handleNewPage}
           />

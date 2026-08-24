@@ -1,6 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
-import { dirname } from 'node:path'
 import { LOG_MAX_BYTES, LOG_MAX_ROTATED_FILES } from '@rtwiki/shared/constants'
+import { RotatingJsonlSink } from './rotating-sink.js'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -44,19 +43,14 @@ export interface LoggerOptions {
  *   single safe terminal warning naming only the failed operation.
  */
 export class FileLogger implements Logger {
-  private readonly logPath: string
-  private readonly maxBytes: number
-  private readonly maxRotatedFiles: number
-  private sinkEnabled = true
-  private sinkWarningEmitted = false
-  private rotationWarningEmitted = false
+  private readonly sink: RotatingJsonlSink
   private closed = false
 
   constructor(logPath: string, options: LoggerOptions = {}) {
-    this.logPath = logPath
-    this.maxBytes = options.maxBytes ?? LOG_MAX_BYTES
-    this.maxRotatedFiles = options.maxRotatedFiles ?? LOG_MAX_ROTATED_FILES
-    this.initializeFile()
+    this.sink = new RotatingJsonlSink(logPath, {
+      maxBytes: options.maxBytes ?? LOG_MAX_BYTES,
+      maxRotatedFiles: options.maxRotatedFiles ?? LOG_MAX_ROTATED_FILES
+    })
   }
 
   info(message: string, context?: LogContext): void {
@@ -82,20 +76,6 @@ export class FileLogger implements Logger {
     this.closed = true
   }
 
-  private initializeFile(): void {
-    try {
-      const dir = dirname(this.logPath)
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true })
-      }
-      if (!existsSync(this.logPath)) {
-        appendFileSync(this.logPath, '')
-      }
-    } catch {
-      this.disableSink('open log file')
-    }
-  }
-
   private write(level: LogLevel, message: string, context?: LogContext): void {
     if (this.closed) return
     const line = JSON.stringify({
@@ -106,69 +86,8 @@ export class FileLogger implements Logger {
     })
     // eslint-disable-next-line no-console
     console.log(line)
-    if (!this.sinkEnabled) return
-    try {
-      this.rotateIfNeeded(Buffer.byteLength(line, 'utf8') + 1)
-      appendFileSync(this.logPath, `${line}\n`)
-    } catch {
-      this.disableSink('append to log file')
-    }
-  }
-
-  /**
-   * Shifts rtwiki.N.log -> rtwiki.N+1.log (deleting the oldest) and moves the
-   * current file to rtwiki.1.log when the size threshold would be exceeded.
-   * A failure here is non-fatal: warn once and keep appending; the next
-   * threshold check retries rotation.
-   */
-  private rotateIfNeeded(incomingBytes: number): void {
-    let size = 0
-    try {
-      size = statSync(this.logPath).size
-    } catch {
-      return
-    }
-    if (size + incomingBytes <= this.maxBytes) return
-
-    const oldest = this.rotatedPath(this.maxRotatedFiles)
-    try {
-      if (existsSync(oldest)) unlinkSync(oldest)
-    } catch {
-      // Keep going — the final rename may still succeed.
-    }
-    for (let index = this.maxRotatedFiles - 1; index >= 1; index--) {
-      const from = this.rotatedPath(index)
-      if (!existsSync(from)) continue
-      try {
-        renameSync(from, this.rotatedPath(index + 1))
-      } catch {
-        return
-      }
-    }
-    try {
-      renameSync(this.logPath, this.rotatedPath(1))
-    } catch {
-      if (!this.rotationWarningEmitted) {
-        this.rotationWarningEmitted = true
-        // eslint-disable-next-line no-console
-        console.warn('RTWiki logging warning: could not rotate log file; continuing to append')
-      }
-    }
-  }
-
-  private rotatedPath(index: number): string {
-    return this.logPath.replace(/\.log$/, `.${index}.log`)
-  }
-
-  private disableSink(operation: string): void {
-    this.sinkEnabled = false
-    if (!this.sinkWarningEmitted) {
-      this.sinkWarningEmitted = true
-      // eslint-disable-next-line no-console
-      console.warn(
-        `RTWiki logging warning: could not ${operation}; file logging is disabled for this session`
-      )
-    }
+    // File failures degrade to a terminal warning inside the shared sink.
+    this.sink.appendLine(line)
   }
 }
 

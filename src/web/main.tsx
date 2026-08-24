@@ -6,6 +6,7 @@ import '@blocknote/mantine/style.css'
 import '@mantine/core/styles.css'
 import { App } from './App.js'
 import { AppErrorBoundary } from './diagnostics/app-error-boundary.js'
+import { configureDebugLoggingFromStorage } from './diagnostics/debug-log.js'
 import { installGlobalErrorReporting } from './diagnostics/error-reporter.js'
 import { rtwikiCssVariablesResolver, theme } from './theme/index.js'
 // Centralized customization entry: loaded last so hierarchy/layout variables
@@ -16,6 +17,10 @@ import './theme/customization.css'
 // diagnostics endpoint. Inner React boundaries mark their errors as handled,
 // so the same failure is never reported twice.
 installGlobalErrorReporting()
+
+// Activate opt-in Debug Mode before the app renders so early events
+// (session restoration, editor mounts) are captured when enabled.
+configureDebugLoggingFromStorage()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

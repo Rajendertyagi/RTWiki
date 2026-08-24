@@ -179,7 +179,8 @@ describe('listAllPages against the running API', () => {
         error: () => {},
         close: async () => {}
       } as unknown as import('../src/server/logging/index.js').Logger,
-      frontendDistDir: ''
+      frontendDistDir: '',
+      debugEventSink: { append: () => {} }
     }
     await runMigrations(deps.getDb())
     app = createApp(deps)

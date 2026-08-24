@@ -16,8 +16,28 @@ export interface AutosaveControllerOptions {
   debounceMs?: number
   onSave: (pageId: string, content: string) => Promise<void>
   onStatusChange?: (state: AutosaveState) => void
+  /**
+   * Optional Debug Mode observer. Receives monotonic revisions only — never
+   * content. Callers enrich events with lengths/hashes at their own boundary.
+   */
+  events?: AutosaveEventSink
   /** @internal Test injection point; defaults to the real timers. */
   scheduler?: Scheduler
+}
+
+/**
+ * Debug Mode observation points across the autosave lifecycle. Every method
+ * is optional and must never throw into the save pipeline.
+ */
+export interface AutosaveEventSink {
+  scheduled?(revision: number): void
+  cancelled?(revision: number): void
+  flushRequested?(revision: number): void
+  requestStarted?(revision: number): void
+  success?(revision: number): void
+  failure?(revision: number): void
+  revisionApplied?(revision: number): void
+  staleIgnored?(revision: number): void
 }
 
 /**
@@ -38,6 +58,15 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   dispose: () => void
 } {
   const debounceMs = options.debounceMs ?? 2000
+  // Debug events are observed through an indirection so a throwing observer
+  // can never break saving.
+  const emitEvent = (name: keyof AutosaveEventSink, revision: number): void => {
+    try {
+      options.events?.[name]?.(revision)
+    } catch {
+      // Observation must never break editing.
+    }
+  }
   // Wrapper arrows (not the bare methods): in browsers setTimeout/clearTimeout
   // are Window scope methods and throw "Illegal invocation" when invoked with
   // any other `this` — e.g. as properties of a plain scheduler object.
@@ -86,11 +115,13 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   const startSnapshotSave = async (snapshot: DocumentRevision): Promise<boolean> => {
     inFlightSnapshot = snapshot
     inFlightPromise = (async (): Promise<boolean> => {
+      emitEvent('requestStarted', snapshot.revision)
       try {
         await options.onSave(pendingPageId ?? '', snapshot.content)
         // Advance confirmedRevision only if this request is still the newest
         if (snapshot.revision >= confirmedRevision) {
           confirmedRevision = snapshot.revision
+          emitEvent('revisionApplied', confirmedRevision)
           // Only clear pending if it hasn't been superseded
           if (
             pendingContent !== null &&
@@ -110,6 +141,9 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
           } else {
             setState('saved', null)
           }
+        } else {
+          // Stale completion: a newer revision was already confirmed.
+          emitEvent('staleIgnored', snapshot.revision)
         }
         // Stale completion: do nothing — newer revision is already confirmed
         return true
@@ -118,6 +152,7 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
         if (inFlightSnapshot !== null && inFlightSnapshot.revision === snapshot.revision) {
           setState('error', err instanceof Error ? err.message : 'Save failed')
         }
+        emitEvent('failure', snapshot.revision)
         // Do NOT clear pendingContent — preserve for retry
         return false
       } finally {
@@ -134,6 +169,9 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
    * Coalesces in-flight saves and continues until current revision is confirmed.
    */
   const drain = async (): Promise<boolean> => {
+    if (timer !== null) {
+      emitEvent('flushRequested', currentRevision)
+    }
     clearTimer()
 
     while (
@@ -159,7 +197,12 @@ export function createAutosaveController(options: AutosaveControllerOptions): {
   }
 
   const scheduleSave = (): void => {
-    clearTimer()
+    if (timer !== null) {
+      // Re-arming mid-window supersedes the previous schedule.
+      emitEvent('cancelled', currentRevision)
+      clearTimer()
+    }
+    emitEvent('scheduled', currentRevision)
     timer = scheduler.setTimeout(async () => {
       timer = null
       await drain()

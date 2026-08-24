@@ -65,7 +65,8 @@ describe('per-response CSP nonce pairing', () => {
         error: () => {},
         close: async () => {}
       } as unknown as import('../src/server/logging/index.js').Logger,
-      frontendDistDir: distDir
+      frontendDistDir: distDir,
+      debugEventSink: { append: () => {} }
     }
     await runMigrations(db)
   })

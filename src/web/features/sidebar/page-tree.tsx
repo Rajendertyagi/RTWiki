@@ -3,6 +3,7 @@ import { Text } from '@mantine/core'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { debugLog } from '../../diagnostics/debug-log.js'
 import { type UsePageTreeResult, usePageTree } from '../../hooks/use-page-tree.js'
 import classes from './page-tree.module.css'
 import { PageTreeRow } from './page-tree-row.js'
@@ -65,7 +66,16 @@ export function PageTree({
   onOpenHtmlSource,
   onCreateRoot
 }: PageTreeProps): JSX.Element {
-  const tree = usePageTree({ pages, activePageId, onOpen, onOpenHtmlSource })
+  const tree = usePageTree({
+    pages,
+    activePageId,
+    // Keyboard Enter shares the pointer click's Debug Mode observation.
+    onOpen: (id) => {
+      debugLog('ui', 'ui_tree_row_open', { pageId: id })
+      onOpen(id)
+    },
+    onOpenHtmlSource
+  })
 
   const moveTargets = buildMoveTargets(pages)
 
@@ -138,6 +148,20 @@ export function PageTree({
   const hooksRef = useRef(hooks)
   hooksRef.current = hooks
   const draggingSourceIdRef = useRef<string | null>(null)
+  // Set when a drop intent is actually committed; lets the monitor's onDrop
+  // distinguish real drops from cancellations for Debug Mode.
+  const dropCommittedRef = useRef(false)
+  // Debug Mode: log only CHANGED row/edge hints, never every pointer event.
+  const lastHintRef = useRef<RowHint | 'blocked' | null>(null)
+  const applyDropHint = useCallback((hint: RowHint | 'blocked' | null): void => {
+    const previous = lastHintRef.current
+    lastHintRef.current = hint
+    if (previous === hint) return
+    if (hint !== null && hint !== 'blocked') {
+      debugLog('ui', 'ui_drag_hint_changed', { pageId: hint.rowId, code: hint.edge })
+    }
+    setDropHint(hint)
+  }, [])
   // Stable refs so the container registration effect can stay mount-scoped
   // while always invoking the latest commit/focus logic.
   const handleRowDropRef = useRef(handleRowDrop)
@@ -150,26 +174,46 @@ export function PageTree({
       onDragStart: ({ source }) => {
         if (isPageTreeDragData(source.data)) {
           draggingSourceIdRef.current = source.data.pageId
+          dropCommittedRef.current = false
+          debugLog('ui', 'ui_drag_start', { pageId: source.data.pageId })
         }
       },
-      // Fires for both real drops and cancellations (empty targets), which
-      // is exactly the reset signal rows need.
+      // Fires when the drag finishes regardless of outcome. A finish without
+      // a committed drop intent was a cancellation (Escape, or released
+      // outside the tree); real drops commit the intent flag first.
       onDrop: () => {
+        const sourceId = draggingSourceIdRef.current
         draggingSourceIdRef.current = null
-        setDropHint(null)
+        applyDropHint(null)
+        if (!dropCommittedRef.current && sourceId !== null) {
+          debugLog('ui', 'ui_drag_cancel', { pageId: sourceId, result: 'cancelled' })
+        }
       }
     })
-  }, [])
+  }, [applyDropHint])
 
   useEffect(() => {
     const element = containerElementRef.current
     if (!element) return
     return registerContainerDnd({
       element,
-      onHintChange: setDropHint,
+      onHintChange: applyDropHint,
+      onBlockedDrop: () => {
+        debugLog('ui', 'ui_drag_drop', {
+          pageId: draggingSourceIdRef.current ?? undefined,
+          result: 'rejected',
+          code: 'subfile-target'
+        })
+      },
       onDropIntent: (rowId, edge) => {
         const sourceId = draggingSourceIdRef.current
         if (sourceId === null) return
+        dropCommittedRef.current = true
+        debugLog('ui', 'ui_drag_drop', {
+          pageId: sourceId,
+          targetId: rowId ?? undefined,
+          code: edge
+        })
         if (rowId === null || edge === 'root-append') {
           // Root append: oversized position clamps to the destination end.
           hooksRef.current.onDropMove(sourceId, null, Number.MAX_SAFE_INTEGER)
@@ -179,12 +223,19 @@ export function PageTree({
         handleRowDropRef.current(sourceId, rowId, edge)
       }
     })
-  }, [])
+  }, [applyDropHint])
 
   const handleRenameCommit = (id: string, title: string): void => {
+    debugLog('ui', 'ui_rename_commit', { pageId: id })
     void hooks.onRename(id, title).then(() => {
       tree.restoreFocusAfterChange(id)
     })
+  }
+
+  /** Debug Mode observation: a tree row was opened by pointer click. */
+  const openRow = (id: string): void => {
+    debugLog('ui', 'ui_tree_row_open', { pageId: id })
+    onOpen(id)
   }
 
   const handleDelete = (id: string): void => {
@@ -294,7 +345,7 @@ export function PageTree({
               focused={tree.focusedId === row.id}
               active={activePageId === row.id}
               tabIndex={tree.focusedId === row.id ? 0 : -1}
-              onOpen={() => onOpen(row.id)}
+              onOpen={() => openRow(row.id)}
               onToggleExpand={() => tree.toggleExpand(row.id)}
               onFocusRow={() => tree.focusRow(row.id)}
               onRenameCommit={(title) => handleRenameCommit(row.id, title)}
@@ -384,7 +435,8 @@ export function PageTree({
                   onClick={() => {
                     const id = contextMenu.pageId
                     closeContextMenu()
-                    if (actionKey === 'open') onOpen(id)
+                    debugLog('ui', 'ui_context_menu_action', { pageId: id, code: actionKey })
+                    if (actionKey === 'open') openRow(id)
                     if (actionKey === 'childRich') createChildAndExpand(id, 'rich')
                     if (actionKey === 'childHtml') createChildAndExpand(id, 'html')
                     if (actionKey === 'rename') requestRenameViaMenu(id)

@@ -2,6 +2,7 @@ import { ActionIcon, Card, Menu } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
 import { UI_TEXT } from '../../config/index.js'
+import { debugLog } from '../../diagnostics/debug-log.js'
 import { pagePreviewText } from '../../util/page-preview-text.js'
 import classes from './page-card.module.css'
 
@@ -42,7 +43,10 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
       <button
         type="button"
         className={classes.cardOpen}
-        onClick={() => onOpen(page.id)}
+        onClick={() => {
+          debugLog('ui', 'ui_card_open', { pageId: page.id })
+          onOpen(page.id)
+        }}
         aria-label={`Open ${displayTitle}`}
       >
         <span className={classes.cardTitle}>{displayTitle}</span>

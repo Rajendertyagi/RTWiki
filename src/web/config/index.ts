@@ -169,7 +169,13 @@ export const UI_TEXT = {
   pageInfoTitle: 'Page info',
   pageInfoType: 'Type',
   pageInfoCreated: 'Created',
-  pageInfoUpdated: 'Modified'
+  pageInfoUpdated: 'Modified',
+  // Settings / diagnostics
+  settingsLabel: 'Settings',
+  debugToggleLabel: 'Debug logging',
+  debugToggleDescription:
+    'Writes technical diagnostics to logs\\rtwiki-debug.jsonl. Never records note content.',
+  debugActiveLabel: 'Debug logging is active'
 } as const
 
 export const STATUS_TEXT = {

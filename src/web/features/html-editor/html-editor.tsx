@@ -9,6 +9,7 @@ import {
 } from '@rtwiki/shared/schemas/html-content'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { createThrottledEmitter, debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { PreviewFrame } from '../html/preview-frame.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { CodeEditor } from './code-editor.js'
@@ -63,6 +64,21 @@ export default function HtmlEditorWorkspace({
     parseResult.ok ? normalizeHtmlContent(parseResult.content) : createEmptyHtmlContent()
   )
   const [previewContent, setPreviewContent] = useState<HtmlPageContentV2>(content)
+
+  // Debug Mode: editor lifecycle. The draft is created exactly once per
+  // mounted page; its identity is the real parent page id.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-scoped lifecycle observation; content changes are never re-logged here
+  useEffect(() => {
+    debugLog('editor', 'editor_mount', { pageId, field: sourceField ?? 'preview' })
+    debugLog('editor', 'editor_draft_created', {
+      pageId,
+      len: content.html.length + content.css.length + content.javascript.length,
+      hash: safeHash(content.html + content.css + content.javascript)
+    })
+    return () => {
+      debugLog('editor', 'editor_unmount', { pageId })
+    }
+  }, [pageId])
 
   const handleSave = useCallback(
     async (pid: string, serialized: string): Promise<void> => {
@@ -119,8 +135,44 @@ export default function HtmlEditorWorkspace({
       const normalized = normalizeHtmlContent(parseResult.content)
       setContent(normalized)
       setPreviewContent(normalized)
+      debugLog('editor', 'editor_draft_replaced', {
+        pageId,
+        len: normalized.html.length + normalized.css.length + normalized.javascript.length,
+        hash: safeHash(normalized.html + normalized.css + normalized.javascript)
+      })
     }
   }, [pageId, parseResult])
+
+  // Debug Mode: source-field switches (requested/completed in one commit —
+  // the switch is synchronous state, so both observations carry the same tick).
+  const previousFieldRef = useRef(sourceField)
+  useEffect(() => {
+    if (previousFieldRef.current === sourceField) return
+    debugLog('editor', 'editor_source_switch_requested', {
+      pageId,
+      field: sourceField ?? 'preview'
+    })
+    previousFieldRef.current = sourceField
+    debugLog('editor', 'editor_source_switch_completed', {
+      pageId,
+      field: sourceField ?? 'preview'
+    })
+  }, [sourceField, pageId])
+
+  // Debug Mode: throttled transaction observation (latest keystroke stats at
+  // most once per second; length and safe hash only, never content).
+  const emitTransaction = useMemo(
+    () =>
+      createThrottledEmitter(1000, (field: ContentField, value: string) => {
+        debugLog('editor', 'editor_transaction', {
+          pageId,
+          field,
+          len: value.length,
+          hash: safeHash(value)
+        })
+      }),
+    [pageId]
+  )
 
   // Serialize-and-notify on every actual change. The guard keeps this
   // idempotent under StrictMode double-invocation and prevents marking the
@@ -144,6 +196,11 @@ export default function HtmlEditorWorkspace({
     }
     previewTimerRef.current = window.setTimeout(() => {
       previewTimerRef.current = null
+      debugLog('preview', 'preview_render_requested', {
+        pageId,
+        len: content.html.length + content.css.length + content.javascript.length,
+        hash: safeHash(content.html + content.css + content.javascript)
+      })
       setPreviewContent(content)
     }, PREVIEW_REBUILD_DEBOUNCE_MS)
     return () => {
@@ -152,11 +209,15 @@ export default function HtmlEditorWorkspace({
         previewTimerRef.current = null
       }
     }
-  }, [content])
+  }, [content, pageId])
 
-  const updateField = useCallback((field: ContentField, value: string): void => {
-    setContent((prev) => ({ ...prev, [field]: value }))
-  }, [])
+  const updateField = useCallback(
+    (field: ContentField, value: string): void => {
+      setContent((prev) => ({ ...prev, [field]: value }))
+      emitTransaction(field, value)
+    },
+    [emitTransaction]
+  )
 
   const toggleJs = useCallback((): void => {
     setContent((prev) => ({ ...prev, jsEnabled: !prev.jsEnabled }))
@@ -231,7 +292,10 @@ export default function HtmlEditorWorkspace({
           <Button
             size="compact-xs"
             variant="light"
-            onClick={() => onExitSource?.()}
+            onClick={() => {
+              debugLog('ui', 'ui_return_to_preview', { pageId, field: sourceField })
+              onExitSource?.()
+            }}
             data-testid="return-to-preview"
           >
             {UI_TEXT.htmlSourceBackToPreview}

@@ -8,8 +8,9 @@ import {
   IconFileText,
   IconPalette
 } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { debugLog } from '../../diagnostics/debug-log.js'
 import classes from './page-tree.module.css'
 import { type DropEdge, PAGE_TREE_DND_TYPE, registerRowDraggable } from './tree-dnd.js'
 
@@ -119,17 +120,6 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     })
   }, [pageId, parentId, subfile])
 
-  // Context-menu Rename: an incrementing signal starts inline editing.
-  useEffect(() => {
-    if (editSignal !== editSignalRef.current) {
-      editSignalRef.current = editSignal
-      if (!subfile) {
-        setDraft(title)
-        setEditing(true)
-      }
-    }
-  }, [editSignal, subfile, title])
-
   useEffect(() => {
     if (editing) {
       setDraft(title)
@@ -140,20 +130,42 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     }
   }, [editing, title])
 
-  const commit = (): void => {
+  /** Starts inline rename; Debug Mode observes the start once per session. */
+  const startEditing = useCallback((): void => {
+    if (subfile) return
+    debugLog('ui', 'ui_rename_start', { pageId: pageId })
+    setEditing(true)
+  }, [subfile, pageId])
+
+  // Context-menu Rename: an incrementing signal starts inline editing.
+  useEffect(() => {
+    if (editSignal !== editSignalRef.current) {
+      editSignalRef.current = editSignal
+      if (!subfile) {
+        setDraft(title)
+        startEditing()
+      }
+    }
+  }, [editSignal, subfile, title, startEditing])
+
+  const commit = useCallback((): void => {
     const trimmed = draft.trim()
     setEditing(false)
     if (!trimmed || trimmed === title) {
+      // No-op commit: nothing changed, so the tree-level commit event will
+      // not fire — observe it as a cancellation instead.
+      debugLog('ui', 'ui_rename_cancel', { pageId: pageId, result: 'skipped' })
       onRenameCancel()
       return
     }
     onRenameCommit(trimmed)
-  }
+  }, [draft, title, pageId, onRenameCancel, onRenameCommit])
 
-  const cancel = (): void => {
+  const cancel = useCallback((): void => {
     setEditing(false)
+    debugLog('ui', 'ui_rename_cancel', { pageId: pageId })
     onRenameCancel()
-  }
+  }, [pageId, onRenameCancel])
 
   const rowStyle = {
     paddingLeft: `calc(${indentLevel} * var(--rtwiki-tree-indent-step, 16px))`
@@ -237,7 +249,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
         if (event.key === 'F2' && !editing) {
           event.preventDefault()
           event.stopPropagation()
-          setEditing(true)
+          startEditing()
         }
         if (event.key === 'Enter' && !editing) {
           event.preventDefault()
@@ -246,7 +258,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
         }
       }}
       onDoubleClick={() => {
-        if (!editing) setEditing(true)
+        if (!editing) startEditing()
       }}
       onContextMenu={(event) => {
         event.preventDefault()
@@ -352,7 +364,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
             {onCreateChildHtml ? (
               <Menu.Item onClick={onCreateChildHtml}>{UI_TEXT.newChildHtmlPage}</Menu.Item>
             ) : null}
-            <Menu.Item onClick={() => setEditing(true)}>{UI_TEXT.renameAction}</Menu.Item>
+            <Menu.Item onClick={startEditing}>{UI_TEXT.renameAction}</Menu.Item>
             <Menu.Item onClick={onDuplicate}>{UI_TEXT.duplicateAction}</Menu.Item>
             <Menu.Item color="red" onClick={onDelete}>
               {UI_TEXT.deleteAction}

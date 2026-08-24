@@ -3,6 +3,7 @@ import type { HtmlPageContentV2 } from '@rtwiki/shared/schemas/html-content'
 import { IconAlertCircle, IconShieldLock } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
 import classes from './html-preview.module.css'
 import { normalizePreviewHtml } from './normalize-html.js'
@@ -53,7 +54,9 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
   const [status, setStatus] = useState<PreviewStatus>({ kind: 'idle' })
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const channelIdRef = useRef<string>('')
-
+  // Monotonic render generation: incremented on every srcdoc rebuild so
+  // Debug Mode can correlate ready/runtime messages with a specific build.
+  const generationRef = useRef(0)
   // Builds (or rebuilds) the srcdoc document. Every call regenerates the
   // channel ID so stale messages from a previous preview can never be
   // accepted by the listener; failures are reported and rendered as a
@@ -71,6 +74,12 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
       }
       channelIdRef.current = generateChannelId()
       const normalized = normalizePreviewHtml(content.html)
+      generationRef.current += 1
+      debugLog('preview', 'preview_render_built', {
+        gen: generationRef.current,
+        len: content.html.length + content.css.length + content.javascript.length,
+        hash: safeHash(content.html + content.css + content.javascript)
+      })
       return {
         srcdoc: buildPreviewDocument({
           normalizedHead: normalized.head,
@@ -119,9 +128,19 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
       return
     }
     if (message.type === 'rtwiki-preview-ready') {
+      debugLog('preview', 'preview_iframe_ready', { gen: generationRef.current })
       setStatus({ kind: 'ready' })
       return
     }
+    // Reduce the sandbox's operation string to a bounded machine token so a
+    // hostile value can never violate the debug log's closed field contract.
+    const operationToken = (message.operation ?? 'unknown')
+      .replace(/[^A-Za-z0-9_-]/g, '_')
+      .slice(0, 64)
+    debugLog('preview', 'preview_runtime_error', {
+      gen: generationRef.current,
+      code: operationToken
+    })
     setStatus({
       kind: 'runtime-issue',
       operation: message.operation ?? 'unknown',

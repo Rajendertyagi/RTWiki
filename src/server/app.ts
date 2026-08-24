@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { NONCE, type SecureHeadersVariables, secureHeaders } from 'hono/secure-headers'
 import { checkIntegrity, getDb } from './database/index.js'
 import { createConsoleLogger, type Logger } from './logging/index.js'
+import { createClientDebugEventRoutes, type DebugEventSink } from './routes/client-debug-events.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
 import { createPageRoutes } from './routes/pages.js'
 import { createShutdownRoutes } from './routes/shutdown.js'
@@ -49,6 +50,12 @@ export interface AppDependencies {
   getDb: () => ReturnType<typeof getDb>
   logger: Logger
   frontendDistDir: string
+  /**
+   * Persistence for opt-in client debug events (Debug Mode). Production
+   * injects the rotating logs/rtwiki-debug.jsonl sink; tests may collect
+   * in memory or drop events entirely.
+   */
+  debugEventSink: DebugEventSink
 }
 
 /**
@@ -111,6 +118,12 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
     '/api/client-errors',
     createClientErrorRoutes({ logger: deps.logger, scrubValues: [deps.token] })
   )
+  // Opt-in structured client debug events (Debug Mode). Same scrubbing rule:
+  // the shutdown token never reaches the debug log file.
+  app.route(
+    '/api/client-debug-events',
+    createClientDebugEventRoutes({ sink: deps.debugEventSink, scrubValues: [deps.token] })
+  )
 
   app.use('/*', serveStatic({ root: deps.frontendDistDir, logger: deps.logger }))
 
@@ -126,7 +139,8 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
 
 /**
  * Default app instance for tests and legacy access. Uses an explicitly
- * injected console-only logger so importing this module never creates files.
+ * injected console-only logger and a dropping debug-event sink so importing
+ * this module never creates files.
  */
 export const app = createApp({
   coordinator: {
@@ -144,5 +158,6 @@ export const app = createApp({
   token: '',
   getDb: getDb,
   logger: createConsoleLogger(),
-  frontendDistDir: ''
+  frontendDistDir: '',
+  debugEventSink: { append: () => {} }
 })

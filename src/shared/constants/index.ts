@@ -31,3 +31,21 @@ export const CLIENT_ERRORS_PATH = '/api/client-errors' as const
 export const MAX_CLIENT_ERROR_BODY_BYTES = 8 * 1024
 export const CLIENT_ERROR_RATE_LIMIT_MAX = 20 as const
 export const CLIENT_ERROR_RATE_LIMIT_WINDOW_MS = 60_000 as const
+
+// Opt-in structured client debug logging (Debug Mode). Events are batched by
+// the client and appended as JSONL to logs/rtwiki-debug.jsonl. All values are
+// provisional centralized defaults and are defined exactly once here.
+export const DEBUG_LOG_FILENAME = 'rtwiki-debug.jsonl' as const
+export const DEBUG_LOG_MAX_BYTES = 1_000_000 as const
+export const DEBUG_LOG_MAX_ROTATED_FILES = 3 as const
+export const CLIENT_DEBUG_EVENTS_PATH = '/api/client-debug-events' as const
+export const MAX_CLIENT_DEBUG_BODY_BYTES = 32 * 1024
+export const CLIENT_DEBUG_RATE_LIMIT_MAX = 120 as const
+export const CLIENT_DEBUG_RATE_LIMIT_WINDOW_MS = 60_000 as const
+export const CLIENT_DEBUG_MAX_EVENTS_PER_BATCH = 100 as const
+// Client-side batching: flush cadence and queue bound (oldest events dropped).
+export const DEBUG_LOG_FLUSH_INTERVAL_MS = 2_000 as const
+export const DEBUG_LOG_MAX_QUEUE = 500 as const
+// After this many consecutive failed ingests the session stops sending until
+// it is re-enabled, so a broken endpoint can never degrade editing.
+export const DEBUG_LOG_MAX_CONSECUTIVE_FAILURES = 5 as const

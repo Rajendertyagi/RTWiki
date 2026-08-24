@@ -1,5 +1,6 @@
 import { CLIENT_ERRORS_PATH } from '@rtwiki/shared/constants'
 import type { ClientErrorReport } from '@rtwiki/shared/schemas/client-error'
+import { debugLog } from './debug-log.js'
 
 type SafeEvent = ClientErrorReport['event']
 type SafePageType = ClientErrorReport['pageType']
@@ -43,6 +44,15 @@ const CANNED_MESSAGES: Record<SafeEvent, string> = {
   rich_note_save_error: 'Saving the Rich Note failed.',
   rich_note_init_error: 'Initializing the Rich Note editor failed.',
   html_preview_error: 'Building the sandboxed HTML preview failed.'
+}
+
+/** Maps client-error events onto their Debug Mode error-category events. */
+const DEBUG_EVENT_FOR_CLIENT_ERROR: Partial<
+  Record<SafeEvent, Parameters<typeof debugLog<'error'>>[1]>
+> = {
+  react_error_boundary: 'error_boundary',
+  window_error: 'error_global',
+  unhandled_rejection: 'error_unhandled_rejection'
 }
 
 function randomId(): string {
@@ -109,8 +119,15 @@ async function post(report: ClientErrorReport): Promise<void> {
  * Reports a sanitized frontend failure to the local diagnostics endpoint.
  * Returns the short diagnostic reference ID shown in recovery UIs; repeated
  * failures of the same kind reuse the first ID and are not re-sent.
+ *
+ * Debug Mode additionally mirrors the failure category into the structured
+ * debug log (event name only — never error text).
  */
 export function reportClientError(event: SafeEvent, details: ReportDetails = {}): string {
+  const debugEvent = DEBUG_EVENT_FOR_CLIENT_ERROR[event]
+  if (debugEvent) {
+    debugLog('error', debugEvent, { code: event })
+  }
   const key = `${event}|${details.component ?? ''}|${details.pageType ?? 'unknown'}`
   const existing = reported.get(key)
   if (existing) {

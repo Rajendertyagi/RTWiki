@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { APP_VERSION } from '@rtwiki/shared/constants'
+import {
+  APP_VERSION,
+  DEBUG_LOG_FILENAME,
+  DEBUG_LOG_MAX_BYTES,
+  DEBUG_LOG_MAX_ROTATED_FILES
+} from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
 import { joinPaths, type RuntimePaths, resolveRuntimePaths } from './config/index.js'
 import {
@@ -13,6 +18,7 @@ import {
 import { runMigrations } from './database/migrations.js'
 import { type Launcher, launchBrowser } from './launcher.js'
 import { createLogger, type Logger } from './logging/index.js'
+import { RotatingJsonlSink } from './logging/rotating-sink.js'
 import { sanitizePathForLog } from './logging/sanitize-path.js'
 import { ShutdownCoordinator } from './shutdown-coordinator.js'
 
@@ -129,6 +135,23 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   const logger = options.logger ?? createLogger(options.logPath ?? paths.logPath)
   setDatabaseLogger(logger)
 
+  // Opt-in client debug log (Debug Mode): logs/rtwiki-debug.jsonl beside the
+  // main log, with its own bounded rotation. Created eagerly so enabling the
+  // toggle never has to create files mid-session.
+  const debugLogPath = joinPaths(
+    options.logPath ? options.logPath.replace(/[/\\][^/\\]+$/, '') : paths.logDir,
+    DEBUG_LOG_FILENAME
+  )
+  const debugSink = new RotatingJsonlSink(debugLogPath, {
+    maxBytes: DEBUG_LOG_MAX_BYTES,
+    maxRotatedFiles: DEBUG_LOG_MAX_ROTATED_FILES
+  })
+  const debugEventSink = {
+    append: (event: Record<string, unknown>): void => {
+      debugSink.appendLine(JSON.stringify(event))
+    }
+  }
+
   const openBrowser = options.openBrowser ?? true
   const shutdownToken = randomUUID()
 
@@ -224,7 +247,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     token: shutdownToken,
     getDb: () => db,
     logger,
-    frontendDistDir: paths.frontendDistDir
+    frontendDistDir: paths.frontendDistDir,
+    debugEventSink
   })
 
   // 3. Start the Bun HTTP server.

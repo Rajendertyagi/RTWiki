@@ -43,6 +43,7 @@ function makeDeps(tempDir: string, overrides: Partial<AppDependencies> = {}): Ap
       close: async () => {}
     } as unknown as import('../src/server/logging/index.js').Logger,
     frontendDistDir: '',
+    debugEventSink: { append: () => {} },
     ...overrides
   }
 }
