@@ -23,7 +23,9 @@
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "3.0.0",
     "@blocknote/core": "0.54.0",
+    "@blocknote/diagram-block": "0.54.0",
     "@blocknote/mantine": "0.54.0",
+    "@blocknote/math-block": "0.54.0",
     "@blocknote/react": "0.54.0",
     "@codemirror/lang-css": "6.3.1",
     "@codemirror/lang-html": "6.4.12",
@@ -37,6 +39,7 @@
     "@tabler/icons-react": "3.46.0",
     "codemirror": "6.0.2",
     "hono": "4.13.3",
+    "mermaid": "11.17.1",
     "parse5": "8.0.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
