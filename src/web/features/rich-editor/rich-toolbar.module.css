@@ -20,3 +20,33 @@
   min-width: 28px;
   font-weight: 600;
 }
+
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--mantine-spacing-xs);
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mantine-radius-sm);
+  border: 1px solid var(--mantine-color-default-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mantine-color-dimmed);
+}
+
+.swatchActive {
+  outline: 2px solid var(--mantine-color-blue-filled);
+  outline-offset: 1px;
+}
+
+/* Narrow screens scroll the single row; never wrap into multiple rows. */
+.bar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+}
