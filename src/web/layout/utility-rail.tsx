@@ -7,8 +7,8 @@ import {
 } from '@mantine/core'
 import {
   IconHome,
+  IconLayoutSidebar,
   IconMoon,
-  IconPanelLeft,
   IconPlus,
   IconPower,
   IconSearch,
@@ -79,7 +79,7 @@ export function UtilityRail({
               visibleFrom="sm"
               data-testid="tree-toggle"
             >
-              <IconPanelLeft size={18} />
+              <IconLayoutSidebar size={18} />
             </ActionIcon>
           </Tooltip>
         ) : null}
