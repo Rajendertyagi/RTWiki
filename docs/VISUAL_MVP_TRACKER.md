@@ -1034,3 +1034,27 @@ Attachments, math, Mermaid, mind maps, cards/tabs blocks, import pipeline,
 ### Owner manual testing
 
 Pending. The owner has not tested this artifact.
+
+### Shell region correction (this branch)
+
+Owner-directed layout alignment of the workspace shell regions:
+
+- **Global header removed.** The standalone 44px app-title row is gone; the
+  launcher/action rail is now the true outermost full-height column, starting
+  at the viewport top. Home remains the rail's first action; compact identity
+  was deliberately omitted.
+- **Desktop tree collapse.** A rail toggle (`aria-expanded`, desktop only)
+  collapses/expands the page-tree pane independently; collapsing keeps the
+  rail visible and lets the central workspace expand into the released space.
+  State is session-only. On mobile the drawer always exposes both rail and
+  tree regardless of the desktop collapsed state (the pane hides through a
+  `>=sm` media query only).
+- **Central ordering fixed for Rich Notes:** document tabs, then the
+  persistent Rich Document toolbar, then title/save/actions and breadcrumb,
+  then the editable document. The toolbar slot is unconditional with a fixed
+  height so nothing shifts while the editor instance initializes. HTML pages
+  keep their existing flow without a rich toolbar.
+- **Right sidebar unchanged** (outline + page info, collapsible).
+- Focused browser coverage lives in `tests/browser/shell-layout.pwspec.ts`
+  (rail geometry, header absence, collapse behaviour, mobile drawer, central
+  ordering, stable toolbar slot, HTML-page flow).
