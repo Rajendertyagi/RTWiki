@@ -122,14 +122,14 @@ function PageEditors({
 }: {
   page: Page
   onSaveContent?: (id: string, content: string) => Promise<boolean>
-  onBack?: () => void
-  onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
-  onSaveStateChange?: (state: {
+  onBack: () => void
+  onFlushRef: (fn: (() => Promise<boolean>) | null) => void
+  onSaveStateChange: (state: {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
   }) => void
   onRichEditorReady: (editor: BlockNoteEditor | null) => void
-}): JSX.Element {
+}): JSX.Element | null {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     const frame = requestAnimationFrame(() => setMounted(true))
