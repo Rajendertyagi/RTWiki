@@ -133,9 +133,20 @@ test.describe('HTML editor workspace (real Chromium)', () => {
   })
   let pageErrors: Error[] = []
 
-  test.beforeEach(({ page }) => {
+  test.beforeEach(async ({ page }) => {
     pageErrors = []
     page.on('pageerror', (err) => pageErrors.push(err))
+    // This suite exercises per-navigation dashboard semantics. Workspace
+    // restoration (tested in stability-regressions) would otherwise auto-
+    // reopen the previous page on goto/reload, so every fresh load starts
+    // with an empty session.
+    await page.addInitScript(() => {
+      try {
+        window.sessionStorage.clear()
+      } catch {
+        // Storage may be unavailable; nothing to reset.
+      }
+    })
   })
 
   test.afterEach(() => {

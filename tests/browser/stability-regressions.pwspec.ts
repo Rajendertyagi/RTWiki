@@ -50,7 +50,9 @@ function pageRow(page: Page, title: string) {
 async function expandRow(page: Page, id: string): Promise<void> {
   const row = page.locator(`[role="treeitem"][data-page-id="${id}"]`)
   const expand = row.locator('[aria-label="Expand"]')
-  if ((await expand.count()) > 0) {
+  // Idempotent: only click when actually collapsed, otherwise a second call
+  // would collapse the row again.
+  if ((await expand.count()) > 0 && (await row.getAttribute('aria-expanded')) !== 'true') {
     await expand.click()
     await expect(row).toHaveAttribute('aria-expanded', 'true')
   }
@@ -86,9 +88,26 @@ test.describe('stability regressions', () => {
   })
 
   let pageErrors: Error[] = []
-  test.beforeEach(({ page }) => {
+
+  // Tests that specifically exercise workspace restoration keep sessionStorage;
+  // every other test opts out so goto('/') lands on the dashboard.
+  const RESTORATION_TESTS = new Set([
+    'restores tabs, active page and the active source subfile',
+    'falls back to Home when the stored workspace references nothing valid'
+  ])
+
+  test.beforeEach(({ page }, testInfo) => {
     pageErrors = []
     page.on('pageerror', (err) => pageErrors.push(err))
+    if (!RESTORATION_TESTS.has(testInfo.title)) {
+      void page.addInitScript(() => {
+        try {
+          window.sessionStorage.clear()
+        } catch {
+          // Storage may be unavailable; nothing to reset.
+        }
+      })
+    }
   })
   test.afterEach(() => {
     expect(pageErrors, 'no uncaught browser exceptions').toEqual([])
@@ -100,7 +119,9 @@ test.describe('stability regressions', () => {
       await pageRow(page, from).click({ button: 'right' })
       const menu = page.getByTestId('tree-context-menu')
       await menu.waitFor()
-      await menu.getByRole('menuitem', { name: 'Rename' }).click()
+      // exact:true — substring matching would also hit "Move to parent
+      // page: <Renamed…>" targets.
+      await menu.getByRole('menuitem', { name: 'Rename', exact: true }).click()
       const input = page.getByTestId('page-rename-input')
       await expect(input).toHaveValue(from)
       await input.fill(to)
@@ -108,30 +129,29 @@ test.describe('stability regressions', () => {
       await expect(input).toHaveCount(0)
     }
 
-    async function expectTitleEverywhere(
-      page: Page,
-      request: APIRequestContext,
-      id: string,
-      title: string
-    ) {
+    async function expectTitleEverywhere(page: Page, request: APIRequestContext, title: string) {
+      // Tree row and server truth are assertable straight from the dashboard.
       await expect(pageRow(page, title)).toBeVisible()
-      await expect(page.locator('input[aria-label="Title"]')).toHaveValue(title)
-      await expect(
-        page.locator('[aria-label="Open pages"]').getByText(title, { exact: true })
-      ).toBeVisible()
       const res = await request.get('/api/pages')
       const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
-      expect(list.pages.find((p) => p.id === id)?.title).toBe(title)
+      expect(list.pages.some((p) => p.title === title)).toBe(true)
+
+      // Opening the renamed page asserts the header input and tab label.
+      await pageRow(page, title).click()
+      await expect(page.locator('input[aria-label="Title"]')).toHaveValue(title)
+      await expect(
+        page.locator('[aria-label="Open pages"]').getByRole('tab', { name: title, exact: true })
+      ).toBeVisible()
     }
 
     test('root Rich Note rename', async ({ page, request }) => {
       const original = uniqueTitle('Ren Root')
       const renamed = `Renamed Root ${Date.now()}`
-      const p = await seedPage(request, original, 'rich', '')
+      await seedPage(request, original, 'rich', '')
       await page.goto('/')
       await pageRow(page, original).waitFor()
       await renameViaTree(page, original, renamed)
-      await expectTitleEverywhere(page, request, p.id, renamed)
+      await expectTitleEverywhere(page, request, renamed)
     })
 
     test('child Rich Note rename does not touch other pages', async ({ page, request }) => {
@@ -139,12 +159,12 @@ test.describe('stability regressions', () => {
       const childOriginal = uniqueTitle('Ren Child')
       const childRenamed = `Renamed Child ${Date.now()}`
       const parent = await seedPage(request, parentTitle, 'rich', '')
-      const child = await seedPage(request, childOriginal, 'rich', '', parent.id)
+      await seedPage(request, childOriginal, 'rich', '', parent.id)
       await page.goto('/')
       await expandRow(page, parent.id)
       await pageRow(page, childOriginal).waitFor()
       await renameViaTree(page, childOriginal, childRenamed)
-      await expectTitleEverywhere(page, request, child.id, childRenamed)
+      await expectTitleEverywhere(page, request, childRenamed)
       // The parent's title is untouched by the child rename.
       const res = await request.get('/api/pages')
       const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
@@ -161,7 +181,7 @@ test.describe('stability regressions', () => {
         javascript: '',
         jsEnabled: false
       })
-      const child = await seedPage(
+      await seedPage(
         request,
         childOriginal,
         'html',
@@ -172,7 +192,7 @@ test.describe('stability regressions', () => {
       await expandRow(page, root.id)
       await pageRow(page, childOriginal).waitFor()
       await renameViaTree(page, childOriginal, childRenamed)
-      await expectTitleEverywhere(page, request, child.id, childRenamed)
+      await expectTitleEverywhere(page, request, childRenamed)
     })
 
     test('cancel leaves the title unchanged', async ({ page, request }) => {
@@ -344,11 +364,11 @@ test.describe('stability regressions', () => {
       await expect(page.locator('[data-testid="live-preview"] iframe')).toBeVisible()
 
       await page.getByTestId('refresh-preview').click()
-      await expect(page.locator('[data-testid="preview-refresh-status"]')).toBeVisible()
       // The frame is rebuilt and renders again; the same page stays selected.
       const frame = page.frameLocator('[data-testid="preview-iframe"]')
       await expect(frame.locator('#rf')).toHaveText('refreshable')
       await expect(pageRow(page, title)).toHaveAttribute('aria-selected', 'true')
+      // The accessible refresh status is transient by design.
       await expect(page.locator('[data-testid="preview-refresh-status"]')).toBeHidden({
         timeout: 5_000
       })

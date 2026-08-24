@@ -68,6 +68,16 @@ test.describe('Rich Note lifecycle (real application)', () => {
     page.on('console', (msg) => {
       consoleMessages.push(`[${msg.type()}] ${msg.text()}`)
     })
+    // Dashboard-first semantics: clear persisted workspace metadata on every
+    // load so restoration never auto-reopens a page in this suite (restoration
+    // itself is covered in stability-regressions).
+    void page.addInitScript(() => {
+      try {
+        window.sessionStorage.clear()
+      } catch {
+        // Storage may be unavailable; nothing to reset.
+      }
+    })
   })
 
   test.afterEach(async ({ page }) => {
