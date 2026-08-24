@@ -222,7 +222,17 @@ interface InnerProps {
 }
 
 function RichEditorInner(props: InnerProps): JSX.Element {
-  const { pageId, initialDocument, notifyEdit, status, error, createdDate, updatedDate, onEditorReady, toolbarExternal } = props
+  const {
+    pageId,
+    initialDocument,
+    notifyEdit,
+    status,
+    error,
+    createdDate,
+    updatedDate,
+    onEditorReady,
+    toolbarExternal
+  } = props
   // TEMP-DEBUG: log what stored content reached the editor on mount.
   useEffect(() => {
     console.log(
