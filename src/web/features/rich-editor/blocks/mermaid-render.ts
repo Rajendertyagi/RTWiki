@@ -87,14 +87,28 @@ export async function renderMermaidSvg(
     len: source.length,
     hash: safeHash(source)
   })
+  // 'import' | 'init' | 'parse' | 'render' | 'sanitize' — narrows any
+  // failure to a phase without ever logging diagram content.
+  let stage = 'import'
   try {
     // Lazy import keeps Mermaid (~1 MB) out of the initial application chunk.
-    const mermaid = (await import('mermaid')).default
+    const mod = (await import('mermaid')) as unknown as {
+      default?: typeof import('mermaid')['default']
+      mermaid?: typeof import('mermaid')['default']
+    }
+    const mermaid = mod.default ?? mod.mermaid
+    if (!mermaid || typeof mermaid.initialize !== 'function') {
+      throw new Error('mermaid module unavailable')
+    }
+    stage = 'init'
     if (initializedFor !== options.theme) {
       applyConfig(mermaid, options.theme)
     }
+    stage = 'parse'
     await mermaid.parse(source)
+    stage = 'render'
     const { svg } = await mermaid.render(mermaidRenderId(options.blockId), source)
+    stage = 'sanitize'
     const clean = sanitizeDiagramSvg(svg)
     if (!clean) {
       debugLog('editor', 'editor_block_render_failed', {
@@ -112,13 +126,17 @@ export async function renderMermaidSvg(
       durMs: Date.now() - startedAt
     })
     return { ok: true, svg: clean }
-  } catch {
+  } catch (err) {
+    // Bounded, content-free diagnostic: error NAME + phase only. Mermaid
+    // parse errors can embed source snippets, so messages are never logged.
+    const name = err instanceof Error ? err.name : typeof err
+    console.warn(`rtwiki mermaid render failed at ${stage}: ${name}`)
     debugLog('editor', 'editor_block_render_failed', {
       targetId: options.blockId,
-      code: options.blockType,
+      code: `${options.blockType}-${stage}`,
       result: 'error',
       durMs: Date.now() - startedAt
     })
-    return { ok: false, code: 'parse_error' }
+    return { ok: false, code: stage === 'parse' ? 'parse_error' : 'render_error' }
   }
 }

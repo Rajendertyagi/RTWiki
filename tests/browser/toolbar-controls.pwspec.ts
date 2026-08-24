@@ -127,17 +127,25 @@ test.describe('Rich Note toolbar controls', () => {
     ).toBeVisible()
   })
 
-  test('quote and code blocks apply', async ({ page }) => {
+  test('quote and code blocks apply via the Insert menu', async ({ page }) => {
     await newRichNote(page)
-    await toolbarButton(page, 'Quote block').click()
+    // Quote/code/table now live behind the single Insert control.
+    const openInsert = async (): Promise<void> => {
+      await page.getByTestId('insert-menu-button').click()
+      await expect(page.getByTestId('insert-menu')).toBeVisible()
+    }
+    await openInsert()
+    await page.getByTestId('insert-quote').click()
     await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
-    await toolbarButton(page, 'Code block').click()
+    await openInsert()
+    await page.getByTestId('insert-code-block').click()
     await expect(page.locator(`${EDITABLE} pre`).first()).toBeVisible()
   })
 
-  test('table insertion creates a table', async ({ page }) => {
+  test('table insertion creates a table via the Insert menu', async ({ page }) => {
     await newRichNote(page)
-    await toolbarButton(page, 'Insert table').click()
+    await page.getByTestId('insert-menu-button').click()
+    await page.getByTestId('insert-table').click()
     await expect(page.locator(`${EDITABLE} table`).first()).toBeVisible()
     await expect(page.locator(`${EDITABLE} table td`).first()).toBeVisible()
   })
