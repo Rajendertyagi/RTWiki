@@ -68,7 +68,11 @@ async function openSubfile(page: Page, id: string, field: 'html' | 'css' | 'java
 }
 
 async function typeIntoEditor(page: Page, field: string, text: string): Promise<void> {
-  await page.locator(`[data-testid="code-editor-${field}"] .cm-content`).click()
+  // The host div becomes visible before CodeMirror's view mounts; waiting
+  // for the actual content element guarantees keystrokes land in the editor.
+  const content = page.locator(`[data-testid="code-editor-${field}"] .cm-content`)
+  await content.waitFor({ state: 'visible' })
+  await content.click()
   await page.keyboard.type(text)
 }
 
@@ -177,7 +181,12 @@ test.describe('stability regressions', () => {
       const child = await seedPage(request, childOriginal, 'rich', '', parent.id)
       await page.goto('/')
       await expandRow(page, parent.id)
-      await pageRow(page, childOriginal).waitFor()
+      // A background refetch can remount the tree and reset expansion; retry
+      // the expand-and-wait pair until the child row stays visible.
+      await expect(async () => {
+        await expandRow(page, parent.id)
+        await pageRow(page, childOriginal).waitFor({ state: 'visible', timeout: 3_000 })
+      }).toPass({ timeout: 20_000 })
       await renameViaTree(page, childOriginal, childRenamed)
       // A mutation-triggered refetch remounts the tree (pre-existing
       // behaviour), so re-expand the parent before asserting the child row.
@@ -208,7 +217,11 @@ test.describe('stability regressions', () => {
       )
       await page.goto('/')
       await expandRow(page, root.id)
-      await pageRow(page, childOriginal).waitFor()
+      // Same refetch-remount resilience for the nested child row.
+      await expect(async () => {
+        await expandRow(page, root.id)
+        await pageRow(page, childOriginal).waitFor({ state: 'visible', timeout: 3_000 })
+      }).toPass({ timeout: 20_000 })
       await renameViaTree(page, childOriginal, childRenamed)
       // Same refetch-remount re-expansion as above.
       await expandRow(page, root.id)
@@ -587,9 +600,10 @@ test.describe('stability regressions', () => {
         })
       await expect.poll(order).toEqual([c.id, a.id, b.id])
 
-      // inside B (append under B)
+      // inside B: drag C onto the middle of B (append under B). A SELF-drop
+      // is a no-op by design, so the source must differ from the target.
       await page
-        .locator(`[data-page-id="${b.id}"]`)
+        .locator(`[data-page-id="${c.id}"]`)
         .dragTo(page.locator(`[data-page-id="${b.id}"]`), {
           targetPosition: { x: 40, y: 16 }
         })
