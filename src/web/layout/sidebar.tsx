@@ -29,6 +29,10 @@ interface SidebarProps {
   onCreateRoot?: (pageType: 'rich' | 'html') => void
   /** Opens an HTML page's virtual source subfile in the central workspace. */
   onOpenHtmlSource: (pageId: string, field: 'html' | 'css' | 'javascript') => void
+  /** Session-restoration seed for tree expansion (see usePageTree). */
+  seedExpandedIds?: ReadonlySet<string>
+  /** Expansion observation for session persistence. */
+  onExpandedChange?: (ids: ReadonlySet<string>) => void
 }
 
 export function Sidebar({
@@ -49,7 +53,9 @@ export function Sidebar({
   onMoveRelative,
   onDropMove,
   onCreateRoot,
-  onOpenHtmlSource
+  onOpenHtmlSource,
+  seedExpandedIds,
+  onExpandedChange
 }: SidebarProps): JSX.Element {
   return (
     <div className={classes.sidebarRoot}>
@@ -102,6 +108,8 @@ export function Sidebar({
                 }}
                 onCreateRoot={onCreateRoot}
                 onOpenHtmlSource={onOpenHtmlSource}
+                seedExpandedIds={seedExpandedIds}
+                onExpandedChange={onExpandedChange}
               />
             )}
           </Stack>

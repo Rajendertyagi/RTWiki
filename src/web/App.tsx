@@ -12,6 +12,12 @@ import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdow
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
 import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
+import {
+  loadWorkspaceSession,
+  resolveRestorableWorkspace,
+  saveWorkspaceSession,
+  type WorkspaceStorage
+} from './features/workspace/workspace-session.js'
 import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
@@ -19,11 +25,78 @@ import { UtilityRail } from './layout/utility-rail.js'
 
 type SaveState = 'clean' | 'saving' | 'saved' | 'error'
 
+/** sessionStorage adapter; unavailable storage degrades to no persistence. */
+function createSessionStorage(): WorkspaceStorage | null {
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      return window.sessionStorage
+    }
+  } catch {
+    // Privacy modes can throw on access; restoration is best-effort.
+  }
+  return null
+}
+
 export function App(): JSX.Element {
   const controller = usePagesController()
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
   // Session-only desktop tree-pane visibility (no persistence by design).
   const [treeOpen, setTreeOpen] = useState(true)
+
+  // --- Browser-refresh workspace restoration (metadata only) ---
+  const workspaceStorageRef = useRef<WorkspaceStorage | null>(null)
+  if (workspaceStorageRef.current === null) {
+    workspaceStorageRef.current = createSessionStorage()
+  }
+  // Flips true once per app lifetime when loading first completes; guards
+  // both the restore attempt and all subsequent saves.
+  const sessionReadyRef = useRef(false)
+  const [seedExpandedIds, setSeedExpandedIds] = useState<ReadonlySet<string>>(new Set())
+  // Live expansion mirror for persistence writes (avoids re-render coupling).
+  const expandedIdsRef = useRef<ReadonlySet<string>>(new Set())
+
+  // Runs exactly once, when the initial page load completes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-shot restoration gated on the first completed load
+  useEffect(() => {
+    if (controller.loading || sessionReadyRef.current) return
+    sessionReadyRef.current = true
+    const storage = workspaceStorageRef.current
+    if (!storage) return
+    const session = loadWorkspaceSession(storage)
+    if (!session) return
+    debugLog('ui', 'ui_browser_reload_restore', {})
+    const resolved = resolveRestorableWorkspace(session, controller.pages)
+    if (!resolved) {
+      debugLog('navigation', 'nav_session_invalid_discarded', { code: 'no_valid_pages' })
+      saveWorkspaceSession(storage, {
+        version: 1,
+        openPageIds: [],
+        activePageId: null,
+        sourceField: 'preview',
+        expandedTreeIds: []
+      })
+      return
+    }
+    setOpenTabs(resolved.tabs)
+    controller.selectPage(resolved.activePageId)
+    if (resolved.htmlSource) {
+      setHtmlSource(resolved.htmlSource)
+    }
+    if (resolved.expandedTreeIds.length > 0) {
+      const seed = new Set(resolved.expandedTreeIds)
+      expandedIdsRef.current = seed
+      setSeedExpandedIds(seed)
+    }
+    debugLog('navigation', 'nav_session_restored', {
+      pageId: resolved.activePageId ?? undefined,
+      field: resolved.htmlSource?.field ?? 'preview'
+    })
+  }, [controller.loading, controller.pages])
+
+  // Persist workspace metadata after every meaningful navigation change.
+  // Defined after the htmlSource state; mirrors for expansion writes live
+  // with that state's declarations.
+  const selectedId = controller.selectedPage?.id ?? null
 
   // Any selection (tree click, dashboard card, create, duplicate) opens or
   // activates that page's tab. openInTabs deduplicates by page id.
@@ -147,6 +220,43 @@ export function App(): JSX.Element {
     pageId: string
     field: 'html' | 'css' | 'javascript'
   } | null>(null)
+
+  // Mirrors for session persistence from render-free callbacks.
+  const openTabsRef = useRef(openTabs)
+  openTabsRef.current = openTabs
+  const activeIdRef = useRef(selectedId)
+  activeIdRef.current = selectedId
+  const htmlSourceRef = useRef(htmlSource)
+  htmlSourceRef.current = htmlSource
+
+  /** Expansion writes persist immediately so a refresh after collapse/expand alone still restores. */
+  const handleExpandedChange = useCallback((ids: ReadonlySet<string>): void => {
+    expandedIdsRef.current = ids
+    const storage = workspaceStorageRef.current
+    if (!storage || !sessionReadyRef.current) return
+    saveWorkspaceSession(storage, {
+      version: 1,
+      openPageIds: openTabsRef.current.map((tab) => tab.pageId),
+      activePageId: activeIdRef.current,
+      sourceField: htmlSourceRef.current?.field ?? 'preview',
+      expandedTreeIds: [...ids]
+    })
+  }, [])
+
+  // Persist workspace metadata after every meaningful navigation change.
+  useEffect(() => {
+    if (!sessionReadyRef.current || controller.loading) return
+    const storage = workspaceStorageRef.current
+    if (!storage) return
+    saveWorkspaceSession(storage, {
+      version: 1,
+      openPageIds: openTabs.map((tab) => tab.pageId),
+      activePageId: selectedId,
+      sourceField: htmlSource?.field ?? 'preview',
+      expandedTreeIds: [...expandedIdsRef.current]
+    })
+    debugLog('navigation', 'nav_session_state_stored', { pageId: selectedId ?? undefined })
+  }, [openTabs, selectedId, htmlSource, controller.loading])
 
   /** Flushes pending edits before switching the visible source/preview. */
   const flushQuietly = async (): Promise<boolean> => {
@@ -349,6 +459,8 @@ export function App(): JSX.Element {
             onDropMove={controller.moveToPosition}
             onCreateRoot={(pageType) => void controller.createPage(UI_TEXT.untitledPage, pageType)}
             onOpenHtmlSource={(pageId, field) => void handleOpenHtmlSource(pageId, field)}
+            seedExpandedIds={seedExpandedIds}
+            onExpandedChange={handleExpandedChange}
           />
         }
       >

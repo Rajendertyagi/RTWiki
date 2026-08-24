@@ -21,7 +21,14 @@ export interface UsePageTreeOptions {
   /** Opens a page through the controller's existing selection flow. */
   onOpen: (id: string) => void
   /** Opens an HTML page's virtual source subfile in the central workspace. */
-  onOpenHtmlSource: (pageId: string, field: HtmlSubfileField) => void
+  onOpenHtmlSource: (id: string, field: HtmlSubfileField) => void
+  /**
+   * Session-restoration seed: merged into the expansion set once per new
+   * identity, after mount (the tree renders before restoration resolves).
+   */
+  seedExpandedIds?: ReadonlySet<string>
+  /** Debug/session observation: fires whenever the expansion set changes. */
+  onExpandedChange?: (ids: ReadonlySet<string>) => void
 }
 
 export interface UsePageTreeResult {
@@ -55,6 +62,26 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set())
   const containerRef = useRef<HTMLDivElement | null>(null)
   const typeAheadRef = useRef({ buffer: '', expiresAt: 0 })
+
+  // Session-restoration seed: applied once per distinct seed identity.
+  const lastSeedRef = useRef<ReadonlySet<string> | null>(null)
+  useEffect(() => {
+    const seed = options.seedExpandedIds
+    if (!seed || seed === lastSeedRef.current || seed.size === 0) return
+    lastSeedRef.current = seed
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of seed) next.add(id)
+      return next
+    })
+  }, [options.seedExpandedIds])
+
+  // Expansion observation for session persistence (no re-render coupling).
+  const onExpandedChangeRef = useRef(options.onExpandedChange)
+  onExpandedChangeRef.current = options.onExpandedChange
+  useEffect(() => {
+    onExpandedChangeRef.current?.(expandedIds)
+  }, [expandedIds])
 
   const tree = useMemo(() => buildTree(pages), [pages])
   const parents = useMemo(() => parentMap(pages), [pages])

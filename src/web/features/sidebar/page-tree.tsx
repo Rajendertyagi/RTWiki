@@ -41,6 +41,10 @@ interface PageTreeProps {
   onOpenHtmlSource: (pageId: string, field: 'html' | 'css' | 'javascript') => void
   /** Creates a new ROOT page from the tree's empty-space context menu. */
   onCreateRoot?: (pageType: PageType) => void
+  /** Session-restoration seed for the expansion set (see usePageTree). */
+  seedExpandedIds?: ReadonlySet<string>
+  /** Expansion observation for session persistence. */
+  onExpandedChange?: (ids: ReadonlySet<string>) => void
 }
 
 type ContextMenuState =
@@ -64,7 +68,9 @@ export function PageTree({
   onOpen,
   hooks,
   onOpenHtmlSource,
-  onCreateRoot
+  onCreateRoot,
+  seedExpandedIds,
+  onExpandedChange
 }: PageTreeProps): JSX.Element {
   const tree = usePageTree({
     pages,
@@ -74,7 +80,9 @@ export function PageTree({
       debugLog('ui', 'ui_tree_row_open', { pageId: id })
       onOpen(id)
     },
-    onOpenHtmlSource
+    onOpenHtmlSource,
+    seedExpandedIds,
+    onExpandedChange
   })
 
   const moveTargets = buildMoveTargets(pages)
