@@ -56,17 +56,6 @@ export function PageWorkspace({
   // document never shift when the real controls arrive.
   const [richEditor, setRichEditor] = useState<BlockNoteEditor | null>(null)
 
-  // Defer the heavy editor mount by one frame so a simultaneously closing
-  // dialog (e.g. the create-note modal) can finish its exit transition
-  // first. Mounting BlockNote synchronously in the same commit starves the
-  // transition-end handling and leaves a pointer-blocking overlay behind.
-  const [editorsMounted, setEditorsMounted] = useState(false)
-  useEffect(() => {
-    setEditorsMounted(false)
-    const frame = requestAnimationFrame(() => setEditorsMounted(true))
-    return () => cancelAnimationFrame(frame)
-  }, [page.id])
-
   return (
     <div className={classes.workspace}>
       {page.pageType === 'rich' ? (
@@ -101,32 +90,78 @@ export function PageWorkspace({
         </Text>
       ) : null}
       <div className={classes.content}>
-        {editorsMounted &&
-          (page.pageType === 'rich' ? (
-            <RichEditor
-              pageId={page.id}
-              storedContent={page.content}
-              pageTitle={page.title}
-              createdDate={page.createdAt}
-              updatedDate={page.updatedAt}
-              onSaveContent={onSaveContent}
-              onBack={onBack}
-              onFlushRef={onFlushRef}
-              onSaveStateChange={onSaveStateChange}
-              onEditorReady={setRichEditor}
-              toolbarExternal
-            />
-          ) : (
-            <HtmlEditorSurface
-              page={page}
-              onSaveContent={onSaveContent}
-              onBack={onBack}
-              onFlushRef={onFlushRef}
-              onSaveStateChange={onSaveStateChange}
-            />
-          ))}
+        {/* Keyed by page: a page switch remounts the editors fresh. */}
+        <PageEditors
+          key={page.id}
+          page={page}
+          onSaveContent={onSaveContent}
+          onBack={onBack}
+          onFlushRef={onFlushRef}
+          onSaveStateChange={onSaveStateChange}
+          onRichEditorReady={setRichEditor}
+        />
       </div>
     </div>
+  )
+}
+
+/**
+ * Editor surface for the open page, mounted one frame after the workspace
+ * appears. Mounting BlockNote in the same commit that closes a dialog (e.g.
+ * the create-note modal) starves the modal's exit transition on loaded
+ * machines and leaves a pointer-blocking overlay behind; the deferred mount
+ * lets the exit finish first.
+ */
+function PageEditors({
+  page,
+  onSaveContent,
+  onBack,
+  onFlushRef,
+  onSaveStateChange,
+  onRichEditorReady
+}: {
+  page: Page
+  onSaveContent?: (id: string, content: string) => Promise<boolean>
+  onBack?: () => void
+  onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
+  onSaveStateChange?: (state: {
+    isDirty: boolean
+    saveState: 'clean' | 'saving' | 'saved' | 'error'
+  }) => void
+  onRichEditorReady: (editor: BlockNoteEditor | null) => void
+}): JSX.Element {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  if (!mounted) return null
+  if (page.pageType === 'rich') {
+    return (
+      <RichEditor
+        pageId={page.id}
+        storedContent={page.content}
+        pageTitle={page.title}
+        createdDate={page.createdAt}
+        updatedDate={page.updatedAt}
+        onSaveContent={onSaveContent}
+        onBack={onBack}
+        onFlushRef={onFlushRef}
+        onSaveStateChange={onSaveStateChange}
+        onEditorReady={onRichEditorReady}
+        toolbarExternal
+      />
+    )
+  }
+  return (
+    <HtmlEditorSurface
+      page={page}
+      onSaveContent={onSaveContent}
+      onBack={onBack}
+      onFlushRef={onFlushRef}
+      onSaveStateChange={onSaveStateChange}
+    />
   )
 }
 
