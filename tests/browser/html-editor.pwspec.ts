@@ -142,7 +142,10 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     expect(pageErrors, 'no uncaught exceptions in the application').toEqual([])
   })
 
-  test('parent opens as rendered preview with JS off by default', async ({ page, request }) => {
+  test('parent opens as rendered preview only — the JS gate lives in the JavaScript subfile', async ({
+    page,
+    request
+  }) => {
     const title = uniqueTitle('Editor Open')
     await seedHtmlPage(request, title, {
       content: JSON.stringify({
@@ -155,10 +158,10 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     })
     await openPreview(page, title)
 
-    // Rendered content only: no source editors anywhere in the workspace.
+    // Rendered content only: no source editors and no developer controls.
     await expect(page.locator(PREVIEW_FRAME)).toBeVisible()
     await expect(page.locator('[data-testid^="code-editor-"]')).toHaveCount(0)
-    await expect(page.locator(JS_TOGGLE)).not.toBeChecked()
+    await expect(page.locator(JS_TOGGLE)).toHaveCount(0)
 
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('#open-marker')).toBeVisible()
@@ -306,7 +309,12 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     })
     await openPreview(page, title)
 
+    // The gate is inspected from its new home: the JavaScript subfile.
+    await openSource(page, title, 'javascript')
     await expect(page.locator(JS_TOGGLE)).not.toBeChecked()
+    await page.getByTestId('return-to-preview').click()
+    await expect(page.locator(PREVIEW_VIEW)).toBeVisible()
+
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('#static-marker')).toBeVisible()
     await page.waitForTimeout(600)
@@ -326,13 +334,16 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     })
     await openPreview(page, title)
 
+    // Enable the gate inside the JavaScript subfile, then return to preview.
+    await openSource(page, title, 'javascript')
     const save = nextSave(page)
     await page.locator(JS_TOGGLE).click()
     const result = await save.done
     expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
     expect(result.payload).toContain('"jsEnabled":true')
 
-    // After the debounced rebuild the pane executes with the flag on.
+    await page.getByTestId('return-to-preview').click()
+    await expect(page.locator(PREVIEW_VIEW)).toBeVisible()
     const frame = page.frameLocator(PREVIEW_FRAME)
     await expect(frame.locator('html[data-probe="ran"]')).toBeAttached({ timeout: 10_000 })
   })
@@ -347,6 +358,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     })
     await openPreview(page, title)
 
+    await openSource(page, title, 'javascript')
     const save = nextSave(page)
     await page.locator(JS_TOGGLE).click()
     const result = await save.done
@@ -356,10 +368,12 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
     await page.reload()
     await openPreview(page, title)
+    await openSource(page, title, 'javascript')
     await expect(page.locator(JS_TOGGLE)).toBeChecked()
 
     await page.locator('[aria-label="Home"]').click()
     await openPreview(page, title)
+    await openSource(page, title, 'javascript')
     await expect(page.locator(JS_TOGGLE)).toBeChecked()
   })
 
