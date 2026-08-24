@@ -251,10 +251,11 @@ function RichEditorInner(props: InnerProps): JSX.Element {
 
   // Hand the live editor instance to the parent so an externally hosted
   // toolbar can bind to it; cleared on unmount/editor replacement.
+  // The parent callback is a stable setState function, so [editor] suffices.
   useEffect(() => {
     onEditorReady?.(editor)
     return () => onEditorReady?.(null)
-  }, [editor, onEditorReady])
+  }, [editor])
 
   // Place the caret in the document on open and keep claiming focus briefly:
   // Mantine's Modal restores focus to its trigger after the create dialog
