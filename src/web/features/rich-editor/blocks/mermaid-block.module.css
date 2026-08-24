@@ -1,0 +1,60 @@
+.previewPane {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  padding: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
+}
+
+.editButton {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  opacity: 0.55;
+}
+
+.previewPane:hover .editButton,
+.editButton:focus-visible {
+  opacity: 1;
+}
+
+.svgHost {
+  width: 100%;
+}
+
+/* Mermaid SVGs carry their own width handling; constrain without clipping. */
+.svgHost :global(svg) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.editPane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  width: 100%;
+  padding: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--mantine-color-default-border);
+}
+
+.editActions {
+  display: flex;
+  gap: var(--mantine-spacing-xs);
+}
+
+.errorPane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  width: 100%;
+  padding: var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-red-filled) 35%, transparent);
+  background: color-mix(in srgb, var(--mantine-color-red-filled) 8%, transparent);
+}

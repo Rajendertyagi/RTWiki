@@ -4,7 +4,6 @@ import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
-import { RichEditor } from '../rich-editor/rich-editor.js'
 import { RichToolbar } from '../rich-editor/rich-toolbar.js'
 import type { AnyRichEditor } from '../rich-editor/schema.js'
 import { EditorHeader } from './editor-header.js'
@@ -12,6 +11,12 @@ import classes from './page-workspace.module.css'
 
 // CodeMirror is heavy and only needed on HTML pages — loaded as its own chunk.
 const HtmlEditorWorkspace = lazy(() => import('../html-editor/html-editor.js'))
+
+// BlockNote (+KaTeX for math blocks) is heavy and only needed on Rich Notes;
+// loaded as its own chunk so the initial application bundle stays lean.
+const RichEditor = lazy(() =>
+  import('../rich-editor/rich-editor.js').then((m) => ({ default: m.RichEditor }))
+)
 
 interface PageWorkspaceProps {
   page: Page
@@ -155,19 +160,21 @@ function PageEditors({
   if (!mounted) return null
   if (page.pageType === 'rich') {
     return (
-      <RichEditor
-        pageId={page.id}
-        storedContent={page.content}
-        pageTitle={page.title}
-        createdDate={page.createdAt}
-        updatedDate={page.updatedAt}
-        onSaveContent={onSaveContent}
-        onBack={onBack}
-        onFlushRef={onFlushRef}
-        onSaveStateChange={onSaveStateChange}
-        onEditorReady={onRichEditorReady}
-        toolbarExternal
-      />
+      <Suspense fallback={<RichEditorSkeleton />}>
+        <RichEditor
+          pageId={page.id}
+          storedContent={page.content}
+          pageTitle={page.title}
+          createdDate={page.createdAt}
+          updatedDate={page.updatedAt}
+          onSaveContent={onSaveContent}
+          onBack={onBack}
+          onFlushRef={onFlushRef}
+          onSaveStateChange={onSaveStateChange}
+          onEditorReady={onRichEditorReady}
+          toolbarExternal
+        />
+      </Suspense>
     )
   }
   return (
@@ -234,6 +241,19 @@ function HtmlEditorSurface({
 function HtmlEditorSkeleton(): JSX.Element {
   return (
     <Stack gap="sm" p="md" aria-busy="true" aria-label="Loading the HTML editor…">
+      <Box w="100%" h={22}>
+        <Skeleton height={22} radius="sm" />
+      </Box>
+      <Box w="100%" flex={1}>
+        <Skeleton height="100%" radius="sm" />
+      </Box>
+    </Stack>
+  )
+}
+
+function RichEditorSkeleton(): JSX.Element {
+  return (
+    <Stack gap="sm" p="md" aria-busy="true" aria-label="Loading the editor…">
       <Box w="100%" h={22}>
         <Skeleton height={22} radius="sm" />
       </Box>

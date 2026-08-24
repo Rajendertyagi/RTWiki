@@ -1,4 +1,3 @@
-import type { BlockNoteEditor } from '@blocknote/core'
 import { UI_TEXT } from '../../config/index.js'
 import type { AnyRichEditor, RTWikiPartialBlock } from './schema.js'
 

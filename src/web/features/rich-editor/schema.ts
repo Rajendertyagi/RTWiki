@@ -1,6 +1,8 @@
 import { type BlockNoteEditor, BlockNoteSchema, type PartialBlock } from '@blocknote/core'
 import { createReactInlineMathSpec, createReactMathBlockSpec } from '@blocknote/math-block'
 import { createReactCalloutSpec } from './blocks/callout.js'
+import { createReactDiagramSpec } from './blocks/diagram.js'
+import { createReactMindMapSpec } from './blocks/mindmap.js'
 
 /**
  * The RTWiki Rich Document schema: BlockNote's default blocks plus the
@@ -18,7 +20,9 @@ import { createReactCalloutSpec } from './blocks/callout.js'
 export const rtwikiBlockSchema = BlockNoteSchema.create().extend({
   blockSpecs: {
     mathBlock: createReactMathBlockSpec(),
-    callout: createReactCalloutSpec()
+    callout: createReactCalloutSpec(),
+    diagram: createReactDiagramSpec(),
+    mindMap: createReactMindMapSpec()
   },
   inlineContentSpecs: {
     math: createReactInlineMathSpec()

@@ -73,6 +73,29 @@ describe('debug event schema', () => {
     expect(debugEventCategory('editor_stale_update_rejected')).toBe('editor')
     expect(debugEventCategory('error_api_failure')).toBe('error')
   })
+
+  it('accepts the visual-block render lifecycle events', () => {
+    const base = { ts: Date.now(), cat: 'editor' as const }
+    expect(
+      DebugEventSchema.safeParse({ ...base, evt: 'editor_block_render_requested', len: 42 }).success
+    ).toBe(true)
+    expect(
+      DebugEventSchema.safeParse({
+        ...base,
+        evt: 'editor_block_render_succeeded',
+        result: 'ok',
+        durMs: 12
+      }).success
+    ).toBe(true)
+    expect(
+      DebugEventSchema.safeParse({
+        ...base,
+        evt: 'editor_block_render_failed',
+        result: 'error',
+        code: 'diagram'
+      }).success
+    ).toBe(true)
+  })
 })
 
 describe('debug event batch schema', () => {
