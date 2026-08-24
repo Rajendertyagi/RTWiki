@@ -155,13 +155,12 @@ test.describe('Shell layout regions', () => {
   }) => {
     await page.setViewportSize(DESKTOP)
     const title = uniqueTitle('ShellE')
-    await request.post('/api/pages', {
-      data: {
-        title,
-        pageType: 'html',
-        content: '<!doctype html><html><head><title>t</title></head><body><p>hi</p></body></html>'
-      }
+    // Empty content is schema-valid; the workspace shows its placeholder,
+    // which is enough to assert the shell regions around it.
+    const res = await request.post('/api/pages', {
+      data: { title, pageType: 'html', content: '' }
     })
+    expect(res.status()).toBe(201)
     await page.goto('/')
     await openRowByTitle(page, title)
 
