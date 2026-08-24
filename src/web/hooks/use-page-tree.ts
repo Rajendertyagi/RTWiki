@@ -4,6 +4,7 @@ import {
   buildTree,
   type FlatRow,
   flattenVisible,
+  type HtmlSubfileField,
   isSelfOrDescendant,
   nextTypeAheadMatch,
   parentMap
@@ -19,6 +20,8 @@ export interface UsePageTreeOptions {
   activePageId: string | null
   /** Opens a page through the controller's existing selection flow. */
   onOpen: (id: string) => void
+  /** Opens an HTML page's virtual source subfile in the central workspace. */
+  onOpenHtmlSource: (pageId: string, field: HtmlSubfileField) => void
 }
 
 export interface UsePageTreeResult {
@@ -30,6 +33,8 @@ export interface UsePageTreeResult {
   containerRef: { current: HTMLDivElement | null }
   handleTreeKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void
   toggleExpand: (id: string) => void
+  /** Force-expands a page's row without toggling. */
+  expandPage: (id: string) => void
   focusRow: (id: string) => void
   /** Restores tree focus after structural changes; never opens a page. */
   restoreFocusAfterChange: (preferredId: string | null) => void
@@ -44,7 +49,7 @@ export interface UsePageTreeResult {
  * the sole keyboard path into the controller's selection flow.
  */
 export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
-  const { pages, activePageId, onOpen } = options
+  const { pages, activePageId, onOpen, onOpenHtmlSource } = options
 
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set())
@@ -65,9 +70,10 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
     focusedId ?? (activeVisible ? activePageId : null) ?? rows[0]?.id ?? null
 
   const focusDomRow = useCallback((id: string): void => {
-    const el = containerRef.current?.querySelector<HTMLElement>(
-      `[data-page-id="${CSS.escape(id)}"]`
-    )
+    const container = containerRef.current
+    const el =
+      container?.querySelector<HTMLElement>(`[data-page-id="${CSS.escape(id)}"]`) ??
+      container?.querySelector<HTMLElement>(`[data-subfile-id="${CSS.escape(id)}"]`)
     el?.focus()
   }, [])
 
@@ -92,6 +98,16 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
     [rows, effectiveFocusedId, setFocusAndDom]
   )
 
+  /** Force-expands a page row (used after creating a child beneath it). */
+  const expandPage = useCallback((id: string): void => {
+    setExpandedIds((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }, [])
+
   const toggleExpand = useCallback((id: string): void => {
     setExpandedIds((prev) => {
       const next = new Set(prev)
@@ -104,13 +120,15 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
   const expandAllSiblings = useCallback(
     (id: string): void => {
       const row = rows.find((r) => r.id === id)
-      if (!row) return
+      if (!row || row.subfile || !row.node) return
       const parentId = row.node.page.parentId ?? null
-      const siblings = rows.filter((r) => (r.node.page.parentId ?? null) === parentId)
+      const siblings = rows.filter(
+        (r) => !r.subfile && r.node !== null && (r.node.page.parentId ?? null) === parentId
+      )
       setExpandedIds((prev) => {
         const next = new Set(prev)
         for (const sibling of siblings) {
-          if (sibling.node.children.length > 0) next.add(sibling.node.page.id)
+          if (sibling.node && sibling.node.children.length > 0) next.add(sibling.node.page.id)
         }
         return next
       })
@@ -145,7 +163,7 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
       if (key === 'ArrowRight') {
         event.preventDefault()
         const row = rows.find((r) => r.id === effectiveFocusedId)
-        if (!row) return
+        if (!row || row.subfile || !row.node) return
         if (row.node.children.length > 0 && !row.expanded) {
           toggleExpand(row.id)
         } else if (row.node.children.length > 0) {
@@ -157,6 +175,12 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
         event.preventDefault()
         const row = rows.find((r) => r.id === effectiveFocusedId)
         if (!row) return
+        if (row.subfile) {
+          // A subfile's logical parent is its HTML page.
+          setFocusAndDom(row.subfile.pageId)
+          return
+        }
+        if (!row.node) return
         if (row.expanded) {
           toggleExpand(row.id)
           return
@@ -174,7 +198,13 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
       }
       if (key === 'Enter') {
         event.preventDefault()
-        if (effectiveFocusedId) onOpen(effectiveFocusedId)
+        const row = rows.find((r) => r.id === effectiveFocusedId)
+        if (!row) return
+        if (row.subfile) {
+          onOpenHtmlSource(row.subfile.pageId, row.subfile.field)
+        } else {
+          onOpen(row.id)
+        }
         return
       }
 
@@ -185,7 +215,7 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
         const buffer = now <= state.expiresAt ? state.buffer + key : key
         typeAheadRef.current = { buffer, expiresAt: now + TYPE_AHEAD_RESET_MS }
 
-        const labels = rows.map((r) => r.node.page.title || '')
+        const labels = rows.map((r) => (r.subfile ? r.subfile.label : (r.node?.page.title ?? '')))
         const startIndex = Math.max(
           0,
           rows.findIndex((r) => r.id === effectiveFocusedId)
@@ -195,7 +225,16 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
         event.preventDefault()
       }
     },
-    [rows, effectiveFocusedId, moveFocus, setFocusAndDom, toggleExpand, expandAllSiblings, onOpen]
+    [
+      rows,
+      effectiveFocusedId,
+      moveFocus,
+      setFocusAndDom,
+      toggleExpand,
+      expandAllSiblings,
+      onOpen,
+      onOpenHtmlSource
+    ]
   )
 
   /**
@@ -237,6 +276,7 @@ export function usePageTree(options: UsePageTreeOptions): UsePageTreeResult {
     containerRef,
     handleTreeKeyDown,
     toggleExpand,
+    expandPage,
     focusRow: setFocusAndDom,
     restoreFocusAfterChange,
     isSelfOrDescendantChecker: (ancestorId: string, candidateId: string): boolean =>

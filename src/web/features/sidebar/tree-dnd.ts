@@ -63,19 +63,24 @@ export interface RowHint {
 export interface ContainerDndOptions {
   element: HTMLElement
   /** Throttled hover updates while dragging over the tree. */
-  onHintChange: (hint: RowHint | null) => void
+  onHintChange: (hint: RowHint | 'blocked' | null) => void
   /** Commit: rowId null means empty-space root append. */
   onDropIntent: (rowId: string | null, edge: DropEdge | 'root-append') => void
 }
+
+type ResolvedHint = RowHint | 'blocked' | null
 
 function resolveRowUnderPointer(
   container: HTMLElement,
   clientX: number,
   clientY: number
-): RowHint | null {
+): ResolvedHint {
   const underPointer = getElementFromPointWithoutHoneypot({ x: clientX, y: clientY })
   const row = underPointer?.closest('[role="treeitem"]') as HTMLElement | null
   if (!row || !container.contains(row)) return null
+  // Virtual HTML subfile rows are never drop targets: a drop over one is
+  // swallowed instead of falling through to root-append.
+  if (row.hasAttribute('data-subfile-id')) return 'blocked'
   const rowId = row.getAttribute('data-page-id')
   if (!rowId) return null
   return { rowId, edge: pointerEdge(row, clientY) }
@@ -100,7 +105,7 @@ function resolveRowUnderPointer(
 export function registerContainerDnd(options: ContainerDndOptions): () => void {
   // Latest valid hint of the CURRENT drag. Rewritten by every
   // onDragEnter/onDrag, cleared on dragleave/drop, and reset at drag start.
-  let lastRowHint: RowHint | null = null
+  let lastRowHint: ResolvedHint = null
 
   const updateHint = (clientX: number, clientY: number): void => {
     lastRowHint = resolveRowUnderPointer(options.element, clientX, clientY)
@@ -140,6 +145,10 @@ export function registerContainerDnd(options: ContainerDndOptions): () => void {
       lastRowHint = null
       options.onHintChange(null)
 
+      if (hint === 'blocked') {
+        // Over a subfile row: swallow the drop entirely.
+        return
+      }
       if (hint) {
         options.onDropIntent(hint.rowId, hint.edge)
         return

@@ -32,6 +32,10 @@ interface PageWorkspaceProps {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
   }) => void
+  /** Active HTML source subfile for this page; null = rendered preview. */
+  htmlSourceField?: 'html' | 'css' | 'javascript' | null
+  /** Returns from a source subfile to the rendered preview. */
+  onExitHtmlSource?: () => void
 }
 
 export function PageWorkspace({
@@ -47,7 +51,9 @@ export function PageWorkspace({
   onDuplicate,
   onDelete,
   onFlushRef,
-  onSaveStateChange
+  onSaveStateChange,
+  htmlSourceField = null,
+  onExitHtmlSource
 }: PageWorkspaceProps): JSX.Element {
   // Rich pages host the persistent toolbar OUTSIDE the editor component so
   // it sits directly under the tab strip, above the title/actions row. The
@@ -94,6 +100,8 @@ export function PageWorkspace({
         <PageEditors
           key={page.id}
           page={page}
+          sourceField={htmlSourceField}
+          onExitSource={onExitHtmlSource}
           onSaveContent={onSaveContent}
           onBack={onBack}
           onFlushRef={onFlushRef}
@@ -114,6 +122,8 @@ export function PageWorkspace({
  */
 function PageEditors({
   page,
+  sourceField,
+  onExitSource,
   onSaveContent,
   onBack,
   onFlushRef,
@@ -121,6 +131,8 @@ function PageEditors({
   onRichEditorReady
 }: {
   page: Page
+  sourceField: 'html' | 'css' | 'javascript' | null
+  onExitSource?: () => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
@@ -157,6 +169,8 @@ function PageEditors({
   return (
     <HtmlEditorSurface
       page={page}
+      sourceField={sourceField}
+      onExitSource={onExitSource}
       onSaveContent={onSaveContent}
       onBack={onBack}
       onFlushRef={onFlushRef}
@@ -172,12 +186,16 @@ function PageEditors({
  */
 function HtmlEditorSurface({
   page,
+  sourceField,
+  onExitSource,
   onSaveContent,
   onBack,
   onFlushRef,
   onSaveStateChange
 }: {
   page: Page
+  sourceField: 'html' | 'css' | 'javascript' | null
+  onExitSource?: () => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
@@ -197,6 +215,8 @@ function HtmlEditorSurface({
           key={page.id}
           pageId={page.id}
           storedContent={page.content}
+          sourceField={sourceField}
+          onExitSource={onExitSource}
           onSaveContent={onSaveContent}
           onBack={onBack}
           onFlushRef={onFlushRef}

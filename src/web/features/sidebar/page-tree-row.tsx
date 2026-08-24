@@ -1,6 +1,13 @@
 import { ActionIcon, Menu, Text, TextInput } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
-import { IconChevronRight, IconDots, IconFileText } from '@tabler/icons-react'
+import {
+  IconBraces,
+  IconChevronRight,
+  IconCode,
+  IconDots,
+  IconFileText,
+  IconPalette
+} from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './page-tree.module.css'
@@ -29,12 +36,31 @@ export interface PageTreeRowProps {
   onDelete: () => void
   onMoveUp: () => void
   onMoveDown: () => void
-  /** Parent candidates for the keyboard/touch "Move to." parity menu. */
+  /** Parent candidates for the keyboard/touch "Move to" parity menu. */
   moveTargets: Array<{ id: string; label: string }>
   onMoveTo: (newParentId: string) => void
   /** Controlled drop indicator owned by the tree container. */
   dropHint?: DropEdge | null
+  /**
+   * Virtual HTML source subfile row. When set the row loses all lifecycle
+   * actions and Enter/click opens that single source editor instead.
+   */
+  subfile?: { field: 'html' | 'css' | 'javascript'; label: string; pageId: string } | null
+  /** Opens this subfile's source editor in the central workspace. */
+  onOpenSubfile?: () => void
+  /** Requests the tree-level context menu at this row (pointer coordinates). */
+  onRequestContextMenu?: (rect: DOMRect) => void
+  /** Increment to programmatically start inline rename (context menu path). */
+  editSignal?: number
+  /** Creates a new child HTML page beneath this row. */
+  onCreateChildHtml?: () => void
 }
+
+const SUBFILE_ICONS = {
+  html: IconCode,
+  css: IconPalette,
+  javascript: IconBraces
+} as const
 
 /**
  * One compact Trilium-style tree row. Purely presentational: all state and
@@ -64,19 +90,26 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     onMoveDown,
     moveTargets,
     onMoveTo,
-    dropHint
+    dropHint,
+    subfile = null,
+    onOpenSubfile,
+    onRequestContextMenu,
+    editSignal = 0,
+    onCreateChildHtml
   } = props
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
+  const editSignalRef = useRef(editSignal)
 
   const displayTitle = title || UI_TEXT.untitledPage
 
-  // Core-only drag-and-drop: this row is a draggable source. Drop handling
-  // lives entirely in the tree container's single drop target.
+  // Core-only drag-and-drop: real pages are draggable sources. Virtual
+  // subfile rows are never draggable and never drop targets.
   useEffect(() => {
+    if (subfile) return
     const element = rowRef.current
     if (!element) return
     return registerRowDraggable(element, {
@@ -84,7 +117,18 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
       pageId,
       parentId
     })
-  }, [pageId, parentId])
+  }, [pageId, parentId, subfile])
+
+  // Context-menu Rename: an incrementing signal starts inline editing.
+  useEffect(() => {
+    if (editSignal !== editSignalRef.current) {
+      editSignalRef.current = editSignal
+      if (!subfile) {
+        setDraft(title)
+        setEditing(true)
+      }
+    }
+  }, [editSignal, subfile, title])
 
   useEffect(() => {
     if (editing) {
@@ -117,6 +161,65 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
 
   const rowClassName = dropHint === 'inside' ? `${classes.row} ${classes.dropInside}` : classes.row
 
+  const handleContextMenuKey = (event: React.KeyboardEvent): void => {
+    // Windows keyboard-menu parity: ContextMenu key and Shift+F10.
+    if (
+      !subfile &&
+      onRequestContextMenu &&
+      (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey))
+    ) {
+      event.preventDefault()
+      event.stopPropagation()
+      const rect = rowRef.current?.getBoundingClientRect()
+      if (rect) onRequestContextMenu(rect)
+    }
+  }
+
+  if (subfile) {
+    const Icon = SUBFILE_ICONS[subfile.field]
+    return (
+      <div
+        className={rowClassName}
+        style={rowStyle}
+        data-subfile-id={`${subfile.pageId}::${subfile.field}`}
+        data-focused={focused || undefined}
+        role="treeitem"
+        aria-level={indentLevel + 1}
+        aria-selected={false}
+        tabIndex={tabIndex}
+        ref={rowRef}
+        onContextMenu={(event) => {
+          // Subfiles have no lifecycle actions: suppress the native menu.
+          event.preventDefault()
+        }}
+        onKeyDown={(event) => {
+          handleContextMenuKey(event)
+          if (event.key === 'Enter' && !event.defaultPrevented) {
+            event.preventDefault()
+            event.stopPropagation()
+            onOpenSubfile?.()
+          }
+        }}
+      >
+        <span style={{ width: 22 }} aria-hidden="true" />
+        <Icon size={14} aria-hidden="true" />
+        <Text
+          size="sm"
+          truncate
+          className={classes.label}
+          onClick={() => {
+            onFocusRow()
+            onOpenSubfile?.()
+          }}
+          onFocus={() => onFocusRow()}
+          aria-label={`Open ${subfile.label} source`}
+        >
+          {subfile.label}
+        </Text>
+      </div>
+    )
+  }
+
   return (
     <div
       className={rowClassName}
@@ -128,21 +231,9 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
       aria-selected={active}
       aria-level={indentLevel + 1}
       tabIndex={tabIndex}
-      ref={(el) => {
-        rowRef.current = el
-        const active = document.activeElement
-        const treeOwnsFocus =
-          active === null ||
-          active === document.body ||
-          (active instanceof HTMLElement && active.closest('[role="tree"]') !== null)
-        if (focused && !editing && el && active !== el && treeOwnsFocus) {
-          // Roving tabindex keeps DOM focus in sync with focusedId — but
-          // only while the tree already owns focus. It must never steal
-          // focus from the editor or another control mid-interaction.
-          el.focus({ preventScroll: false })
-        }
-      }}
+      ref={rowRef}
       onKeyDown={(event) => {
+        handleContextMenuKey(event)
         if (event.key === 'F2' && !editing) {
           event.preventDefault()
           event.stopPropagation()
@@ -156,6 +247,19 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
       }}
       onDoubleClick={() => {
         if (!editing) setEditing(true)
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const rect = rowRef.current?.getBoundingClientRect()
+        if (rect && onRequestContextMenu) {
+          onRequestContextMenu({
+            left: event.clientX,
+            bottom: event.clientY,
+            top: event.clientY,
+            right: event.clientX
+          } as DOMRect)
+        }
       }}
     >
       {dropHint === 'before' ? (
@@ -244,7 +348,10 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
           </Menu.Target>
           <Menu.Dropdown className={classes.menuScroll}>
             <Menu.Item onClick={onOpen}>{UI_TEXT.openAction}</Menu.Item>
-            <Menu.Item onClick={onCreateChild}>{UI_TEXT.newChildPage}</Menu.Item>
+            <Menu.Item onClick={onCreateChild}>{UI_TEXT.newChildRichPage}</Menu.Item>
+            {onCreateChildHtml ? (
+              <Menu.Item onClick={onCreateChildHtml}>{UI_TEXT.newChildHtmlPage}</Menu.Item>
+            ) : null}
             <Menu.Item onClick={() => setEditing(true)}>{UI_TEXT.renameAction}</Menu.Item>
             <Menu.Item onClick={onDuplicate}>{UI_TEXT.duplicateAction}</Menu.Item>
             <Menu.Item color="red" onClick={onDelete}>

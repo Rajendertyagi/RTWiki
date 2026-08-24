@@ -31,3 +31,19 @@
     grid-template-rows: minmax(280px, auto) minmax(320px, auto);
   }
 }
+
+.previewPaneFull {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+}
+
+.editorPaneSingle {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

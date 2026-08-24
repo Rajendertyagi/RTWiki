@@ -19,6 +19,32 @@ export interface TreeNode<T extends PageLike> {
   children: TreeNode<T>[]
 }
 
+/** Source fields exposed as virtual subfiles of an HTML page. */
+export type HtmlSubfileField = 'html' | 'css' | 'javascript'
+
+export const HTML_SUBFILE_FIELDS: readonly HtmlSubfileField[] = ['html', 'css', 'javascript']
+
+export const HTML_SUBFILE_LABELS: Record<HtmlSubfileField, string> = {
+  html: 'HTML',
+  css: 'CSS',
+  javascript: 'JavaScript'
+}
+
+/** Separator chosen so a subfile id can never collide with a real page id (UUIDs). */
+const SUBFILE_SEPARATOR = '::'
+
+export function htmlSubfileId(pageId: string, field: HtmlSubfileField): string {
+  return `${pageId}${SUBFILE_SEPARATOR}${field}`
+}
+
+export function parseHtmlSubfileId(id: string): { pageId: string; field: HtmlSubfileField } | null {
+  const index = id.lastIndexOf(SUBFILE_SEPARATOR)
+  if (index <= 0) return null
+  const field = id.slice(index + SUBFILE_SEPARATOR.length) as HtmlSubfileField
+  if (!HTML_SUBFILE_FIELDS.includes(field)) return null
+  return { pageId: id.slice(0, index), field }
+}
+
 /** Stable sibling order: position, then title, then id (deterministic tie-breaks). */
 function comparePages(a: PageLike, b: PageLike): number {
   if (a.position !== b.position) return a.position - b.position
@@ -74,7 +100,10 @@ export function buildTree<T extends PageLike>(pages: T[]): TreeNode<T>[] {
 export interface FlatRow {
   id: string
   depth: number
-  node: TreeNode<Page>
+  /** Null for virtual HTML subfile rows (which have no real page node). */
+  node: TreeNode<Page> | null
+  /** Set only on virtual subfile rows beneath an expanded HTML page. */
+  subfile: { pageId: string; field: HtmlSubfileField; label: string } | null
   /** True when the row has children and is currently expanded. */
   expanded: boolean
 }
@@ -88,15 +117,34 @@ export function flattenVisible(
   const rows: FlatRow[] = []
   const walk = (levelNodes: TreeNode<Page>[], depth: number): void => {
     for (const node of levelNodes) {
-      const hasChildren = node.children.length > 0
+      // HTML pages are always expandable: their virtual source subfiles live
+      // behind the chevron even when no real child pages exist.
+      const hasChildren = node.children.length > 0 || node.page.pageType === 'html'
       const expanded = hasChildren && expandedIds.has(node.page.id)
       rows.push({
         id: node.page.id,
         depth: Math.min(depth, indentClampLevels),
         node,
+        subfile: null,
         expanded
       })
-      if (expanded) walk(node.children, depth + 1)
+      if (expanded) {
+        walk(node.children, depth + 1)
+        // Virtual source subfiles trail an expanded HTML page's real
+        // children, in fixed field order. They are presentation-only rows:
+        // no real page backs them.
+        if (node.page.pageType === 'html') {
+          for (const field of HTML_SUBFILE_FIELDS) {
+            rows.push({
+              id: htmlSubfileId(node.page.id, field),
+              depth: Math.min(depth + 1, indentClampLevels),
+              node: null,
+              subfile: { pageId: node.page.id, field, label: HTML_SUBFILE_LABELS[field] },
+              expanded: false
+            })
+          }
+        }
+      }
     }
   }
   walk(nodes, 0)

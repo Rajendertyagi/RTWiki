@@ -1,4 +1,4 @@
-import { Box, Button, Group, Stack, Switch, Tabs, Text } from '@mantine/core'
+import { Box, Button, Group, Stack, Switch, Text } from '@mantine/core'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import {
   createEmptyHtmlContent,
@@ -17,6 +17,10 @@ import classes from './html-editor.module.css'
 export interface HtmlEditorWorkspaceProps {
   pageId: string
   storedContent: string
+  /** Active source subfile; null shows only the rendered preview. */
+  sourceField: 'html' | 'css' | 'javascript' | null
+  /** Returns from a source subfile to the rendered preview. */
+  onExitSource?: () => void
   /** Persists editor content and syncs the pages list. */
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   /** Returns to the pages dashboard from recovery UIs. */
@@ -37,21 +41,24 @@ const FIELD_LABELS: Record<ContentField, keyof typeof UI_TEXT> = {
 }
 
 /**
- * Editable HTML-page workspace: CodeMirror tabs (HTML/CSS/JS), the per-page
- * JavaScript switch, and the Phase 4A sandboxed live preview in a responsive
- * split view. All persistence flows through the shared autosave controller;
- * all preview rendering flows through the unchanged secure builder.
+ * Editable HTML-page workspace. Two modes driven by sourceField:
+ * - null: rendered preview only (the student view) with the JS gate switch.
+ * - html/css/javascript: a single CodeMirror editor for that field with an
+ *   explicit return-to-preview action.
+ * All persistence flows through the shared autosave controller writing
+ * canonical v2 JSON; all rendering flows through the unchanged secure builder.
  */
 export default function HtmlEditorWorkspace({
   pageId,
   storedContent,
+  sourceField,
+  onExitSource,
   onSaveContent,
   onFlushRef,
   onSaveStateChange
 }: HtmlEditorWorkspaceProps): JSX.Element {
   const parseResult = useMemo(() => parseHtmlContent(storedContent), [storedContent])
 
-  const [activeField, setActiveField] = useState<ContentField>('html')
   const [content, setContent] = useState<HtmlPageContentV2>(() =>
     parseResult.ok ? normalizeHtmlContent(parseResult.content) : createEmptyHtmlContent()
   )
@@ -175,41 +182,73 @@ export default function HtmlEditorWorkspace({
     )
   }
 
+  // Rendered parent view ("student view"): the finished page only, no
+  // source panes. An empty page shows a simple empty state instead of an
+  // empty sandbox frame.
+  if (sourceField === null) {
+    const isEmpty =
+      content.html.trim() === '' && content.css.trim() === '' && content.javascript.trim() === ''
+    return (
+      <div className={classes.root} data-testid="html-preview-view">
+        <Group justify="flex-end" gap="sm" className={classes.controls}>
+          <Switch
+            checked={content.jsEnabled}
+            onChange={toggleJs}
+            label={UI_TEXT.jsEnabledToggleLabel}
+            aria-label={UI_TEXT.jsEnabledToggleLabel}
+            data-testid="js-enabled-toggle"
+          />
+        </Group>
+        {isEmpty ? (
+          <Stack align="center" justify="center" gap="xs" className={classes.previewPane}>
+            <Text c="dimmed">{UI_TEXT.htmlPreviewEmpty}</Text>
+          </Stack>
+        ) : (
+          <Box className={classes.previewPaneFull} data-testid="live-preview">
+            <PreviewFrame content={previewContent} />
+          </Box>
+        )}
+      </div>
+    )
+  }
+
+  // Source subfile view: exactly one CodeMirror editor for the chosen field,
+  // no permanent split-screen preview, plus an explicit return action.
   return (
-    <div className={classes.root} data-testid="html-editor">
+    <div className={classes.root} data-testid="html-source-view">
       <Group justify="space-between" wrap="nowrap" gap="sm" className={classes.controls}>
-        <Tabs value={activeField} onChange={(value) => setActiveField(value as ContentField)}>
-          <Tabs.List aria-label={UI_TEXT.editorTabsLabel}>
-            <Tabs.Tab value="html">{UI_TEXT.editorTabHtml}</Tabs.Tab>
-            <Tabs.Tab value="css">{UI_TEXT.editorTabCss}</Tabs.Tab>
-            <Tabs.Tab value="javascript">{UI_TEXT.editorTabJs}</Tabs.Tab>
-          </Tabs.List>
-        </Tabs>
-        <Switch
-          checked={content.jsEnabled}
-          onChange={toggleJs}
-          label={UI_TEXT.jsEnabledToggleLabel}
-          aria-label={UI_TEXT.jsEnabledToggleLabel}
-          data-testid="js-enabled-toggle"
-        />
+        <Text size="sm" fw={600}>
+          {UI_TEXT[FIELD_LABELS[sourceField]]}
+        </Text>
+        <Group gap="sm" wrap="nowrap">
+          <Switch
+            checked={content.jsEnabled}
+            onChange={toggleJs}
+            label={UI_TEXT.jsEnabledToggleLabel}
+            aria-label={UI_TEXT.jsEnabledToggleLabel}
+            data-testid="js-enabled-toggle"
+          />
+          <Button
+            size="compact-xs"
+            variant="light"
+            onClick={() => onExitSource?.()}
+            data-testid="return-to-preview"
+          >
+            {UI_TEXT.htmlSourceBackToPreview}
+          </Button>
+        </Group>
       </Group>
 
-      <div className={classes.split}>
-        <Box className={classes.editorPane}>
-          <CodeEditor
-            key={activeField}
-            value={content[activeField]}
-            onChange={(value) => updateField(activeField, value)}
-            language={activeField}
-            label={UI_TEXT[FIELD_LABELS[activeField]]}
-            extraKeys={modSaveKeys}
-          />
-        </Box>
-
-        <Box className={classes.previewPane} data-testid="live-preview">
-          <PreviewFrame content={previewContent} />
-        </Box>
-      </div>
+      <Box className={classes.editorPaneSingle}>
+        <CodeEditor
+          key={sourceField}
+          value={content[sourceField]}
+          onChange={(value) => updateField(sourceField, value)}
+          language={sourceField}
+          label={UI_TEXT[FIELD_LABELS[sourceField]]}
+          extraKeys={modSaveKeys}
+        />
+      </Box>
 
       {status === 'error' ? (
         <Group gap="xs" p="xs">
