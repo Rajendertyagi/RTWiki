@@ -1,4 +1,5 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { UI_TEXT } from '../../src/web/config/index.js'
 import { purgeUntitledPages } from './utils/cleanup.js'
 
 /**
@@ -129,33 +130,43 @@ test.describe('stability regressions', () => {
       await expect(input).toHaveCount(0)
     }
 
-    async function expectTitleEverywhere(page: Page, request: APIRequestContext, title: string) {
-      // Server truth first (authoritative), then the rendered tree.
+    async function expectTitleEverywhere(
+      page: Page,
+      request: APIRequestContext,
+      id: string,
+      title: string
+    ) {
+      // Server truth first (authoritative), then the rendered row by its
+      // stable page-id attribute and exact label text.
       await expect
         .poll(async () => {
           const res = await request.get('/api/pages')
           const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
-          return list.pages.some((p) => p.title === title)
+          return list.pages.find((p) => p.id === id)?.title
         })
-        .toBe(true)
-      await expect(pageRow(page, title)).toBeVisible()
+        .toBe(title)
+      const row = page.locator(`[role="treeitem"][data-page-id="${id}"]`)
+      await expect(row).toBeVisible()
+      await expect(row.getByText(title, { exact: true })).toBeVisible()
 
-      // Opening the renamed page asserts the header input and tab label.
-      await pageRow(page, title).click()
+      // Opening the renamed page asserts the header input and tab label. The
+      // tab's accessible name also contains the close control's label, so
+      // match by substring here.
+      await row.click()
       await expect(page.locator('input[aria-label="Title"]')).toHaveValue(title)
       await expect(
-        page.locator('[aria-label="Open pages"]').getByRole('tab', { name: title, exact: true })
+        page.locator('[aria-label="Open pages"]').getByRole('tab', { name: title })
       ).toBeVisible()
     }
 
     test('root Rich Note rename', async ({ page, request }) => {
       const original = uniqueTitle('Ren Root')
       const renamed = `Renamed Root ${Date.now()}`
-      await seedPage(request, original, 'rich', '')
+      const p = await seedPage(request, original, 'rich', '')
       await page.goto('/')
       await pageRow(page, original).waitFor()
       await renameViaTree(page, original, renamed)
-      await expectTitleEverywhere(page, request, renamed)
+      await expectTitleEverywhere(page, request, p.id, renamed)
     })
 
     test('child Rich Note rename does not touch other pages', async ({ page, request }) => {
@@ -163,12 +174,12 @@ test.describe('stability regressions', () => {
       const childOriginal = uniqueTitle('Ren Child')
       const childRenamed = `Renamed Child ${Date.now()}`
       const parent = await seedPage(request, parentTitle, 'rich', '')
-      await seedPage(request, childOriginal, 'rich', '', parent.id)
+      const child = await seedPage(request, childOriginal, 'rich', '', parent.id)
       await page.goto('/')
       await expandRow(page, parent.id)
       await pageRow(page, childOriginal).waitFor()
       await renameViaTree(page, childOriginal, childRenamed)
-      await expectTitleEverywhere(page, request, childRenamed)
+      await expectTitleEverywhere(page, request, child.id, childRenamed)
       // The parent's title is untouched by the child rename.
       const res = await request.get('/api/pages')
       const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
@@ -185,7 +196,7 @@ test.describe('stability regressions', () => {
         javascript: '',
         jsEnabled: false
       })
-      await seedPage(
+      const child = await seedPage(
         request,
         childOriginal,
         'html',
@@ -196,7 +207,7 @@ test.describe('stability regressions', () => {
       await expandRow(page, root.id)
       await pageRow(page, childOriginal).waitFor()
       await renameViaTree(page, childOriginal, childRenamed)
-      await expectTitleEverywhere(page, request, childRenamed)
+      await expectTitleEverywhere(page, request, child.id, childRenamed)
     })
 
     test('cancel leaves the title unchanged', async ({ page, request }) => {
@@ -327,7 +338,11 @@ test.describe('stability regressions', () => {
       })
 
       await page.reload()
+      // Deterministic re-entry: wait for the dashboard, reopen the page,
+      // confirm the rendered parent view, then open the JavaScript subfile.
+      await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
       await openPageByRow(page, title)
+      await expect(page.locator('[data-testid="html-preview-view"]')).toBeVisible()
       await openSubfile(page, p.id, 'javascript')
       expect(await readEditor(page, 'javascript')).toContain(marker)
     })
@@ -471,8 +486,10 @@ test.describe('stability regressions', () => {
 
       await openSubfile(page, p.id, 'javascript')
       await expect(page.getByTestId('js-enabled-toggle')).toBeVisible()
-      // Compact help instead of a permanent technical paragraph.
-      await expect(page.getByText(/isolated sandboxed frame/i).first()).toBeAttached()
+      // Compact help instead of a permanent technical paragraph: the info
+      // icon carries the sandbox explanation as its accessible name (the
+      // Mantine tooltip body itself is hover-lazy and not always in the DOM).
+      await expect(page.locator(`[aria-label="${UI_TEXT.jsSandboxHint}"]`)).toBeAttached()
       await expect(page.getByText(/Sandboxed preview\. Scripts run/i)).toHaveCount(0)
     })
   })
@@ -501,7 +518,13 @@ test.describe('stability regressions', () => {
               const style = (rule as CSSStyleRule).style
               if (!style) continue
               const selector = (rule as CSSStyleRule).selectorText ?? ''
-              if (selector.includes('insertLine')) {
+              // Only the BASE insertLine rule; the Top/Bottom variants carry
+              // offsets, not the visible geometry under test.
+              if (
+                selector.includes('insertLine') &&
+                !selector.includes('insertLineTop') &&
+                !selector.includes('insertLineBottom')
+              ) {
                 out.insertLine = {
                   position: style.position,
                   height: style.height,
