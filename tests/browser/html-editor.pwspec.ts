@@ -14,7 +14,6 @@ const PREVIEW_VIEW = '[data-testid="html-preview-view"]'
 const SOURCE_VIEW = '[data-testid="html-source-view"]'
 const PREVIEW_FRAME = '[data-testid="preview-iframe"]'
 const JS_TOGGLE = '[data-testid="js-enabled-toggle"]'
-const EDITOR_ROOT = '[data-testid="html-editor"]'
 
 let titleSeq = 0
 
@@ -71,7 +70,7 @@ async function openSource(
     .waitFor({ state: 'visible' })
   await page.locator(`[role="treeitem"][data-subfile-id$="::${field}"]`).click()
   await expect(page.locator(SOURCE_VIEW)).toBeVisible()
-  await expect(page.locator(EDITOR_ROOT)).toBeVisible()
+  await expect(page.locator('[data-testid^="code-editor-"]').first()).toBeVisible()
 }
 
 /** Types text into the single CodeMirror pane of the source view. */
