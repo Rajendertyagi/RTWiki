@@ -83,6 +83,43 @@ async function readEditor(page: Page, field: string): Promise<string> {
   }, field)
 }
 
+/**
+ * Waits for the next page-content PATCH and returns request/response truth.
+ * UI status text alone cannot distinguish a real save from a stale label.
+ */
+function nextSave(page: Page): {
+  done: Promise<{ ok: boolean; status: number; payload: string }>
+} {
+  let resolve: (v: { ok: boolean; status: number; payload: string }) => void
+  const done = new Promise<{ ok: boolean; status: number; payload: string }>((res) => {
+    resolve = res
+  })
+  void page
+    .waitForEvent('request', {
+      predicate: (req) => req.method() === 'PATCH' && req.url().includes('/api/pages/'),
+      timeout: 15_000
+    })
+    .then((req) => {
+      let payload = req.postData() ?? ''
+      try {
+        const envelope = JSON.parse(payload) as { content?: string }
+        if (typeof envelope.content === 'string') {
+          payload = envelope.content
+        }
+      } catch {
+        // Non-envelope bodies fail the payload assertions below.
+      }
+      void req.response().then((resp) => {
+        if (!resp) {
+          resolve({ ok: false, status: 0, payload })
+          return
+        }
+        resolve({ ok: resp.ok(), status: resp.status(), payload })
+      })
+    })
+  return { done }
+}
+
 async function openPageByRow(page: Page, title: string): Promise<void> {
   await pageRow(page, title).click()
 }
@@ -350,10 +387,14 @@ test.describe('stability regressions', () => {
       await openSubfile(page, p.id, 'javascript')
 
       const marker = `// saved-${titleSeq}`
+      // Network truth: the autosave PATCH must carry the typed marker before
+      // we reload. (The header's "Saved" label alone is vacuous — it also
+      // reads Saved while clean.)
+      const save = nextSave(page)
       await typeIntoEditor(page, 'javascript', marker)
-      await expect(page.locator('p[aria-live="polite"]').filter({ hasText: 'Saved' })).toBeVisible({
-        timeout: 10_000
-      })
+      const result = await save.done
+      expect(result.ok, `PATCH failed: ${result.status}`).toBe(true)
+      expect(result.payload).toContain(marker)
 
       await page.reload()
       // Deterministic re-entry: wait for the dashboard, reopen the page,
