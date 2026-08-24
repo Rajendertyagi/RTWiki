@@ -24,7 +24,11 @@ interface PageWorkspaceProps {
   onSave: () => Promise<boolean>
   onRetry: () => Promise<boolean>
   onBack: () => void
-  onRename: (title: string) => Promise<boolean>
+  /**
+   * Renames THIS page by id — the same (id, title) contract as the tree, so
+   * header and tree renames share one controller path.
+   */
+  onRenamePage: (id: string, title: string) => Promise<boolean>
   onDuplicate: () => void
   onDelete: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
@@ -47,7 +51,7 @@ export function PageWorkspace({
   onSave,
   onRetry,
   onBack,
-  onRename,
+  onRenamePage,
   onDuplicate,
   onDelete,
   onFlushRef,
@@ -85,7 +89,7 @@ export function PageWorkspace({
         onSave={onSave}
         onRetry={onRetry}
         onBack={onBack}
-        onRename={onRename}
+        onRename={(title) => onRenamePage(page.id, title)}
         onDuplicate={onDuplicate}
         onDelete={onDelete}
       />

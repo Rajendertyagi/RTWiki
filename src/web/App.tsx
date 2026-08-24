@@ -363,15 +363,25 @@ export function App(): JSX.Element {
     })
   }
 
-  const handleRename = async (title: string): Promise<boolean> => {
-    const selected = controller.selectedPage
-    if (!selected) return false
-    const ok = await controller.renamePage(selected.id, title)
-    if (ok) {
-      setOpenTabs((prev) => renameInTabs(prev, selected.id, title, UI_TEXT.untitledPage))
-    }
-    return ok
-  }
+  /**
+   * THE single rename handler, keyed by the real page id. Both the tree and
+   * the page header bind into it (the header binds page.id at its call
+   * site). The previous one-argument header handler was arity-compatible
+   * with the tree's (id, title) contract, so a tree rename passed the row's
+   * UUID in the title slot and renamed whichever page was open — the
+   * reported ID-like title corruption. One shared signature makes that
+   * mismatch unrepresentable.
+   */
+  const handleRenamePage = useCallback(
+    async (id: string, title: string): Promise<boolean> => {
+      const ok = await controller.renamePage(id, title)
+      if (ok) {
+        setOpenTabs((prev) => renameInTabs(prev, id, title, UI_TEXT.untitledPage))
+      }
+      return ok
+    },
+    [controller]
+  )
 
   const handleWorkspaceClose = async (): Promise<void> => {
     if (flushRef.current) {
@@ -449,7 +459,7 @@ export function App(): JSX.Element {
             selectedId={controller.selectedPage?.id ?? null}
             onSelect={handleSelectPage}
             searchInputRef={searchInputRef}
-            onRename={handleRename}
+            onRename={handleRenamePage}
             onDuplicate={(id) => void controller.duplicatePage(id)}
             onDelete={handleDeleteRequest}
             onCreateChild={(parentId) => void controller.createChild(parentId)}
@@ -517,7 +527,7 @@ export function App(): JSX.Element {
               onSave={handleSave}
               onRetry={handleRetry}
               onBack={handleWorkspaceClose}
-              onRename={handleRename}
+              onRenamePage={handleRenamePage}
               onDuplicate={handleWorkspaceDuplicate}
               onDelete={handleWorkspaceDelete}
               onFlushRef={(fn) => {

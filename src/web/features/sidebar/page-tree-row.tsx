@@ -237,6 +237,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
       className={rowClassName}
       style={rowStyle}
       data-page-id={pageId}
+      data-drop-hint={dropHint ?? undefined}
       data-focused={focused || undefined}
       role="treeitem"
       aria-expanded={hasChildren ? expanded : undefined}
