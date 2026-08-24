@@ -294,7 +294,13 @@ test.describe('stability regressions', () => {
         jsEnabled: false
       })
       await page.goto('/')
-      await expandRow(page, p.id)
+      // Refetch-remount resilience: retry expand until the subfile row stays.
+      await expect(async () => {
+        await expandRow(page, p.id)
+        await page
+          .locator('[role="treeitem"][data-subfile-id$="::css"]')
+          .waitFor({ state: 'visible', timeout: 3_000 })
+      }).toPass({ timeout: 20_000 })
       const sub = page.locator('[role="treeitem"][data-subfile-id$="::css"]')
       await sub.click({ button: 'right' })
       // Native menu is suppressed and no app context menu opens.

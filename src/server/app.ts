@@ -30,7 +30,9 @@ const securityHeaders = secureHeaders({
     scriptSrc: ["'self'", NONCE],
     styleSrc: ["'self'", "'unsafe-inline'"],
     imgSrc: ["'self'", 'data:'],
-    fontSrc: ["'self'"],
+    // KaTeX (official math integration) ships its fonts inline as data: URIs;
+    // data: fonts are inert content and cannot execute.
+    fontSrc: ["'self'", 'data:'],
     objectSrc: ["'none'"],
     baseUri: ["'self'"],
     frameAncestors: ["'none'"]
