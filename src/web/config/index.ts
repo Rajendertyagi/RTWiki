@@ -73,8 +73,6 @@ export const UI_TEXT = {
   htmlPlaceholderMessage:
     'The HTML/CSS/JS editor is coming in the next phase. Your HTML pages are safely stored and will be editable soon.',
   htmlPlaceholderHint: 'HTML pages remain viewable as stored content.',
-  htmlPreviewSandboxNotice:
-    'Sandboxed preview. Scripts run in an isolated frame with no access to RTWiki or the network.',
   htmlPreviewIframeTitle: 'Sandboxed HTML page preview',
   htmlPreviewErrorTitle: 'Preview unavailable',
   htmlPreviewNonceMissing:
@@ -175,7 +173,12 @@ export const UI_TEXT = {
   debugToggleLabel: 'Debug logging',
   debugToggleDescription:
     'Writes technical diagnostics to logs\\rtwiki-debug.jsonl. Never records note content.',
-  debugActiveLabel: 'Debug logging is active'
+  debugActiveLabel: 'Debug logging is active',
+  // HTML preview actions
+  refreshPreviewLabel: 'Refresh preview',
+  previewRefreshingLabel: 'Refreshing preview…',
+  jsSandboxHint:
+    'Scripts run only inside an isolated sandboxed frame. They cannot access RTWiki data or the network.'
 } as const
 
 export const STATUS_TEXT = {

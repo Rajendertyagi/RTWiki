@@ -1,6 +1,6 @@
-import { Alert, Box, Button, Group, Stack, Text } from '@mantine/core'
+import { Alert, Box, Button, Stack, Text } from '@mantine/core'
 import type { HtmlPageContentV2 } from '@rtwiki/shared/schemas/html-content'
-import { IconAlertCircle, IconShieldLock } from '@tabler/icons-react'
+import { IconAlertCircle } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
@@ -27,6 +27,8 @@ export interface PreviewFrameProps {
   content: HtmlPageContentV2
   /** Per-response parent CSP nonce read from the served document's meta tag. */
   nonce?: string
+  /** Notifies the parent when the sandboxed frame reports readiness. */
+  onReady?: () => void
 }
 
 type PreviewStatus =
@@ -45,7 +47,11 @@ interface BuildResult {
   error?: string
 }
 
-export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): JSX.Element {
+export function PreviewFrame({
+  content,
+  nonce: nonceProp,
+  onReady
+}: PreviewFrameProps): JSX.Element {
   // The nonce normally arrives via prop; reading the meta tag keeps the
   // component usable in isolation. Hooks stay unconditional.
   const nonceFromDocument = useMemo(readParentNonce, [])
@@ -113,40 +119,44 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
     setResult(buildPreview())
   }, [buildPreview])
 
-  const handleMessage = useCallback((event: MessageEvent): void => {
-    // Check 1: identity — only our own iframe's window may talk to us.
-    if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) {
-      return
-    }
-    // Check 2: strict schema (unknown fields rejected).
-    if (!isValidPreviewMessage(event.data)) {
-      return
-    }
-    // Check 3: exact current channel ID — wrong/stale channels are ignored.
-    const message = event.data as PreviewMessage
-    if (message.channel !== channelIdRef.current) {
-      return
-    }
-    if (message.type === 'rtwiki-preview-ready') {
-      debugLog('preview', 'preview_iframe_ready', { gen: generationRef.current })
-      setStatus({ kind: 'ready' })
-      return
-    }
-    // Reduce the sandbox's operation string to a bounded machine token so a
-    // hostile value can never violate the debug log's closed field contract.
-    const operationToken = (message.operation ?? 'unknown')
-      .replace(/[^A-Za-z0-9_-]/g, '_')
-      .slice(0, 64)
-    debugLog('preview', 'preview_runtime_error', {
-      gen: generationRef.current,
-      code: operationToken
-    })
-    setStatus({
-      kind: 'runtime-issue',
-      operation: message.operation ?? 'unknown',
-      errorName: message.errorName
-    })
-  }, [])
+  const handleMessage = useCallback(
+    (event: MessageEvent): void => {
+      // Check 1: identity — only our own iframe's window may talk to us.
+      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) {
+        return
+      }
+      // Check 2: strict schema (unknown fields rejected).
+      if (!isValidPreviewMessage(event.data)) {
+        return
+      }
+      // Check 3: exact current channel ID — wrong/stale channels are ignored.
+      const message = event.data as PreviewMessage
+      if (message.channel !== channelIdRef.current) {
+        return
+      }
+      if (message.type === 'rtwiki-preview-ready') {
+        debugLog('preview', 'preview_iframe_ready', { gen: generationRef.current })
+        setStatus({ kind: 'ready' })
+        onReady?.()
+        return
+      }
+      // Reduce the sandbox's operation string to a bounded machine token so a
+      // hostile value can never violate the debug log's closed field contract.
+      const operationToken = (message.operation ?? 'unknown')
+        .replace(/[^A-Za-z0-9_-]/g, '_')
+        .slice(0, 64)
+      debugLog('preview', 'preview_runtime_error', {
+        gen: generationRef.current,
+        code: operationToken
+      })
+      setStatus({
+        kind: 'runtime-issue',
+        operation: message.operation ?? 'unknown',
+        errorName: message.errorName
+      })
+    },
+    [onReady]
+  )
 
   useEffect(() => {
     window.addEventListener('message', handleMessage)
@@ -186,12 +196,6 @@ export function PreviewFrame({ content, nonce: nonceProp }: PreviewFrameProps): 
       // Test observability: reflects which validated messages were accepted.
       data-preview-status={status.kind}
     >
-      <Group gap="xs">
-        <IconShieldLock size={14} />
-        <Text size="xs" c="dimmed">
-          {UI_TEXT.htmlPreviewSandboxNotice}
-        </Text>
-      </Group>
       {status.kind === 'runtime-issue' ? (
         <Alert color="yellow" variant="light" title={UI_TEXT.htmlPreviewRuntimeTitle}>
           <Text size="sm">{UI_TEXT.htmlPreviewRuntimeMessage}</Text>

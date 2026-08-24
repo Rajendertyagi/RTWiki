@@ -3,7 +3,7 @@ import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import { javascript } from '@codemirror/lang-javascript'
 import { bracketMatching, indentOnInput } from '@codemirror/language'
-import { EditorState, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { drawSelection, dropCursor, EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
 import { htmlEditorHighlighting, htmlEditorTheme } from './editor-theme.js'
@@ -34,8 +34,17 @@ export interface UseCodeMirrorOptions {
 
 /**
  * Thin lifecycle wrapper around CodeMirror 6 — deliberately no third-party
- * React binding. The view is created once per mount and disposed on unmount;
- * controlled-value updates are dispatched only when they actually differ
+ * React binding.
+ *
+ * The view is created ONCE per pane lifetime and survives source-field
+ * switches: the document, language and history are swapped through
+ * compartments instead of remounting. Remounting per field was the defect-1
+ * amplifier — a fresh view seeded mid-flush could resurrect stale text and
+ * destroyed typing continuity. History is reset together with the language
+ * so an undo after a switch can never drag a previous field's document into
+ * the current one.
+ *
+ * Controlled-value updates are dispatched only when they actually differ
  * from the document, which prevents cursor jumps while typing.
  */
 export function useCodeMirror(
@@ -45,14 +54,18 @@ export function useCodeMirror(
   const viewRef = useRef<EditorView | null>(null)
   // Last document string this hook emitted or received — the loop guard.
   const lastValueRef = useRef(options.value)
+  // Last language configured into the view — drives compartment swaps.
+  const lastLanguageRef = useRef(options.language)
   const onChangeRef = useRef(options.onChange)
   onChangeRef.current = options.onChange
 
-  // The editor is constructed exactly once per pane mount: language, label
-  // and key bindings are fixed for the pane's lifetime, and value/onChange
-  // flow through refs plus the guarded sync effect below. The suppression is
-  // intentionally scoped to this construction effect.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time view construction; options flow via refs and the sync effect
+  // Compartments are created once and live for the view's lifetime.
+  const languageCompartmentRef = useRef(new Compartment())
+  const historyCompartmentRef = useRef(new Compartment())
+
+  // The editor is constructed exactly once per pane mount; value/onChange/
+  // language flow through refs plus the sync effects below.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time view construction; options flow via refs and the sync effects
   useEffect(() => {
     const host = hostRef.current
     if (!host) {
@@ -64,14 +77,14 @@ export function useCodeMirror(
         doc: options.value,
         extensions: [
           lineNumbers(),
-          history(),
+          historyCompartmentRef.current.of(history()),
+          languageCompartmentRef.current.of(languageExtension(options.language)),
           drawSelection(),
           dropCursor(),
           indentOnInput(),
           bracketMatching(),
           htmlEditorHighlighting,
           htmlEditorTheme,
-          languageExtension(options.language),
           keymap.of([...(options.extraKeys ?? []), ...defaultKeymap, ...historyKeymap]),
           EditorView.contentAttributes.of({ 'aria-label': options.ariaLabel }),
           EditorView.updateListener.of((update) => {
@@ -92,7 +105,23 @@ export function useCodeMirror(
     }
   }, [])
 
-  // External value sync (page switch, reset, reload merge). Skipped when the
+  // Field switches arrive as a changed language prop: swap the language
+  // extension AND reset history so undo never crosses field boundaries.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || options.language === lastLanguageRef.current) {
+      return
+    }
+    lastLanguageRef.current = options.language
+    view.dispatch({
+      effects: [
+        languageCompartmentRef.current.reconfigure(languageExtension(options.language)),
+        historyCompartmentRef.current.reconfigure(history())
+      ]
+    })
+  }, [options.language])
+
+  // External value sync (field switch, external reset). Skipped when the
   // incoming value equals what the editor last emitted, so typing never
   // resets the cursor.
   useEffect(() => {

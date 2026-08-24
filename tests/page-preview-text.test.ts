@@ -1,66 +1,79 @@
 import { describe, expect, it } from 'bun:test'
-import type { Page } from '@rtwiki/shared/contracts/pages'
+import type { Page } from '../src/shared/contracts/pages.js'
 import { pagePreviewText } from '../src/web/util/page-preview-text.js'
 
-function page(pageType: 'rich' | 'html', content: string): Page {
+function htmlPage(content: unknown): Page {
   return {
-    id: 'p1',
-    title: 'T',
-    pageType,
-    content,
+    id: '0f0a7c1e-8d21-4c9a-b2e3-5f6a7b8c9d01',
+    title: 'Card',
+    pageType: 'html',
+    content: JSON.stringify(content),
     parentId: null,
     position: 0,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    deletedAt: null,
-    version: 1
-  } as Page
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    deletedAt: null
+  } as unknown as Page
 }
 
-describe('pagePreviewText', () => {
-  it('extracts readable text from BlockNote JSON', () => {
-    const doc = JSON.stringify([
-      { type: 'heading', content: [{ type: 'text', text: 'Title here' }] },
-      {
-        type: 'paragraph',
-        content: [{ type: 'text', text: 'Body words' }]
-      }
-    ])
-    expect(pagePreviewText(page('rich', doc))).toBe('Title here Body words')
+describe('dashboard card preview text (defect 12: raw svg leak)', () => {
+  it('never surfaces encoded markup that decodes into tags', () => {
+    const text = pagePreviewText(
+      htmlPage({
+        version: 2,
+        html: '&lt;svg&gt;<p>visible</p>',
+        css: '',
+        javascript: '',
+        jsEnabled: false
+      })
+    )
+    expect(text).not.toContain('<svg')
+    expect(text).not.toContain('svg>')
+    expect(text).toContain('visible')
   })
 
-  it('never returns raw JSON for rich pages', () => {
-    const doc = JSON.stringify([{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }])
-    const preview = pagePreviewText(page('rich', doc))
-    expect(preview.startsWith('{')).toBe(false)
-    expect(preview).not.toContain('"type"')
+  it('removes unclosed tag fragments', () => {
+    const text = pagePreviewText(
+      htmlPage({
+        version: 2,
+        html: '<svg <p>visible tail</p>',
+        css: '',
+        javascript: '',
+        jsEnabled: false
+      })
+    )
+    expect(text).not.toContain('svg')
+    expect(text).toContain('visible tail')
   })
 
-  it('strips tags from HTML-page content', () => {
-    const doc = JSON.stringify({
-      version: 2,
-      html: '<h1>Hi</h1><p>Plain &amp; simple</p>',
-      css: '',
-      javascript: '',
-      jsEnabled: false
-    })
-    expect(pagePreviewText(page('html', doc))).toBe('Hi Plain & simple')
+  it('strips well-formed markup as before', () => {
+    const text = pagePreviewText(
+      htmlPage({
+        version: 2,
+        html: '<style>.x{}</style><h2>Title</h2><p>Body copy</p>',
+        css: '',
+        javascript: '',
+        jsEnabled: false
+      })
+    )
+    expect(text).toBe('Title Body copy')
   })
 
-  it('never exposes script contents or raw JSON for HTML pages', () => {
-    const doc = JSON.stringify({
-      version: 2,
-      html: '<p>ok</p><script>alert(1)</script>',
-      css: '',
-      javascript: '',
-      jsEnabled: false
-    })
-    const preview = pagePreviewText(page('html', doc))
-    expect(preview).toBe('ok')
-    expect(preview).not.toContain('version')
+  it('keeps legitimate comparison text intact', () => {
+    const text = pagePreviewText(
+      htmlPage({
+        version: 2,
+        html: '<p>1 &lt; 2 and a &amp; b</p>',
+        css: '',
+        javascript: '',
+        jsEnabled: false
+      })
+    )
+    expect(text).toContain('1 < 2')
+    expect(text).toContain('a & b')
   })
 
-  it('returns empty for malformed stored content', () => {
-    expect(pagePreviewText(page('rich', '{not json'))).toBe('')
+  it('degrades malformed content to an empty string', () => {
+    expect(pagePreviewText({ ...htmlPage({ version: 2 }), content: '{broken' })).toBe('')
   })
 })

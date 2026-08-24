@@ -431,4 +431,114 @@ describe('autosave controller', () => {
     expect(result.document).toBeNull()
     expect(result.errorMessage).toBeDefined()
   })
+
+  it('emits the debug lifecycle: scheduled → requestStarted → revisionApplied', async () => {
+    const { scheduler, fireNext } = makeFakeScheduler()
+    const events: string[] = []
+    const controller = createAutosaveController({
+      debounceMs: 10,
+      scheduler,
+      onSave: async () => {},
+      events: {
+        scheduled: () => events.push('scheduled'),
+        cancelled: () => events.push('cancelled'),
+        flushRequested: () => events.push('flushRequested'),
+        requestStarted: (rev) => events.push(`requestStarted:${rev}`),
+        success: () => events.push('success'),
+        failure: () => events.push('failure'),
+        revisionApplied: (rev) => events.push(`revisionApplied:${rev}`),
+        staleIgnored: (rev) => events.push(`staleIgnored:${rev}`)
+      }
+    })
+
+    controller.notifyEdit('p1', 'first')
+    fireNext()
+    await controller.flush()
+
+    expect(events).toEqual(['scheduled', 'requestStarted:1', 'revisionApplied:1'])
+    controller.dispose()
+  })
+
+  it('emits cancelled + flushRequested when a flush supersedes the debounce', async () => {
+    const { scheduler } = makeFakeScheduler()
+    const events: string[] = []
+    const controller = createAutosaveController({
+      debounceMs: 10,
+      scheduler,
+      onSave: async () => {},
+      events: {
+        scheduled: () => events.push('scheduled'),
+        cancelled: () => events.push('cancelled'),
+        flushRequested: () => events.push('flushRequested')
+      }
+    })
+
+    controller.notifyEdit('p1', 'first')
+    expect(events).toEqual(['scheduled'])
+    await controller.flush()
+    expect(events).toEqual(['scheduled', 'flushRequested'])
+    controller.dispose()
+  })
+
+  it('applies superseded revisions in order; stale completions cannot occur', async () => {
+    // The single-flight drain serializes saves, so an older snapshot can
+    // never complete after a newer one was confirmed — `staleIgnored` exists
+    // purely as defensive observability. This pins that invariant.
+    const { scheduler, fireNext } = makeFakeScheduler()
+    const saves: string[] = []
+    const resolvers = new Map<number, { resolve: () => void }>()
+    const events: string[] = []
+    const controller = createAutosaveController({
+      debounceMs: 10,
+      scheduler,
+      onSave: async (_pageId, content) => {
+        saves.push(content)
+        const id = saves.length
+        await new Promise<void>((r) => {
+          resolvers.set(id, { resolve: r })
+        })
+      },
+      events: {
+        staleIgnored: (rev) => events.push(`staleIgnored:${rev}`),
+        revisionApplied: (rev) => events.push(`revisionApplied:${rev}`)
+      }
+    })
+
+    // Revision 1 starts saving and hangs.
+    controller.notifyEdit('p1', 'older')
+    fireNext()
+    // Revision 2 supersedes it; drain sends it once the first resolves.
+    controller.notifyEdit('p1', 'newer')
+    resolvers.get(1)?.resolve()
+    setTimeout(() => resolvers.get(2)?.resolve(), 0)
+    await controller.flush()
+
+    expect(saves).toEqual(['older', 'newer'])
+    expect(events).toEqual(['revisionApplied:1', 'revisionApplied:2'])
+    expect(controller.getState().status).toBe('saved')
+    controller.dispose()
+  })
+
+  it('a throwing observer never breaks the save pipeline', async () => {
+    const { scheduler, fireNext } = makeFakeScheduler()
+    const controller = createAutosaveController({
+      debounceMs: 10,
+      scheduler,
+      onSave: async () => {},
+      events: {
+        scheduled: () => {
+          throw new Error('observer bug')
+        },
+        revisionApplied: () => {
+          throw new Error('observer bug')
+        }
+      }
+    })
+
+    controller.notifyEdit('p1', 'content')
+    fireNext()
+    await controller.flush()
+    expect(controller.getState().status).toBe('saved')
+    controller.dispose()
+  })
 })

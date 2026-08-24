@@ -1,4 +1,4 @@
-import { Box, Button, Group, Stack, Switch, Text } from '@mantine/core'
+import { Box, Button, Group, Stack, Switch, Text, Tooltip } from '@mantine/core'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import {
   createEmptyHtmlContent,
@@ -7,6 +7,7 @@ import {
   parseHtmlContent,
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
+import { IconInfoCircle } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { createThrottledEmitter, debugLog, safeHash } from '../../diagnostics/debug-log.js'
@@ -43,11 +44,18 @@ const FIELD_LABELS: Record<ContentField, keyof typeof UI_TEXT> = {
 
 /**
  * Editable HTML-page workspace. Two modes driven by sourceField:
- * - null: rendered preview only (the student view) with the JS gate switch.
+ * - null: rendered preview only (the student view) with a Refresh action.
  * - html/css/javascript: a single CodeMirror editor for that field with an
- *   explicit return-to-preview action.
- * All persistence flows through the shared autosave controller writing
- * canonical v2 JSON; all rendering flows through the unchanged secure builder.
+ *   explicit return-to-preview action (the JavaScript subfile additionally
+ *   hosts the preview JS gate).
+ *
+ * Draft contract: ONE in-memory draft per open page holding all v2 fields,
+ * created exactly once per mount (the workspace keys this component by the
+ * real parent page id). Server responses NEVER overwrite the draft — the
+ * previous storedContent→draft reset effect was the rollback race that made
+ * typing disappear after subfile switches; persistence reconciliation now
+ * flows one way only (draft → autosave → server), and stale autosave
+ * completions are rejected inside the autosave controller.
  */
 export default function HtmlEditorWorkspace({
   pageId,
@@ -64,6 +72,14 @@ export default function HtmlEditorWorkspace({
     parseResult.ok ? normalizeHtmlContent(parseResult.content) : createEmptyHtmlContent()
   )
   const [previewContent, setPreviewContent] = useState<HtmlPageContentV2>(content)
+
+  // Monotonic draft generation: bumped by every local mutation. Debug Mode
+  // correlates transactions and renders against it; no server snapshot can
+  // ever rewind it because nothing writes back into `content` after mount.
+  const generationRef = useRef(0)
+  // Mirror of the newest draft for synchronous reads inside effects/handlers.
+  const contentRef = useRef(content)
+  contentRef.current = content
 
   // Debug Mode: editor lifecycle. The draft is created exactly once per
   // mounted page; its identity is the real parent page id.
@@ -128,31 +144,34 @@ export default function HtmlEditorWorkspace({
     }
   }, [flush, onFlushRef])
 
-  // Reset local state when switching between pages.
-  useEffect(() => {
-    void pageId
-    if (parseResult.ok) {
-      const normalized = normalizeHtmlContent(parseResult.content)
-      setContent(normalized)
-      setPreviewContent(normalized)
-      debugLog('editor', 'editor_draft_replaced', {
-        pageId,
-        len: normalized.html.length + normalized.css.length + normalized.javascript.length,
-        hash: safeHash(normalized.html + normalized.css + normalized.javascript)
-      })
-    }
-  }, [pageId, parseResult])
+  // NOTE: there is deliberately NO storedContent→draft reset effect here.
+  // The workspace remounts this component per page (key = page id), so a
+  // genuine page switch rebuilds the draft from persisted content at mount.
+  // Re-applying server snapshots while mounted was the rollback race that
+  // reverted newer typing whenever an autosave response landed (defects 1-3);
+  // the draft is now write-only from the editor's perspective.
 
   // Debug Mode: source-field switches (requested/completed in one commit —
   // the switch is synchronous state, so both observations carry the same tick).
   const previousFieldRef = useRef(sourceField)
   useEffect(() => {
     if (previousFieldRef.current === sourceField) return
+    const returningToPreview = previousFieldRef.current !== null && sourceField === null
+    previousFieldRef.current = sourceField
     debugLog('editor', 'editor_source_switch_requested', {
       pageId,
       field: sourceField ?? 'preview'
     })
-    previousFieldRef.current = sourceField
+    if (returningToPreview) {
+      // Commit the newest draft into the preview SYNCHRONOUSLY: the rendered
+      // parent must reflect exactly what the user just typed, without waiting
+      // for the debounce or for autosave to finish in the background.
+      if (previewTimerRef.current !== null) {
+        window.clearTimeout(previewTimerRef.current)
+        previewTimerRef.current = null
+      }
+      setPreviewContent(contentRef.current)
+    }
     debugLog('editor', 'editor_source_switch_completed', {
       pageId,
       field: sourceField ?? 'preview'
@@ -160,13 +179,14 @@ export default function HtmlEditorWorkspace({
   }, [sourceField, pageId])
 
   // Debug Mode: throttled transaction observation (latest keystroke stats at
-  // most once per second; length and safe hash only, never content).
+  // most once per second; length, safe hash and draft generation only).
   const emitTransaction = useMemo(
     () =>
-      createThrottledEmitter(1000, (field: ContentField, value: string) => {
+      createThrottledEmitter(1000, (field: ContentField, value: string, gen: number) => {
         debugLog('editor', 'editor_transaction', {
           pageId,
           field,
+          gen,
           len: value.length,
           hash: safeHash(value)
         })
@@ -213,14 +233,47 @@ export default function HtmlEditorWorkspace({
 
   const updateField = useCallback(
     (field: ContentField, value: string): void => {
+      generationRef.current += 1
       setContent((prev) => ({ ...prev, [field]: value }))
-      emitTransaction(field, value)
+      emitTransaction(field, value, generationRef.current)
     },
     [emitTransaction]
   )
 
   const toggleJs = useCallback((): void => {
+    generationRef.current += 1
     setContent((prev) => ({ ...prev, jsEnabled: !prev.jsEnabled }))
+  }, [])
+
+  // Manual Refresh Preview: rebuilds the sandboxed iframe from the CURRENT
+  // draft by regenerating the frame key (new channel ID, fresh document).
+  // This is an explicit user action, never a workaround — the automatic
+  // return-to-preview path commits the draft synchronously on its own.
+  const [previewNonce, setPreviewNonce] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current)
+    }
+  }, [])
+  const handleRefreshPreview = useCallback((): void => {
+    generationRef.current += 1
+    setPreviewContent(contentRef.current)
+    setPreviewNonce((n) => n + 1)
+    setRefreshing(true)
+    if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current)
+    // Accessible completion: cleared when the frame reports ready (below) or
+    // after a bounded fallback so the status can never stick.
+    refreshTimerRef.current = window.setTimeout(() => setRefreshing(false), 2000)
+    debugLog('preview', 'preview_manual_refresh', { pageId, gen: generationRef.current })
+  }, [pageId])
+  const handleFrameReady = useCallback((): void => {
+    if (refreshTimerRef.current !== null) {
+      window.clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = null
+    }
+    setRefreshing(false)
   }, [])
 
   const manualSave = useCallback((): boolean => {
@@ -243,22 +296,30 @@ export default function HtmlEditorWorkspace({
     )
   }
 
-  // Rendered parent view ("student view"): the finished page only, no
-  // source panes. An empty page shows a simple empty state instead of an
-  // empty sandbox frame.
+  // Rendered parent view ("student view"): the finished page plus minimal
+  // page-level actions (Refresh preview). No source panes, no JS gate, no
+  // sandbox explanation — those live in the JavaScript subfile. An empty
+  // page shows a simple empty state instead of an empty sandbox frame.
   if (sourceField === null) {
     const isEmpty =
       content.html.trim() === '' && content.css.trim() === '' && content.javascript.trim() === ''
     return (
       <div className={classes.root} data-testid="html-preview-view">
         <Group justify="flex-end" gap="sm" className={classes.controls}>
-          <Switch
-            checked={content.jsEnabled}
-            onChange={toggleJs}
-            label={UI_TEXT.jsEnabledToggleLabel}
-            aria-label={UI_TEXT.jsEnabledToggleLabel}
-            data-testid="js-enabled-toggle"
-          />
+          {refreshing ? (
+            <Text size="xs" c="dimmed" role="status" data-testid="preview-refresh-status">
+              {UI_TEXT.previewRefreshingLabel}
+            </Text>
+          ) : null}
+          <Button
+            size="compact-xs"
+            variant="light"
+            onClick={handleRefreshPreview}
+            aria-label={UI_TEXT.refreshPreviewLabel}
+            data-testid="refresh-preview"
+          >
+            {UI_TEXT.refreshPreviewLabel}
+          </Button>
         </Group>
         {isEmpty ? (
           <Stack align="center" justify="center" gap="xs" className={classes.previewPane}>
@@ -266,7 +327,8 @@ export default function HtmlEditorWorkspace({
           </Stack>
         ) : (
           <Box className={classes.previewPaneFull} data-testid="live-preview">
-            <PreviewFrame content={previewContent} />
+            {/* Key = render generation: every refresh rebuilds the frame. */}
+            <PreviewFrame key={previewNonce} content={previewContent} onReady={handleFrameReady} />
           </Box>
         )}
       </div>
@@ -274,7 +336,8 @@ export default function HtmlEditorWorkspace({
   }
 
   // Source subfile view: exactly one CodeMirror editor for the chosen field,
-  // no permanent split-screen preview, plus an explicit return action.
+  // no permanent split-screen preview, plus an explicit return action. The
+  // preview-JS gate lives ONLY in the JavaScript subfile.
   return (
     <div className={classes.root} data-testid="html-source-view">
       <Group justify="space-between" wrap="nowrap" gap="sm" className={classes.controls}>
@@ -282,13 +345,26 @@ export default function HtmlEditorWorkspace({
           {UI_TEXT[FIELD_LABELS[sourceField]]}
         </Text>
         <Group gap="sm" wrap="nowrap">
-          <Switch
-            checked={content.jsEnabled}
-            onChange={toggleJs}
-            label={UI_TEXT.jsEnabledToggleLabel}
-            aria-label={UI_TEXT.jsEnabledToggleLabel}
-            data-testid="js-enabled-toggle"
-          />
+          {sourceField === 'javascript' ? (
+            <>
+              <Switch
+                checked={content.jsEnabled}
+                onChange={toggleJs}
+                label={UI_TEXT.jsEnabledToggleLabel}
+                aria-label={UI_TEXT.jsEnabledToggleLabel}
+                data-testid="js-enabled-toggle"
+              />
+              <Tooltip
+                label={UI_TEXT.jsSandboxHint}
+                position="bottom-end"
+                withArrow
+                multiline
+                w={260}
+              >
+                <IconInfoCircle size={16} aria-label={UI_TEXT.jsSandboxHint} />
+              </Tooltip>
+            </>
+          ) : null}
           <Button
             size="compact-xs"
             variant="light"
@@ -305,7 +381,6 @@ export default function HtmlEditorWorkspace({
 
       <Box className={classes.editorPaneSingle}>
         <CodeEditor
-          key={sourceField}
           value={content[sourceField]}
           onChange={(value) => updateField(sourceField, value)}
           language={sourceField}

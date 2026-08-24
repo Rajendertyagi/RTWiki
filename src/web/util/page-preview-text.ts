@@ -32,15 +32,28 @@ function textFromBlocks(blocks: BlockLike[]): string {
   return out
 }
 
+/**
+ * Reduces authored HTML to plain text for card previews.
+ *
+ * Two stripping passes bracket the entity decode: markup is removed first,
+ * entities are decoded second, and anything that THEN looks like a tag is
+ * removed again. Without the second pass, authored text such as
+ * "&lt;svg&gt;" decodes into visible "<svg>" after stripping — the raw
+ * "svg" leak reported on dashboard cards. The tag pattern also matches
+ * unclosed fragments ("<svg" with no ">") so partial markup can never
+ * surface as preview text either.
+ */
 function stripTags(html: string): string {
+  const tagPattern = /<[/!a-zA-Z][^>]*>?/g
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
+    .replace(tagPattern, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
+    .replace(tagPattern, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
