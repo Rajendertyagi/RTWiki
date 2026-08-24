@@ -56,6 +56,17 @@ export function PageWorkspace({
   // document never shift when the real controls arrive.
   const [richEditor, setRichEditor] = useState<BlockNoteEditor | null>(null)
 
+  // Defer the heavy editor mount by one frame so a simultaneously closing
+  // dialog (e.g. the create-note modal) can finish its exit transition
+  // first. Mounting BlockNote synchronously in the same commit starves the
+  // transition-end handling and leaves a pointer-blocking overlay behind.
+  const [editorsMounted, setEditorsMounted] = useState(false)
+  useEffect(() => {
+    setEditorsMounted(false)
+    const frame = requestAnimationFrame(() => setEditorsMounted(true))
+    return () => cancelAnimationFrame(frame)
+  }, [page.id])
+
   return (
     <div className={classes.workspace}>
       {page.pageType === 'rich' ? (
@@ -90,29 +101,30 @@ export function PageWorkspace({
         </Text>
       ) : null}
       <div className={classes.content}>
-        {page.pageType === 'rich' ? (
-          <RichEditor
-            pageId={page.id}
-            storedContent={page.content}
-            pageTitle={page.title}
-            createdDate={page.createdAt}
-            updatedDate={page.updatedAt}
-            onSaveContent={onSaveContent}
-            onBack={onBack}
-            onFlushRef={onFlushRef}
-            onSaveStateChange={onSaveStateChange}
-            onEditorReady={setRichEditor}
-            toolbarExternal
-          />
-        ) : (
-          <HtmlEditorSurface
-            page={page}
-            onSaveContent={onSaveContent}
-            onBack={onBack}
-            onFlushRef={onFlushRef}
-            onSaveStateChange={onSaveStateChange}
-          />
-        )}
+        {editorsMounted &&
+          (page.pageType === 'rich' ? (
+            <RichEditor
+              pageId={page.id}
+              storedContent={page.content}
+              pageTitle={page.title}
+              createdDate={page.createdAt}
+              updatedDate={page.updatedAt}
+              onSaveContent={onSaveContent}
+              onBack={onBack}
+              onFlushRef={onFlushRef}
+              onSaveStateChange={onSaveStateChange}
+              onEditorReady={setRichEditor}
+              toolbarExternal
+            />
+          ) : (
+            <HtmlEditorSurface
+              page={page}
+              onSaveContent={onSaveContent}
+              onBack={onBack}
+              onFlushRef={onFlushRef}
+              onSaveStateChange={onSaveStateChange}
+            />
+          ))}
       </div>
     </div>
   )
