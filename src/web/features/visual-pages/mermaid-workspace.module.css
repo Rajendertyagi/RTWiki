@@ -1,0 +1,107 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+/* In-app full-screen workspace: fills the viewport above every shell layer. */
+.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--rtwiki-overlay-z-index, 1000);
+  background: var(--rtwiki-background, var(--mantine-color-body));
+  padding: var(--mantine-spacing-md);
+  overflow: auto;
+}
+
+.editBar,
+.viewBar {
+  flex-wrap: nowrap;
+}
+
+.editSplit {
+  display: flex;
+  flex-direction: row;
+  gap: var(--mantine-spacing-sm);
+  align-items: stretch;
+  flex: 1;
+  min-height: 320px;
+}
+
+.sourcePane {
+  flex: 1 1 50%;
+  min-width: 0;
+}
+
+.previewPane {
+  flex: 1 1 50%;
+  min-width: 0;
+  padding: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--mantine-color-default-border);
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  overflow: auto;
+}
+
+.previewError {
+  padding: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-red-filled) 35%, transparent);
+  background: color-mix(in srgb, var(--mantine-color-red-filled) 8%, transparent);
+}
+
+.viewHost {
+  flex: 1;
+  min-height: 300px;
+  padding: var(--mantine-spacing-md);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--mantine-color-default-border);
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  overflow: auto;
+}
+
+.errorBox {
+  padding: var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-red-filled) 35%, transparent);
+  background: color-mix(in srgb, var(--mantine-color-red-filled) 8%, transparent);
+}
+
+.svgHost {
+  width: 100%;
+}
+
+.fit :global(svg),
+.svgHost :global(svg) {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.actual :global(svg) {
+  max-width: none;
+  width: auto;
+}
+
+.zoomHost {
+  /* Width set inline from zoom level — resize-based, never transform-clipped. */
+  min-width: 100%;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+
+/* Narrow layout stacks the split editor. */
+@media (max-width: 900px) {
+  .editSplit {
+    flex-direction: column;
+  }
+}

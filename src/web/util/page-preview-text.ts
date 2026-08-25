@@ -61,6 +61,11 @@ function stripTags(html: string): string {
 export function pagePreviewText(page: Page, maxChars = 120): string {
   const raw = page.content ?? ''
   if (!raw) return ''
+  // Dedicated Diagram / Mind Map pages: the stored Mermaid source is never
+  // surfaced on cards — the readable type label is the summary.
+  if (page.pageType === 'diagram' || page.pageType === 'mindmap') {
+    return ''
+  }
   try {
     const parsed = JSON.parse(raw) as unknown
     let text = ''

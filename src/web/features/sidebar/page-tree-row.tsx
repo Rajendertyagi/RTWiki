@@ -1,14 +1,17 @@
 import { ActionIcon, Menu, Text, TextInput } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import {
+  IconBinaryTree,
   IconBraces,
   IconChevronRight,
   IconCode,
   IconDots,
   IconFileText,
-  IconPalette
+  IconPalette,
+  IconSitemap
 } from '@tabler/icons-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
 import classes from './page-tree.module.css'
@@ -55,6 +58,10 @@ export interface PageTreeRowProps {
   editSignal?: number
   /** Creates a new child HTML page beneath this row. */
   onCreateChildHtml?: () => void
+  /** Creates a new child Diagram page beneath this row. */
+  onCreateChildDiagram?: () => void
+  /** Creates a new child Mind Map page beneath this row. */
+  onCreateChildMindMap?: () => void
 }
 
 const SUBFILE_ICONS = {
@@ -62,6 +69,14 @@ const SUBFILE_ICONS = {
   css: IconPalette,
   javascript: IconBraces
 } as const
+
+/** Distinct per-type tree icons (single mapping, defined once). */
+const PAGE_TYPE_ICONS: Record<PageType, typeof IconFileText> = {
+  rich: IconFileText,
+  html: IconCode,
+  diagram: IconSitemap,
+  mindmap: IconBinaryTree
+}
 
 /**
  * One compact Trilium-style tree row. Purely presentational: all state and
@@ -96,7 +111,9 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
     onOpenSubfile,
     onRequestContextMenu,
     editSignal = 0,
-    onCreateChildHtml
+    onCreateChildHtml,
+    onCreateChildDiagram,
+    onCreateChildMindMap
   } = props
 
   const [editing, setEditing] = useState(false)
@@ -303,7 +320,10 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
           <span style={{ width: 22 }} aria-hidden="true" />
         )}
 
-        <IconFileText size={16} aria-hidden="true" />
+        {(() => {
+          const TypeIcon = PAGE_TYPE_ICONS[pageType] ?? IconFileText
+          return <TypeIcon size={16} aria-hidden="true" />
+        })()}
 
         {editing ? (
           <TextInput
@@ -339,7 +359,7 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
 
         {!editing ? (
           <Text size="xs" c="dimmed" visibleFrom="sm">
-            {pageType === 'rich' ? UI_TEXT.richNote : UI_TEXT.htmlPage}
+            {pageTypeLabel(pageType)}
           </Text>
         ) : null}
 
@@ -364,6 +384,16 @@ export function PageTreeRow(props: PageTreeRowProps): JSX.Element {
             <Menu.Item onClick={onCreateChild}>{UI_TEXT.newChildRichPage}</Menu.Item>
             {onCreateChildHtml ? (
               <Menu.Item onClick={onCreateChildHtml}>{UI_TEXT.newChildHtmlPage}</Menu.Item>
+            ) : null}
+            {onCreateChildDiagram ? (
+              <Menu.Item onClick={onCreateChildDiagram} data-testid="new-child-diagram">
+                {UI_TEXT.newDiagramPage}
+              </Menu.Item>
+            ) : null}
+            {onCreateChildMindMap ? (
+              <Menu.Item onClick={onCreateChildMindMap} data-testid="new-child-mindmap">
+                {UI_TEXT.newMindMapPage}
+              </Menu.Item>
             ) : null}
             <Menu.Item onClick={startEditing}>{UI_TEXT.renameAction}</Menu.Item>
             <Menu.Item onClick={onDuplicate}>{UI_TEXT.duplicateAction}</Menu.Item>

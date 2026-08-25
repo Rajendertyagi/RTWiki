@@ -55,3 +55,9 @@ export const DEBUG_LOG_MAX_CONSECUTIVE_FAILURES = 5 as const
 // shared by the web document layer and the server search extractor so the
 // preservation payload is never indexed or surfaced as readable text.
 export const UNSUPPORTED_BLOCK_MARKER = '[unsupported block preserved below]' as const
+
+// Starter Mermaid sources shared by the rich-editor insertion entries and the
+// dedicated Diagram / Mind Map page starters. Defined exactly once.
+export const DIAGRAM_STARTER_SOURCE = 'graph TD\n    A[Start] --> B[End]' as const
+export const MINDMAP_STARTER_SOURCE =
+  'mindmap\n  root((Main topic))\n    Topic A\n    Topic B' as const

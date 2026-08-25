@@ -84,6 +84,16 @@ export function NewPageDialog({
           <Group mt="xs" gap="md">
             <Radio value="rich" label={UI_TEXT.richNote} />
             <Radio value="html" label={UI_TEXT.htmlPage} />
+            <Radio
+              value="diagram"
+              label={UI_TEXT.diagramPage}
+              data-testid="new-page-type-diagram"
+            />
+            <Radio
+              value="mindmap"
+              label={UI_TEXT.mindMapPage}
+              data-testid="new-page-type-mindmap"
+            />
           </Group>
         </Radio.Group>
 

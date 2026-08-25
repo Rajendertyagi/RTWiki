@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { PageType } from '../contracts/pages'
 
 /**
  * Payload for `POST /api/pages/:id/move`.
@@ -19,7 +20,7 @@ export interface MoveReconciliationResponse {
   page: {
     id: string
     title: string
-    pageType: 'rich' | 'html'
+    pageType: PageType
     parentId: string | null
     position: number
     updatedAt: string

@@ -82,6 +82,16 @@
   background: var(--mantine-color-teal-light);
 }
 
+.type-diagram {
+  color: var(--mantine-color-violet-light-color);
+  background: var(--mantine-color-violet-light);
+}
+
+.type-mindmap {
+  color: var(--mantine-color-grape-light-color);
+  background: var(--mantine-color-grape-light);
+}
+
 .cardMenuWrapper {
   position: absolute;
   top: var(--mantine-spacing-xs);

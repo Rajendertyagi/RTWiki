@@ -1,6 +1,7 @@
 import { ActionIcon, Card, Menu } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
+import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
 import { pagePreviewText } from '../../util/page-preview-text.js'
@@ -55,7 +56,7 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
         </span>
         <span className={classes.cardMeta}>
           <span className={`${classes.cardType} ${classes[`type-${page.pageType}`]}`}>
-            {page.pageType === 'rich' ? UI_TEXT.richNote : UI_TEXT.htmlPage}
+            {pageTypeLabel(page.pageType)}
           </span>
           <span>{formatDate(page.updatedAt)}</span>
         </span>

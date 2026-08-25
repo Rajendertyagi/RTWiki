@@ -18,6 +18,10 @@ const RichEditor = lazy(() =>
   import('../rich-editor/rich-editor.js').then((m) => ({ default: m.RichEditor }))
 )
 
+// Dedicated Diagram / Mind Map workspaces share one lazily loaded component
+// (Mermaid itself is further code-split inside the render pipeline).
+const MermaidPageWorkspace = lazy(() => import('../visual-pages/mermaid-workspace.js'))
+
 interface PageWorkspaceProps {
   page: Page
   /** Display-only parent chain for the open page (no navigation). */
@@ -177,6 +181,21 @@ function PageEditors({
       </Suspense>
     )
   }
+  if (page.pageType === 'diagram' || page.pageType === 'mindmap') {
+    return (
+      <Suspense fallback={<VisualWorkspaceSkeleton />}>
+        <MermaidPageWorkspace
+          key={page.id}
+          pageId={page.id}
+          storedContent={page.content}
+          pageType={page.pageType}
+          onSaveContent={onSaveContent}
+          onFlushRef={onFlushRef}
+          onSaveStateChange={onSaveStateChange}
+        />
+      </Suspense>
+    )
+  }
   return (
     <HtmlEditorSurface
       page={page}
@@ -254,6 +273,19 @@ function HtmlEditorSkeleton(): JSX.Element {
 function RichEditorSkeleton(): JSX.Element {
   return (
     <Stack gap="sm" p="md" aria-busy="true" aria-label="Loading the editor…">
+      <Box w="100%" h={22}>
+        <Skeleton height={22} radius="sm" />
+      </Box>
+      <Box w="100%" flex={1}>
+        <Skeleton height="100%" radius="sm" />
+      </Box>
+    </Stack>
+  )
+}
+
+function VisualWorkspaceSkeleton(): JSX.Element {
+  return (
+    <Stack gap="sm" p="md" aria-busy="true" aria-label="Loading the workspace…">
       <Box w="100%" h={22}>
         <Skeleton height={22} radius="sm" />
       </Box>

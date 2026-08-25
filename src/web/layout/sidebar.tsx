@@ -1,5 +1,5 @@
 import { Alert, Loader, NavLink, ScrollArea, Stack, Text } from '@mantine/core'
-import type { Page } from '@rtwiki/shared/contracts/pages'
+import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconHome } from '@tabler/icons-react'
 import { SearchInput } from '../components/search-input.js'
 import { UI_TEXT } from '../config/index.js'
@@ -21,12 +21,14 @@ interface SidebarProps {
   onDelete: (id: string) => void
   onCreateChild: (parentId: string) => void
   onCreateChildHtml?: (parentId: string) => void
+  /** Creates a child of any type (Diagram / Mind Map entry points). */
+  onCreateChildOfType?: (parentId: string, pageType: PageType) => void
   onMoveTo: (id: string, newParentId: string | null) => void
   onMoveRelative: (id: string, delta: number) => void
   /** Positional move used by drag-and-drop (optimistic + rollback). */
   onDropMove: (id: string, newParentId: string | null, newPosition: number) => void
   /** Creates a new ROOT page from the tree's empty-space context menu. */
-  onCreateRoot?: (pageType: 'rich' | 'html') => void
+  onCreateRoot?: (pageType: PageType) => void
   /** Opens an HTML page's virtual source subfile in the central workspace. */
   onOpenHtmlSource: (pageId: string, field: 'html' | 'css' | 'javascript') => void
   /** Session-restoration seed for tree expansion (see usePageTree). */
@@ -49,6 +51,7 @@ export function Sidebar({
   onDelete,
   onCreateChild,
   onCreateChildHtml,
+  onCreateChildOfType,
   onMoveTo,
   onMoveRelative,
   onDropMove,
@@ -102,6 +105,7 @@ export function Sidebar({
                   onDelete,
                   onCreateChild,
                   onCreateChildHtml,
+                  onCreateChildOfType,
                   onMoveTo,
                   onMoveRelative,
                   onDropMove

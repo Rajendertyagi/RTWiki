@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const CreatePageSchema = z.object({
   title: z.string().min(1).max(200),
-  pageType: z.enum(['rich', 'html']).default('rich'),
+  pageType: z.enum(['rich', 'html', 'diagram', 'mindmap']).default('rich'),
   content: z.string().default(''),
   // Optional parent: omitted/NULL creates a root page. Validated against a
   // living parent inside the creation transaction.

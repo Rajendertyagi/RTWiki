@@ -464,6 +464,9 @@ export function App(): JSX.Element {
             onDelete={handleDeleteRequest}
             onCreateChild={(parentId) => void controller.createChild(parentId)}
             onCreateChildHtml={(parentId) => void controller.createChild(parentId, 'html')}
+            onCreateChildOfType={(parentId, pageType) =>
+              void controller.createChild(parentId, pageType)
+            }
             onMoveTo={(id, newParentId) => controller.moveTo(id, newParentId)}
             onMoveRelative={(id, delta) => controller.moveRelative(id, delta)}
             onDropMove={controller.moveToPosition}

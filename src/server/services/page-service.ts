@@ -6,6 +6,12 @@ import {
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
+import {
+  createStarterVisualContent,
+  parseVisualPageContent,
+  VISUAL_PAGE_TYPES,
+  type VisualPageType
+} from '@rtwiki/shared/schemas/visual-page-content'
 import * as repo from '../repositories/page-repository.js'
 import { HierarchyError } from '../repositories/page-repository.js'
 
@@ -31,19 +37,37 @@ export { HierarchyError } from '../repositories/page-repository.js'
  * validated but stored verbatim, never re-serialized or "fixed".
  *
  * Rich pages are unchanged: every string remains accepted.
+ *
+ * Dedicated Diagram / Mind Map pages: empty content becomes the starter
+ * document; any other value must be canonical visual-page JSON.
  */
 function resolveCreatedContent(pageType: PageType, content: string): string {
-  if (pageType !== 'html') {
+  if (pageType === 'html') {
+    if (content === '') {
+      return serializeHtmlContent(createEmptyHtmlContent())
+    }
+    const parsed = parseHtmlContent(content)
+    if (!parsed.ok) {
+      throw new PageValidationError(parsed.error)
+    }
     return content
   }
-  if (content === '') {
-    return serializeHtmlContent(createEmptyHtmlContent())
-  }
-  const parsed = parseHtmlContent(content)
-  if (!parsed.ok) {
-    throw new PageValidationError(parsed.error)
+  if (pageType === 'diagram' || pageType === 'mindmap') {
+    if (content === '') {
+      return createStarterVisualContent(pageType)
+    }
+    const parsed = parseVisualPageContent(content)
+    if (!parsed.ok) {
+      throw new PageValidationError(parsed.error)
+    }
+    return content
   }
   return content
+}
+
+/** True when the page type owns a dedicated Mermaid workspace. */
+export function isVisualPageType(pageType: PageType): pageType is VisualPageType {
+  return (VISUAL_PAGE_TYPES as readonly string[]).includes(pageType)
 }
 
 export function createPage(db: Database, input: CreatePageInput): Page {
@@ -115,6 +139,12 @@ export function updatePage(db: Database, id: string, input: UpdatePageInput): Pa
   if (input.content !== undefined) {
     if (existing.pageType === 'html') {
       const parsed = parseHtmlContent(input.content)
+      if (!parsed.ok) {
+        throw new PageValidationError(parsed.error)
+      }
+    }
+    if (isVisualPageType(existing.pageType)) {
+      const parsed = parseVisualPageContent(input.content)
       if (!parsed.ok) {
         throw new PageValidationError(parsed.error)
       }

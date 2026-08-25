@@ -6,10 +6,12 @@
  * functions so the behaviour is unit-testable without React.
  */
 
+import type { PageType } from '@rtwiki/shared/contracts/pages'
+
 export interface OpenTab {
   pageId: string
   title: string
-  pageType: 'rich' | 'html'
+  pageType: PageType
 }
 
 export interface CloseTabResult {
@@ -28,7 +30,7 @@ export function findTab(tabs: OpenTab[], pageId: string): OpenTab | undefined {
  */
 export function openInTabs(
   tabs: OpenTab[],
-  page: { id: string; title: string; pageType: 'rich' | 'html' },
+  page: { id: string; title: string; pageType: PageType },
   untitledLabel: string
 ): OpenTab[] {
   if (findTab(tabs, page.id)) return tabs

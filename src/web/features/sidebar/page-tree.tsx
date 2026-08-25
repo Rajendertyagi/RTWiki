@@ -2,6 +2,7 @@ import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/ad
 import { Text } from '@mantine/core'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
 import { type UsePageTreeResult, usePageTree } from '../../hooks/use-page-tree.js'
@@ -26,6 +27,8 @@ export interface PageTreeControllerHooks {
   onCreateChild: (parentId: string) => void
   /** Creates a new child HTML page beneath an existing page. */
   onCreateChildHtml?: (parentId: string) => void
+  /** Creates a child of any type (Diagram / Mind Map entry points). */
+  onCreateChildOfType?: (parentId: string, pageType: PageType) => void
   onMoveTo: (id: string, newParentId: string | null) => void
   onMoveRelative: (id: string, delta: number) => void
   /** Positional move used by drag-and-drop (optimistic + rollback). */
@@ -271,12 +274,14 @@ export function PageTree({
     })
   }
 
-  const createChildAndExpand = (parentId: string, kind: 'rich' | 'html'): void => {
+  const createChildAndExpand = (parentId: string, kind: PageType): void => {
     // The child must be visible immediately: force-expand the parent before
     // the creation round-trip lands.
     tree.expandPage(parentId)
     if (kind === 'html') {
       hooks.onCreateChildHtml?.(parentId)
+    } else if (kind === 'diagram' || kind === 'mindmap') {
+      hooks.onCreateChildOfType?.(parentId, kind)
     } else {
       hooks.onCreateChild(parentId)
     }
@@ -360,6 +365,8 @@ export function PageTree({
               onRenameCancel={() => tree.restoreFocusAfterChange(row.id)}
               onCreateChild={() => createChildAndExpand(row.id, 'rich')}
               onCreateChildHtml={() => createChildAndExpand(row.id, 'html')}
+              onCreateChildDiagram={() => createChildAndExpand(row.id, 'diagram')}
+              onCreateChildMindMap={() => createChildAndExpand(row.id, 'mindmap')}
               onDuplicate={() => hooks.onDuplicate(row.id)}
               onDelete={() => handleDelete(row.id)}
               onMoveUp={() => hooks.onMoveRelative(row.id, -1)}
@@ -418,6 +425,30 @@ export function PageTree({
               >
                 {UI_TEXT.newHtmlRootPage}
               </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="tree-new-root-diagram"
+                className={classes.contextMenuItem}
+                onClick={() => {
+                  closeContextMenu()
+                  onCreateRoot?.('diagram')
+                }}
+              >
+                {UI_TEXT.createDiagramPage}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="tree-new-root-mindmap"
+                className={classes.contextMenuItem}
+                onClick={() => {
+                  closeContextMenu()
+                  onCreateRoot?.('mindmap')
+                }}
+              >
+                {UI_TEXT.createMindMapPage}
+              </button>
             </>
           ) : (
             <>
@@ -426,6 +457,8 @@ export function PageTree({
                   ['open', UI_TEXT.openAction],
                   ['childRich', UI_TEXT.newChildRichPage],
                   ['childHtml', UI_TEXT.newChildHtmlPage],
+                  ['childDiagram', UI_TEXT.newDiagramPage],
+                  ['childMindMap', UI_TEXT.newMindMapPage],
                   ['rename', UI_TEXT.renameAction],
                   ['duplicate', UI_TEXT.duplicateAction],
                   ['delete', UI_TEXT.deleteAction]
@@ -447,6 +480,8 @@ export function PageTree({
                     if (actionKey === 'open') openRow(id)
                     if (actionKey === 'childRich') createChildAndExpand(id, 'rich')
                     if (actionKey === 'childHtml') createChildAndExpand(id, 'html')
+                    if (actionKey === 'childDiagram') createChildAndExpand(id, 'diagram')
+                    if (actionKey === 'childMindMap') createChildAndExpand(id, 'mindmap')
                     if (actionKey === 'rename') requestRenameViaMenu(id)
                     if (actionKey === 'duplicate') hooksRef.current.onDuplicate(id)
                     if (actionKey === 'delete') handleDelete(id)
@@ -502,13 +537,10 @@ export function PageTree({
 function buildMoveTargets(pages: Page[]): MoveTarget[] {
   return [...pages]
     .sort((a, b) => a.position - b.position)
-    .map((page) => {
-      const typeLabel = page.pageType === 'rich' ? UI_TEXT.richNote : UI_TEXT.htmlPage
-      return {
-        id: page.id,
-        label: `${page.title || UI_TEXT.untitledPage} (${typeLabel})`
-      }
-    })
+    .map((page) => ({
+      id: page.id,
+      label: `${page.title || UI_TEXT.untitledPage} (${pageTypeLabel(page.pageType)})`
+    }))
 }
 
 // Re-exported for consumers that need the expanded-state shape in tests.

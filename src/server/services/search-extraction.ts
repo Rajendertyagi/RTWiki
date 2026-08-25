@@ -211,6 +211,12 @@ export function extractSearchableRich(storedContent: string): string {
 }
 
 export function extractSearchableContent(pageType: PageType, storedContent: string): string {
+  // Dedicated Diagram / Mind Map pages: the Mermaid source is deliberately
+  // NOT indexed (same readable-text policy as embedded diagram blocks) —
+  // only the page title remains searchable.
+  if (pageType === 'diagram' || pageType === 'mindmap') {
+    return ''
+  }
   if (pageType === 'html') {
     try {
       const parsed: unknown = JSON.parse(storedContent)

@@ -229,6 +229,7 @@ export const UI_TEXT = {
   workspaceFullscreenLabel: 'Full screen',
   workspaceExitFullscreenLabel: 'Exit full screen',
   workspaceSourceLabel: 'Source',
+  workspaceRefreshLabel: 'Refresh',
   // Settings / diagnostics
   settingsLabel: 'Settings',
   debugToggleLabel: 'Debug logging',
