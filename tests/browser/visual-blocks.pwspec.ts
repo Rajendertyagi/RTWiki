@@ -315,7 +315,7 @@ test.describe('visual knowledge blocks', () => {
       // Type into the callout's own editable inline content, prove the text
       // exists in the document DOM, then verify persisted state.
       const calloutBody = page
-        .locator(`[data-variant="${variant}"] [contenteditable="true"]`)
+        .locator(`[data-variant="${variant}"] [data-testid="callout-content"]`)
         .first()
       await calloutBody.click()
       await page.keyboard.type(`Callout ${variant} text`)
@@ -392,9 +392,14 @@ test.describe('visual knowledge blocks', () => {
     const inserted = await save.done
     expect(inserted.ok).toBe(true)
 
-    // Switch away immediately (before autosave of further edits would land).
+    // Switch away immediately (before autosave of further edits would land):
+    // return to the dashboard first, then open the other page from its card.
+    await page.locator('[aria-label="Home"]').click()
+    await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
     await page.getByRole('button', { name: `Open ${htmlTitle}`, exact: true }).click()
     await expect(page.locator('[data-testid="html-preview-view"]')).toBeVisible()
+    await page.locator('[aria-label="Home"]').click()
+    await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
     await page.getByRole('button', { name: `Open ${richTitle}`, exact: true }).click()
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
     await expect(page.locator('[data-variant="note"]').first()).toBeVisible()
@@ -425,10 +430,12 @@ test.describe('visual knowledge blocks', () => {
     ])
     await openNote(page, title)
     await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
-    await page.locator('[aria-label="Toggle color scheme"]').click()
+    // The utility-rail theme toggle relabels with the active scheme.
+    const themeToggle = page.locator('button[aria-label="Theme"]')
+    await themeToggle.click()
     // Re-render in dark: the SVG is rebuilt (host persists, drawing refreshes).
     await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
-    await page.locator('[aria-label="Toggle color scheme"]').click()
+    await themeToggle.click()
   })
 
   test('narrow width scrolls the diagram without overflowing the workspace', async ({

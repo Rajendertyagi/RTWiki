@@ -59,7 +59,7 @@ export const createReactCalloutSpec = () =>
         return (
           <div className={`${classes.callout} ${visual.className}`} data-variant={variant}>
             <Icon size={18} className={classes.icon} aria-hidden="true" />
-            <div className={classes.content} ref={contentRef} />
+            <div className={classes.content} ref={contentRef} data-testid="callout-content" />
           </div>
         )
       }
