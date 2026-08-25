@@ -10,7 +10,7 @@ import {
   indentOnInput,
   indentUnit
 } from '@codemirror/language'
-import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
+import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import {
   drawSelection,
@@ -141,6 +141,9 @@ export function useCodeMirror(options: UseCodeMirrorOptions): UseCodeMirrorResul
           autocompletion(),
           highlightActiveLine(),
           highlightSelectionMatches(),
+          // Provides the search state/panel required by searchKeymap and the
+          // toolbar's Find/Replace commands.
+          search(),
           wrapCompartmentRef.current.of([]),
           fontCompartmentRef.current.of(
             EditorView.theme({ '&': { fontSize: `${BASE_FONT_SIZE}px` } })

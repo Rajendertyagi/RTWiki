@@ -41,20 +41,25 @@ async function openNote(page: Page, title: string): Promise<void> {
 
 const DRAG_HANDLE = '[data-test="dragHandle"]'
 
-/** Drags the block whose text matches `sourceText` above/below the target. */
+/** Drags the block whose text matches `sourceText` above the target block. */
 async function dragBlockTo(page: Page, sourceText: string, targetText: string): Promise<void> {
   const source = page.locator('.bn-block-outer', { hasText: sourceText }).first()
   await source.hover()
   // The drag handle lives in BlockNote's portal, outside the block DOM.
   const handle = page.locator(DRAG_HANDLE).first()
   await handle.waitFor({ state: 'visible' })
-  await handle.hover()
+  const handleBox = await handle.boundingBox()
+  if (!handleBox) throw new Error('drag handle has no box')
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
   await page.mouse.down()
+  // A small initial wiggle reliably crosses the HTML5 dragstart threshold.
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 8, handleBox.y + 10, { steps: 3 })
   const target = page.locator('.bn-block-outer', { hasText: targetText }).first()
   const box = await target.boundingBox()
   if (!box) throw new Error(`target block ${targetText} not found`)
-  // Move in steps so ProseMirror's drop cursor tracks the pointer.
-  await page.mouse.move(box.x + box.width / 2, box.y + 4, { steps: 12 })
+  // Drop slightly ABOVE the target's top edge so ProseMirror's drop cursor
+  // lands before it; steps keep the drag event stream continuous.
+  await page.mouse.move(box.x + box.width / 2, box.y - 4, { steps: 20 })
   await page.mouse.up()
 }
 
@@ -183,8 +188,10 @@ test.describe('rich note block rearrangement', () => {
     expect(twoIdx).toBeGreaterThan(-1)
     expect(oneIdx).toBeGreaterThan(-1)
 
+    // Reload: session restoration reopens the same note directly (the tab
+    // and active page persist in sessionStorage), so no dashboard navigation.
     await page.reload()
-    await openNote(page, title)
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible({ timeout: 15_000 })
     const order = await page
       .locator('[data-testid="rich-editor"] .bn-block-outer')
       .allTextContents()
