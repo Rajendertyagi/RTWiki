@@ -120,6 +120,9 @@ test.describe('source-file IDE', () => {
         await row.getByRole('button').first().click()
       })
     await openSource(page, 'HTML')
+    // Wait until the CodeMirror view is actually mounted before driving
+    // toolbar commands (the imperative accessor is wired post-mount).
+    await expect(page.locator('.cm-editor')).toBeVisible({ timeout: 10_000 })
     // The toolbar button drives the same openSearchPanel command as Ctrl+F.
     await page.getByTestId('ide-find').click()
     await expect(page.locator('.cm-searchpanel')).toBeVisible({ timeout: 10_000 })

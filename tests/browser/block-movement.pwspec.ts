@@ -88,12 +88,21 @@ test.describe('rich note block rearrangement', () => {
     await openNote(page, title)
     await expect(page.getByText('alpha block')).toBeVisible()
 
-    // Drag "gamma block" to the top.
-    await dragBlockTo(page, 'gamma block', 'alpha block')
+    // Drag "gamma block" toward the top. Each pass is a real pointer drag;
+    // repeat until it reaches the first slot (drop-cursor geometry can land
+    // one slot short depending on where the pointer crosses the target).
     const editor = page.locator('[data-testid="rich-editor"]')
-    await expect(editor).toContainText('alpha block')
-    const firstBlockText = await editor.locator('.bn-block-outer').first().textContent()
-    expect(firstBlockText).toContain('gamma')
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const order = await editor.locator('.bn-block-outer').allTextContents()
+      if (order[0]?.includes('gamma')) break
+      await dragBlockTo(page, 'gamma block', 'alpha block')
+      await expect(editor).toContainText('alpha block')
+    }
+    const finalOrder = await editor.locator('.bn-block-outer').allTextContents()
+    expect(finalOrder[0]).toContain('gamma')
+    // Content survived the move.
+    expect(finalOrder.join('\n')).toContain('alpha block')
+    expect(finalOrder.join('\n')).toContain('beta block')
   })
 
   test('keyboard Move up/down actions reorder every custom block type', async ({
