@@ -25,7 +25,6 @@ import {
   IconListNumbers,
   IconNote,
   IconPencil,
-  IconPlus,
   IconQuote,
   IconSitemap,
   IconSortAscending,
@@ -36,7 +35,7 @@ import {
 } from '@tabler/icons-react'
 import type { JSX } from 'react'
 import { useState } from 'react'
-import { UI_TEXT } from '../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
 
@@ -62,6 +61,22 @@ const INSERT_ICONS = {
 function InsertEntryIcon({ entry }: { entry: InsertEntry }): JSX.Element {
   const Icon = INSERT_ICONS[entry.icon]
   return <Icon size={16} />
+}
+
+/** One always-visible insertion control on the persistent toolbar. */
+function InsertButton({ editor, entry }: { editor: AnyEditor; entry: InsertEntry }): JSX.Element {
+  return (
+    <Tooltip label={entry.label} position="bottom">
+      <ActionIcon
+        variant="subtle"
+        aria-label={entry.label}
+        data-testid={entry.key}
+        onClick={() => runInsertEntry(editor, entry)}
+      >
+        <InsertEntryIcon entry={entry} />
+      </ActionIcon>
+    </Tooltip>
+  )
 }
 
 interface RichToolbarProps {
@@ -95,7 +110,6 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
   const [linkOpened, setLinkOpened] = useState(false)
   const [textColorOpened, setTextColorOpened] = useState(false)
   const [highlightOpened, setHighlightOpened] = useState(false)
-  const [insertOpened, setInsertOpened] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
 
   const withEditor = (action: () => void) => (): void => {
@@ -284,7 +298,14 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
         </ActionIcon>
       </Tooltip>
 
-      <Popover opened={textColorOpened} onChange={setTextColorOpened} width={220} position="bottom">
+      <Popover
+        opened={textColorOpened}
+        onChange={setTextColorOpened}
+        width={220}
+        position="bottom"
+        withinPortal
+        zIndex={LAYOUT.overlayZIndex}
+      >
         <Popover.Target>
           <Tooltip label={UI_TEXT.textColorLabel} position="bottom">
             <ActionIcon
@@ -314,7 +335,14 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
         </Popover.Dropdown>
       </Popover>
 
-      <Popover opened={highlightOpened} onChange={setHighlightOpened} width={220} position="bottom">
+      <Popover
+        opened={highlightOpened}
+        onChange={setHighlightOpened}
+        width={220}
+        position="bottom"
+        withinPortal
+        zIndex={LAYOUT.overlayZIndex}
+      >
         <Popover.Target>
           <Tooltip label={UI_TEXT.highlightLabel} position="bottom">
             <ActionIcon
@@ -345,7 +373,14 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
         </Popover.Dropdown>
       </Popover>
 
-      <Popover opened={linkOpened} onChange={setLinkOpened} width={280} position="bottom">
+      <Popover
+        opened={linkOpened}
+        onChange={setLinkOpened}
+        width={280}
+        position="bottom"
+        withinPortal
+        zIndex={LAYOUT.overlayZIndex}
+      >
         <Popover.Target>
           <Tooltip label={UI_TEXT.linkLabel} position="bottom">
             <ActionIcon
@@ -453,50 +488,32 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
 
       <span className={classes.divider} />
 
-      {/* Insert menu: visual knowledge blocks plus the existing table/code/
-          quote conversions, kept behind one control so the toolbar stays a
-          single scrollable row. */}
-      <Popover
-        opened={insertOpened}
-        onChange={setInsertOpened}
-        position="bottom-start"
-        withinPortal
-      >
-        <Popover.Target>
-          <Tooltip label={UI_TEXT.insertMenuLabel} position="bottom">
-            <ActionIcon
-              variant={insertOpened ? 'light' : 'subtle'}
-              aria-label={UI_TEXT.insertMenuLabel}
-              aria-haspopup="menu"
-              aria-expanded={insertOpened}
-              data-testid="insert-menu-button"
-              onClick={() => setInsertOpened((open) => !open)}
-            >
-              <IconPlus size={16} />
-            </ActionIcon>
-          </Tooltip>
-        </Popover.Target>
-        <Popover.Dropdown>
-          <div role="menu" data-testid="insert-menu" className={classes.insertMenu}>
-            {getInsertEntries(editor).map((entry) => (
-              <button
-                key={entry.key}
-                type="button"
-                role="menuitem"
-                className={classes.insertItem}
-                data-testid={entry.key}
-                onClick={() => {
-                  runInsertEntry(editor, entry)
-                  setInsertOpened(false)
-                }}
-              >
-                <InsertEntryIcon entry={entry} />
-                <span>{entry.label}</span>
-              </button>
-            ))}
-          </div>
-        </Popover.Dropdown>
-      </Popover>
+      {/* Insertion controls live directly on the persistent toolbar — one
+          compact icon per entry, grouped with separators. Nothing is hidden
+          behind an Insert dropdown; the slash menu remains as an alternative
+          surface. The row scrolls horizontally on narrow screens instead of
+          wrapping or collapsing into menus. */}
+      {(['insert-formula', 'insert-diagram', 'insert-mind-map'] as const).map((key) => {
+        const entry = getInsertEntries(editor).find((candidate) => candidate.key === key)
+        return entry ? <InsertButton key={key} editor={editor} entry={entry} /> : null
+      })}
+
+      <span className={classes.divider} />
+
+      {(['insert-table', 'insert-code-block', 'insert-quote'] as const).map((key) => {
+        const entry = getInsertEntries(editor).find((candidate) => candidate.key === key)
+        return entry ? <InsertButton key={key} editor={editor} entry={entry} /> : null
+      })}
+
+      <span className={classes.divider} />
+
+      {getInsertEntries(editor)
+        .filter((entry) => entry.group === 'callout')
+        .map((entry) => (
+          <InsertButton key={entry.key} editor={editor} entry={entry} />
+        ))}
+
+      <span className={classes.divider} />
 
       <Tooltip label={UI_TEXT.clearFormattingLabel} position="bottom">
         <ActionIcon

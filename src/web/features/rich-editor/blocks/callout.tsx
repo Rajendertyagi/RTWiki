@@ -8,7 +8,7 @@ import {
   IconNote,
   IconTag
 } from '@tabler/icons-react'
-import { UI_TEXT } from '../../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../../config/index.js'
 import { debugLog, safeHash } from '../../../diagnostics/debug-log.js'
 import classes from './callout.module.css'
 
@@ -82,7 +82,13 @@ export const createReactCalloutSpec = () =>
           <div className={`${classes.callout} ${visual.className}`} data-variant={variant}>
             <Icon size={18} className={classes.icon} aria-hidden="true" />
             <div className={classes.content} ref={contentRef} data-testid="callout-content" />
-            <Menu position="bottom-end" withinPortal={false} shadow="sm" width={200}>
+            <Menu
+              position="bottom-end"
+              withinPortal
+              zIndex={LAYOUT.overlayZIndex}
+              shadow="sm"
+              width={200}
+            >
               <Menu.Target>
                 <Tooltip label={UI_TEXT.calloutChangeTypeLabel} position="top-end">
                   <ActionIcon

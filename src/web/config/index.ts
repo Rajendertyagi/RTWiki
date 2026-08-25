@@ -6,8 +6,32 @@ export const LAYOUT = {
   /** Narrow launcher/action rail (outermost full-height column). */
   railWidth: 60,
   /** Page-tree pane width when expanded. */
-  treePaneWidth: 336
+  treePaneWidth: 336,
+  /**
+   * Shared overlay z-index. Every floating layer (menus, popovers, portals,
+   * full-screen workspaces) must sit above the AppShell navbar so a
+   * collision-shifted dropdown near the left edge can never paint behind
+   * the sidebar. Single source of truth; referenced through the
+   * --rtwiki-overlay-z-index CSS variable for stylesheet consumers.
+   */
+  overlayZIndex: 1000,
+  /** Visual-block container size clamps (px). */
+  blockMinWidth: 240,
+  blockMaxWidth: 1600,
+  blockMinHeight: 120,
+  blockMaxHeight: 2000
 } as const
+
+/** Visual-block container size presets (width px, height px; 0 = auto). */
+export const BLOCK_SIZE_PRESETS = {
+  small: { label: 'Small', width: 360, height: 240 },
+  medium: { label: 'Medium', width: 640, height: 400 },
+  large: { label: 'Large', width: 960, height: 560 },
+  full: { label: 'Full width', width: 0, height: 400 },
+  fit: { label: 'Auto height', width: 0, height: 0 }
+} as const
+
+export type BlockSizePresetKey = keyof typeof BLOCK_SIZE_PRESETS
 
 export const UI_TEXT = {
   appName: 'RTWiki',
@@ -118,6 +142,7 @@ export const UI_TEXT = {
   moveToLabel: 'Move',
   moveUpLabel: 'Move up',
   moveDownLabel: 'Move down',
+  removeBlockLabel: 'Delete block',
   moveToParentLabel: 'Move to parent page',
   hierarchyFutureNote: 'Hierarchical page organization is planned for a future release.',
   saveFailedRetryHint: 'Save failed. You can retry or keep editing.',
@@ -189,6 +214,21 @@ export const UI_TEXT = {
   mindMapFitLabel: 'Fit width',
   mindMapActualSizeLabel: 'Actual size',
   calloutChangeTypeLabel: 'Change callout type',
+  resizeHandleLabel: 'Resize block',
+  sizePresetLabel: 'Size',
+  diagramPage: 'Diagram',
+  mindMapPage: 'Mind map',
+  newDiagramPage: 'Diagram page',
+  newMindMapPage: 'Mind map page',
+  createDiagramPage: 'Create Diagram Page',
+  createMindMapPage: 'Create Mind Map Page',
+  diagramWorkspaceEditLabel: 'Edit diagram',
+  mindMapWorkspaceEditLabel: 'Edit mind map',
+  diagramWorkspacePreviewLabel: 'Diagram preview',
+  mindMapWorkspacePreviewLabel: 'Mind map preview',
+  workspaceFullscreenLabel: 'Full screen',
+  workspaceExitFullscreenLabel: 'Exit full screen',
+  workspaceSourceLabel: 'Source',
   // Settings / diagnostics
   settingsLabel: 'Settings',
   debugToggleLabel: 'Debug logging',

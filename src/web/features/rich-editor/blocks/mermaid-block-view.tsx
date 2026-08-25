@@ -19,9 +19,10 @@ import {
   IconZoomOut
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { UI_TEXT } from '../../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../../config/index.js'
 import { debugLog, safeHash } from '../../../diagnostics/debug-log.js'
 import { DIAGRAM_TEMPLATES } from '../insert-blocks.js'
+import { ResizableBlockContainer } from './block-resize.js'
 import classes from './mermaid-block.module.css'
 import { renderMermaidSvg } from './mermaid-render.js'
 
@@ -50,6 +51,12 @@ export interface MermaidBlockViewProps {
    * diagram replaces the raw source in the user interface.
    */
   contentRef: (node: HTMLElement | null) => void
+  /** Stored container width prop (px string, '' = auto). */
+  width?: string
+  /** Stored container height prop (px string, '' = auto). */
+  height?: string
+  /** Persists new container dimensions without disturbing other props. */
+  onCommitSize?: (width: string, height: string) => void
 }
 
 type RenderErrorCode = 'parse_error' | 'render_error'
@@ -68,7 +75,10 @@ export function MermaidBlockView({
   source,
   blockType,
   editor,
-  contentRef
+  contentRef,
+  width = '',
+  height = '',
+  onCommitSize
 }: MermaidBlockViewProps): JSX.Element {
   const colorScheme = useComputedColorScheme('light')
   const [editing, setEditing] = useState(false)
@@ -239,6 +249,7 @@ export function MermaidBlockView({
                 aria-label={UI_TEXT.diagramTemplateLabel}
                 placeholder={UI_TEXT.diagramTemplateLabel}
                 clearable
+                comboboxProps={{ withinPortal: true, zIndex: LAYOUT.overlayZIndex }}
                 data={Object.entries(DIAGRAM_TEMPLATES).map(([value, def]) => ({
                   value,
                   label: def.label
@@ -346,7 +357,19 @@ export function MermaidBlockView({
         </Tooltip>
       </Group>
       {committedSvg !== null ? (
-        <div className={classes.previewScroll}>{renderSvg(committedSvg)}</div>
+        <ResizableBlockContainer
+          width={width}
+          height={height}
+          onCommit={onCommitSize ?? (() => undefined)}
+          testIdPrefix={blockType}
+        >
+          <div
+            className={classes.previewScroll}
+            style={height !== '' ? { height: '100%' } : undefined}
+          >
+            {renderSvg(committedSvg)}
+          </div>
+        </ResizableBlockContainer>
       ) : (
         <Text size="xs" c="dimmed" role="status">
           …

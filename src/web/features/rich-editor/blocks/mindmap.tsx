@@ -12,7 +12,13 @@ export const createReactMindMapSpec = () =>
   createReactBlockSpec(
     {
       type: 'mindMap',
-      propSchema: {},
+      // Container dimensions persist as pixel strings ('' = auto) so reload
+      // and duplicate preserve sizes; existing documents without these props
+      // fall back to the defaults — no migration, fully compatible.
+      propSchema: {
+        width: { default: '' },
+        height: { default: '' }
+      },
       content: 'plain'
     },
     {
@@ -23,6 +29,11 @@ export const createReactMindMapSpec = () =>
           blockType="mindMap"
           editor={editor as never}
           contentRef={contentRef}
+          width={block.props.width}
+          height={block.props.height}
+          onCommitSize={(width, height) =>
+            editor.updateBlock(block, { props: { ...block.props, width, height } })
+          }
         />
       )
     }

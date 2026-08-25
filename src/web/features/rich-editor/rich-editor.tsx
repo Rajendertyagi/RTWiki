@@ -28,6 +28,7 @@ import {
   type RTWikiPartialBlock,
   rtwikiBlockSchema
 } from './schema.js'
+import { RTSideMenu } from './side-menu.js'
 import { RTSuggestionMenu } from './slash-menu.js'
 import { useAutosave } from './use-autosave.js'
 
@@ -333,6 +334,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
         <Stack gap="xs" className={classes.editorContainer}>
           <div className={classes.blockNoteWrapper}>
             <BlockNoteView editor={editor} theme={blocknoteTheme} formattingToolbar={false}>
+              <RTSideMenu editor={editor} />
               <RTSuggestionMenu editor={editor} />
             </BlockNoteView>
           </div>

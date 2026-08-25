@@ -40,6 +40,57 @@
   padding-top: var(--mantine-spacing-md);
 }
 
+/*
+ * Resizable block container. Dimensions come from stored props (inline
+ * style); max-width re-clamps responsively on narrow screens without
+ * touching the stored desktop size.
+ */
+.sizeContainer {
+  position: relative;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sizePresets {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding: 1px 3px;
+  border-radius: var(--mantine-radius-sm);
+  background: color-mix(in srgb, var(--mantine-color-body) 80%, transparent);
+  opacity: 0;
+}
+
+.sizeContainer:hover .sizePresets,
+.sizePresets:focus-within {
+  opacity: 1;
+}
+
+.resizeHandle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  color: var(--mantine-color-dimmed);
+  border-radius: var(--mantine-radius-xs) 0 0 0;
+  touch-action: none;
+  opacity: 0.6;
+}
+
+.sizeContainer:hover .resizeHandle,
+.resizeHandle:focus-visible {
+  opacity: 1;
+}
+
 .zoomHost {
   /* Width is set inline from the zoom level (resize-based, no transform clip). */
   min-width: 100%;

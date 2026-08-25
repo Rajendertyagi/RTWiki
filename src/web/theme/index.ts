@@ -1,8 +1,14 @@
 import type { CSSVariablesResolver } from '@mantine/core'
 import { createTheme } from '@mantine/core'
+import { LAYOUT } from '../config/index.js'
 
 export const rtwikiCssVariablesResolver: CSSVariablesResolver = () => ({
-  variables: {},
+  variables: {
+    // Shared overlay stacking level for every floating layer (menus,
+    // popovers, portals, full-screen workspaces). Defined once here so
+    // stylesheet consumers and inline styles never diverge.
+    '--rtwiki-overlay-z-index': String(LAYOUT.overlayZIndex)
+  },
   light: {
     '--rtwiki-background': '#f5f5f5',
     '--rtwiki-surface': '#ffffff',
