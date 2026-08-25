@@ -1,0 +1,30 @@
+.results {
+  max-height: 320px;
+  overflow-y: auto;
+  margin-top: var(--mantine-spacing-xs);
+}
+
+.groupLabel {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm) 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.resultItem {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--mantine-radius-xs);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-text);
+  cursor: pointer;
+}
+
+.resultItemActive,
+.resultItem:hover {
+  background: var(--mantine-color-default-hover);
+}

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from './config/index.js'
 import { debugLog } from './diagnostics/debug-log.js'
 import { Dashboard } from './features/dashboard/dashboard.js'
+import { QuickFinder } from './features/finder/quick-finder.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
@@ -22,6 +23,7 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
+import { recordRecentPage } from './util/recent-pages.js'
 
 type SaveState = 'clean' | 'saving' | 'saved' | 'error'
 
@@ -210,6 +212,11 @@ export function App(): JSX.Element {
       setPendingFlushError(null)
     }
     controller.selectPage(id)
+    if (id !== null) {
+      // Genuinely-opened tracking for the Ctrl+K finder (parent pages only:
+      // virtual HTML subfiles resolve before this point).
+      recordRecentPage(id)
+    }
     debugLog('navigation', 'nav_active_page_changed', { pageId: id ?? undefined })
     // Any normal navigation lands on the rendered parent view.
     setHtmlSource(null)
@@ -220,6 +227,20 @@ export function App(): JSX.Element {
     pageId: string
     field: 'html' | 'css' | 'javascript'
   } | null>(null)
+
+  // Global Ctrl+K page finder. Safe everywhere: no installed CodeMirror
+  // keymap binds Mod-K, and the finder is a plain Mantine modal.
+  const [finderOpen, setFinderOpen] = useState(false)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setFinderOpen((open) => !open)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   // Mirrors for session persistence from render-free callbacks.
   const openTabsRef = useRef(openTabs)
@@ -577,6 +598,13 @@ export function App(): JSX.Element {
         opened={stopDialogOpen}
         onClose={() => setStopDialogOpen(false)}
         onConfirm={handleStopConfirm}
+      />
+
+      <QuickFinder
+        opened={finderOpen}
+        onClose={() => setFinderOpen(false)}
+        pages={controller.pages}
+        onOpenPage={(id) => void handleSelectPage(id)}
       />
     </>
   )
