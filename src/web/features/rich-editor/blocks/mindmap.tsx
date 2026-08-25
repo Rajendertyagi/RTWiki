@@ -1,3 +1,4 @@
+import { plainContentToString } from '@blocknote/core'
 import { createReactBlockSpec } from '@blocknote/react'
 import { MermaidBlockView } from './mermaid-block-view.js'
 
@@ -18,7 +19,7 @@ export const createReactMindMapSpec = () =>
       render: ({ block, editor, contentRef }) => (
         <MermaidBlockView
           blockId={block.id}
-          source={typeof block.content === 'string' ? block.content : ''}
+          source={plainContentToString(block.content)}
           blockType="mindMap"
           editor={editor as never}
           contentRef={contentRef}
