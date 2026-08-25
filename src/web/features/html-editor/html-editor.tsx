@@ -14,7 +14,10 @@ import { createThrottledEmitter, debugLog, safeHash } from '../../diagnostics/de
 import { PreviewFrame } from '../html/preview-frame.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { CodeEditor } from './code-editor.js'
+import { formatSource } from './format-source.js'
 import classes from './html-editor.module.css'
+import { SourceToolbar } from './source-toolbar.js'
+import type { EditorStats } from './use-codemirror.js'
 
 export interface HtmlEditorWorkspaceProps {
   pageId: string
@@ -27,6 +30,8 @@ export interface HtmlEditorWorkspaceProps {
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   /** Returns to the pages dashboard from recovery UIs. */
   onBack?: () => void
+  /** Display-only parent chain for the breadcrumb. */
+  breadcrumbLabels?: string[]
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
     isDirty: boolean
@@ -63,6 +68,7 @@ export default function HtmlEditorWorkspace({
   sourceField,
   onExitSource,
   onSaveContent,
+  breadcrumbLabels = [],
   onFlushRef,
   onSaveStateChange
 }: HtmlEditorWorkspaceProps): JSX.Element {
@@ -283,6 +289,62 @@ export default function HtmlEditorWorkspace({
 
   const modSaveKeys = useMemo(() => [{ key: 'Mod-s', run: manualSave }], [manualSave])
 
+  // ---- IDE state: toolbar-controlled editor presentation -----------------
+  const [wordWrap, setWordWrap] = useState(true)
+  const [fontSize, setFontSize] = useState(14)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [stats, setStats] = useState<EditorStats>({ line: 1, column: 1, selectedChars: 0 })
+  const [formatError, setFormatError] = useState<string | null>(null)
+  const getViewRef = useRef<(() => import('@codemirror/view').EditorView | null) | null>(null)
+
+  // Format Document: lazily loads Prettier standalone, formats the CURRENT
+  // view document and dispatches the result as an ordinary transaction — so
+  // it participates in undo history, flows through onChange → autosave, and
+  // can never bypass the draft contract. Failures stay contained in the
+  // status row; the source is never replaced by an empty result.
+  const handleFormat = useCallback(async (): Promise<void> => {
+    const view = getViewRef.current?.()
+    if (!view || sourceField === null) return
+    const result = await formatSource(sourceField, view.state.doc.toString())
+    if (!result.ok) {
+      setFormatError(result.error)
+      debugLog('editor', 'editor_format_failed', { pageId, field: sourceField })
+      return
+    }
+    setFormatError(null)
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: result.formatted },
+      userEvent: 'input.format'
+    })
+    debugLog('editor', 'editor_format_applied', {
+      pageId,
+      field: sourceField,
+      len: result.formatted.length
+    })
+  }, [pageId, sourceField])
+
+  // Keyboard shortcuts (Shift+Alt+F format, F11 full-screen) attach to the
+  // source view container via a ref listener so the static wrapper element
+  // carries no interaction ARIA contract.
+  const sourceViewRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const host = sourceViewRef.current
+    if (!host) return
+    const listener = (event: KeyboardEvent): void => {
+      if (event.shiftKey && event.altKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        void handleFormat()
+        return
+      }
+      if (event.key === 'F11') {
+        event.preventDefault()
+        setFullscreen((f) => !f)
+      }
+    }
+    host.addEventListener('keydown', listener)
+    return () => host.removeEventListener('keydown', listener)
+  }, [handleFormat])
+
   if (!parseResult.ok) {
     return (
       <Stack gap="md" p="md" data-testid="html-editor">
@@ -335,14 +397,29 @@ export default function HtmlEditorWorkspace({
     )
   }
 
-  // Source subfile view: exactly one CodeMirror editor for the chosen field,
-  // no permanent split-screen preview, plus an explicit return action. The
-  // preview-JS gate lives ONLY in the JavaScript subfile.
+  // Source subfile view: an IDE-style workspace — breadcrumb, source
+  // toolbar, large editor area and a compact status row. The preview-JS gate
+  // lives ONLY in the JavaScript subfile.
+  const fieldLabel = UI_TEXT[FIELD_LABELS[sourceField]]
+  const breadcrumbText = [...breadcrumbLabels, fieldLabel].join(' / ')
+  const saveStateLabel =
+    status === 'error'
+      ? UI_TEXT.saveStatusError
+      : status === 'saving'
+        ? UI_TEXT.saveStatusSaving
+        : status === 'saved'
+          ? UI_TEXT.saveStatusSaved
+          : ''
   return (
-    <div className={classes.root} data-testid="html-source-view">
+    <div
+      ref={sourceViewRef}
+      className={`${classes.root} ${fullscreen ? classes.sourceFullscreen : ''}`}
+      data-testid="html-source-view"
+      data-fullscreen={fullscreen ? 'true' : 'false'}
+    >
       <Group justify="space-between" wrap="nowrap" gap="sm" className={classes.controls}>
-        <Text size="sm" fw={600}>
-          {UI_TEXT[FIELD_LABELS[sourceField]]}
+        <Text size="xs" c="dimmed" data-testid="source-breadcrumb">
+          {breadcrumbText}
         </Text>
         <Group gap="sm" wrap="nowrap">
           {sourceField === 'javascript' ? (
@@ -372,22 +449,67 @@ export default function HtmlEditorWorkspace({
               debugLog('ui', 'ui_return_to_preview', { pageId, field: sourceField })
               onExitSource?.()
             }}
-            data-testid="return-to-preview"
+            data-testid="return-to-preview-button"
           >
             {UI_TEXT.htmlSourceBackToPreview}
           </Button>
         </Group>
       </Group>
 
+      <SourceToolbar
+        getView={() => getViewRef.current?.() ?? null}
+        onFormat={() => void handleFormat()}
+        wordWrap={wordWrap}
+        onToggleWordWrap={() => setWordWrap((w) => !w)}
+        fontSize={fontSize}
+        onFontSizeChange={setFontSize}
+        fullscreen={fullscreen}
+        onToggleFullscreen={() => setFullscreen((f) => !f)}
+        onReturnToPreview={() => {
+          debugLog('ui', 'ui_return_to_preview', { pageId, field: sourceField })
+          onExitSource?.()
+        }}
+        onSaveNow={() => void save()}
+      />
+
       <Box className={classes.editorPaneSingle}>
         <CodeEditor
           value={content[sourceField]}
           onChange={(value) => updateField(sourceField, value)}
           language={sourceField}
-          label={UI_TEXT[FIELD_LABELS[sourceField]]}
+          label={fieldLabel}
+          wordWrap={wordWrap}
+          fontSize={fontSize}
+          onStatsChange={setStats}
+          onViewAccessor={(getView) => {
+            getViewRef.current = getView
+          }}
           extraKeys={modSaveKeys}
         />
       </Box>
+
+      {/* Compact bottom status row: language, caret, selection, save state. */}
+      <Group gap="md" wrap="nowrap" className={classes.statusRow} data-testid="ide-status-row">
+        <Text size="xs" c="dimmed">
+          {fieldLabel}
+        </Text>
+        <Text size="xs" c="dimmed" data-testid="ide-caret-position">
+          Ln {stats.line}, Col {stats.column}
+        </Text>
+        {stats.selectedChars > 0 ? (
+          <Text size="xs" c="dimmed" data-testid="ide-selection-count">
+            {stats.selectedChars} selected
+          </Text>
+        ) : null}
+        {formatError !== null ? (
+          <Text size="xs" c="red" role="alert" data-testid="ide-format-error">
+            {UI_TEXT.ideFormatErrorLabel}
+          </Text>
+        ) : null}
+        <Text size="xs" c={status === 'error' ? 'red' : 'dimmed'} ml="auto">
+          {saveStateLabel}
+        </Text>
+      </Group>
 
       {status === 'error' ? (
         <Group gap="xs" p="xs">

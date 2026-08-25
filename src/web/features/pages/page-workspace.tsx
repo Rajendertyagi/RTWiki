@@ -113,6 +113,7 @@ export function PageWorkspace({
         <PageEditors
           key={page.id}
           page={page}
+          breadcrumb={breadcrumb}
           sourceField={htmlSourceField}
           onExitSource={onExitHtmlSource}
           onSaveContent={onSaveContent}
@@ -135,6 +136,7 @@ export function PageWorkspace({
  */
 function PageEditors({
   page,
+  breadcrumb,
   sourceField,
   onExitSource,
   onSaveContent,
@@ -144,6 +146,7 @@ function PageEditors({
   onRichEditorReady
 }: {
   page: Page
+  breadcrumb?: string[]
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
@@ -199,6 +202,7 @@ function PageEditors({
   return (
     <HtmlEditorSurface
       page={page}
+      breadcrumb={breadcrumb ?? []}
       sourceField={sourceField}
       onExitSource={onExitSource}
       onSaveContent={onSaveContent}
@@ -216,6 +220,7 @@ function PageEditors({
  */
 function HtmlEditorSurface({
   page,
+  breadcrumb,
   sourceField,
   onExitSource,
   onSaveContent,
@@ -224,6 +229,7 @@ function HtmlEditorSurface({
   onSaveStateChange
 }: {
   page: Page
+  breadcrumb: string[]
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
@@ -248,6 +254,7 @@ function HtmlEditorSurface({
           sourceField={sourceField}
           onExitSource={onExitSource}
           onSaveContent={onSaveContent}
+          breadcrumbLabels={[...breadcrumb, page.title]}
           onBack={onBack}
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}

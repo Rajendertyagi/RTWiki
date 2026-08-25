@@ -66,7 +66,10 @@ export const DEBUG_EVENT_NAMES = {
     'editor_stale_update_rejected',
     'editor_block_render_requested',
     'editor_block_render_succeeded',
-    'editor_block_render_failed'
+    'editor_block_render_failed',
+    'editor_format_requested',
+    'editor_format_applied',
+    'editor_format_failed'
   ],
   autosave: [
     'autosave_scheduled',
