@@ -127,7 +127,12 @@ describe('page CRUD', () => {
     service.createPage(db, {
       title: 'Notes',
       pageType: 'rich',
-      content: 'The mitochondria is the powerhouse'
+      content: JSON.stringify([
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'The mitochondria is the powerhouse' }]
+        }
+      ])
     })
     const result = service.listPages(db, { search: 'mitochondria' })
     expect(result.pages.some((p) => p.title === 'Notes')).toBe(true)

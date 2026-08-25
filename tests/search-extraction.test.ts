@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import {
   extractSearchableContent,
   extractSearchableHtml,
+  extractSearchableRich,
   SEARCH_EXTRACTION_MAX_CHARS
 } from '../src/server/services/search-extraction.js'
 
@@ -86,9 +87,12 @@ describe('HTML search-text extraction', () => {
 })
 
 describe('searchable-content resolution per page type', () => {
-  it('returns rich-page stored content verbatim (behavior unchanged)', () => {
+  it('extracts readable text from a rich page (no raw JSON indexed)', () => {
     const richJson = '[{"type":"paragraph","content":[{"type":"text","text":"rich words"}]}]'
-    expect(extractSearchableContent('rich', richJson)).toBe(richJson)
+    const text = extractSearchableContent('rich', richJson)
+    expect(text).toBe('rich words')
+    expect(text).not.toContain('"type"')
+    expect(text).not.toContain('content')
   })
 
   it('extracts readable text from canonical html-page content', () => {
@@ -108,5 +112,116 @@ describe('searchable-content resolution per page type', () => {
     expect(extractSearchableContent('html', '<p>pre-canonical garbage</p>')).toBe('')
     expect(extractSearchableContent('html', 'not json at all')).toBe('')
     expect(extractSearchableContent('html', '{"version":1,"css":"only"}')).toBe('')
+  })
+})
+
+describe('rich-page searchable text extraction', () => {
+  it('collects paragraph, heading, list and callout text', () => {
+    const doc = [
+      { type: 'heading', props: { level: 1 }, content: [{ type: 'text', text: 'Title Here' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Body paragraph text' }] },
+      { type: 'bulletListItem', content: [{ type: 'text', text: 'List item one' }] },
+      {
+        type: 'callout',
+        props: { variant: 'warning' },
+        content: [{ type: 'text', text: 'Callout warning text' }]
+      }
+    ]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toContain('Title Here')
+    expect(text).toContain('Body paragraph text')
+    expect(text).toContain('List item one')
+    expect(text).toContain('Callout warning text')
+  })
+
+  it('extracts link inline text recursively', () => {
+    const doc = [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'See ' },
+          {
+            type: 'link',
+            content: [{ type: 'text', text: 'the documentation' }],
+            href: 'https://example.com'
+          },
+          { type: 'text', text: ' for details' }
+        ]
+      }
+    ]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toBe('See the documentation for details')
+  })
+
+  it('extracts table cell text', () => {
+    const doc = [
+      {
+        type: 'table',
+        content: {
+          type: 'tableContent',
+          rows: [{ cells: [['Header A'], ['Header B']] }, { cells: [['Cell one'], ['Cell two']] }]
+        }
+      }
+    ]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toContain('Header A')
+    expect(text).toContain('Header B')
+    expect(text).toContain('Cell one')
+    expect(text).toContain('Cell two')
+  })
+
+  it('never indexes formula, diagram or mind map source', () => {
+    const doc = [
+      { type: 'mathBlock', content: 'E = mc^2' },
+      { type: 'diagram', content: 'graph TD; A-->B' },
+      { type: 'mindMap', content: 'mindmap\n root' },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Visible prose only' }] }
+    ]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toBe('Visible prose only')
+    expect(text).not.toContain('mc^2')
+    expect(text).not.toContain('graph TD')
+    expect(text).not.toContain('mindmap')
+  })
+
+  it('never indexes the unsupported-block preservation marker', () => {
+    const doc = [
+      {
+        type: 'codeBlock',
+        props: { language: 'json' },
+        content: '[unsupported block preserved below]\n{"type":"futureBlock"}'
+      },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Real text' }] }
+    ]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toBe('Real text')
+    expect(text).not.toContain('unsupported block preserved')
+    expect(text).not.toContain('futureBlock')
+  })
+
+  it('indexes ordinary code block text', () => {
+    const doc = [{ type: 'codeBlock', props: { language: 'ts' }, content: 'const x = 1' }]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toContain('const x = 1')
+  })
+
+  it('never exposes JSON punctuation or internal props', () => {
+    const doc = [{ type: 'paragraph', content: [{ type: 'text', text: 'Plain sentence' }] }]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toBe('Plain sentence')
+    expect(text).not.toContain('{')
+    expect(text).not.toContain('"type"')
+    expect(text).not.toContain('content')
+  })
+
+  it('caps extracted text at the centralized limit', () => {
+    const doc = [{ type: 'paragraph', content: [{ type: 'text', text: 'word '.repeat(50_000) }] }]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text.length).toBe(SEARCH_EXTRACTION_MAX_CHARS)
+  })
+
+  it('returns empty string for malformed rich content', () => {
+    expect(extractSearchableRich('not json at all')).toBe('')
+    expect(extractSearchableRich('{"blocks":"nope"}')).toBe('')
   })
 })

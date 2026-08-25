@@ -49,3 +49,9 @@ export const DEBUG_LOG_MAX_QUEUE = 500 as const
 // After this many consecutive failed ingests the session stops sending until
 // it is re-enabled, so a broken endpoint can never degrade editing.
 export const DEBUG_LOG_MAX_CONSECUTIVE_FAILURES = 5 as const
+
+// Marker stored as the plain-text content of a `codeBlock` when an unknown
+// rich block is preserved during import/normalization. Single source of truth
+// shared by the web document layer and the server search extractor so the
+// preservation payload is never indexed or surfaced as readable text.
+export const UNSUPPORTED_BLOCK_MARKER = '[unsupported block preserved below]' as const

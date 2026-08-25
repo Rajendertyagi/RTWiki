@@ -1,4 +1,7 @@
-import { PROVISIONAL_AUTOSAVE_DEBOUNCE_MS } from '@rtwiki/shared/constants'
+import {
+  PROVISIONAL_AUTOSAVE_DEBOUNCE_MS,
+  UNSUPPORTED_BLOCK_MARKER
+} from '@rtwiki/shared/constants'
 
 export const AUTOSAVE_DEBOUNCE_MS = PROVISIONAL_AUTOSAVE_DEBOUNCE_MS
 
@@ -102,7 +105,7 @@ export function serializeDocument(document: BlockNoteDocument): string {
  * rest of the page keeps loading — one foreign block can never crash the
  * whole document.
  */
-const UNKNOWN_BLOCK_MARKER = '[unsupported block preserved below]'
+const UNKNOWN_BLOCK_MARKER = UNSUPPORTED_BLOCK_MARKER
 
 export function containUnknownBlocks(
   document: BlockNoteDocument,
