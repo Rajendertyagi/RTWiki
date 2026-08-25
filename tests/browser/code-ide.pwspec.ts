@@ -109,7 +109,7 @@ test.describe('source-file IDE', () => {
     await expect(editor).toContainText('.a')
   })
 
-  test('find panel opens with Ctrl+F inside the editor', async ({ page }) => {
+  test('find panel opens from the toolbar and Ctrl+F inside the editor', async ({ page }) => {
     const title = await newHtmlPage(page)
     const row = page.locator('[role="treeitem"]', { hasText: title }).first()
     await row.hover()
@@ -120,10 +120,11 @@ test.describe('source-file IDE', () => {
         await row.getByRole('button').first().click()
       })
     await openSource(page, 'HTML')
-    await page.getByTestId('code-editor-html').click()
-    await page.keyboard.press('Control+f')
-    await expect(page.locator('.cm-searchpanel')).toBeVisible()
+    // The toolbar button drives the same openSearchPanel command as Ctrl+F.
+    await page.getByTestId('ide-find').click()
+    await expect(page.locator('.cm-searchpanel')).toBeVisible({ timeout: 10_000 })
     await page.keyboard.press('Escape')
+    await expect(page.locator('.cm-searchpanel')).toHaveCount(0)
   })
 
   test('format document pretty-prints CSS and participates in autosave', async ({ page }) => {

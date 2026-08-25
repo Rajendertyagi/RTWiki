@@ -506,15 +506,28 @@ export default function HtmlEditorWorkspace({
             {UI_TEXT.ideFormatErrorLabel}
           </Text>
         ) : null}
-        <Text size="xs" c={status === 'error' ? 'red' : 'dimmed'} ml="auto">
-          {status === 'error' && error ? `${saveStateLabel}: ${error}` : saveStateLabel}
-        </Text>
+        {/* On failure the header already announces "Save failed"; here we
+            surface only the underlying detail plus the retry control so the
+            failure text appears exactly once in the DOM. */}
+        {status === 'error' && error ? (
+          <Text size="xs" c="red">
+            {error}
+          </Text>
+        ) : status !== 'error' ? (
+          <Text size="xs" c="dimmed" ml="auto">
+            {saveStateLabel}
+          </Text>
+        ) : null}
         {/* Content-save retry lives here (parity with the Rich editor); the
-            header's Retry action belongs to page-list mutations. The legacy
-            duplicate error group was folded into this status row so the
-            failure text appears exactly once. */}
+            header's Retry action belongs to page-list mutations. */}
         {status === 'error' ? (
-          <Button size="compact-xs" variant="light" data-testid="html-editor-retry" onClick={retry}>
+          <Button
+            size="compact-xs"
+            variant="light"
+            ml="auto"
+            data-testid="html-editor-retry"
+            onClick={retry}
+          >
             {UI_TEXT.saveStatusRetry}
           </Button>
         ) : null}

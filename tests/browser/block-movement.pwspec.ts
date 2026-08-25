@@ -225,9 +225,14 @@ test.describe('diagram and mind map resizing', () => {
 
     const width = await container.getAttribute('data-width')
     const height = await container.getAttribute('data-height')
-    // Width grows but is clamped to the document column; height is unclamped.
-    expect(Number(width)).toBeGreaterThan(500)
+    // Height is unclamped and must grow; width clamps to the document column
+    // (the stored 500px may exceed it, in which case the clamp pulls it in).
     expect(Number(height)).toBeGreaterThan(340)
+    const workspace = page.getByTestId('rich-editor')
+    const wsBox = await workspace.boundingBox()
+    const containerBox = await container.boundingBox()
+    expect(containerBox?.width ?? 0).toBeLessThanOrEqual((wsBox?.width ?? 9999) + 2)
+    expect(Number(width)).toBeGreaterThanOrEqual(240)
   })
 
   test('size presets apply clamped dimensions via keyboard-accessible buttons', async ({

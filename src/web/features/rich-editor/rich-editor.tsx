@@ -333,7 +333,15 @@ function RichEditorInner(props: InnerProps): JSX.Element {
       <div className={classes.richRow}>
         <Stack gap="xs" className={classes.editorContainer}>
           <div className={classes.blockNoteWrapper}>
-            <BlockNoteView editor={editor} theme={blocknoteTheme} formattingToolbar={false}>
+            <BlockNoteView
+              editor={editor}
+              theme={blocknoteTheme}
+              formattingToolbar={false}
+              sideMenu={false}
+            >
+              {/* Custom side menu replaces the built-in controller (disabled
+                  above) so exactly ONE drag-handle menu exists, carrying the
+                  Move up / Move down actions. */}
               <RTSideMenu editor={editor} />
               <RTSuggestionMenu editor={editor} />
             </BlockNoteView>
