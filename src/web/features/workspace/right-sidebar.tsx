@@ -1,6 +1,6 @@
 import { ActionIcon, Divider, Stack, Text, Tooltip } from '@mantine/core'
 import { IconLayoutSidebar } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { getBacklinks } from '../../services/pages-api.js'
 import type { DocumentOutlineEntry } from '../rich-editor/document.js'
@@ -41,6 +41,7 @@ export function RightSidebar({
   onCollapse
 }: RightSidebarProps): JSX.Element {
   const [backlinks, setBacklinks] = useState<BacklinkEntryView[] | null>(null)
+  const backlinksKeyRef = useRef<string | null>(null)
 
   // Backlinks are fetched per open page and refetched when the page changes.
   // A null list means "not loaded / not applicable"; errors degrade to the
@@ -50,6 +51,11 @@ export function RightSidebar({
       setBacklinks(null)
       return
     }
+    // The cache key includes updatedDate so a save while the page is open
+    // (link added/removed) refreshes the list without remounting.
+    const cacheKey = `${pageId}:${updatedDate}`
+    if (backlinksKeyRef.current === cacheKey) return
+    backlinksKeyRef.current = cacheKey
     let cancelled = false
     setBacklinks(null)
     getBacklinks(pageId)
@@ -62,7 +68,7 @@ export function RightSidebar({
     return () => {
       cancelled = true
     }
-  }, [pageId])
+  }, [pageId, updatedDate])
   return (
     <aside className={classes.panel} aria-label={UI_TEXT.rightSidebarLabel}>
       <div className={classes.header}>

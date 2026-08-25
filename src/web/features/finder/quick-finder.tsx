@@ -119,8 +119,6 @@ export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderP
     return out
   }, [pages, recents, query, contentMatches])
 
-
-
   const openRow = (row: FinderRow | undefined): void => {
     if (!row) return
     onClose()
