@@ -16,9 +16,35 @@ BlockNote JSON with no schema migration ([ADR-004](adr/ADR-004-canonical-block-j
 | Callout | `callout` | Editable inline rich text + `variant` prop | Native custom block, theme-token styling |
 
 Insertion is available from the toolbar **Insert** menu and the `/` slash
-menu. Diagram/Mind Map blocks expose an Edit action that reveals a source
-textarea with Apply/Cancel; invalid input shows a contained error state with
-Retry and never affects neighbouring blocks.
+menu. The Insert/slash entries stay uncluttered — Diagram insertion uses a
+single flowchart starter; the six common diagram shapes (flowchart, sequence,
+class, state, entity-relationship, timeline) are offered as a **starter
+template picker** inside the Diagram edit pane.
+
+### Live editing (Diagram & Mind Map)
+
+Both blocks are preview-first. The normal view shows only the rendered,
+sanitized SVG with a compact toolbar (Edit, Fit/Actual, and zoom for Mind
+Map). Choosing **Edit** opens a split editor:
+
+- **Source** on the left, **live rendered preview** on the right.
+- Typing re-renders the preview automatically (debounced) — you do **not**
+  need to Apply merely to see a change.
+- **Apply** commits the source and returns to the normal view; **Cancel**
+  restores the last applied source.
+- Invalid syntax shows a contained error inside the preview column while the
+  source stays editable, so you can fix it in place.
+- On narrow viewports the split stacks vertically (source above preview).
+- **Fit width** (default) scales the SVG to the column; **Actual size** lets
+  the pane scroll. Mind Map adds **zoom** controls (50%–200%, resize-based so
+  the SVG is never clipped).
+
+### Callouts
+
+Callouts support five variants (Info, Note, Tip, Warning, Danger) with
+editable rich text. The variant can be **changed after insertion** from the
+callout's action menu without disturbing the rich text or any other stored
+prop — only the `variant` prop changes.
 
 ## Security model (Mermaid)
 
@@ -56,8 +82,13 @@ Rendering failures resolve to bounded error codes (`parse_error`,
   dropped.
 - Dashboard card previews extract readable callout text and never show
   serialized JSON or raw diagram/formula source.
-- Duplicate, autosave, restart and search behave exactly as for default
-  blocks; rich-page search indexes the canonical JSON verbatim (unchanged).
+- Duplicate, autosave and restart behave exactly as for default blocks.
+- **Rich-page search** parses the canonical BlockNote JSON and indexes only
+  readable text — paragraph, heading, list and callout text, table cells and
+  ordinary code. Formula, Diagram and Mind Map source are intentionally **not**
+  indexed (their raw Mermaid/LaTeX is not readable prose), and the
+  unsupported-block preservation marker is never indexed. JSON punctuation and
+  internal props never reach search results.
 
 ## Debug Mode
 
