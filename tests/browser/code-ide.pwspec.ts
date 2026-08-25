@@ -122,7 +122,7 @@ test.describe('source-file IDE', () => {
     await openSource(page, 'HTML')
     await page.getByTestId('code-editor-html').click()
     await page.keyboard.press('Control+f')
-    await expect(page.locator('.cm-panel-search')).toBeVisible()
+    await expect(page.locator('.cm-searchpanel')).toBeVisible()
     await page.keyboard.press('Escape')
   })
 

@@ -507,22 +507,18 @@ export default function HtmlEditorWorkspace({
           </Text>
         ) : null}
         <Text size="xs" c={status === 'error' ? 'red' : 'dimmed'} ml="auto">
-          {saveStateLabel}
+          {status === 'error' && error ? `${saveStateLabel}: ${error}` : saveStateLabel}
         </Text>
-      </Group>
-
-      {status === 'error' ? (
-        <Group gap="xs" p="xs">
-          <Text size="sm" c="red">
-            {error ?? UI_TEXT.saveFailedRetryHint}
-          </Text>
-          {/* Content-save retry lives here (parity with the Rich editor); the
-              header's Retry action belongs to page-list mutations. */}
-          <Button size="xs" variant="light" data-testid="html-editor-retry" onClick={retry}>
+        {/* Content-save retry lives here (parity with the Rich editor); the
+            header's Retry action belongs to page-list mutations. The legacy
+            duplicate error group was folded into this status row so the
+            failure text appears exactly once. */}
+        {status === 'error' ? (
+          <Button size="compact-xs" variant="light" data-testid="html-editor-retry" onClick={retry}>
             {UI_TEXT.saveStatusRetry}
           </Button>
-        </Group>
-      ) : null}
+        ) : null}
+      </Group>
     </div>
   )
 }

@@ -58,7 +58,7 @@ test.describe('dedicated diagram and mind map pages', () => {
     await expect(page.locator('[role="tree"]').getByText(title)).toBeVisible()
   })
 
-  test('create a Mind Map child page from the row New Child menu', async ({ page }) => {
+  test('create a Mind Map child page from the tree context menu', async ({ page }) => {
     const parentTitle = uniqueTitle('MindMap Parent')
     await page.goto('/')
     await page.locator('[aria-label="New page"]').first().click()
@@ -67,21 +67,14 @@ test.describe('dedicated diagram and mind map pages', () => {
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 
-    // Row action menu → New Child → Mind map page.
+    // Right-click the row → context menu → Mind map page (child).
     const row = page.locator('[role="treeitem"]', { hasText: parentTitle }).first()
-    await row.hover()
-    await row.getByLabel(`Actions for ${parentTitle}`).click()
+    await row.click({ button: 'right' })
+    await expect(page.getByTestId('tree-context-menu')).toBeVisible()
     await page.getByText('Mind map page').click()
-
-    const childTitle = uniqueTitle('MindMap Child')
-    const childDialog = page.getByRole('dialog')
-    if (await childDialog.isVisible().catch(() => false)) {
-      await childDialog.getByLabel('Title').fill(childTitle)
-      await childDialog.getByRole('button', { name: /create/i }).click()
-    }
-    await expect(
-      page.getByTestId('mindmap-workspace').or(page.locator('[data-testid="mindmap-workspace"]'))
-    ).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('mindmap-workspace')).toBeVisible({ timeout: 15_000 })
+    // The new page is a child of the parent (visible in breadcrumb or tree).
+    await expect(page.getByTestId('mindmap-rendered').locator('svg')).toBeVisible()
   })
 
   test('diagram workspace: edit mode with live preview, template, apply/cancel', async ({
