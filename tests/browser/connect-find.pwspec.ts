@@ -279,6 +279,8 @@ test.describe('connect and find', () => {
     })
     expect(htmlRes.status()).toBe(201)
     await page.goto('/')
+    await page.locator('[aria-label="Home"]').click()
+    await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
     const htmlCard = page.getByRole('button', { name: `Open ${htmlTitle}`, exact: true })
     await htmlCard.waitFor()
     await htmlCard.click()
