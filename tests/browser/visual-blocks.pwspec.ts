@@ -446,14 +446,18 @@ test.describe('visual knowledge blocks', () => {
     ])
     await page.setViewportSize({ width: 480, height: 900 })
     await openNote(page, title)
-    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
-    const overflow = await page.evaluate(() => {
-      const workspace = document.querySelector('[data-testid="rich-editor"]')
-      if (!workspace) return null
-      return { scroll: workspace.scrollWidth, client: workspace.clientWidth }
-    })
-    expect(overflow).not.toBeNull()
-    // The workspace itself must not overflow; the diagram pane scrolls inside.
-    expect(overflow!.scroll).toBeLessThanOrEqual(overflow!.client + 2)
+    await expectRendered(page, 'diagram')
+    await expect
+      .poll(async () => {
+        const overflow = await page.evaluate(() => {
+          const workspace = document.querySelector('[data-testid="rich-editor"]')
+          if (!workspace) return null
+          return { scroll: workspace.scrollWidth, client: workspace.clientWidth }
+        })
+        if (overflow === null) return 'missing'
+        // The workspace itself must not overflow; the diagram pane scrolls inside.
+        return overflow.scroll <= overflow.client + 2 ? 'contained' : 'overflowing'
+      })
+      .toBe('contained')
   })
 })

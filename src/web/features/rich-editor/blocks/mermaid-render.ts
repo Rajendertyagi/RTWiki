@@ -1,3 +1,4 @@
+import type { Mermaid } from 'mermaid'
 import { debugLog, safeHash } from '../../../diagnostics/debug-log.js'
 import { sanitizeDiagramSvg } from './svg-sanitize.js'
 
@@ -91,12 +92,10 @@ export async function renderMermaidSvg(
   // failure to a phase without ever logging diagram content.
   let stage = 'import'
   try {
-    // Lazy import keeps Mermaid (~1 MB) out of the initial application chunk.
-    const mod = (await import('mermaid')) as unknown as {
-      default?: typeof import('mermaid')['default']
-      mermaid?: typeof import('mermaid')['default']
-    }
-    const mermaid = mod.default ?? mod.mermaid
+    // Lazy import keeps Mermaid out of the initial application chunk.
+    // v10 ships a single eager bundle: every diagram type is registered in
+    // the main module, so detection cannot be broken by chunk splitting.
+    const mermaid: Mermaid = (await import('mermaid')).default
     if (!mermaid || typeof mermaid.initialize !== 'function') {
       throw new Error('mermaid module unavailable')
     }

@@ -39,10 +39,11 @@
     "@tabler/icons-react": "3.46.0",
     "codemirror": "6.0.2",
     "hono": "4.13.3",
-    "mermaid": "11.17.1",
+    "mermaid": "10.9.3",
     "parse5": "8.0.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-icons": "5.7.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
