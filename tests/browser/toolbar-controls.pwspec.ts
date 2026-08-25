@@ -127,27 +127,65 @@ test.describe('Rich Note toolbar controls', () => {
     ).toBeVisible()
   })
 
-  test('quote and code blocks apply via the Insert menu', async ({ page }) => {
+  test('quote and code blocks apply via their toolbar controls', async ({ page }) => {
     await newRichNote(page)
-    // Quote/code/table now live behind the single Insert control.
-    const openInsert = async (): Promise<void> => {
-      await page.getByTestId('insert-menu-button').click()
-      await expect(page.getByTestId('insert-menu')).toBeVisible()
-    }
-    await openInsert()
+    // Every insertion control is a direct toolbar button (no Insert dropdown).
     await page.getByTestId('insert-quote').click()
     await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
-    await openInsert()
     await page.getByTestId('insert-code-block').click()
     await expect(page.locator(`${EDITABLE} pre`).first()).toBeVisible()
   })
 
-  test('table insertion creates a table via the Insert menu', async ({ page }) => {
+  test('table insertion creates a table via its toolbar control', async ({ page }) => {
     await newRichNote(page)
-    await page.getByTestId('insert-menu-button').click()
     await page.getByTestId('insert-table').click()
     await expect(page.locator(`${EDITABLE} table`).first()).toBeVisible()
     await expect(page.locator(`${EDITABLE} table td`).first()).toBeVisible()
+  })
+
+  test('every insertion control is present and usable at desktop width', async ({ page }) => {
+    await newRichNote(page)
+    const keys = [
+      'insert-formula',
+      'insert-diagram',
+      'insert-mind-map',
+      'insert-callout-info',
+      'insert-callout-note',
+      'insert-callout-tip',
+      'insert-callout-warning',
+      'insert-callout-danger',
+      'insert-table',
+      'insert-quote',
+      'insert-code-block'
+    ]
+    for (const key of keys) {
+      const control = page.getByTestId(key)
+      await expect(control).toBeVisible()
+      await expect(control).toBeEnabled()
+    }
+    // The former Insert dropdown is gone.
+    await expect(page.getByTestId('insert-menu-button')).toHaveCount(0)
+  })
+
+  test('every insertion control remains visible at narrow width (scroll, no menu)', async ({
+    page
+  }) => {
+    const title = uniqueTitle('NarrowInsert')
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(title)
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.locator(EDITABLE)).toBeVisible()
+    await page.setViewportSize({ width: 480, height: 800 })
+    const keys = ['insert-formula', 'insert-diagram', 'insert-mind-map', 'insert-callout-danger']
+    for (const key of keys) {
+      await expect(page.getByTestId(key)).toBeVisible()
+    }
+    await expect(page.getByTestId('insert-menu-button')).toHaveCount(0)
+    // Narrow screens scroll the row; controls stay usable.
+    await page.getByTestId('insert-quote').click()
+    await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
   })
 
   test('text colour applies an inline colour style', async ({ page }) => {

@@ -44,9 +44,9 @@ async function openNote(page: Page, title: string): Promise<void> {
   await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 }
 
-/** Inserts a block through the toolbar Insert menu. */
+/** Inserts a block through its persistent toolbar control (one compact
+ * icon per entry; the former Insert dropdown was removed). */
 async function insertViaMenu(page: Page, key: string): Promise<void> {
-  await page.getByTestId('insert-menu-button').click()
   await page.getByTestId(key).click()
 }
 
