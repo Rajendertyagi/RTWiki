@@ -312,11 +312,14 @@ test.describe('visual knowledge blocks', () => {
       expect(result.ok).toBe(true)
       expect(result.payload).toContain(`"variant":"${variant}"`)
 
-      // Type into the callout's editable inline content, then verify through
-      // saved state (autosave debounce makes PATCH timing racy to catch).
-      const calloutContent = page.locator('[data-variant]').getByRole('textbox').first()
-      await calloutContent.click()
+      // Type into the callout's own editable inline content, prove the text
+      // exists in the document DOM, then verify persisted state.
+      const calloutBody = page
+        .locator(`[data-variant="${variant}"] [contenteditable="true"]`)
+        .first()
+      await calloutBody.click()
       await page.keyboard.type(`Callout ${variant} text`)
+      await expect(calloutBody).toContainText(`Callout ${variant} text`)
       await expect
         .poll(async () => (await getStoredContent(request, p.id)) ?? '', { timeout: 15_000 })
         .toContain(`Callout ${variant} text`)
