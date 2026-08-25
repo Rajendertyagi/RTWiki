@@ -458,6 +458,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
           </Tooltip>
         ) : (
           <RightSidebar
+            key={pageId}
             outline={outline}
             pageTypeLabel={UI_TEXT.richNote}
             createdDate={createdDate ?? ''}

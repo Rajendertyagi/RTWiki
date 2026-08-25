@@ -116,26 +116,33 @@ export function RightSidebar({
         <Text size="xs" fw={600} c="dimmed" className={classes.sectionTitle}>
           {UI_TEXT.backlinksHeading}
         </Text>
-        {backlinks !== null && backlinks.length > 0 ? (
-          <Stack gap={2} data-testid="backlinks-list">
-            {backlinks.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                className={classes.outlineEntry}
-                data-testid="backlink-entry"
-                onClick={() => onOpenPage?.(entry.id)}
-                title={entry.snippet ?? undefined}
-              >
-                {entry.title || UI_TEXT.untitledPage}
-              </button>
-            ))}
-          </Stack>
-        ) : (
-          <Text size="xs" c="dimmed" className={classes.emptyOutline} data-testid="backlinks-empty">
-            {UI_TEXT.backlinksEmptyLabel}
-          </Text>
-        )}
+        <div data-testid="backlinks-section">
+          {backlinks !== null && backlinks.length > 0 ? (
+            <Stack gap={2} data-testid="backlinks-list">
+              {backlinks.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className={classes.outlineEntry}
+                  data-testid="backlink-entry"
+                  onClick={() => onOpenPage?.(entry.id)}
+                  title={entry.snippet ?? undefined}
+                >
+                  {entry.title || UI_TEXT.untitledPage}
+                </button>
+              ))}
+            </Stack>
+          ) : (
+            <Text
+              size="xs"
+              c="dimmed"
+              className={classes.emptyOutline}
+              data-testid="backlinks-empty"
+            >
+              {UI_TEXT.backlinksEmptyLabel}
+            </Text>
+          )}
+        </div>
 
         <Divider my="sm" />
 
