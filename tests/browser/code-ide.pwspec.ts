@@ -125,9 +125,10 @@ test.describe('source-file IDE', () => {
     await expect(page.locator('.cm-editor')).toBeVisible({ timeout: 10_000 })
     // The toolbar button drives the same openSearchPanel command as Ctrl+F.
     await page.getByTestId('ide-find').click()
-    await expect(page.locator('.cm-searchpanel')).toBeVisible({ timeout: 10_000 })
+    // This CodeMirror version renders the panel as .cm-panel.cm-search.
+    await expect(page.locator('.cm-panel.cm-search')).toBeVisible({ timeout: 10_000 })
     await page.keyboard.press('Escape')
-    await expect(page.locator('.cm-searchpanel')).toHaveCount(0)
+    await expect(page.locator('.cm-panel.cm-search')).toHaveCount(0)
   })
 
   test('format document pretty-prints CSS and participates in autosave', async ({ page }) => {

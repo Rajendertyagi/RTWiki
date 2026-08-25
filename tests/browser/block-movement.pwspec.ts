@@ -197,6 +197,20 @@ test.describe('rich note block rearrangement', () => {
     expect(twoIdx).toBeGreaterThan(-1)
     expect(oneIdx).toBeGreaterThan(-1)
 
+    // Wait until the moved order is PERSISTED before reloading — a reload
+    // during the autosave debounce window would legitimately lose the move.
+    await expect
+      .poll(
+        async () => {
+          const stored = await getStoredContent(request, p.id)
+          const two = stored.indexOf('persist two')
+          const one = stored.indexOf('persist one')
+          return two > -1 && one > -1 && two < one ? 'moved' : 'pending'
+        },
+        { timeout: 15_000 }
+      )
+      .toBe('moved')
+
     // Reload: session restoration reopens the same note directly (the tab
     // and active page persist in sessionStorage), so no dashboard navigation.
     await page.reload()
