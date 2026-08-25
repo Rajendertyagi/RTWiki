@@ -597,13 +597,13 @@ test.describe('visual knowledge blocks', () => {
         type: 'paragraph',
         content: [
           { type: 'text', text: 'Energy is ', styles: {} },
-          { type: 'inlineMath', content: 'E = mc^2', styles: {} },
-          { type: 'text', text: ' famously.', styles: {} }
+          { type: 'math', content: 'E = mc^2', styles: {} },
+          { type: 'text', text: 'famously.', styles: {} }
         ]
       }
     ])
     await openNote(page, title)
-    const inlineMath = page.locator('[data-content-type="inlineMath"]').first()
+    const inlineMath = page.locator('[data-content-type="math"]').first()
     await expect(inlineMath).toBeVisible()
     await expect(inlineMath).toContainText('mc')
     await expect(page.getByText('Energy is')).toBeVisible()
