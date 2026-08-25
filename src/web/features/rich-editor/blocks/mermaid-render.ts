@@ -130,9 +130,7 @@ export async function renderMermaidSvg(
     // only. Mermaid parse errors can embed source snippets, so messages and
     // content are never logged.
     const name = err instanceof Error ? err.name : typeof err
-    console.warn(
-      `rtwiki mermaid render failed at ${stage}: ${name} (len=${source.length})`
-    )
+    console.warn(`rtwiki mermaid render failed at ${stage}: ${name} (len=${source.length})`)
     debugLog('editor', 'editor_block_render_failed', {
       targetId: options.blockId,
       code: `${options.blockType}-${stage}`,
