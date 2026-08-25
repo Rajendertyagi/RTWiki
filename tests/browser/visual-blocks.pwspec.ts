@@ -603,7 +603,9 @@ test.describe('visual knowledge blocks', () => {
       }
     ])
     await openNote(page, title)
-    await expect(page.locator('[data-testid="rich-editor"] math').first()).toBeVisible()
+    const inlineMath = page.locator('[data-content-type="inlineMath"]').first()
+    await expect(inlineMath).toBeVisible()
+    await expect(inlineMath).toContainText('mc')
     await expect(page.getByText('Energy is')).toBeVisible()
     await expect(page.getByText('famously.')).toBeVisible()
   })
@@ -617,12 +619,16 @@ test.describe('visual knowledge blocks', () => {
     // Open the formula source editor and replace the broken LaTeX.
     const mathBlock = page.locator('[data-content-type="mathBlock"]').first()
     await mathBlock.click()
-    const source = mathBlock.locator('[contenteditable="true"]').first()
+    // The source editor opens in a popup; it is the active contenteditable.
+    const source = page.locator('[contenteditable="true"]').first()
+    await expect(source).toBeVisible()
     await source.click()
     await page.keyboard.press('Control+a')
     await page.keyboard.type('c = a + b')
     // The corrected formula renders as MathML and persists.
-    await expect(page.locator('[data-testid="rich-editor"] math').first()).toBeVisible()
+    await expect(
+      page.locator('[data-testid="rich-editor"] [data-content-type="mathBlock"] math').first()
+    ).toBeVisible()
     await expect
       .poll(async () => (await getStoredContent(request, p.id)) ?? '', { timeout: 15_000 })
       .toContain('c = a + b')
@@ -650,7 +656,7 @@ test.describe('visual knowledge blocks', () => {
     ])
 
     const find = async (q: string): Promise<boolean> => {
-      const res = await request.get(`/api/pages?search=${encodeURIComponent(q)}`)
+      const res = await request.get(`/api/pages?q=${encodeURIComponent(q)}`)
       const body = (await res.json()) as { pages: Array<{ title: string }> }
       return body.pages.some((pg) => pg.title === title)
     }
