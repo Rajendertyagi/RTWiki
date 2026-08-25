@@ -347,7 +347,7 @@ test.describe('visual knowledge blocks', () => {
     expect(cardText).not.toContain('{')
   })
 
-  test('duplicate preserves every visual block', async ({ page, request }) => {
+  test('duplicate preserves every visual block', async ({ request }) => {
     const title = uniqueTitle('VB Duplicate')
     const original = await seedRich(request, title, [
       { id: 'm', type: 'mathBlock', content: 'a^2+b^2=c^2' },
@@ -466,5 +466,222 @@ test.describe('visual knowledge blocks', () => {
         return overflow.scroll <= overflow.client + 2 ? 'contained' : 'overflowing'
       })
       .toBe('contained')
+  })
+
+  test('diagram: live preview renders while typing (no Apply required)', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('VB LiveDiagram')
+    await seedRich(request, title, [{ id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' }])
+    await openNote(page, title)
+    await expectRendered(page, 'diagram')
+
+    await page.getByTestId('diagram-edit-button').click()
+    const input = page.getByTestId('diagram-source-input')
+    await expect(input).toBeVisible()
+    // Type a new diagram; the live preview pane re-renders without Apply.
+    await input.fill('graph TD\n  A[One] --> B[Two] --> C[Three]')
+    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
+    // Cancel keeps the previously applied source (A-->B), not the typed draft.
+    await page.getByTestId('diagram-cancel').click()
+    await expect(page.getByTestId('diagram-preview')).toBeVisible()
+  })
+
+  test('diagram: Cancel restores the last applied source', async ({ page, request }) => {
+    const title = uniqueTitle('VB CancelDiagram')
+    const p = await seedRich(request, title, [
+      { id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' }
+    ])
+    await openNote(page, title)
+    await expectRendered(page, 'diagram')
+
+    await page.getByTestId('diagram-edit-button').click()
+    const input = page.getByTestId('diagram-source-input')
+    await input.fill('graph TD\n  A[Changed] --> B[Changed2]')
+    await page.getByTestId('diagram-cancel').click()
+
+    // Reopen edit: source is the original applied value.
+    await page.getByTestId('diagram-edit-button').click()
+    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/graph TD/)
+    const stored = await getStoredContent(request, p.id)
+    expect(stored).toContain('A-->B')
+    expect(stored).not.toContain('Changed2')
+  })
+
+  test('diagram: template picker loads a starter source into the live preview', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('VB DiagramTemplate')
+    await seedRich(request, title, [{ id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' }])
+    await openNote(page, title)
+    await expectRendered(page, 'diagram')
+
+    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-template').click()
+    await page.getByText('Sequence', { exact: true }).click()
+    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/sequenceDiagram/)
+    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
+    await page.getByTestId('diagram-cancel').click()
+  })
+
+  test('mind map: live preview renders while typing', async ({ page, request }) => {
+    const title = uniqueTitle('VB LiveMindMap')
+    await seedRich(request, title, [
+      { id: 'mm', type: 'mindMap', content: 'mindmap\n  root((R))\n    A\n    B' }
+    ])
+    await openNote(page, title)
+    await expectRendered(page, 'mindMap')
+
+    await page.getByTestId('mindMap-edit-button').click()
+    const input = page.getByTestId('mindMap-source-input')
+    await input.fill('mindmap\n  root((Root))\n    Alpha\n    Beta\n    Gamma')
+    await expect(page.locator('[data-testid="mindMap-svg"] svg').first()).toBeVisible()
+    await page.getByTestId('mindMap-cancel').click()
+    await expect(page.getByTestId('mindMap-preview')).toBeVisible()
+  })
+
+  test('mind map: zoom controls resize the rendered map', async ({ page, request }) => {
+    const title = uniqueTitle('VB ZoomMindMap')
+    await seedRich(request, title, [
+      { id: 'mm', type: 'mindMap', content: 'mindmap\n  root((R))\n    A\n    B' }
+    ])
+    await openNote(page, title)
+    await expectRendered(page, 'mindMap')
+
+    const label = page.getByTestId('mindMap-zoom-label')
+    await expect(label).toHaveText('100%')
+    await page.getByTestId('mindMap-zoom-in').click()
+    await expect(label).toHaveText('125%')
+    await page.getByTestId('mindMap-zoom-in').click()
+    await expect(label).toHaveText('150%')
+    await page.getByTestId('mindMap-zoom-out').click()
+    await expect(label).toHaveText('125%')
+    // Zoom never clips: the SVG host keeps its natural width at >100%.
+    await expect(page.locator('[data-testid="mindMap-svg"] svg').first()).toBeVisible()
+  })
+
+  test('callout: switch variant after insertion preserves rich text', async ({ page, request }) => {
+    const title = uniqueTitle('VB CalloutSwitch')
+    const p = await seedRich(request, title, [
+      {
+        id: 'c',
+        type: 'callout',
+        props: { variant: 'info' },
+        content: [{ type: 'text', text: 'switch me', styles: {} }]
+      }
+    ])
+    await openNote(page, title)
+    await expect(page.locator('[data-variant="info"]').first()).toBeVisible()
+
+    await page.getByTestId('callout-variant-button').click()
+    await page.getByTestId('callout-variant-warning').click()
+    await expect(page.locator('[data-variant="warning"]').first()).toBeVisible()
+    await expect(page.locator('[data-variant="info"]')).toHaveCount(0)
+    // Rich text is preserved across the variant change.
+    await expect(
+      page.locator('[data-variant="warning"] [data-testid="callout-content"]').first()
+    ).toContainText('switch me')
+    // Persisted as a variant change only (other props untouched).
+    await expect
+      .poll(async () => (await getStoredContent(request, p.id)) ?? '', { timeout: 15_000 })
+      .toContain('"variant":"warning"')
+  })
+
+  test('inline formula renders within paragraph text', async ({ page, request }) => {
+    const title = uniqueTitle('VB InlineMath')
+    await seedRich(request, title, [
+      {
+        id: 'p',
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Energy is ', styles: {} },
+          { type: 'inlineMath', content: 'E = mc^2', styles: {} },
+          { type: 'text', text: ' famously.', styles: {} }
+        ]
+      }
+    ])
+    await openNote(page, title)
+    await expect(page.locator('[data-testid="rich-editor"] math').first()).toBeVisible()
+    await expect(page.getByText('Energy is')).toBeVisible()
+    await expect(page.getByText('famously.')).toBeVisible()
+  })
+
+  test('invalid formula is correctable through the editor', async ({ page, request }) => {
+    const title = uniqueTitle('VB FormulaFix')
+    const p = await seedRich(request, title, [{ id: 'm', type: 'mathBlock', content: '\\frac{' }])
+    await openNote(page, title)
+    await expect(page.getByText(/Invalid equation/i)).toBeVisible()
+
+    // Open the formula source editor and replace the broken LaTeX.
+    const mathBlock = page.locator('[data-content-type="mathBlock"]').first()
+    await mathBlock.click()
+    const source = mathBlock.locator('[contenteditable="true"]').first()
+    await source.click()
+    await page.keyboard.press('Control+a')
+    await page.keyboard.type('c = a + b')
+    // The corrected formula renders as MathML and persists.
+    await expect(page.locator('[data-testid="rich-editor"] math').first()).toBeVisible()
+    await expect
+      .poll(async () => (await getStoredContent(request, p.id)) ?? '', { timeout: 15_000 })
+      .toContain('c = a + b')
+  })
+
+  test('structured search finds paragraph and callout text, never raw source', async ({
+    request
+  }) => {
+    const title = uniqueTitle('VB Search')
+    await seedRich(request, title, [
+      {
+        id: 'h',
+        type: 'heading',
+        props: { level: 1 },
+        content: [{ type: 'text', text: 'Quantum Bumblebee' }]
+      },
+      {
+        id: 'c',
+        type: 'callout',
+        props: { variant: 'tip' },
+        content: [{ type: 'text', text: 'Bees pollinate flowers' }]
+      },
+      { id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' },
+      { id: 'm', type: 'mathBlock', content: 'E = mc^2' }
+    ])
+
+    const find = async (q: string): Promise<boolean> => {
+      const res = await request.get(`/api/pages?search=${encodeURIComponent(q)}`)
+      const body = (await res.json()) as { pages: Array<{ title: string }> }
+      return body.pages.some((pg) => pg.title === title)
+    }
+
+    expect(await find('Quantum Bumblebee')).toBe(true)
+    expect(await find('Bees pollinate flowers')).toBe(true)
+    // Raw diagram/Formula source is intentionally NOT indexed.
+    expect(await find('graph TD')).toBe(false)
+    expect(await find('mc^2')).toBe(false)
+  })
+
+  test('dashboard preview never exposes source, JSON or SVG', async ({ page, request }) => {
+    const title = uniqueTitle('VB PreviewSafe')
+    await seedRich(request, title, [
+      {
+        id: 'c1',
+        type: 'callout',
+        props: { variant: 'warning' },
+        content: [{ type: 'text', text: 'Readable warning sentence', styles: {} }]
+      },
+      { id: 'd1', type: 'diagram', content: 'graph TD\n  A-->B' },
+      { id: 'm1', type: 'mathBlock', content: 'x^2' }
+    ])
+    await page.goto('/')
+    const card = page.getByRole('button', { name: `Open ${title}`, exact: true })
+    await card.waitFor()
+    const cardText = (await card.textContent()) ?? ''
+    expect(cardText).toContain('Readable warning sentence')
+    expect(cardText).not.toContain('graph TD')
+    expect(cardText).not.toContain('mathBlock')
+    expect(cardText).not.toContain('{')
+    expect(cardText).not.toContain('<svg')
   })
 })
