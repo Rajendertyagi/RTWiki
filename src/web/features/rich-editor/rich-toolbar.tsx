@@ -38,8 +38,8 @@ import { useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
-
 import type { AnyRichEditor } from './schema.js'
+import { type LinkablePage, WikiLinkToolbarAction } from './wiki-link.js'
 
 type AnyEditor = AnyRichEditor
 
@@ -81,6 +81,8 @@ function InsertButton({ editor, entry }: { editor: AnyEditor; entry: InsertEntry
 
 interface RichToolbarProps {
   editor: AnyEditor
+  /** Living pages for internal-link insertion. */
+  linkablePages?: LinkablePage[]
 }
 
 /** BlockNote's default palette (minus the 'default' sentinel handled apart). */
@@ -106,7 +108,7 @@ const ALIGNMENTS = ['left', 'center', 'right'] as const
  * derived through the official useEditorState hook so buttons reflect the
  * cursor/selection without manual event plumbing.
  */
-export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
+export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): JSX.Element {
   const [linkOpened, setLinkOpened] = useState(false)
   const [textColorOpened, setTextColorOpened] = useState(false)
   const [highlightOpened, setHighlightOpened] = useState(false)
@@ -372,6 +374,10 @@ export function RichToolbar({ editor }: RichToolbarProps): JSX.Element {
           />
         </Popover.Dropdown>
       </Popover>
+
+      {linkablePages.length > 0 ? (
+        <WikiLinkToolbarAction editor={editor} pages={linkablePages} />
+      ) : null}
 
       <Popover
         opened={linkOpened}

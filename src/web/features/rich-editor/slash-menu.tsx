@@ -1,10 +1,16 @@
 import { combineByGroup, filterSuggestionItems } from '@blocknote/core'
 import { getMathSlashMenuItems } from '@blocknote/math-block'
-import { getDefaultReactSlashMenuItems, SuggestionMenuController } from '@blocknote/react'
+import {
+  type DefaultReactSuggestionItem,
+  getDefaultReactSlashMenuItems,
+  SuggestionMenuController
+} from '@blocknote/react'
 import type { JSX } from 'react'
 import { useMemo } from 'react'
+import { UI_TEXT } from '../../config/index.js'
 import { getInsertEntries, runInsertEntry } from './insert-blocks.js'
 import type { AnyRichEditor } from './schema.js'
+import { filterLinkablePages, insertWikiLink, type LinkablePage } from './wiki-link.js'
 
 /**
  * The Rich Document slash menu: BlockNote's default items plus the official
@@ -41,4 +47,31 @@ export function RTSuggestionMenu({ editor }: { editor: AnyRichEditor }): JSX.Ele
     return async (query: string) => filterSuggestionItems(items, query)
   }, [editor])
   return <SuggestionMenuController triggerCharacter="/" getItems={getItems} />
+}
+
+/**
+ * The `[[` wiki-link menu: typing two opening brackets near the caret opens
+ * a searchable page picker. Arrow keys navigate, Enter inserts the selected
+ * page as an internal link (ID-stored, title-displayed), Escape closes.
+ * Pages are never created implicitly; virtual HTML subfiles do not exist
+ * here because only real pages arrive in `pages`.
+ */
+export function RTWikiLinkMenu({
+  editor,
+  pages
+}: {
+  editor: AnyRichEditor
+  pages: LinkablePage[]
+}): JSX.Element {
+  const getItems = useMemo(() => {
+    return async (query: string) =>
+      filterLinkablePages(pages, query).map(
+        (page): DefaultReactSuggestionItem => ({
+          title: page.title || UI_TEXT.untitledPage,
+          aliases: [page.id],
+          onItemClick: () => insertWikiLink(editor, page)
+        })
+      )
+  }, [editor, pages])
+  return <SuggestionMenuController triggerCharacter="[[" getItems={getItems} />
 }

@@ -7,7 +7,7 @@ import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Alert, Button, Stack, Text, Tooltip } from '@mantine/core'
 import { IconAlertCircle, IconLayoutSidebar } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { updatePage } from '../../services/pages-api.js'
@@ -29,8 +29,10 @@ import {
   rtwikiBlockSchema
 } from './schema.js'
 import { RTSideMenu } from './side-menu.js'
-import { RTSuggestionMenu } from './slash-menu.js'
+import { RTSuggestionMenu, RTWikiLinkMenu } from './slash-menu.js'
+import { parseInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { useAutosave } from './use-autosave.js'
+import type { LinkablePage } from './wiki-link.js'
 
 interface RichEditorProps {
   pageId: string
@@ -51,6 +53,10 @@ interface RichEditorProps {
   onEditorReady?: (editor: AnyRichEditor | null) => void
   /** Renders without the built-in toolbar; the parent hosts it externally. */
   toolbarExternal?: boolean
+  /** All living pages, for internal-link insertion and broken-link styling. */
+  linkablePages?: LinkablePage[]
+  /** Opens a page through the controller/tab flow (flushes pending edits). */
+  onOpenPage?: (pageId: string) => void
 }
 
 export function RichEditor({
@@ -63,7 +69,9 @@ export function RichEditor({
   onFlushRef,
   onSaveStateChange,
   onEditorReady,
-  toolbarExternal
+  toolbarExternal,
+  linkablePages = [],
+  onOpenPage
 }: RichEditorProps): JSX.Element {
   const parseResult = parseStoredDocument(storedContent)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -209,6 +217,8 @@ export function RichEditor({
           updatedDate={updatedDate}
           onEditorReady={onEditorReady}
           toolbarExternal={toolbarExternal}
+          linkablePages={linkablePages}
+          onOpenPage={onOpenPage}
         />
       </EditorErrorBoundary>
     </div>
@@ -227,6 +237,8 @@ interface InnerProps {
   onEditorReady?: (editor: AnyRichEditor | null) => void
   /** Renders without the built-in toolbar; the parent hosts it externally. */
   toolbarExternal?: boolean
+  linkablePages?: LinkablePage[]
+  onOpenPage?: (pageId: string) => void
 }
 
 function RichEditorInner(props: InnerProps): JSX.Element {
@@ -239,7 +251,9 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     createdDate,
     updatedDate,
     onEditorReady,
-    toolbarExternal
+    toolbarExternal,
+    linkablePages = [],
+    onOpenPage
   } = props
   const editor = useCreateBlockNote(
     {
@@ -315,6 +329,76 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     }
   }, [editor, notifyEdit])
 
+  // ---- Internal wiki links ------------------------------------------------
+  const knownPageIds = useMemo(() => new Set(linkablePages.map((p) => p.id)), [linkablePages])
+  const knownPageIdsRef = useRef(knownPageIds)
+  knownPageIdsRef.current = knownPageIds
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const [brokenLinkNotice, setBrokenLinkNotice] = useState(false)
+
+  // Marks anchors whose target no longer exists. Pure DOM-level styling: the
+  // underlying link mark keeps its stored ID, so repairing (recreating the
+  // page) or removing the link stays a normal editing action.
+  useEffect(() => {
+    // Captured so this effect re-runs (and re-scans) when the page set changes.
+    const known = knownPageIds
+    const scan = (): void => {
+      const wrapper = wrapperRef.current
+      if (!wrapper) return
+      const anchors = wrapper.querySelectorAll(
+        'a[href^="rtwiki://page/"]'
+      ) as NodeListOf<HTMLAnchorElement>
+      for (const anchor of anchors) {
+        const id = parseInternalLinkHref(anchor.getAttribute('href') ?? '')
+        anchor.classList.toggle('rtwiki-broken-link', id === null || !known.has(id))
+      }
+    }
+    scan()
+    // Re-scan after edits (BN re-renders node views); debounced to once per
+    // second so typing never pays for it.
+    let timer: number | null = null
+    const schedule = (): void => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        scan()
+      }, 1000)
+    }
+    const unsub = editor.onChange(schedule)
+    return () => {
+      unsub()
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [editor, knownPageIds])
+
+  // Click interception: internal links navigate through the controller flow
+  // (flush + tab dedupe, no browser navigation). Deleted targets show an
+  // understandable notice and never navigate anywhere else. Attached via a
+  // ref listener: the wrapper is a static container and must not grow an
+  // interaction ARIA contract.
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+    const listener = (event: MouseEvent): void => {
+      const target = event.target as HTMLElement
+      const anchor = target.closest('a[href^="rtwiki://page/"]') as HTMLAnchorElement | null
+      if (!anchor) return
+      event.preventDefault()
+      event.stopPropagation()
+      const id = parseInternalLinkHref(anchor.getAttribute('href') ?? '')
+      if (id === null) return
+      if (knownPageIdsRef.current.has(id)) {
+        setBrokenLinkNotice(false)
+        onOpenPage?.(id)
+      } else {
+        setBrokenLinkNotice(true)
+        window.setTimeout(() => setBrokenLinkNotice(false), 4000)
+      }
+    }
+    wrapper.addEventListener('click', listener)
+    return () => wrapper.removeEventListener('click', listener)
+  }, [onOpenPage])
+
   const navigateToHeading = (blockId: string): void => {
     editor.setTextCursorPosition(blockId, 'start')
     editor.focus()
@@ -328,11 +412,17 @@ function RichEditorInner(props: InnerProps): JSX.Element {
         </Alert>
       ) : null}
 
-      {toolbarExternal ? null : <RichToolbar editor={editor} />}
+      {brokenLinkNotice ? (
+        <Alert color="orange" variant="light" role="status" data-testid="broken-link-notice">
+          <Text size="sm">{UI_TEXT.brokenLinkNotice}</Text>
+        </Alert>
+      ) : null}
+
+      {toolbarExternal ? null : <RichToolbar editor={editor} linkablePages={linkablePages} />}
 
       <div className={classes.richRow}>
         <Stack gap="xs" className={classes.editorContainer}>
-          <div className={classes.blockNoteWrapper}>
+          <div className={classes.blockNoteWrapper} ref={wrapperRef}>
             <BlockNoteView
               editor={editor}
               theme={blocknoteTheme}
@@ -344,6 +434,9 @@ function RichEditorInner(props: InnerProps): JSX.Element {
                   Move up / Move down actions. */}
               <RTSideMenu editor={editor} />
               <RTSuggestionMenu editor={editor} />
+              {linkablePages.length > 0 ? (
+                <RTWikiLinkMenu editor={editor} pages={linkablePages} />
+              ) : null}
             </BlockNoteView>
           </div>
 

@@ -518,6 +518,8 @@ export function App(): JSX.Element {
             <PageWorkspace
               page={controller.selectedPage}
               breadcrumb={breadcrumb}
+              linkablePages={controller.pages.map((p) => ({ id: p.id, title: p.title }))}
+              onOpenPageLink={(id) => void handleSelectPage(id)}
               htmlSourceField={
                 htmlSource && htmlSource.pageId === controller.selectedPage.id
                   ? htmlSource.field

@@ -47,6 +47,10 @@ interface PageWorkspaceProps {
   }) => void
   /** Active HTML source subfile for this page; null = rendered preview. */
   htmlSourceField?: 'html' | 'css' | 'javascript' | null
+  /** All living pages (id+title) for internal-link insertion. */
+  linkablePages?: Array<{ id: string; title: string }>
+  /** Opens a page through the controller/tab flow. */
+  onOpenPageLink?: (pageId: string) => void
   /** Returns from a source subfile to the rendered preview. */
   onExitHtmlSource?: () => void
 }
@@ -66,7 +70,9 @@ export function PageWorkspace({
   onFlushRef,
   onSaveStateChange,
   htmlSourceField = null,
-  onExitHtmlSource
+  onExitHtmlSource,
+  linkablePages = [],
+  onOpenPageLink
 }: PageWorkspaceProps): JSX.Element {
   // Rich pages host the persistent toolbar OUTSIDE the editor component so
   // it sits directly under the tab strip, above the title/actions row. The
@@ -114,6 +120,8 @@ export function PageWorkspace({
           key={page.id}
           page={page}
           breadcrumb={breadcrumb}
+          linkablePages={linkablePages}
+          onOpenPageLink={onOpenPageLink}
           sourceField={htmlSourceField}
           onExitSource={onExitHtmlSource}
           onSaveContent={onSaveContent}
@@ -137,6 +145,8 @@ export function PageWorkspace({
 function PageEditors({
   page,
   breadcrumb,
+  linkablePages,
+  onOpenPageLink,
   sourceField,
   onExitSource,
   onSaveContent,
@@ -147,6 +157,8 @@ function PageEditors({
 }: {
   page: Page
   breadcrumb?: string[]
+  linkablePages?: Array<{ id: string; title: string }>
+  onOpenPageLink?: (pageId: string) => void
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
@@ -180,6 +192,8 @@ function PageEditors({
           onSaveStateChange={onSaveStateChange}
           onEditorReady={onRichEditorReady}
           toolbarExternal
+          linkablePages={linkablePages}
+          onOpenPage={onOpenPageLink}
         />
       </Suspense>
     )
