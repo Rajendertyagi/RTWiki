@@ -34,6 +34,10 @@ async function getStoredContent(request: APIRequestContext, id: string): Promise
 
 async function openNote(page: Page, title: string): Promise<void> {
   await page.goto('/')
+  // Session restoration may reopen the last workspace directly; go Home
+  // first so the dashboard card lookup is always valid.
+  await page.locator('[aria-label="Home"]').click()
+  await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
   await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
   await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 }
@@ -352,14 +356,14 @@ test.describe('connect and find', () => {
       created.push(p.id)
     }
     const deep = uniqueTitle('Deep Finder Page 54')
-    await seedRich(request, deep)
+    const deepPage = await seedRich(request, deep)
     await page.goto('/')
     await page.keyboard.press('Control+k')
     await page.getByTestId('quick-finder-input').fill(deep)
     await expect(page.getByTestId('quick-finder-results')).toContainText(deep)
     await page.keyboard.press('Escape')
-    // Clean up the bulk pages so later suites see a small tree again.
-    for (const id of created) {
+    // Clean up the bulk pages so later suites see an unpolluted tree.
+    for (const id of [...created, deepPage.id]) {
       await request.delete(`/api/pages/${id}`)
     }
   })
