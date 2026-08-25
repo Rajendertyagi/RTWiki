@@ -15,11 +15,38 @@ BlockNote JSON with no schema migration ([ADR-004](adr/ADR-004-canonical-block-j
 | Mind Map | `mindMap` | Plain-text content (Mermaid mindmap syntax) | RTWiki secure Mermaid pipeline |
 | Callout | `callout` | Editable inline rich text + `variant` prop | Native custom block, theme-token styling |
 
-Insertion is available from the toolbar **Insert** menu and the `/` slash
-menu. The Insert/slash entries stay uncluttered — Diagram insertion uses a
-single flowchart starter; the six common diagram shapes (flowchart, sequence,
+Insertion controls live directly on the persistent Rich Note toolbar — one
+compact icon per entry (Formula, Diagram, Mind Map, the five Callouts,
+Table, Quote, Code Block), grouped with separators and always visible; the
+row scrolls horizontally on narrow screens. The `/` slash menu remains
+available as an alternative surface. Diagram insertion uses a single
+flowchart starter; the six common diagram shapes (flowchart, sequence,
 class, state, entity-relationship, timeline) are offered as a **starter
 template picker** inside the Diagram edit pane.
+
+### Rearrangement
+
+Every block — including all custom visual blocks — can be rearranged two
+ways: the native drag handle (hover a block, drag the gutter handle) and
+keyboard-accessible **Move up / Move down** actions in the drag-handle menu.
+Moves preserve block ids and content, trigger autosave, return focus to the
+moved block, and never cross the document boundaries (the first block has no
+Move up; the last has no Move down).
+
+### Resizing (Diagram & Mind Map)
+
+Embedded Diagram and Mind Map blocks expose a corner resize handle (pointer)
+plus always-rendered size-preset buttons — Small, Medium, Large, Full width,
+Auto height — for keyboard users. Dimensions persist as typed block props
+(pixel strings), are clamped to min/max bounds and the document column, and
+re-clamp responsively on narrow screens without altering the stored desktop
+size. Zoom/Fit of the rendered SVG is independent of the container box.
+
+Floating menus (drag-handle menu, callout variant menu, template pickers,
+toolbar popovers) render through portals above the application shell using
+the shared overlay z-index token with collision-aware flip/shift placement,
+so they can never paint behind the sidebar or clip against scroll
+containers.
 
 ### Live editing (Diagram & Mind Map)
 
@@ -74,6 +101,38 @@ Hardening layers:
 
 Rendering failures resolve to bounded error codes (`parse_error`,
 `render_error`) contained to the block.
+
+## Dedicated Diagram and Mind Map pages
+
+Beyond embedded blocks, **Diagram** and **Mind Map** are real page types.
+They are created from the New Page dialog, the empty-tree context menu, or
+any page-row New Child menu; they appear immediately in the tree with
+distinct icons/type labels, open in a tab, and support rename, duplicate,
+move and delete. The database stores the type as unconstrained text — no
+migration was required, and existing notes are untouched.
+
+Each opens a dedicated full-page workspace reusing the same secure Mermaid
+pipeline: a rendered view (Edit, Refresh, Fit/Actual, Zoom, full-screen) and
+a split edit mode (source + live debounced preview, template picker on
+Diagram pages, Apply/Cancel, contained syntax errors, shared autosave and
+save status). Stored content is opaque visual-page JSON; search indexes only
+the title, and dashboard cards show the readable type label — never Mermaid
+source or SVG.
+
+## Source-file IDE (HTML pages)
+
+Clicking an HTML page's HTML/CSS/JavaScript subfile opens a lightweight IDE
+around the existing CodeMirror 6 editor: a file breadcrumb, a source toolbar
+(undo, redo, find, replace, Format Document, word wrap, fold/unfold all,
+font size controls, full-screen editor, save now, return to preview), and a
+status row (language, line/column, selection count, format errors, save
+state). Shortcuts: `Ctrl+F` find, `Ctrl+H` replace, `Ctrl+S` flush save,
+`Shift+Alt+F` format, `F11` full-screen toggle. Formatting uses the
+exact-pinned Prettier standalone build, lazy-loaded per language only when
+first invoked; results participate in undo history and trigger autosave,
+failures stay contained, and empty output never replaces source. The
+generation-guarded draft contract is preserved across file switches,
+formatting and browser refresh.
 
 ## Compatibility
 
