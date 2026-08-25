@@ -171,3 +171,20 @@ export async function deletePage(id: string, signal?: AbortSignal): Promise<void
     throw new Error(body.error || `Failed to delete page (${res.status})`)
   }
 }
+/**
+ * Lists living pages whose Rich Note content links to `pageId` (exact
+ * ID-based relationships from the maintained page_links index).
+ */
+export async function getBacklinks(
+  pageId: string,
+  signal?: AbortSignal
+): Promise<Array<{ id: string; title: string; snippet: string | null }>> {
+  const res = await fetch(`${API_BASE}/pages/${encodeURIComponent(pageId)}/backlinks`, { signal })
+  if (!res.ok) {
+    throw new Error(`Backlinks request failed (${res.status})`)
+  }
+  const body = (await res.json()) as {
+    backlinks: Array<{ id: string; title: string; snippet: string | null }>
+  }
+  return body.backlinks
+}

@@ -5,6 +5,7 @@ import {
   parseHtmlContent,
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
+import { extractPageLinks, findLinkContext } from '@rtwiki/shared/schemas/page-links'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
 import {
   createStarterVisualContent,
@@ -14,7 +15,6 @@ import {
 } from '@rtwiki/shared/schemas/visual-page-content'
 import * as repo from '../repositories/page-repository.js'
 import { HierarchyError } from '../repositories/page-repository.js'
-
 import { extractSearchableContent } from './search-extraction.js'
 
 /**
@@ -91,6 +91,10 @@ export function createPage(db: Database, input: CreatePageInput): Page {
       position
     })
     db.run('COMMIT')
+    // Maintain the internal-link index for the new page (rich pages only).
+    if (input.pageType === 'rich') {
+      repo.replaceOutgoingLinks(db, id, extractPageLinks(content))
+    }
     return page
   } catch (err) {
     db.run('ROLLBACK')
@@ -154,18 +158,54 @@ export function updatePage(db: Database, id: string, input: UpdatePageInput): Pa
     searchContent = extractSearchableContent(existing.pageType, existing.content)
   }
 
-  return repo.updatePage(db, id, { ...input, searchContent })
+  const updated = repo.updatePage(db, id, { ...input, searchContent })
+  // Maintain the internal-link index on every content write. Non-rich page
+  // types cannot carry wiki links, so their outgoing set is cleared.
+  if (updated !== null && input.content !== undefined) {
+    if (existing.pageType === 'rich') {
+      repo.replaceOutgoingLinks(db, id, extractPageLinks(input.content))
+    } else {
+      repo.replaceOutgoingLinks(db, id, [])
+    }
+  }
+  return updated
 }
 
 export function duplicatePage(db: Database, id: string): Page | null {
   const source = repo.getPage(db, id)
   if (!source) return null
   const searchContent = extractSearchableContent(source.pageType, source.content)
-  return repo.duplicatePage(db, id, searchContent)
+  const copy = repo.duplicatePage(db, id, searchContent)
+  if (copy !== null && source.pageType === 'rich') {
+    repo.copyOutgoingLinks(db, id, copy.id)
+  }
+  return copy
 }
 
 export function softDeletePage(db: Database, id: string): boolean {
-  return repo.softDeletePage(db, id)
+  const deleted = repo.softDeletePage(db, id)
+  if (deleted) {
+    // Outgoing links die with the source; incoming links survive as broken
+    // links so sources keep their stored IDs and can repair or remove them.
+    repo.deleteOutgoingLinks(db, id)
+  }
+  return deleted
+}
+
+export interface BacklinkEntry {
+  id: string
+  title: string
+  snippet: string | null
+}
+
+/** Living pages whose Rich Note content links to 	argetId. */
+export function listBacklinks(db: Database, targetId: string): BacklinkEntry[] {
+  const rows = repo.listBacklinks(db, targetId)
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    snippet: findLinkContext(repo.getPage(db, row.id)?.content ?? '', targetId)
+  }))
 }
 
 export function listPages(

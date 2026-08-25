@@ -6,6 +6,7 @@ import type { AutosaveStatus } from './autosave-controller.js'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Alert, Button, Stack, Text, Tooltip } from '@mantine/core'
+import { parseInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { IconAlertCircle, IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
@@ -30,7 +31,6 @@ import {
 } from './schema.js'
 import { RTSideMenu } from './side-menu.js'
 import { RTSuggestionMenu, RTWikiLinkMenu } from './slash-menu.js'
-import { parseInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { useAutosave } from './use-autosave.js'
 import type { LinkablePage } from './wiki-link.js'
 
@@ -462,7 +462,9 @@ function RichEditorInner(props: InnerProps): JSX.Element {
             pageTypeLabel={UI_TEXT.richNote}
             createdDate={createdDate ?? ''}
             updatedDate={updatedDate ?? ''}
+            pageId={pageId}
             onNavigateToHeading={navigateToHeading}
+            onOpenPage={onOpenPage}
             onCollapse={() => setSidebarCollapsed(true)}
           />
         )}

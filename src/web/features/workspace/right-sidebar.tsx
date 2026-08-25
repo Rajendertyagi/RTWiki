@@ -1,30 +1,68 @@
 import { ActionIcon, Divider, Stack, Text, Tooltip } from '@mantine/core'
 import { IconLayoutSidebar } from '@tabler/icons-react'
+import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { getBacklinks } from '../../services/pages-api.js'
 import type { DocumentOutlineEntry } from '../rich-editor/document.js'
 import classes from './right-sidebar.module.css'
+
+export interface BacklinkEntryView {
+  id: string
+  title: string
+  snippet: string | null
+}
 
 interface RightSidebarProps {
   outline: DocumentOutlineEntry[]
   pageTypeLabel: string
   createdDate: string
   updatedDate: string
+  /** Page whose backlinks are listed; omitted on legacy callers. */
+  pageId?: string
   onNavigateToHeading: (blockId: string) => void
+  /** Opens a backlink source through the controller/tab flow. */
+  onOpenPage?: (pageId: string) => void
   onCollapse: () => void
 }
 
 /**
- * Contextual right sidebar for an open Rich Note: heading outline plus
- * basic page information. Collapsible; the document expands when hidden.
+ * Contextual right sidebar for an open Rich Note: heading outline,
+ * ID-exact backlinks, and basic page information. Collapsible; the
+ * document expands when hidden.
  */
 export function RightSidebar({
   outline,
   pageTypeLabel,
   createdDate,
   updatedDate,
+  pageId,
   onNavigateToHeading,
+  onOpenPage,
   onCollapse
 }: RightSidebarProps): JSX.Element {
+  const [backlinks, setBacklinks] = useState<BacklinkEntryView[] | null>(null)
+
+  // Backlinks are fetched per open page and refetched when the page changes.
+  // A null list means "not loaded / not applicable"; errors degrade to the
+  // empty state rather than blocking the sidebar.
+  useEffect(() => {
+    if (!pageId) {
+      setBacklinks(null)
+      return
+    }
+    let cancelled = false
+    setBacklinks(null)
+    getBacklinks(pageId)
+      .then((entries) => {
+        if (!cancelled) setBacklinks(entries)
+      })
+      .catch(() => {
+        if (!cancelled) setBacklinks([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pageId])
   return (
     <aside className={classes.panel} aria-label={UI_TEXT.rightSidebarLabel}>
       <div className={classes.header}>
@@ -65,6 +103,32 @@ export function RightSidebar({
               </button>
             ))}
           </Stack>
+        )}
+
+        <Divider my="sm" />
+
+        <Text size="xs" fw={600} c="dimmed" className={classes.sectionTitle}>
+          {UI_TEXT.backlinksHeading}
+        </Text>
+        {backlinks !== null && backlinks.length > 0 ? (
+          <Stack gap={2} data-testid="backlinks-list">
+            {backlinks.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className={classes.outlineEntry}
+                data-testid="backlink-entry"
+                onClick={() => onOpenPage?.(entry.id)}
+                title={entry.snippet ?? undefined}
+              >
+                {entry.title || UI_TEXT.untitledPage}
+              </button>
+            ))}
+          </Stack>
+        ) : (
+          <Text size="xs" c="dimmed" className={classes.emptyOutline} data-testid="backlinks-empty">
+            {UI_TEXT.backlinksEmptyLabel}
+          </Text>
         )}
 
         <Divider my="sm" />

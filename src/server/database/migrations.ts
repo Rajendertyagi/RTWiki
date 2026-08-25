@@ -69,6 +69,21 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
       'CREATE INDEX idx_pages_parent_position ON pages(parent_id, position) WHERE deleted_at IS NULL'
     )
   })
+
+  await applyMigration(db, '004_page_links', (db) => {
+    // Exact internal-link relationships between Rich Notes, maintained
+    // transactionally on content save. No FK constraints: a link to a
+    // deleted target must survive as a broken link (the source keeps its
+    // stored ID), and deleting a linked target must never be blocked.
+    db.run(`
+      CREATE TABLE IF NOT EXISTS page_links (
+        source_id TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        PRIMARY KEY (source_id, target_id)
+      )
+    `)
+    db.run('CREATE INDEX idx_page_links_target ON page_links(target_id)')
+  })
 }
 
 async function applyMigration(

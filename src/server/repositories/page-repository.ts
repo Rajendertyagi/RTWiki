@@ -398,3 +398,64 @@ export function movePage(
     throw err
   }
 }
+
+// ---------- Internal page links (backlink index) ----------
+
+export interface PageLinkRef {
+  sourceId: string
+  sourceTitle: string
+  snippet: string | null
+}
+
+/**
+ * Replaces a page's outgoing internal-link set atomically. Called on every
+ * successful Rich Note content save; targets may reference deleted pages
+ * (broken links), so no existence check and no FK constraint apply.
+ */
+export function replaceOutgoingLinks(db: Database, sourceId: string, targetIds: string[]): void {
+  db.run('BEGIN IMMEDIATE')
+  try {
+    db.run('DELETE FROM page_links WHERE source_id = ?', [sourceId])
+    for (const targetId of targetIds) {
+      db.run('INSERT OR IGNORE INTO page_links (source_id, target_id) VALUES (?, ?)', [
+        sourceId,
+        targetId
+      ])
+    }
+    db.run('COMMIT')
+  } catch (err) {
+    db.run('ROLLBACK')
+    throw err
+  }
+}
+
+/** Removes a page's outgoing links. Incoming links are kept (broken links). */
+export function deleteOutgoingLinks(db: Database, id: string): void {
+  db.run('DELETE FROM page_links WHERE source_id = ?', [id])
+}
+
+/** Copies outgoing links to a duplicated page (duplicate fidelity). */
+export function copyOutgoingLinks(db: Database, sourceId: string, newId: string): void {
+  db.run(
+    'INSERT OR IGNORE INTO page_links (source_id, target_id) SELECT ?, target_id FROM page_links WHERE source_id = ?',
+    [newId, sourceId]
+  )
+}
+
+/**
+ * Lists living pages that link to `targetId`, newest-modified first, with an
+ * optional readable snippet around the link occurrence.
+ */
+export function listBacklinks(
+  db: Database,
+  targetId: string
+): Array<{ id: string; title: string; updatedAt: string }> {
+  return db
+    .query(
+      `SELECT p.id, p.title, p.updated_at FROM page_links pl
+       INNER JOIN pages p ON p.id = pl.source_id
+       WHERE pl.target_id = ? AND p.deleted_at IS NULL
+       ORDER BY p.updated_at DESC`
+    )
+    .all(targetId) as Array<{ id: string; title: string; updatedAt: string }>
+}

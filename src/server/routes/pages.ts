@@ -108,6 +108,20 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     }
   })
 
+  // Living pages whose Rich Note content links to this page (exact ID-based
+  // relationships from the maintained page_links index).
+  routes.get('/:id/backlinks', (c) => {
+    try {
+      const db = getDbFn()
+      const id = c.req.param('id')
+      const backlinks = service.listBacklinks(db, id)
+      return c.json({ backlinks })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
   routes.patch('/:id', async (c) => {
     const bodyResult = await readJsonBody(c)
     if (!bodyResult.ok && bodyResult.handled) {
