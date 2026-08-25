@@ -173,7 +173,7 @@ test.describe('connect and find', () => {
     const target = uniqueTitle('Backlink Hub')
     const targetPage = await seedRich(request, target)
     const source = uniqueTitle('Backlink Source')
-    await seedRich(request, source, [
+    const sourcePage = await seedRich(request, source, [
       {
         id: 'p',
         type: 'paragraph',
@@ -193,9 +193,10 @@ test.describe('connect and find', () => {
 
     // Remove the link in the source → server index empties → revisiting the
     // target shows the explicit empty state.
-    await request.patch(`/api/pages/${source}`, {
+    const removeRes = await request.patch(`/api/pages/${sourcePage.id}`, {
       data: { content: JSON.stringify([{ id: 'p', type: 'paragraph' }]) }
     })
+    expect(removeRes.status()).toBe(200)
     await expect
       .poll(
         async () => {
