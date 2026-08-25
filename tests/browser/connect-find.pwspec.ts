@@ -191,14 +191,26 @@ test.describe('connect and find', () => {
     await expect(page.getByTestId('backlinks-list')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('backlink-entry').first()).toContainText(source)
 
-    // Remove the link in the source → backlink disappears on return.
+    // Remove the link in the source → server index empties → revisiting the
+    // target shows the explicit empty state.
     await request.patch(`/api/pages/${source}`, {
       data: { content: JSON.stringify([{ id: 'p', type: 'paragraph' }]) }
     })
-    // Reload clears session storage (init script), so re-open explicitly.
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(`/api/pages/${targetPage.id}/backlinks`)
+          const body = (await res.json()) as { backlinks: Array<{ id: string }> }
+          return body.backlinks.length
+        },
+        { timeout: 15_000 }
+      )
+      .toBe(0)
     await page.reload()
     await openNote(page, target)
-    await expect(page.getByTestId('backlinks-empty')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('backlinks-section')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('backlink-entry')).toHaveCount(0)
+    await expect(page.getByTestId('backlinks-empty')).toBeVisible()
   })
 
   test('deleted target renders a broken link that never navigates', async ({ page, request }) => {
