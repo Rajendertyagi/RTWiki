@@ -15,12 +15,13 @@ export const createReactDiagramSpec = () =>
       content: 'plain'
     },
     {
-      render: ({ block, editor }) => (
+      render: ({ block, editor, contentRef }) => (
         <MermaidBlockView
           blockId={block.id}
           source={typeof block.content === 'string' ? block.content : ''}
           blockType="diagram"
           editor={editor as never}
+          contentRef={contentRef}
         />
       )
     }

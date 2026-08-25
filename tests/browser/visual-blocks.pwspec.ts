@@ -90,6 +90,12 @@ test.describe('visual knowledge blocks', () => {
   test.beforeEach(({ page }) => {
     pageErrors = []
     page.on('pageerror', (err) => pageErrors.push(err))
+    // Surface page-side warnings (e.g. bounded mermaid phase diagnostics).
+    page.on('console', (msg) => {
+      if (msg.type() === 'warning' || msg.type() === 'error') {
+        console.log(`PAGECONSOLE [${msg.type()}] ${msg.text().slice(0, 160)}`)
+      }
+    })
     // Dashboard-first semantics unless a test specifically reloads.
     void page.addInitScript(() => {
       try {
@@ -99,6 +105,23 @@ test.describe('visual knowledge blocks', () => {
       }
     })
   })
+
+  /** Asserts a Mermaid block reached the rendered state, surfacing which
+   * state it actually reached when it did not. */
+  async function expectRendered(page: Page, blockType: string): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const svg = await page.locator(`[data-testid="${blockType}-svg"] svg`).count()
+          const error = await page.locator(`[data-testid="${blockType}-error"]`).count()
+          if (svg > 0) return 'svg'
+          if (error > 0) return 'error'
+          return 'pending'
+        },
+        { timeout: 20_000 }
+      )
+      .toBe('svg')
+  }
   test.afterEach(() => {
     expect(pageErrors, 'no uncaught browser exceptions').toEqual([])
   })
@@ -155,8 +178,7 @@ test.describe('visual knowledge blocks', () => {
     expect(result.payload).toContain('graph TD')
 
     // Rendered SVG appears inside the sanitized host.
-    const svgHost = page.locator('[data-testid="diagram-svg"] svg')
-    await expect(svgHost.first()).toBeVisible()
+    await expectRendered(page, 'diagram')
 
     // Edit the source through the block's own Edit action.
     await page.getByTestId('diagram-edit-button').click()
@@ -168,12 +190,12 @@ test.describe('visual knowledge blocks', () => {
     const applied = await applySave.done
     expect(applied.ok).toBe(true)
     expect(applied.payload).toContain('C[Done]')
-    await expect(page.locator('[data-testid="diagram-svg"] svg')).toBeVisible()
+    await expectRendered(page, 'diagram')
 
     // Reload: persisted source re-renders.
     await page.reload()
     await openNote(page, title)
-    await expect(page.locator('[data-testid="diagram-svg"] svg')).toBeVisible()
+    await expectRendered(page, 'diagram')
     const stored = await getStoredContent(request, p.id)
     expect(stored).toContain('C[Done]')
   })
@@ -188,7 +210,7 @@ test.describe('visual knowledge blocks', () => {
       }
     ])
     await openNote(page, title)
-    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
+    await expectRendered(page, 'diagram')
   })
 
   test('mind map: insert → render → edit → reload', async ({ page, request }) => {
@@ -201,7 +223,7 @@ test.describe('visual knowledge blocks', () => {
     const result = await save.done
     expect(result.ok).toBe(true)
     expect(result.payload).toContain('"type":"mindMap"')
-    await expect(page.locator('[data-testid="mindMap-svg"] svg').first()).toBeVisible()
+    await expectRendered(page, 'mindMap')
 
     await page.getByTestId('mindMap-edit-button').click()
     const input = page.getByTestId('mindMap-source-input')
@@ -214,7 +236,7 @@ test.describe('visual knowledge blocks', () => {
 
     await page.reload()
     await openNote(page, title)
-    await expect(page.locator('[data-testid="mindMap-svg"] svg')).toBeVisible()
+    await expectRendered(page, 'mindMap')
     const stored = await getStoredContent(request, p.id)
     expect(stored).toContain('Beta')
   })
@@ -244,7 +266,7 @@ test.describe('visual knowledge blocks', () => {
     await page.getByTestId('diagram-apply').click()
     const applied = await applySave.done
     expect(applied.ok).toBe(true)
-    await expect(page.locator('[data-testid="diagram-svg"] svg')).toBeVisible()
+    await expectRendered(page, 'diagram')
     const stored = await getStoredContent(request, p.id)
     expect(stored).toContain('A[Fixed]')
   })

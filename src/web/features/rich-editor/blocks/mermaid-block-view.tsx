@@ -22,6 +22,13 @@ export interface MermaidBlockViewProps {
   source: string
   blockType: 'diagram' | 'mindMap'
   editor: BlockNoteEditor
+  /**
+   * ProseMirror content binding for the plain-text source. Must stay mounted
+   * in EVERY state (preview/editing/error) or the node view cannot attach
+   * the document text; it is kept visually hidden because the rendered
+   * diagram replaces the raw source in the user interface.
+   */
+  contentRef: (node: HTMLElement | null) => void
 }
 
 const ERROR_MESSAGES = {
@@ -33,7 +40,8 @@ export function MermaidBlockView({
   blockId,
   source,
   blockType,
-  editor
+  editor,
+  contentRef
 }: MermaidBlockViewProps): JSX.Element {
   const colorScheme = useComputedColorScheme('light')
   const [editing, setEditing] = useState(false)
@@ -91,9 +99,13 @@ export function MermaidBlockView({
     setEditing(false)
   }
 
+  // The ProseMirror text host must exist in every state; visually hidden.
+  const sourceHost = <div ref={contentRef} className={classes.hiddenSource} aria-hidden="true" />
+
   if (editing) {
     return (
       <div className={classes.editPane} data-testid={`${blockType}-edit`}>
+        {sourceHost}
         <Textarea
           value={draft}
           onChange={(event) => setDraft(event.currentTarget.value)}
@@ -124,6 +136,7 @@ export function MermaidBlockView({
   if (errorCode !== null) {
     return (
       <div className={classes.errorPane} data-testid={`${blockType}-error`}>
+        {sourceHost}
         <Text size="sm" c="red">
           {ERROR_MESSAGES[errorCode]}
         </Text>
@@ -151,6 +164,7 @@ export function MermaidBlockView({
       data-testid={`${blockType}-preview`}
       data-rendered={svg !== null}
     >
+      {sourceHost}
       <Tooltip label={UI_TEXT.diagramEditLabel} position="top">
         <ActionIcon
           className={classes.editButton}
