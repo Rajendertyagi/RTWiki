@@ -303,7 +303,7 @@ test.describe('visual knowledge blocks', () => {
   for (const variant of ['info', 'note', 'tip', 'warning', 'danger'] as const) {
     test(`callout ${variant}: insert, edit rich text, autosave`, async ({ page, request }) => {
       const title = uniqueTitle(`VB Callout ${variant}`)
-      await seedRich(request, title, [])
+      const p = await seedRich(request, title, [])
       await openNote(page, title)
 
       const save = nextSave(page)
@@ -312,17 +312,14 @@ test.describe('visual knowledge blocks', () => {
       expect(result.ok).toBe(true)
       expect(result.payload).toContain(`"variant":"${variant}"`)
 
-      // Type into the callout's editable inline content.
+      // Type into the callout's editable inline content, then verify through
+      // saved state (autosave debounce makes PATCH timing racy to catch).
       const calloutContent = page.locator('[data-variant]').getByRole('textbox').first()
       await calloutContent.click()
       await page.keyboard.type(`Callout ${variant} text`)
-      const textSave = nextSave(page)
-      await page.keyboard.press('Enter') // leave; triggers change/blur path
-      const textResult = await textSave.done.catch(() => null)
-      if (textResult) {
-        expect(textResult.ok).toBe(true)
-        expect(textResult.payload).toContain(`Callout ${variant} text`)
-      }
+      await expect
+        .poll(async () => (await getStoredContent(request, p.id)) ?? '', { timeout: 15_000 })
+        .toContain(`Callout ${variant} text`)
       await expect(page.locator(`[data-variant="${variant}"]`).first()).toBeVisible()
     })
   }

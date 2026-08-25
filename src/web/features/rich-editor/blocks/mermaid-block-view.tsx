@@ -150,7 +150,12 @@ export function MermaidBlockView({
           >
             {UI_TEXT.diagramRetryLabel}
           </Button>
-          <Button size="compact-xs" variant="subtle" onClick={startEditing}>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            onClick={startEditing}
+            data-testid={`${blockType}-edit-button`}
+          >
             {UI_TEXT.diagramEditLabel}
           </Button>
         </div>
