@@ -47,13 +47,6 @@ test.describe('connect and find', () => {
   test.beforeEach(({ page }) => {
     pageErrors = []
     page.on('pageerror', (err) => pageErrors.push(err))
-    void page.addInitScript(() => {
-      try {
-        window.sessionStorage.clear()
-      } catch {
-        // Storage may be unavailable.
-      }
-    })
   })
   test.afterEach(() => {
     expect(pageErrors, 'no uncaught browser exceptions').toEqual([])
@@ -353,8 +346,10 @@ test.describe('connect and find', () => {
     page,
     request
   }) => {
+    const created: string[] = []
     for (let i = 0; i < 55; i++) {
-      await seedRich(request, `Bulk Finder ${Date.now()}-${i}`)
+      const p = await seedRich(request, `Bulk Finder ${Date.now()}-${i}`)
+      created.push(p.id)
     }
     const deep = uniqueTitle('Deep Finder Page 54')
     await seedRich(request, deep)
@@ -363,6 +358,10 @@ test.describe('connect and find', () => {
     await page.getByTestId('quick-finder-input').fill(deep)
     await expect(page.getByTestId('quick-finder-results')).toContainText(deep)
     await page.keyboard.press('Escape')
+    // Clean up the bulk pages so later suites see a small tree again.
+    for (const id of created) {
+      await request.delete(`/api/pages/${id}`)
+    }
   })
 })
 
