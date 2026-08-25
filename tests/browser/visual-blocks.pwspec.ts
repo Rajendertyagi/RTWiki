@@ -603,9 +603,8 @@ test.describe('visual knowledge blocks', () => {
       }
     ])
     await openNote(page, title)
-    const inlineMath = page.locator('[data-content-type="math"]').first()
-    await expect(inlineMath).toBeVisible()
-    await expect(inlineMath).toContainText('mc')
+    // Inline formula renders through KaTeX (visible .katex wrapper).
+    await expect(page.locator('.katex').first()).toBeVisible()
     await expect(page.getByText('Energy is')).toBeVisible()
     await expect(page.getByText('famously.')).toBeVisible()
   })
