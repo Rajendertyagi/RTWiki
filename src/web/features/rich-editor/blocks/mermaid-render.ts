@@ -126,10 +126,13 @@ export async function renderMermaidSvg(
     })
     return { ok: true, svg: clean }
   } catch (err) {
-    // Bounded, content-free diagnostic: error NAME + phase only. Mermaid
-    // parse errors can embed source snippets, so messages are never logged.
+    // Bounded, content-free diagnostic: error NAME + phase + source LENGTH
+    // only. Mermaid parse errors can embed source snippets, so messages and
+    // content are never logged.
     const name = err instanceof Error ? err.name : typeof err
-    console.warn(`rtwiki mermaid render failed at ${stage}: ${name}`)
+    console.warn(
+      `rtwiki mermaid render failed at ${stage}: ${name} (len=${source.length})`
+    )
     debugLog('editor', 'editor_block_render_failed', {
       targetId: options.blockId,
       code: `${options.blockType}-${stage}`,
