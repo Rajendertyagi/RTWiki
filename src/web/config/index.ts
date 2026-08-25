@@ -183,6 +183,12 @@ export const UI_TEXT = {
   diagramApplyLabel: 'Apply',
   diagramErrorTitle: 'Diagram error',
   diagramRetryLabel: 'Retry render',
+  diagramFitLabel: 'Fit width',
+  diagramActualSizeLabel: 'Actual size',
+  diagramTemplateLabel: 'Starter template',
+  mindMapFitLabel: 'Fit width',
+  mindMapActualSizeLabel: 'Actual size',
+  calloutChangeTypeLabel: 'Change callout type',
   // Settings / diagnostics
   settingsLabel: 'Settings',
   debugToggleLabel: 'Debug logging',

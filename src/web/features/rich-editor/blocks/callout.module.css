@@ -69,3 +69,14 @@
 .danger .icon {
   color: var(--mantine-color-red-filled);
 }
+
+.variantButton {
+  flex-shrink: 0;
+  margin-top: 2px;
+  opacity: 0.5;
+}
+
+.callout:hover .variantButton,
+.variantButton:focus-visible {
+  opacity: 1;
+}

@@ -20,6 +20,44 @@ export const DIAGRAM_STARTER = 'graph TD\n    A[Start] --> B[End]'
 /** Starter Mermaid mind map used by the Mind Map insertion. */
 export const MINDMAP_STARTER = 'mindmap\n  root((Main topic))\n    Topic A\n    Topic B'
 
+/**
+ * Beginner-friendly starter templates offered inside the Diagram edit pane.
+ * Each is valid Mermaid so the live preview renders immediately on selection.
+ * Single source of truth for the template picker; insertion still uses
+ * DIAGRAM_STARTER so the slash/Insert menu stays uncluttered.
+ */
+export const DIAGRAM_TEMPLATES: Record<string, { label: string; source: string }> = {
+  flowchart: {
+    label: 'Flowchart',
+    source:
+      'flowchart TD\n    A[Start] --> B{Decision}\n    B -->|Yes| C[Do thing]\n    B -->|No| D[Other thing]'
+  },
+  sequence: {
+    label: 'Sequence',
+    source:
+      'sequenceDiagram\n    participant U as User\n    participant S as System\n    U->>S: Request\n    S-->>U: Response'
+  },
+  class: {
+    label: 'Class',
+    source:
+      'classDiagram\n    class Animal {\n      +name: string\n      +speak(): void\n    }\n    class Dog\n    Animal <|-- Dog'
+  },
+  state: {
+    label: 'State',
+    source:
+      'stateDiagram-v2\n    [*] --> Idle\n    Idle --> Active: start\n    Active --> Idle: stop\n    Active --> [*]'
+  },
+  er: {
+    label: 'Entity relationship',
+    source:
+      'erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    ORDER ||--|{ LINE_ITEM : contains\n    CUSTOMER { string name }'
+  },
+  timeline: {
+    label: 'Timeline',
+    source: 'timeline\n    title Project\n    2024 : Plan : Design\n    2025 : Build : Ship'
+  }
+}
+
 /** Starter LaTeX formula used by the Formula insertion. */
 export const FORMULA_STARTER = 'x^2 + y^2 = z^2'
 
