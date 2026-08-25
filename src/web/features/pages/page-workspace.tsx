@@ -86,7 +86,7 @@ export function PageWorkspace({
       {page.pageType === 'rich' ? (
         <div className={classes.toolbarRow} data-testid="rich-toolbar-row" aria-busy={!richEditor}>
           {richEditor ? (
-            <RichToolbar editor={richEditor} />
+            <RichToolbar editor={richEditor} linkablePages={linkablePages} />
           ) : (
             <div className={classes.toolbarSkeleton} aria-hidden="true">
               <span />

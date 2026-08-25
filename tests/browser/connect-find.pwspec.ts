@@ -86,7 +86,7 @@ test.describe('connect and find', () => {
     await insertLinkViaPicker(page, target)
     await expect
       .poll(async () => getStoredContent(request, sourcePage.id), { timeout: 15_000 })
-      .toContain('rtwiki://page/')
+      .toContain('#/page/')
 
     // Path B: toolbar action with search + click.
     await page.getByTestId('wiki-link-button').click()
@@ -112,7 +112,7 @@ test.describe('connect and find', () => {
           { type: 'text', text: 'go to ', styles: {} },
           {
             type: 'link',
-            href: `rtwiki://page/${targetPage.id}`,
+            href: `#/page/${targetPage.id}`,
             content: [{ type: 'text', text: target, styles: {} }]
           }
         ]
@@ -124,7 +124,7 @@ test.describe('connect and find', () => {
 
     await openNote(page, source)
     const tabCountBefore = await page.locator('[role="tab"]').count()
-    await page.locator('a[href^="rtwiki://page/"]').first().click()
+    await page.locator('a[href^="#/page/"]').first().click()
     await expect(page.getByTestId('rich-editor')).toBeVisible()
     await expect(page.locator('[role="tab"]')).toHaveCount(tabCountBefore + 1)
     // The renamed title is visible in the header input.
@@ -133,7 +133,7 @@ test.describe('connect and find', () => {
     // Clicking again must not duplicate the tab.
     await openNote(page, source)
     const countMid = await page.locator('[role="tab"]').count()
-    await page.locator('a[href^="rtwiki://page/"]').first().click()
+    await page.locator('a[href^="#/page/"]').first().click()
     await expect(page.locator('[role="tab"]')).toHaveCount(countMid)
   })
 
@@ -148,7 +148,7 @@ test.describe('connect and find', () => {
         content: [
           {
             type: 'link',
-            href: `rtwiki://page/${targetPage.id}`,
+            href: `#/page/${targetPage.id}`,
             content: [{ type: 'text', text: 'target', styles: {} }]
           }
         ]
@@ -160,7 +160,7 @@ test.describe('connect and find', () => {
     await page.locator('.bn-editor').click()
     await page.keyboard.press('Control+End')
     await page.keyboard.type('unsaved tail text')
-    await page.locator('a[href^="rtwiki://page/"]').first().click()
+    await page.locator('a[href^="#/page/"]').first().click()
     await expect(page.getByTestId('rich-editor')).toBeVisible()
     await expect
       .poll(async () => getStoredContent(request, (await seedLookup(request, source)) ?? ''), {
@@ -183,7 +183,7 @@ test.describe('connect and find', () => {
         content: [
           {
             type: 'link',
-            href: `rtwiki://page/${targetPage.id}`,
+            href: `#/page/${targetPage.id}`,
             content: [{ type: 'text', text: 'hub ref', styles: {} }]
           }
         ]
@@ -198,7 +198,9 @@ test.describe('connect and find', () => {
     await request.patch(`/api/pages/${source}`, {
       data: { content: JSON.stringify([{ id: 'p', type: 'paragraph' }]) }
     })
+    // Reload clears session storage (init script), so re-open explicitly.
     await page.reload()
+    await openNote(page, target)
     await expect(page.getByTestId('backlinks-empty')).toBeVisible({ timeout: 15_000 })
   })
 
@@ -213,7 +215,7 @@ test.describe('connect and find', () => {
         content: [
           {
             type: 'link',
-            href: `rtwiki://page/${targetPage.id}`,
+            href: `#/page/${targetPage.id}`,
             content: [{ type: 'text', text: 'dead ref', styles: {} }]
           }
         ]
@@ -222,7 +224,7 @@ test.describe('connect and find', () => {
     await request.delete(`/api/pages/${targetPage.id}`)
 
     await openNote(page, source)
-    const anchor = page.locator('a[href^="rtwiki://page/"]').first()
+    const anchor = page.locator('a[href^="#/page/"]').first()
     await expect(anchor).toHaveClass(/rtwiki-broken-link/)
     await anchor.click()
     await expect(page.getByTestId('broken-link-notice')).toBeVisible()
@@ -232,9 +234,8 @@ test.describe('connect and find', () => {
     // Recreating a page with the SAME TITLE must not reconnect the old ID.
     await seedRich(request, target)
     await page.reload()
-    await expect(page.locator('a[href^="rtwiki://page/"]').first()).toHaveClass(
-      /rtwiki-broken-link/
-    )
+    await openNote(page, source)
+    await expect(page.locator('a[href^="#/page/"]').first()).toHaveClass(/rtwiki-broken-link/)
   })
 
   test('Ctrl+K finder opens from every page type with keyboard navigation', async ({
@@ -271,20 +272,20 @@ test.describe('connect and find', () => {
     await expect(page.getByTestId('rich-editor')).toBeVisible()
 
     // From an HTML page and from the dashboard.
+    const htmlTitle = uniqueTitle('Finder HTML')
     const htmlRes = await request.post('/api/pages', {
       data: {
-        title: uniqueTitle('Finder HTML'),
+        title: htmlTitle,
         pageType: 'html',
         content: JSON.stringify({ version: 2, html: '', css: '', javascript: '', jsEnabled: false })
       }
     })
     expect(htmlRes.status()).toBe(201)
     await page.goto('/')
-    await page
-      .getByRole('button', { name: /Finder HTML/, exact: false })
-      .first()
-      .click()
-    await expect(page.getByTestId('html-preview-view')).toBeVisible()
+    const htmlCard = page.getByRole('button', { name: `Open ${htmlTitle}`, exact: true })
+    await htmlCard.waitFor()
+    await htmlCard.click()
+    await expect(page.getByTestId('html-preview-view')).toBeVisible({ timeout: 20_000 })
     await page.keyboard.press('Control+k')
     await expect(page.getByTestId('quick-finder-input')).toBeVisible()
     await page.keyboard.press('Escape')
@@ -368,7 +369,7 @@ test.describe('connect and find', () => {
 // ---------- helpers ----------
 
 function buildHref(pageId: string): string {
-  return `rtwiki://page/${pageId}`
+  return `#/page/${pageId}`
 }
 
 async function lookupId(request: APIRequestContext, title: string): Promise<string> {

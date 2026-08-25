@@ -4,14 +4,19 @@
  * Representation decision: an ordinary BlockNote link mark whose href is
  * `rtwiki://page/<pageId>`. The href is a plain string attribute, so the
  * installed editor preserves it verbatim through every save/load round-trip,
- * through paste, and through external HTML export (where it degrades to a
- * harmless custom-scheme anchor). The stored identity is the page ID, so
+ * through paste, and through external HTML export. The stored identity is the page ID, so
  * renaming a page never breaks a link, and a deleted target is detectable by
  * simple ID lookup — a recreated page with the same title can never silently
  * reconnect an old link because IDs are UUIDs minted at creation.
  */
 
-export const RTWIKI_LINK_PREFIX = 'rtwiki://page/' as const
+/**
+ * App-owned relative URL form. A hash-style relative URL is chosen over a
+ * custom scheme because the installed editor (TipTap-based) strips unknown
+ * protocols when rendering link marks, while relative URLs pass validation
+ * untouched. All link clicks are intercepted before any navigation.
+ */
+export const RTWIKI_LINK_PREFIX = '#/page/' as const
 
 /** Extracts the target page ID from an internal link href, or null. */
 export function parseInternalLinkHref(href: string): string | null {

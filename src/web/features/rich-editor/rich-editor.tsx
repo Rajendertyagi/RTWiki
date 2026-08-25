@@ -346,7 +346,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
       const wrapper = wrapperRef.current
       if (!wrapper) return
       const anchors = wrapper.querySelectorAll(
-        'a[href^="rtwiki://page/"]'
+        'a[href^="#/page/"]'
       ) as NodeListOf<HTMLAnchorElement>
       for (const anchor of anchors) {
         const id = parseInternalLinkHref(anchor.getAttribute('href') ?? '')
@@ -381,7 +381,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     if (!wrapper) return
     const listener = (event: MouseEvent): void => {
       const target = event.target as HTMLElement
-      const anchor = target.closest('a[href^="rtwiki://page/"]') as HTMLAnchorElement | null
+      const anchor = target.closest('a[href^="#/page/"]') as HTMLAnchorElement | null
       if (!anchor) return
       event.preventDefault()
       event.stopPropagation()
