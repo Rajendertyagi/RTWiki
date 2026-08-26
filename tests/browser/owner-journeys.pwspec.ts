@@ -122,7 +122,7 @@ test.describe('owner journeys', () => {
     const widthBeforeReload = await container.getAttribute('data-width')
 
     // 9. Wait for Saved.
-    await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('Saved', { exact: true }).first()).toBeVisible({ timeout: 15_000 })
 
     // 10. Open another page and come back.
     const other = uniqueTitle('Scratch')
@@ -156,10 +156,12 @@ test.describe('owner journeys', () => {
     await row.click({ button: 'right' })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
     await page.getByRole('menuitem', { name: 'New child Rich Note' }).click()
-    const dialog = page.getByRole('dialog')
-    await dialog.getByLabel('Title').fill(child)
-    await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+    // Context-menu creation uses the default title; rename via the header.
+    const childTitleInput = page.locator('input[aria-label="Title"]')
+    await childTitleInput.fill(child)
+    await childTitleInput.blur()
+    await expect(page.locator('[role="treeitem"]', { hasText: child }).first()).toBeVisible()
 
     // 2-3. Open card by centre and corners; the card MENU must not navigate.
     await goHome(page)
@@ -425,8 +427,9 @@ test.describe('owner journeys', () => {
 
     // Ctrl+K from rich note, then keyboard-only navigation.
     await page.keyboard.press('Control+k')
-    await expect(page.getByTestId('quick-finder-input')).toBeVisible()
-    await page.keyboard.type('Gamma')
+    const finderInput = page.getByTestId('quick-finder-input')
+    await expect(finderInput).toBeVisible()
+    await finderInput.fill('Gamma')
     await page.keyboard.press('ArrowDown')
     await page.keyboard.press('ArrowUp')
     await page.keyboard.press('Enter')

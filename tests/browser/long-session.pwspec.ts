@@ -78,7 +78,8 @@ test.describe('long accumulated session', () => {
       await seed(request, uniqueTitle(`Filler ${i}`), 'rich')
     }
     // One HTML page.
-    await seed(request, uniqueTitle('Long HTML'), 'html')
+    const htmlTitle = uniqueTitle('Long HTML')
+    await seed(request, htmlTitle, 'html')
 
     const list = await request.get('/api/pages?limit=100')
     const body = (await list.json()) as {
@@ -115,7 +116,7 @@ test.describe('long accumulated session', () => {
     // --- Open tabs through real navigation ---------------------------------
     await page.goto('/')
     // Open a mix by title via Home + card to accumulate distinct tabs.
-    const titlesToOpen = [...subjects.map((s) => s.title), 'Long HTML']
+    const titlesToOpen = [...subjects.map((s) => s.title), htmlTitle]
     for (const t of titlesToOpen) {
       await page.locator('[aria-label="Home"]').click()
       await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
