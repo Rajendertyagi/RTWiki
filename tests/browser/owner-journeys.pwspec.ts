@@ -149,10 +149,7 @@ test.describe('owner journeys', () => {
     expect(widthAfter).toBe(widthBeforeReload)
   })
 
-  test('Journey B: dashboard cards, tree navigation and rename', async ({
-    page,
-    request
-  }) => {
+  test('Journey B: dashboard cards, tree navigation and rename', async ({ page, request }) => {
     test.setTimeout(240_000)
     const parent = uniqueTitle('Physics')
     const child = uniqueTitle('Mechanics')
