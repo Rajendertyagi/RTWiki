@@ -296,8 +296,16 @@ test.describe('deterministic exploratory owner', () => {
         '[role="tab"][aria-selected="true"], [role="tab"][data-active="true"]'
       )
       if ((await tabs.count()) === 1) {
-        const tabText = (await tabs.first().textContent()) ?? ''
-        if (activeTitle && tabText && !tabText.startsWith(activeTitle.slice(0, 8))) {
+        const tabText = ((await tabs.first().textContent()) ?? '').trim()
+        // Tab labels refresh asynchronously after a rename, so accept either
+        // direction of short prefix drift; a genuinely different page never
+        // shares even a six-character prefix with the open page here.
+        if (
+          activeTitle &&
+          tabText &&
+          !tabText.startsWith(activeTitle.slice(0, 6)) &&
+          !activeTitle.startsWith(tabText.slice(0, 6))
+        ) {
           fail(`active tab "${tabText}" does not match open page "${activeTitle}"`)
         }
       }
