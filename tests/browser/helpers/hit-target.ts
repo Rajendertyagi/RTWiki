@@ -38,6 +38,7 @@ export async function assertHitTarget(
   const { minWidth = 12, minHeight = 12, corners = false } = options
   const label = options.label ?? locator.toString()
 
+  await locator.scrollIntoViewIfNeeded().catch(() => {})
   await expect(locator, `${label} should be visible`).toBeVisible()
   const box = await locator.boundingBox()
   expect(box, `${label} should have a bounding box`).not.toBeNull()

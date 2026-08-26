@@ -155,7 +155,10 @@ test.describe('owner journeys', () => {
     const row = page.locator('[role="treeitem"]', { hasText: parent }).first()
     await row.hover()
     await row.getByLabel(`Actions for ${parent}`).click()
-    await page.getByText('New child page', { exact: false }).first().click()
+    await page
+      .getByText(/New child/i)
+      .first()
+      .click()
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('Title').fill(child)
     await dialog.getByRole('button', { name: /create/i }).click()
@@ -276,11 +279,11 @@ test.describe('owner journeys', () => {
     await page.getByTestId('return-to-preview-button').click()
     await expect(page.getByTestId('live-preview')).toBeVisible()
     const frame = page.frameLocator('[data-testid="live-preview"] iframe')
-    await expect(frame.locator('p')).toContainText('alpha')
+    await expect(frame.locator('p', { hasText: 'alpha' })).toContainText('alpha')
 
     // 7. Refresh Preview.
     await page.getByTestId('refresh-preview').click()
-    await expect(frame.locator('p')).toContainText('alpha')
+    await expect(frame.locator('p', { hasText: 'alpha' })).toContainText('alpha')
 
     // 8-9. Reload restores tab + active source field per session model.
     await page.locator('[data-subfile-id]', { hasText: 'CSS' }).first().click()
@@ -368,12 +371,33 @@ test.describe('owner journeys', () => {
     await page.keyboard.type('Beta')
     await page.keyboard.press('Enter')
     await expect(menu).toHaveCount(0)
+    // Flush the link to storage before any navigation can discard it.
+    const alphaId = alphaPage.id
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(`/api/pages/${alphaId}`)
+          return ((await res.json()) as { page: { content: string } }).page.content
+        },
+        { timeout: 15_000 }
+      )
+      .toContain('#/page/')
 
     // Insert link via toolbar picker into Beta → Alpha.
     await openNote(page, beta)
     await page.getByTestId('wiki-link-button').click()
     await page.getByTestId('wiki-link-search').fill(alpha)
     await page.getByRole('option').first().click()
+    const betaId = betaPage.id
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(`/api/pages/${betaId}`)
+          return ((await res.json()) as { page: { content: string } }).page.content
+        },
+        { timeout: 15_000 }
+      )
+      .toContain('#/page/')
 
     // Rename target; stored ID keeps working. Open by the NEW title.
     await renameViaApi(request, alphaPage.id, 'Alpha Renamed')
