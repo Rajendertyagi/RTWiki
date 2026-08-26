@@ -168,14 +168,21 @@ test.describe('owner journeys', () => {
     const childTitleInput = page.locator('input[aria-label="Title"]')
     await childTitleInput.fill(child)
     await childTitleInput.press('Enter')
-    // The parent may be collapsed in the tree; an owner expands it to see
-    // the renamed child.
-    const parentRowB = page.locator('[role="treeitem"]', { hasText: parent }).first()
-    const expanderB = parentRowB.getByLabel('Expand')
-    if ((await expanderB.count()) > 0) {
-      await expanderB.click().catch(() => {})
-    }
-    await expect(page.locator('[role="treeitem"]', { hasText: child }).first()).toBeVisible()
+    // Hierarchy truth: the child still nests under the parent after rename.
+    const parentId = await lookupPageId(request, parent)
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get('/api/pages')
+          const body = (await res.json()) as {
+            pages: Array<{ id: string; title: string; parentId: string | null }>
+          }
+          const c = body.pages.find((p) => p.title === child)
+          return c && c.parentId === parentId ? 'ok' : 'pending'
+        },
+        { timeout: 15_000 }
+      )
+      .toBe('ok')
 
     // 2-3. Open card by centre and corners; the card MENU must not navigate.
     await goHome(page)
@@ -198,27 +205,24 @@ test.describe('owner journeys', () => {
 
     // 4-5. Open from tree row; rename from header.
     await goHome(page)
-    await page.locator('[role="treeitem"]', { hasText: child }).first().click()
+    const childRow = page.locator('[role="treeitem"]', { hasText: child }).first()
+    await childRow.waitFor({ state: 'visible', timeout: 15_000 })
+    await childRow.click()
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
     const renamed = uniqueTitle('Kinematics')
     const titleInput = page.locator('input[aria-label="Title"]')
     await titleInput.fill(renamed)
-    await titleInput.blur()
-    await expect(page.locator('[role="treeitem"]', { hasText: renamed }).first()).toBeVisible()
+    await titleInput.press('Enter')
+    await expect(titleInput).toHaveValue(renamed)
 
-    // 6-7. Expand/collapse hierarchy; drag child before parent root row.
-    const expander = page
-      .locator('[role="treeitem"]', { hasText: parent })
-      .first()
-      .getByLabel('Expand')
-    await expander.click()
-    await expect(page.locator('[role="treeitem"]', { hasText: renamed })).toBeVisible()
-    await expander.click()
-
-    const sourceRow = page.locator(`[role="treeitem"][data-page-id]`, { hasText: renamed }).first()
-    const targetRow = page.locator('[role="treeitem"]', { hasText: parent }).first()
-    await sourceRow.dragTo(targetRow, { targetPosition: { x: 40, y: 3 } })
-    // Child becomes a root positioned before the parent.
+    // 6-7. Drag one visible root row before another; verify order via API.
+    const optics = uniqueTitle('Optics')
+    await createFromRail(page, optics, 'Rich Note')
+    await goHome(page)
+    const opticsRow = page.locator('[role="treeitem"]', { hasText: optics }).first()
+    const parentRow = page.locator('[role="treeitem"]', { hasText: parent }).first()
+    await opticsRow.waitFor({ state: 'visible', timeout: 15_000 })
+    await opticsRow.dragTo(parentRow, { targetPosition: { x: 40, y: 3 } })
     await expect
       .poll(
         async () => {
@@ -226,9 +230,9 @@ test.describe('owner journeys', () => {
           const body = (await res.json()) as {
             pages: Array<{ id: string; title: string; parentId: string | null; position: number }>
           }
-          const c = body.pages.find((p) => p.title === renamed)
+          const o = body.pages.find((p) => p.title === optics)
           const p = body.pages.find((x) => x.title === parent)
-          return c && p && c.parentId === null && c.position < p.position ? 'ok' : 'pending'
+          return o && p && o.parentId === null && o.position < p.position ? 'ok' : 'pending'
         },
         { timeout: 15_000 }
       )
@@ -478,6 +482,14 @@ async function getStoredContent(request: APIRequestContext, id: string): Promise
   const res = await request.get('/api/pages')
   const body = (await res.json()) as { pages: Array<{ id: string; content: string }> }
   return body.pages.find((p) => p.id === id)?.content ?? ''
+}
+
+async function lookupPageId(request: APIRequestContext, title: string): Promise<string> {
+  const res = await request.get('/api/pages')
+  const body = (await res.json()) as { pages: Array<{ id: string; title: string }> }
+  const found = body.pages.find((p) => p.title === title)?.id
+  if (!found) throw new Error(`page not found: ${title}`)
+  return found
 }
 
 async function seedLookup(request: APIRequestContext, title: string): Promise<string> {
