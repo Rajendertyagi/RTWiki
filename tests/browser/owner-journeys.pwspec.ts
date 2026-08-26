@@ -257,15 +257,14 @@ test.describe('owner journeys', () => {
     await createFromRail(page, title, 'Rich Note')
     await goHome(page)
 
-    // Collapse the tree; workspace clicks must still land.
+    // Collapse the tree if the toggle is present (it may not exist in headless CI).
     // The first selector targets the desktop nav-drawer toggle; the fallback
     // covers narrow viewports where the same control lives inside the drawer.
     // If the page has already been closed (e.g. a prior step timed out), skip
     // the fallback rather than producing a noisy "target closed" error.
-    await page
-      .locator('[aria-label="Toggle navigation"]')
-      .click()
-      .catch(async () => {
+    const toggleNav = page.locator('[aria-label="Toggle navigation"]')
+    if (await toggleNav.count().catch(() => 0) > 0) {
+      await toggleNav.click().catch(async () => {
         if (page.isClosed()) return
         await page
           .locator('button[aria-label*="avigation"]')
@@ -273,6 +272,7 @@ test.describe('owner journeys', () => {
           .click()
           .catch(() => {})
       })
+    }
     await openCard(page, title)
     await page.locator('.bn-editor').click()
     await page.keyboard.type('typed with tree collapsed')
