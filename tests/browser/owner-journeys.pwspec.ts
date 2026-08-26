@@ -168,6 +168,13 @@ test.describe('owner journeys', () => {
     const childTitleInput = page.locator('input[aria-label="Title"]')
     await childTitleInput.fill(child)
     await childTitleInput.press('Enter')
+    // The parent may be collapsed in the tree; an owner expands it to see
+    // the renamed child.
+    const parentRowB = page.locator('[role="treeitem"]', { hasText: parent }).first()
+    const expanderB = parentRowB.getByLabel('Expand')
+    if ((await expanderB.count()) > 0) {
+      await expanderB.click().catch(() => {})
+    }
     await expect(page.locator('[role="treeitem"]', { hasText: child }).first()).toBeVisible()
 
     // 2-3. Open card by centre and corners; the card MENU must not navigate.
