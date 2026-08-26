@@ -263,7 +263,7 @@ test.describe('owner journeys', () => {
     // If the page has already been closed (e.g. a prior step timed out), skip
     // the fallback rather than producing a noisy "target closed" error.
     const toggleNav = page.locator('[aria-label="Toggle navigation"]')
-    if (await toggleNav.count().catch(() => 0) > 0) {
+    if ((await toggleNav.count().catch(() => 0)) > 0) {
       await toggleNav.click().catch(async () => {
         if (page.isClosed()) return
         await page
