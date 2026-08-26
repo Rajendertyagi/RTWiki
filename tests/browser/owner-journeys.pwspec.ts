@@ -149,7 +149,7 @@ test.describe('owner journeys', () => {
     expect(widthAfter).toBe(widthBeforeReload)
   })
 
-  test('Journey B: dashboard cards, tree navigation, rename and drag indicators', async ({
+  test('Journey B: dashboard cards, tree navigation and rename', async ({
     page,
     request
   }) => {
@@ -223,6 +223,23 @@ test.describe('owner journeys', () => {
     await titleInput.fill(renamed)
     await titleInput.press('Enter')
     await expect(titleInput).toHaveValue(renamed)
+  })
+
+  test('Journey B: drag reorder and tree collapse', async ({ page, request }) => {
+    test.setTimeout(240_000)
+    const parent = uniqueTitle('Physics')
+    const child = uniqueTitle('Mechanics')
+
+    // Re-create the same hierarchy so the drag test is self-contained.
+    await createFromRail(page, parent, 'Rich Note')
+    const row = page.locator('[role="treeitem"]', { hasText: parent }).first()
+    await row.click({ button: 'right' })
+    await expect(page.getByTestId('tree-context-menu')).toBeVisible()
+    await page.getByRole('menuitem', { name: 'New child Rich Note' }).click()
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+    const childTitleInput = page.locator('input[aria-label="Title"]')
+    await childTitleInput.fill(child)
+    await childTitleInput.press('Enter')
 
     // 6-7. Drag one visible root row before another; verify order via API.
     const optics = uniqueTitle('Optics')
@@ -263,7 +280,8 @@ test.describe('owner journeys', () => {
           .click()
           .catch(() => {})
       })
-    await openCard(page, renamed)
+    // Open the parent page (renamed earlier is not available here; use parent title).
+    await openCard(page, parent)
     await page.locator('.bn-editor').click()
     await page.keyboard.type('typed with tree collapsed')
     await expect(page.locator('[data-testid="rich-editor"]')).toContainText(
