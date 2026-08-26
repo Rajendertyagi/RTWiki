@@ -163,9 +163,10 @@ export async function freezeUi(page: Page): Promise<void> {
 export async function resetDatabase(
   request: import('@playwright/test').APIRequestContext
 ): Promise<void> {
-  let offset = 0
+  // Always re-query from offset 0: each deletion shrinks the living set, so
+  // accumulating offsets would skip pages.
   for (;;) {
-    const res = await request.get(`/api/pages?limit=100&offset=${offset}`)
+    const res = await request.get('/api/pages?limit=100&offset=0')
     expect(res.status()).toBe(200)
     const body = (await res.json()) as {
       pages: Array<{ id: string }>
@@ -176,7 +177,5 @@ export async function resetDatabase(
       const del = await request.delete(`/api/pages/${page.id}`)
       expect(del.status()).toBe(200)
     }
-    offset += body.pages.length
-    if (offset >= body.total) break
   }
 }

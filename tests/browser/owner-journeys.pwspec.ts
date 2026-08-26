@@ -134,7 +134,8 @@ test.describe('owner journeys', () => {
     // 11-12. Restart the real application server, then verify persistence.
     await restartApp(page)
     await openCard(page, title)
-    await expect(page.getByText('Cell theory states')).toBeVisible()
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+    await expect(page.getByText('Cell theory states')).toBeVisible({ timeout: 20_000 })
     await expect(page.getByText('Mitochondria produce ATP')).toBeVisible()
     await expect(page.locator('.bn-editor strong').first()).toBeVisible()
     await expect(page.getByTestId('diagram-container')).toBeVisible()
@@ -160,7 +161,7 @@ test.describe('owner journeys', () => {
     // Context-menu creation uses the default title; rename via the header.
     const childTitleInput = page.locator('input[aria-label="Title"]')
     await childTitleInput.fill(child)
-    await childTitleInput.blur()
+    await childTitleInput.press('Enter')
     await expect(page.locator('[role="treeitem"]', { hasText: child }).first()).toBeVisible()
 
     // 2-3. Open card by centre and corners; the card MENU must not navigate.
