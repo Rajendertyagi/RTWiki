@@ -203,10 +203,19 @@ test.describe('owner journeys', () => {
     await page.keyboard.press('Escape')
     await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
 
-    // 4-5. Open from tree row; rename from header.
+    // 4-5. Open from tree row; rename from header. Tree refetches after
+    // creates/renames can collapse the parent, so expand with retries.
     await goHome(page)
     const childRow = page.locator('[role="treeitem"]', { hasText: child }).first()
-    await childRow.waitFor({ state: 'visible', timeout: 15_000 })
+    for (let i = 0; i < 3; i++) {
+      if (await childRow.isVisible().catch(() => false)) break
+      const exp = page
+        .locator('[role="treeitem"]', { hasText: parent })
+        .first()
+        .getByLabel('Expand')
+      if ((await exp.count()) > 0) await exp.click().catch(() => {})
+      await page.waitForTimeout(400)
+    }
     await childRow.click()
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
     const renamed = uniqueTitle('Kinematics')
