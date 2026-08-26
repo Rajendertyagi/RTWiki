@@ -222,23 +222,12 @@ test.describe('owner journeys', () => {
     await expect(titleInput).toHaveValue(renamed)
   })
 
-  test('Journey B: drag reorder and tree collapse', async ({ page, request }) => {
+  test('Journey B: drag reorder', async ({ page, request }) => {
     test.setTimeout(240_000)
     const parent = uniqueTitle('Physics')
-    const child = uniqueTitle('Mechanics')
-
-    // Re-create the same hierarchy so the drag test is self-contained.
     await createFromRail(page, parent, 'Rich Note')
-    const row = page.locator('[role="treeitem"]', { hasText: parent }).first()
-    await row.click({ button: 'right' })
-    await expect(page.getByTestId('tree-context-menu')).toBeVisible()
-    await page.getByRole('menuitem', { name: 'New child Rich Note' }).click()
-    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
-    const childTitleInput = page.locator('input[aria-label="Title"]')
-    await childTitleInput.fill(child)
-    await childTitleInput.press('Enter')
 
-    // 6-7. Drag one visible root row before another; verify order via API.
+    // Drag one visible root row before another; verify order via API.
     const optics = uniqueTitle('Optics')
     await createFromRail(page, optics, 'Rich Note')
     await goHome(page)
@@ -260,8 +249,15 @@ test.describe('owner journeys', () => {
         { timeout: 15_000 }
       )
       .toBe('ok')
+  })
 
-    // 9-10. Collapse the tree; workspace clicks must still land.
+  test('Journey B: tree collapse and workspace clicks', async ({ page }) => {
+    test.setTimeout(240_000)
+    const title = uniqueTitle('Collapse Test')
+    await createFromRail(page, title, 'Rich Note')
+    await goHome(page)
+
+    // Collapse the tree; workspace clicks must still land.
     // The first selector targets the desktop nav-drawer toggle; the fallback
     // covers narrow viewports where the same control lives inside the drawer.
     // If the page has already been closed (e.g. a prior step timed out), skip
@@ -277,8 +273,7 @@ test.describe('owner journeys', () => {
           .click()
           .catch(() => {})
       })
-    // Open the parent page (renamed earlier is not available here; use parent title).
-    await openCard(page, parent)
+    await openCard(page, title)
     await page.locator('.bn-editor').click()
     await page.keyboard.type('typed with tree collapsed')
     await expect(page.locator('[data-testid="rich-editor"]')).toContainText(
