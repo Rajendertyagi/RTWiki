@@ -47,8 +47,10 @@ async function openCard(page: Page, title: string): Promise<void> {
 }
 
 test.describe('owner journeys', () => {
-  test.beforeEach(async ({ request }) => {
+  test.beforeEach(async ({ page, request }) => {
     await resetDatabase(request)
+    await page.goto('/')
+    await expect(page.locator('[aria-label="New page"]').first()).toBeVisible()
   })
 
   let pageErrors: Error[] = []
@@ -353,7 +355,7 @@ test.describe('owner journeys', () => {
     const beta = uniqueTitle('Beta Topic')
     const gamma = uniqueTitle('Gamma Topic')
     const alphaPage = await seedRich(request, alpha)
-    await seedRich(request, beta)
+    const betaPage = await seedRich(request, beta)
     await seedRich(request, gamma)
 
     // Insert link via [[ picker.
@@ -378,7 +380,17 @@ test.describe('owner journeys', () => {
     await openNote(page, 'Alpha Renamed')
     await expect(page.locator('input[aria-label="Title"]')).toHaveValue('Alpha Renamed')
 
-    // Backlinks on Beta point at Alpha.
+    // Backlinks on Beta point at Alpha (wait out the autosave debounce).
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(`/api/pages/${betaPage.id}/backlinks`)
+          const body = (await res.json()) as { backlinks: Array<{ title: string }> }
+          return body.backlinks.map((b) => b.title).join(',')
+        },
+        { timeout: 15_000 }
+      )
+      .toContain('Alpha')
     await openNote(page, beta)
     await expect(page.getByTestId('backlink-entry').first()).toContainText('Alpha')
 

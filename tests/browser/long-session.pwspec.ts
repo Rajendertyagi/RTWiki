@@ -118,7 +118,9 @@ test.describe('long accumulated session', () => {
     for (const t of titlesToOpen) {
       await page.locator('[aria-label="Home"]').click()
       await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
-      await page.getByRole('button', { name: `Open ${t}`, exact: true }).click()
+      const card = page.getByRole('button', { name: `Open ${t}`, exact: true })
+      await card.waitFor({ state: 'visible', timeout: 20_000 })
+      await card.click()
     }
     const tabCount = await page.locator('[role="tab"]').count()
     expect(tabCount).toBeGreaterThanOrEqual(5)

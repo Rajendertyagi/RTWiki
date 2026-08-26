@@ -303,15 +303,24 @@ test.describe('deterministic exploratory owner', () => {
       }
     }
 
-    // No lingering modal overlay after dismissal surfaces.
-    const overlays = await page.evaluate(() => {
-      const els = document.querySelectorAll('.mantine-Modal-overlay, .mantine-Overlay-root')
-      return Array.from(els).filter((el) => {
-        const style = window.getComputedStyle(el)
-        return style.display !== 'none' && style.visibility !== 'hidden'
-      }).length
-    })
-    if (overlays > 0) fail(`${overlays} modal overlay(s) still mounted`)
+    // No lingering BLOCKING modal overlay. Mantine keeps the overlay node
+    // mounted during its exit transition, so tolerate non-interactive ones
+    // and give the transition up to a second to finish.
+    const blocking = async (): Promise<number> =>
+      page.evaluate(() => {
+        const els = document.querySelectorAll('.mantine-Modal-overlay, .mantine-Overlay-root')
+        return Array.from(els).filter((el) => {
+          const style = window.getComputedStyle(el)
+          if (style.display === 'none' || style.visibility === 'hidden') return false
+          if (style.pointerEvents === 'none') return false
+          return true
+        }).length
+      })
+    if ((await blocking()) > 0) {
+      await page.waitForTimeout(1000)
+    }
+    const overlaysLeft = await blocking()
+    if (overlaysLeft > 0) fail(`${overlaysLeft} blocking modal overlay(s) still mounted`)
 
     // Main workspace keeps positive visible dimensions.
     const mainBox = await page.locator('.mantine-AppShell-main').boundingBox()
