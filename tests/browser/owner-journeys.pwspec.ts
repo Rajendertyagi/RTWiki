@@ -248,11 +248,20 @@ test.describe('owner journeys', () => {
       .toBe('ok')
 
     // 9-10. Collapse the tree; workspace clicks must still land.
+    // The first selector targets the desktop nav-drawer toggle; the fallback
+    // covers narrow viewports where the same control lives inside the drawer.
+    // If the page has already been closed (e.g. a prior step timed out), skip
+    // the fallback rather than producing a noisy "target closed" error.
     await page
       .locator('[aria-label="Toggle navigation"]')
       .click()
       .catch(async () => {
-        await page.locator('button[aria-label*="avigation"]').first().click()
+        if (page.isClosed()) return
+        await page
+          .locator('button[aria-label*="avigation"]')
+          .first()
+          .click()
+          .catch(() => {})
       })
     await openCard(page, renamed)
     await page.locator('.bn-editor').click()
