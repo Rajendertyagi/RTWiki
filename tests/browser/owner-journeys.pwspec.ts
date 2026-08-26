@@ -252,28 +252,24 @@ test.describe('owner journeys', () => {
   })
 
   test('Journey B: tree collapse and workspace clicks', async ({ page }) => {
-    test.setTimeout(240_000)
+    test.setTimeout(120_000)
     const title = uniqueTitle('Collapse Test')
     await createFromRail(page, title, 'Rich Note')
-    await goHome(page)
 
     // Collapse the tree if the toggle is present (it may not exist in headless CI).
-    // The first selector targets the desktop nav-drawer toggle; the fallback
-    // covers narrow viewports where the same control lives inside the drawer.
-    // If the page has already been closed (e.g. a prior step timed out), skip
-    // the fallback rather than producing a noisy "target closed" error.
     const toggleNav = page.locator('[aria-label="Toggle navigation"]')
     if ((await toggleNav.count().catch(() => 0)) > 0) {
-      await toggleNav.click().catch(async () => {
-        if (page.isClosed()) return
-        await page
-          .locator('button[aria-label*="avigation"]')
-          .first()
-          .click()
-          .catch(() => {})
-      })
+      await toggleNav.click().catch(() => {})
     }
-    await openCard(page, title)
+
+    // Navigate directly to the page instead of going through the dashboard card.
+    // This avoids a second goHome/openCard cycle that can hang after tree collapse.
+    const pages = await page.request.get('/api/pages')
+    const pagesBody = (await pages.json()) as { pages: Array<{ id: string; title: string }> }
+    const target = pagesBody.pages.find((p) => p.title === title)
+    expect(target).toBeDefined()
+    await page.goto(`#/page/${target!.id}`)
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible({ timeout: 20_000 })
     await page.locator('.bn-editor').click()
     await page.keyboard.type('typed with tree collapsed')
     await expect(page.locator('[data-testid="rich-editor"]')).toContainText(
