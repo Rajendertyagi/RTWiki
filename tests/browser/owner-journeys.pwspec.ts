@@ -255,6 +255,7 @@ test.describe('owner journeys', () => {
     test.setTimeout(120_000)
     const title = uniqueTitle('Collapse Test')
     await createFromRail(page, title, 'Rich Note')
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 
     // Collapse the tree if the toggle is present (it may not exist in headless CI).
     const toggleNav = page.locator('[aria-label="Toggle navigation"]')
@@ -262,14 +263,7 @@ test.describe('owner journeys', () => {
       await toggleNav.click().catch(() => {})
     }
 
-    // Navigate directly to the page instead of going through the dashboard card.
-    // This avoids a second goHome/openCard cycle that can hang after tree collapse.
-    const pages = await page.request.get('/api/pages')
-    const pagesBody = (await pages.json()) as { pages: Array<{ id: string; title: string }> }
-    const target = pagesBody.pages.find((p) => p.title === title)
-    expect(target).toBeDefined()
-    await page.goto(`#/page/${target!.id}`)
-    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible({ timeout: 20_000 })
+    // Verify workspace clicks still land after tree collapse.
     await page.locator('.bn-editor').click()
     await page.keyboard.type('typed with tree collapsed')
     await expect(page.locator('[data-testid="rich-editor"]')).toContainText(
