@@ -373,9 +373,9 @@ test.describe('owner journeys', () => {
     await page.getByTestId('wiki-link-search').fill(alpha)
     await page.getByRole('option').first().click()
 
-    // Rename target; stored ID keeps working.
+    // Rename target; stored ID keeps working. Open by the NEW title.
     await renameViaApi(request, alphaPage.id, 'Alpha Renamed')
-    await openNote(page, alpha)
+    await openNote(page, 'Alpha Renamed')
     await expect(page.locator('input[aria-label="Title"]')).toHaveValue('Alpha Renamed')
 
     // Backlinks on Beta point at Alpha.
@@ -464,4 +464,10 @@ async function restartApp(page: Page): Promise<void> {
     }
   }
   expect(healthy, 'application should come back after restart').toBe(true)
+  // The still-open SPA was talking to the old process; reload so the UI is
+  // connected to the restarted server before any further interaction.
+  await page.reload()
+  await expect(page.locator('[aria-label="New page"]').first()).toBeVisible({
+    timeout: 20_000
+  })
 }

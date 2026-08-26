@@ -22,7 +22,7 @@ export default defineConfig({
   },
   expect: { timeout: 15_000 },
   // Region screenshots live beside their specs, per platform+browser.
-  snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{arg}{ext}',
+  snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{platform}/{arg}{ext}',
   webServer: {
     // The supervisor respawns the real server when an owner journey exercises
     // the app's own shutdown endpoint, making genuine restarts testable.

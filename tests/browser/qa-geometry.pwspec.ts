@@ -23,10 +23,19 @@ const VIEWPORTS = [
 const THEMES = ['light', 'dark'] as const
 
 async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
+  // Below the navbar breakpoint the rail (with the theme toggle) lives
+  // inside the nav drawer — open it first.
+  const width = page.viewportSize()?.width ?? 1280
+  if (width < 768) {
+    await page.locator('[aria-label="Toggle navigation"]').click()
+  }
   const current = await page.locator('html').getAttribute('data-mantine-color-scheme')
   if (current !== theme) {
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await expect(page.locator(`html[data-mantine-color-scheme="${theme}"]`)).toHaveCount(1)
+  }
+  if (width < 768) {
+    await page.locator('[aria-label="Toggle navigation"]').click()
   }
 }
 
@@ -58,7 +67,7 @@ test.describe('geometry contracts', () => {
         const metrics = await page.evaluate(() => {
           const rail = document.querySelector('nav')
           const main = document.querySelector('.mantine-AppShell-main')
-          const tree = document.querySelector('[role="tree"]')?.closest('nav, div')
+          const tree = document.querySelector('[role="tree"]')
           const toolbar = document.querySelector('[data-testid="rich-toolbar-row"]')
           const breadcrumb = document.querySelector('[data-testid="page-breadcrumb"]')
           const editor = document.querySelector('.bn-editor')
@@ -138,7 +147,7 @@ test.describe('region screenshots', () => {
       caret: 'hide',
       maxDiffPixelRatio: 0.02,
       // Dates/timestamps on cards and headers change between runs.
-      mask: [page.locator(':text-matches("\\\\d{4}-\\\\d{2}-\\\\d{2}"')]
+      mask: [page.locator('text=/d{4}-d{2}-d{2}/')]
     })
 
   async function prepare(page: Page, theme: 'light' | 'dark'): Promise<void> {

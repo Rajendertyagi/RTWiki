@@ -287,7 +287,9 @@ test.describe('deterministic exploratory owner', () => {
     if (selected > 1) fail(`${selected} tree rows selected`)
 
     // Active tab corresponds to the open page title (when a workspace is open).
-    const titleInput = page.locator('input[aria-label="Title"]')
+    // Scope to the editor header input (placeholder 'Page title'); the New
+    // Page dialog's title field can still be mounted mid-transition.
+    const titleInput = page.locator('input[aria-label="Title"][placeholder="Page title"]')
     if ((await titleInput.count()) > 0 && (await titleInput.isVisible())) {
       const activeTitle = await titleInput.inputValue()
       const tabs = page.locator(
