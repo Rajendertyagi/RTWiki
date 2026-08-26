@@ -63,7 +63,8 @@ test.describe('owner journeys', () => {
   })
 
   test('Journey A: rich note lifecycle with blocks, formatting and restart persistence', async ({
-    page
+    page,
+    request
   }) => {
     test.setTimeout(240_000)
     const title = uniqueTitle('Biology')
@@ -71,6 +72,7 @@ test.describe('owner journeys', () => {
     // 1-2. Create from the rail; 3. type immediately (focus is claimed).
     await createFromRail(page, title, 'Rich Note')
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+    const biologyPage = await seedLookup(request, title)
     await page.keyboard.type('Cell theory states')
     // 4. Multiple paragraphs via Enter.
     await page.keyboard.press('Enter')
@@ -121,8 +123,12 @@ test.describe('owner journeys', () => {
     }
     const widthBeforeReload = await container.getAttribute('data-width')
 
-    // 9. Wait for Saved.
+    // 9. Wait for Saved, then verify SERVER truth so any later loss is
+    //    attributable to the restart rather than the save path.
     await expect(page.getByText('Saved', { exact: true }).first()).toBeVisible({ timeout: 15_000 })
+    await expect
+      .poll(async () => getStoredContent(request, biologyPage as string), { timeout: 15_000 })
+      .toContain('Cell theory states')
 
     // 10. Open another page and come back.
     const other = uniqueTitle('Scratch')
@@ -459,6 +465,20 @@ async function seedRich(request: APIRequestContext, title: string): Promise<{ id
 async function renameViaApi(request: APIRequestContext, id: string, title: string): Promise<void> {
   const res = await request.patch(`/api/pages/${id}`, { data: { title } })
   expect(res.status()).toBe(200)
+}
+
+async function getStoredContent(request: APIRequestContext, id: string): Promise<string> {
+  const res = await request.get('/api/pages')
+  const body = (await res.json()) as { pages: Array<{ id: string; content: string }> }
+  return body.pages.find((p) => p.id === id)?.content ?? ''
+}
+
+async function seedLookup(request: APIRequestContext, title: string): Promise<string> {
+  const res = await request.get('/api/pages')
+  const body = (await res.json()) as { pages: Array<{ id: string; title: string }> }
+  const found = body.pages.find((p) => p.title === title)?.id
+  if (!found) throw new Error(`page not found: ${title}`)
+  return found
 }
 
 async function openNote(page: Page, title: string): Promise<void> {
