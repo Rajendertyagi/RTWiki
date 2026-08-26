@@ -60,8 +60,9 @@ test.describe('long accumulated session', () => {
     // --- Seed scale -------------------------------------------------------
     const subjects: Array<{ id: string; title: string }> = []
     for (let s = 0; s < 4; s++) {
-      const subject = await seed(request, uniqueTitle(`Subject ${s}`), 'rich')
-      subjects.push({ id: subject.id, title: `Subject ${s}` })
+      const subjectTitle = uniqueTitle(`Subject ${s}`)
+      const subject = await seed(request, subjectTitle, 'rich')
+      subjects.push({ id: subject.id, title: subjectTitle })
       // Chapters under each subject (hierarchy level 2).
       for (let c = 0; c < 4; c++) {
         const chapter = await seed(request, uniqueTitle(`Ch ${s}-${c}`), 'rich', subject.id)

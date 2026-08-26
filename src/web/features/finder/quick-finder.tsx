@@ -165,7 +165,10 @@ export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderP
         leftSection={<IconSearch size={14} />}
         placeholder={UI_TEXT.quickFinderSearchPlaceholder}
         value={query}
-        onChange={(event) => setQuery(event.currentTarget.value)}
+        onChange={(event) => {
+          setQuery(event.currentTarget.value)
+          setActiveIndex(0)
+        }}
         onKeyDown={handleKeyDown}
         data-testid="quick-finder-input"
         aria-label={UI_TEXT.quickFinderSearchPlaceholder}

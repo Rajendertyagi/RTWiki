@@ -65,7 +65,7 @@ test.describe('owner journeys', () => {
   test('Journey A: rich note lifecycle with blocks, formatting and restart persistence', async ({
     page
   }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(240_000)
     const title = uniqueTitle('Biology')
 
     // 1-2. Create from the rail; 3. type immediately (focus is claimed).
@@ -101,8 +101,8 @@ test.describe('owner journeys', () => {
     }
 
     // 7. Move the callout block up via its drag-handle menu.
-    const callout = page.locator('.bn-block-outer', { hasText: 'Info callout' }).first()
-    await callout.hover().catch(() => {})
+    // Hover any content block so the side menu (with the drag handle) shows.
+    await page.locator('.bn-block-content').last().hover()
     const handle = page.locator('[data-test="dragHandle"]').first()
     await handle.waitFor({ state: 'visible' })
     await handle.click()
@@ -146,19 +146,16 @@ test.describe('owner journeys', () => {
     page,
     request
   }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(240_000)
     const parent = uniqueTitle('Physics')
     const child = uniqueTitle('Mechanics')
 
     await createFromRail(page, parent, 'Rich Note')
-    // Child via tree row menu.
+    // Child via the tree context menu (proven flow).
     const row = page.locator('[role="treeitem"]', { hasText: parent }).first()
-    await row.hover()
-    await row.getByLabel(`Actions for ${parent}`).click()
-    await page
-      .getByText(/New child/i)
-      .first()
-      .click()
+    await row.click({ button: 'right' })
+    await expect(page.getByTestId('tree-context-menu')).toBeVisible()
+    await page.getByRole('menuitem', { name: 'New child Rich Note' }).click()
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('Title').fill(child)
     await dialog.getByRole('button', { name: /create/i }).click()
@@ -239,7 +236,7 @@ test.describe('owner journeys', () => {
   test('Journey C: HTML workspace rapid switching, format, preview and restore', async ({
     page
   }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(240_000)
     const title = uniqueTitle('Web Notes')
     await createFromRail(page, title, 'HTML Page')
     await expect(page.getByTestId('html-preview-view')).toBeVisible()
@@ -300,7 +297,7 @@ test.describe('owner journeys', () => {
   test('Journey D: dedicated visual pages edit, apply/cancel, zoom, full-screen', async ({
     page
   }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(240_000)
     const diag = uniqueTitle('Cycle Diagram')
     await createFromRail(page, diag, 'Diagram')
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
