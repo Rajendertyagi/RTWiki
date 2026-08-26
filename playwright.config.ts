@@ -13,18 +13,20 @@ export default defineConfig({
   timeout: 30_000,
   retries: 0,
   workers: 1,
-  reporter: [['list']],
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
-    trace: 'retain-on-failure'
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure'
   },
-  // Cold BlockNote mounts on CI runners can exceed the default 5s.
   expect: { timeout: 15_000 },
+  // Region screenshots live beside their specs, per platform+browser.
+  snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{arg}{ext}',
   webServer: {
-    // PLAYWRIGHT_PORT keeps local runs off a port owned by another RTWiki
-    // instance; the flag is forwarded so single-instance detection probes
-    // the same port the server will actually bind.
-    command: `bun src/server/index.ts --no-open${PORT === 8080 ? '' : ` --port ${PORT}`}`,
+    // The supervisor respawns the real server when an owner journey exercises
+    // the app's own shutdown endpoint, making genuine restarts testable.
+    command: `bun scripts/dev-supervisor.ts${PORT === 8080 ? '' : ` --port ${PORT}`}`,
     url: `${baseURL}/health`,
     reuseExistingServer: false,
     timeout: 30_000
