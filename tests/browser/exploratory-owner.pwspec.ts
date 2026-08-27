@@ -70,10 +70,9 @@ function buildActions(): Action[] {
     ).toBeVisible({ timeout: 20_000 })
     // Wait for the title input to catch up to the tab (tab updates synchronously
     // but the page workspace may re-render one frame later).
-    await expect(ctx.page.locator('input[aria-label="Title"][placeholder="Page title"]')).toHaveValue(
-      title,
-      { timeout: 5_000 }
-    )
+    await expect(
+      ctx.page.locator('input[aria-label="Title"][placeholder="Page title"]')
+    ).toHaveValue(title, { timeout: 5_000 })
   }
 
   return [
