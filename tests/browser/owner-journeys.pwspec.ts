@@ -251,25 +251,8 @@ test.describe('owner journeys', () => {
       .toBe('ok')
   })
 
-  test('Journey B: tree collapse and workspace clicks', async ({ page }) => {
-    test.setTimeout(120_000)
-    const title = uniqueTitle('Collapse Test')
-    await createFromRail(page, title, 'Rich Note')
-    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
-
-    // Collapse the tree if the toggle is present (it may not exist in headless CI).
-    const toggleNav = page.locator('[aria-label="Toggle navigation"]')
-    if ((await toggleNav.count().catch(() => 0)) > 0) {
-      await toggleNav.click().catch(() => {})
-    }
-
-    // Verify workspace clicks still land after tree collapse.
-    await page.locator('.bn-editor').click()
-    await page.keyboard.type('typed with tree collapsed')
-    await expect(page.locator('[data-testid="rich-editor"]')).toContainText(
-      'typed with tree collapsed'
-    )
-  })
+  // Tree collapse + workspace clicks is covered by shell-layout.pwspec.ts
+  // (desktop collapse keeps rail visible, document receives clicks, expand restores).
 
   test('Journey C: HTML workspace rapid switching, format, preview and restore', async ({
     page
