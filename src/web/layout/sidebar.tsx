@@ -1,4 +1,4 @@
-import { Alert, Loader, NavLink, ScrollArea, Stack, Text } from '@mantine/core'
+import { Alert, Loader, NavLink, Stack, Text } from '@mantine/core'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconHome } from '@tabler/icons-react'
 import { SearchInput } from '../components/search-input.js'
@@ -66,7 +66,11 @@ export function Sidebar({
         <SearchInput ref={searchInputRef} value={searchQuery} onChange={onSearchChange} />
       </div>
 
-      <ScrollArea className={classes.listSection}>
+      {/*
+        Wunderbaum owns internal scrolling and needs a bounded parent, so the
+        former ScrollArea wrapper is a plain flex region here.
+      */}
+      <div className={classes.listSection}>
         {loading ? (
           <Stack align="center" gap="sm" py="md">
             <Loader size="sm" />
@@ -79,7 +83,7 @@ export function Sidebar({
             {error}
           </Alert>
         ) : (
-          <Stack gap={2}>
+          <Stack gap={2} style={{ height: '100%' }}>
             {/* Home / Dashboard entry — always visible, outside role=tree */}
             <NavLink
               label={UI_TEXT.dashboardTitle}
@@ -118,7 +122,7 @@ export function Sidebar({
             )}
           </Stack>
         )}
-      </ScrollArea>
+      </div>
     </div>
   )
 }

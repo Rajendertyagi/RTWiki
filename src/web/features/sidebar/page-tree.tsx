@@ -1,19 +1,11 @@
-import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import { Text } from '@mantine/core'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
-import { type UsePageTreeResult, usePageTree } from '../../hooks/use-page-tree.js'
+import { PageTreeHost, type DropMove } from './wb-tree-host.js'
+import { isMoveToAction, TreeContextMenu } from './tree-context-menu.js'
 import classes from './page-tree.module.css'
-import { PageTreeRow } from './page-tree-row.js'
-import {
-  type DropEdge,
-  isPageTreeDragData,
-  type RowHint,
-  registerContainerDnd
-} from './tree-dnd.js'
 
 export interface MoveTarget {
   id: string
@@ -25,7 +17,6 @@ export interface PageTreeControllerHooks {
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
   onCreateChild: (parentId: string) => void
-  /** Creates a new child HTML page beneath an existing page. */
   onCreateChildHtml?: (parentId: string) => void
   /** Creates a child of any type (Diagram / Mind Map entry points). */
   onCreateChildOfType?: (parentId: string, pageType: PageType) => void
@@ -44,7 +35,7 @@ interface PageTreeProps {
   onOpenHtmlSource: (pageId: string, field: 'html' | 'css' | 'javascript') => void
   /** Creates a new ROOT page from the tree's empty-space context menu. */
   onCreateRoot?: (pageType: PageType) => void
-  /** Session-restoration seed for the expansion set (see usePageTree). */
+  /** Session-restoration seed for the expansion set. */
   seedExpandedIds?: ReadonlySet<string>
   /** Expansion observation for session persistence. */
   onExpandedChange?: (ids: ReadonlySet<string>) => void
@@ -54,16 +45,28 @@ type ContextMenuState =
   | { kind: 'root'; x: number; y: number }
   | { kind: 'page'; pageId: string; x: number; y: number }
 
+/** Imperative helpers the composition root drives through the ref. */
+export interface PageTreeImperative {
+  expandPage: (pageId: string) => void
+  restoreFocus: (preferredId: string | null) => void
+}
+
 /**
- * Accessible hierarchical page tree (WAI-ARIA tree pattern).
+ * Wunderbaum-backed page tree.
  *
- * Owns keyboard focus/expansion state only; the active/open page remains
- * controller-owned. Enter and mouse click open; every other interaction is
- * exploration or mutation that never navigates.
+ * The component owns only the host-instance lifecycle and the context-menu
+ * presentation; all state (pages, selection, expansion persistence) stays
+ * with RTWiki's controller, and interactions flow back through callbacks:
  *
- * Right-click creation follows Trilium's proven pattern: the menu opens at
- * the pointer, operates on the right-clicked row (or offers root creation
- * over empty space), and closes on outside click or Escape.
+ * - Blank tree space right-click opens the root/new-page menu (documented
+ *   behaviour); any row region opens the per-page menu. The native browser
+ *   menu is suppressed for the whole tree surface.
+ * - The row action button (hover/focus) opens the same per-page menu; it
+ *   never opens the page (stopPropagation in the host render hook).
+ * - Row click / Enter opens pages through the controller's normal flow;
+ *   the disclosure control only expands/collapses.
+ * - Virtual HTML/CSS/JS rows open their source workspace and offer no
+ *   lifecycle actions and no drop destinations.
  */
 export function PageTree({
   pages,
@@ -75,463 +78,274 @@ export function PageTree({
   seedExpandedIds,
   onExpandedChange
 }: PageTreeProps): JSX.Element {
-  const tree = usePageTree({
-    pages,
-    activePageId,
-    // Keyboard Enter shares the pointer click's Debug Mode observation.
-    onOpen: (id) => {
-      debugLog('ui', 'ui_tree_row_open', { pageId: id })
-      onOpen(id)
-    },
-    onOpenHtmlSource,
-    seedExpandedIds,
-    onExpandedChange
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const hostRef = useRef<PageTreeHost | null>(null)
+  const imperativeRef = useRef<PageTreeImperative>({
+    expandPage: () => undefined,
+    restoreFocus: () => undefined
   })
 
-  const moveTargets = buildMoveTargets(pages)
-
-  // Right-click / keyboard context menu. Null = closed.
+  // Context menu state (portalled menu rendered by TreeContextMenu).
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [editSignals, setEditSignals] = useState<Record<string, number>>({})
-  const contextMenuRef = useRef<HTMLDivElement | null>(null)
+  const contextMenuRequestRef = useRef<(payload: ContextMenuState) => void>(() => {})
+  const renameSignalRef = useRef<(pageId: string) => void>(() => {})
 
-  const openContextMenu = useCallback((state: ContextMenuState): void => {
-    setContextMenu(state)
-  }, [])
-  const closeContextMenu = useCallback((): void => setContextMenu(null), [])
-  const requestRenameViaMenu = (pageId: string): void => {
+  contextMenuRequestRef.current = (payload) => {
+    setContextMenu(payload)
+  }
+  renameSignalRef.current = (pageId) => {
     setEditSignals((prev) => ({ ...prev, [pageId]: (prev[pageId] ?? 0) + 1 }))
   }
 
-  // Outside pointer-down and global Escape dismiss the context menu.
-  useEffect(() => {
-    if (contextMenu === null) return
-    const onPointerDown = (event: PointerEvent): void => {
-      const menu = contextMenuRef.current
-      if (menu && !menu.contains(event.target as Node)) closeContextMenu()
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') closeContextMenu()
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [contextMenu, closeContextMenu])
-
-  /**
-   * Commits a completed row drop. Before/after targets compute the
-   * final-index-after-removal position among the target's siblings;
-   * inside appends under the target. Descendant/self rejection mirrors
-   * the keyboard "Move to" parity path.
-   */
-  const handleRowDrop = (sourceId: string, targetId: string, edge: DropEdge): void => {
-    if (edge === 'inside') {
-      if (tree.isSelfOrDescendantChecker(sourceId, targetId)) return
-      hooks.onDropMove(sourceId, targetId, Number.MAX_SAFE_INTEGER)
-    } else {
-      const target = pages.find((page) => page.id === targetId)
-      if (!target) return
-      const newParentId = target.parentId ?? null
-      // A null parent is the root list, which can never be inside the
-      // dragged subtree, so the descendant check only applies to pages.
-      if (newParentId !== null && tree.isSelfOrDescendantChecker(sourceId, newParentId)) {
-        return
-      }
-      const siblings = pages
-        .filter((page) => (page.parentId ?? null) === newParentId && page.id !== sourceId)
-        .sort((a, b) => a.position - b.position)
-      const index = siblings.findIndex((page) => page.id === targetId)
-      if (index < 0) return
-      hooks.onDropMove(sourceId, newParentId, edge === 'before' ? index : index + 1)
-    }
-    tree.restoreFocusAfterChange(sourceId)
+  // Callback mirrors so mount-scoped effects always invoke latest closures.
+  const callbacksRef = useRef({
+    pages,
+    activePageId,
+    onOpen,
+    hooks,
+    onOpenHtmlSource,
+    onCreateRoot,
+    onExpandedChange
+  })
+  callbacksRef.current = {
+    pages,
+    activePageId,
+    onOpen,
+    hooks,
+    onOpenHtmlSource,
+    onCreateRoot,
+    onExpandedChange
   }
 
-  // Drag-and-drop: the container is the SINGLE drop target. It resolves the
-  // hovered row and edge itself (honey-pot-aware hit testing), so empty
-  // container space naturally means root placement, and a global monitor
-  // tracks the dragged source for the commit path.
-  const [dropHint, setDropHint] = useState<RowHint | 'blocked' | null>(null)
-  const containerElementRef = useRef<HTMLDivElement | null>(null)
-  const hooksRef = useRef(hooks)
-  hooksRef.current = hooks
-  const draggingSourceIdRef = useRef<string | null>(null)
-  // Set when a drop intent is actually committed; lets the monitor's onDrop
-  // distinguish real drops from cancellations for Debug Mode.
-  const dropCommittedRef = useRef(false)
-  // Debug Mode: log only CHANGED row/edge hints, never every pointer event.
-  const lastHintRef = useRef<RowHint | 'blocked' | null>(null)
-  const applyDropHint = useCallback((hint: RowHint | 'blocked' | null): void => {
-    const previous = lastHintRef.current
-    lastHintRef.current = hint
-    if (previous === hint) return
-    if (hint !== null && hint !== 'blocked') {
-      debugLog('ui', 'ui_drag_hint_changed', { pageId: hint.rowId, code: hint.edge })
-    }
-    setDropHint(hint)
-  }, [])
-  // Stable refs so the container registration effect can stay mount-scoped
-  // while always invoking the latest commit/focus logic.
-  const handleRowDropRef = useRef(handleRowDrop)
-  handleRowDropRef.current = handleRowDrop
-  const restoreFocusRef = useRef(tree.restoreFocusAfterChange)
-  restoreFocusRef.current = tree.restoreFocusAfterChange
-
-  useEffect(() => {
-    return monitorForElements({
-      onDragStart: ({ source }) => {
-        if (isPageTreeDragData(source.data)) {
-          draggingSourceIdRef.current = source.data.pageId
-          dropCommittedRef.current = false
-          debugLog('ui', 'ui_drag_start', { pageId: source.data.pageId })
-        }
-      },
-      // Fires when the drag finishes regardless of outcome. A finish without
-      // a committed drop intent was a cancellation (Escape, or released
-      // outside the tree); real drops commit the intent flag first.
-      onDrop: () => {
-        const sourceId = draggingSourceIdRef.current
-        draggingSourceIdRef.current = null
-        applyDropHint(null)
-        if (!dropCommittedRef.current && sourceId !== null) {
-          debugLog('ui', 'ui_drag_cancel', { pageId: sourceId, result: 'cancelled' })
-        }
+  const isSelfOrDescendantRef = useRef<(a: string, c: string) => boolean>(() => false)
+  const refreshParentMap = (list: Page[]): void => {
+    const parents = new Map<string, string | null>()
+    for (const p of list) parents.set(p.id, p.parentId ?? null)
+    isSelfOrDescendantRef.current = (ancestorId, candidateId): boolean => {
+      let cursor: string | null = candidateId
+      const visited = new Set<string>()
+      while (cursor !== null && !visited.has(cursor)) {
+        visited.add(cursor)
+        if (cursor === ancestorId) return true
+        cursor = parents.get(cursor) ?? null
       }
-    })
-  }, [applyDropHint])
+      return false
+    }
+  }
+  refreshParentMap(pages)
 
+  // Mount exactly one host instance (strict-mode safe); data flows through
+  // the reload effect below.
   useEffect(() => {
-    const element = containerElementRef.current
+    const element = containerRef.current
     if (!element) return
-    return registerContainerDnd({
-      element,
-      onHintChange: applyDropHint,
-      onBlockedDrop: () => {
-        debugLog('ui', 'ui_drag_drop', {
-          pageId: draggingSourceIdRef.current ?? undefined,
-          result: 'rejected',
-          code: 'subfile-target'
-        })
-      },
-      onDropIntent: (rowId, edge) => {
-        const sourceId = draggingSourceIdRef.current
-        if (sourceId === null) return
-        dropCommittedRef.current = true
-        debugLog('ui', 'ui_drag_drop', {
-          pageId: sourceId,
-          targetId: rowId ?? undefined,
-          code: edge
-        })
-        if (rowId === null || edge === 'root-append') {
-          // Root append: oversized position clamps to the destination end.
-          hooksRef.current.onDropMove(sourceId, null, Number.MAX_SAFE_INTEGER)
-          restoreFocusRef.current(sourceId)
-          return
-        }
-        handleRowDropRef.current(sourceId, rowId, edge)
+    const host = new PageTreeHost()
+    hostRef.current = host
+    refreshParentMap(callbacksRef.current.pages)
+
+    host.mount(element, {
+      pages: callbacksRef.current.pages,
+      activePageId: callbacksRef.current.activePageId,
+      untitledLabel: UI_TEXT.untitledPage,
+      seedExpandedIds: callbacksRef.current.seedExpandedIds,
+      isSelfOrDescendant: (a, c) => isSelfOrDescendantRef.current(a, c),
+      callbacks: {
+        onOpenPage: (pageId) => {
+          debugLog('ui', 'ui_tree_row_open', { pageId })
+          callbacksRef.current.onOpen(pageId)
+        },
+        onOpenSubfile: (pageId, field) => {
+          debugLog('ui', 'ui_subfile_open', { pageId, field })
+          callbacksRef.current.onOpenHtmlSource(pageId, field)
+        },
+        onDropMove: (move: DropMove) => {
+          debugLog('ui', 'ui_drag_drop', {
+            pageId: move.pageId,
+            targetId: move.newParentId ?? undefined,
+            code: move.newPosition === null ? 'append' : String(move.newPosition)
+          })
+          callbacksRef.current.hooks.onDropMove(
+            move.pageId,
+            move.newParentId,
+            move.newPosition ?? Number.MAX_SAFE_INTEGER
+          )
+        },
+        onContextMenu: (payload) => contextMenuRequestRef.current(payload),
+        onRenameRequest: (pageId) => renameSignalRef.current(pageId),
+        onExpandedChange: (ids) => callbacksRef.current.onExpandedChange?.(ids)
       }
     })
-  }, [applyDropHint])
 
-  const handleRenameCommit = (id: string, title: string): void => {
-    debugLog('ui', 'ui_rename_commit', { pageId: id })
-    void hooks.onRename(id, title).then(() => {
-      tree.restoreFocusAfterChange(id)
-    })
-  }
-
-  /** Debug Mode observation: a tree row was opened by pointer click. */
-  const openRow = (id: string): void => {
-    debugLog('ui', 'ui_tree_row_open', { pageId: id })
-    onOpen(id)
-  }
-
-  const handleDelete = (id: string): void => {
-    hooks.onDelete(id)
-    // Focus restoration happens after the controller refreshes the list;
-    // the hook's visible-set effect keeps focus inside the tree meanwhile.
-    tree.restoreFocusAfterChange(null)
-  }
-
-  const handleMoveTo = (id: string, newParentId: string): void => {
-    if (!tree.isSelfOrDescendantChecker(id, newParentId)) {
-      hooks.onMoveTo(id, newParentId)
+    imperativeRef.current = {
+      expandPage: (pageId) => host.expandPage(pageId),
+      restoreFocus: (preferredId) => host.restoreFocus(preferredId)
     }
-  }
 
-  /** Container-level right-click: empty space yields the root creation menu. */
-  const handleContainerContextMenu = (event: React.MouseEvent<HTMLDivElement>): void => {
-    const row = (event.target as HTMLElement).closest('[role="treeitem"]')
-    if (row) return // rows handle their own menus
-    event.preventDefault()
-    openContextMenu({
-      kind: 'root',
-      x: event.clientX,
-      y: event.clientY
-    })
-  }
-
-  const createChildAndExpand = (parentId: string, kind: PageType): void => {
-    // The child must be visible immediately: force-expand the parent before
-    // the creation round-trip lands.
-    tree.expandPage(parentId)
-    if (kind === 'html') {
-      hooks.onCreateChildHtml?.(parentId)
-    } else if (kind === 'diagram' || kind === 'mindmap') {
-      hooks.onCreateChildOfType?.(parentId, kind)
-    } else {
-      hooks.onCreateChild(parentId)
+    return () => {
+      host.destroy()
+      hostRef.current = null
+      imperativeRef.current = { expandPage: () => undefined, restoreFocus: () => undefined }
     }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-scoped; data flows through the reload effect
+  }, [])
+
+  // Reload data in place whenever the page list or selection changes.
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    refreshParentMap(pages)
+    host.reload({
+      pages,
+      activePageId,
+      untitledLabel: UI_TEXT.untitledPage,
+      isSelfOrDescendant: (a, c) => isSelfOrDescendantRef.current(a, c),
+      callbacks: {
+        onOpenPage: (pageId) => {
+          debugLog('ui', 'ui_tree_row_open', { pageId })
+          onOpen(pageId)
+        },
+        onOpenSubfile: (pageId, field) => {
+          debugLog('ui', 'ui_subfile_open', { pageId, field })
+          onOpenHtmlSource(pageId, field)
+        },
+        onDropMove: (move: DropMove) => {
+          debugLog('ui', 'ui_drag_drop', {
+            pageId: move.pageId,
+            targetId: move.newParentId ?? undefined,
+            code: move.newPosition === null ? 'append' : String(move.newPosition)
+          })
+          hooks.onDropMove(
+            move.pageId,
+            move.newParentId,
+            move.newPosition ?? Number.MAX_SAFE_INTEGER
+          )
+        },
+        onContextMenu: (payload) => contextMenuRequestRef.current(payload),
+        onRenameRequest: (pageId) => renameSignalRef.current(pageId),
+        onExpandedChange: (ids) => onExpandedChange?.(ids)
+      }
+    })
+  }, [pages, activePageId, onOpen, onOpenHtmlSource, hooks, onExpandedChange])
+
+  // Apply the session-expansion seed once per distinct identity.
+  const seedRef = useRef<ReadonlySet<string> | null>(null)
+  useEffect(() => {
+    if (!seedExpandedIds || seedExpandedIds === seedRef.current) return
+    seedRef.current = seedExpandedIds
+    hostRef.current?.applySeed(seedExpandedIds)
+  }, [seedExpandedIds])
+
+  const moveTargets = buildMoveTargets(pages)
+  const closeContextMenu = (): void => setContextMenu(null)
+
+  const handleMenuAction = (rawAction: string): void => {
+    const menu = contextMenu
+    closeContextMenu()
+    if (!menu) return
+    if (isMoveToAction(rawAction)) {
+      if (menu.kind === 'page') {
+        const targetId = rawAction.slice('moveTo:'.length)
+        debugLog('ui', 'ui_context_menu_action', { pageId: menu.pageId, code: 'moveTo' })
+        hooks.onMoveTo(menu.pageId, targetId)
+      }
+      return
+    }
+    const action = rawAction
+    debugLog('ui', 'ui_context_menu_action', {
+      pageId: menu.kind === 'page' ? menu.pageId : undefined,
+      code: action
+    })
+    if (menu.kind === 'root') {
+      if (action === 'rootRich') onCreateRoot?.('rich')
+      if (action === 'rootHtml') onCreateRoot?.('html')
+      if (action === 'rootDiagram') onCreateRoot?.('diagram')
+      if (action === 'rootMindMap') onCreateRoot?.('mindmap')
+      return
+    }
+    const id = menu.pageId
+    if (action === 'open') onOpen(id)
+    if (action === 'childRich') {
+      imperativeRef.current.expandPage(id)
+      hooks.onCreateChild(id)
+    }
+    if (action === 'childHtml') {
+      imperativeRef.current.expandPage(id)
+      hooks.onCreateChildHtml?.(id)
+    }
+    if (action === 'childDiagram') {
+      imperativeRef.current.expandPage(id)
+      hooks.onCreateChildOfType?.(id, 'diagram')
+    }
+    if (action === 'childMindMap') {
+      imperativeRef.current.expandPage(id)
+      hooks.onCreateChildOfType?.(id, 'mindmap')
+    }
+    if (action === 'rename') renameSignalRef.current(id)
+    if (action === 'duplicate') hooks.onDuplicate(id)
+    if (action === 'delete') {
+      hooks.onDelete(id)
+      imperativeRef.current.restoreFocus(null)
+    }
+    if (action === 'moveUp') hooks.onMoveRelative(id, -1)
+    if (action === 'moveDown') hooks.onMoveRelative(id, 1)
   }
 
-  const rowDropHint = (rowId: string): DropEdge | null =>
-    !dropHint || dropHint === 'blocked' || dropHint.rowId !== rowId ? null : dropHint.edge
+  const menuPageId = contextMenu?.kind === 'page' ? contextMenu.pageId : null
 
   return (
-    <div
-      ref={(el) => {
-        containerElementRef.current = el
-        tree.containerRef.current = el
-      }}
-      role="tree"
-      aria-label={UI_TEXT.dashboardTitle}
-      onKeyDown={tree.handleTreeKeyDown}
-      onContextMenu={handleContainerContextMenu}
-      data-testid="page-tree"
-    >
-      {tree.rows.length === 0 ? (
-        <Text size="sm" c="dimmed" ta="center">
-          {UI_TEXT.emptyDescription}
-        </Text>
-      ) : (
-        tree.rows.map((row) => {
-          const subfile = row.subfile
-          const node = row.node
-          if (subfile) {
-            return (
-              <PageTreeRow
-                key={row.id}
-                subfile={{ ...subfile }}
-                pageId={row.id}
-                title=""
-                pageType="rich"
-                parentId={null}
-                hasChildren={false}
-                expanded={false}
-                focused={tree.focusedId === row.id}
-                active={false}
-                indentLevel={row.depth}
-                tabIndex={tree.focusedId === row.id ? 0 : -1}
-                onOpen={() => onOpenHtmlSource(subfile.pageId, subfile.field)}
-                onOpenSubfile={() => onOpenHtmlSource(subfile.pageId, subfile.field)}
-                onToggleExpand={() => undefined}
-                onFocusRow={() => tree.focusRow(row.id)}
-                onRenameCommit={() => undefined}
-                onRenameCancel={() => tree.restoreFocusAfterChange(row.id)}
-                onCreateChild={() => undefined}
-                onDuplicate={() => undefined}
-                onDelete={() => undefined}
-                onMoveUp={() => undefined}
-                onMoveDown={() => undefined}
-                moveTargets={[]}
-                onMoveTo={() => undefined}
-                dropHint={rowDropHint(row.id)}
-              />
-            )
-          }
-          if (!node) return null
-          return (
-            <PageTreeRow
-              key={row.id}
-              pageId={row.id}
-              title={node.page.title}
-              pageType={node.page.pageType}
-              parentId={node.page.parentId ?? null}
-              indentLevel={row.depth}
-              // HTML pages always show the expand chevron: their virtual
-              // source subfiles live behind it even with no real children.
-              hasChildren={node.children.length > 0 || node.page.pageType === 'html'}
-              expanded={row.expanded}
-              focused={tree.focusedId === row.id}
-              active={activePageId === row.id}
-              tabIndex={tree.focusedId === row.id ? 0 : -1}
-              onOpen={() => openRow(row.id)}
-              onToggleExpand={() => tree.toggleExpand(row.id)}
-              onFocusRow={() => tree.focusRow(row.id)}
-              onRenameCommit={(title) => handleRenameCommit(row.id, title)}
-              onRenameCancel={() => tree.restoreFocusAfterChange(row.id)}
-              onCreateChild={() => createChildAndExpand(row.id, 'rich')}
-              onCreateChildHtml={() => createChildAndExpand(row.id, 'html')}
-              onCreateChildDiagram={() => createChildAndExpand(row.id, 'diagram')}
-              onCreateChildMindMap={() => createChildAndExpand(row.id, 'mindmap')}
-              onDuplicate={() => hooks.onDuplicate(row.id)}
-              onDelete={() => handleDelete(row.id)}
-              onMoveUp={() => hooks.onMoveRelative(row.id, -1)}
-              onMoveDown={() => hooks.onMoveRelative(row.id, 1)}
-              moveTargets={moveTargets.filter((t) => t.id !== row.id)}
-              onMoveTo={(newParentId) => handleMoveTo(row.id, newParentId)}
-              dropHint={rowDropHint(row.id)}
-              editSignal={editSignals[row.id] ?? 0}
-              onRequestContextMenu={(rect) =>
-                openContextMenu({
-                  kind: 'page',
-                  pageId: row.id,
-                  x: rect.left,
-                  y: rect.bottom + 2
-                })
-              }
-            />
-          )
-        })
-      )}
-
-      {contextMenu !== null ? (
-        <div
-          ref={contextMenuRef}
-          role="menu"
-          data-testid="tree-context-menu"
-          className={classes.contextMenu}
-          style={{
-            // Clamp into the viewport: a menu anchored near a screen edge
-            // must never extend beyond it.
-            left: Math.min(contextMenu.x, (window.innerWidth ?? 1024) - 230),
-            top: Math.min(contextMenu.y, (window.innerHeight ?? 768) - 240)
-          }}
-        >
-          {contextMenu.kind === 'root' ? (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                className={classes.contextMenuItem}
-                onClick={() => {
-                  closeContextMenu()
-                  onCreateRoot?.('rich')
-                }}
-              >
-                {UI_TEXT.newRichPage}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={classes.contextMenuItem}
-                onClick={() => {
-                  closeContextMenu()
-                  onCreateRoot?.('html')
-                }}
-              >
-                {UI_TEXT.newHtmlRootPage}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                data-testid="tree-new-root-diagram"
-                className={classes.contextMenuItem}
-                onClick={() => {
-                  closeContextMenu()
-                  onCreateRoot?.('diagram')
-                }}
-              >
-                {UI_TEXT.createDiagramPage}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                data-testid="tree-new-root-mindmap"
-                className={classes.contextMenuItem}
-                onClick={() => {
-                  closeContextMenu()
-                  onCreateRoot?.('mindmap')
-                }}
-              >
-                {UI_TEXT.createMindMapPage}
-              </button>
-            </>
-          ) : (
-            <>
-              {(
-                [
-                  ['open', UI_TEXT.openAction],
-                  ['childRich', UI_TEXT.newChildRichPage],
-                  ['childHtml', UI_TEXT.newChildHtmlPage],
-                  ['childDiagram', UI_TEXT.newDiagramPage],
-                  ['childMindMap', UI_TEXT.newMindMapPage],
-                  ['rename', UI_TEXT.renameAction],
-                  ['duplicate', UI_TEXT.duplicateAction],
-                  ['delete', UI_TEXT.deleteAction]
-                ] as const
-              ).map(([actionKey, label]) => (
-                <button
-                  key={actionKey}
-                  type="button"
-                  role="menuitem"
-                  className={
-                    actionKey === 'delete'
-                      ? `${classes.contextMenuItem} ${classes.contextMenuDanger}`
-                      : classes.contextMenuItem
-                  }
-                  onClick={() => {
-                    const id = contextMenu.pageId
-                    closeContextMenu()
-                    debugLog('ui', 'ui_context_menu_action', { pageId: id, code: actionKey })
-                    if (actionKey === 'open') openRow(id)
-                    if (actionKey === 'childRich') createChildAndExpand(id, 'rich')
-                    if (actionKey === 'childHtml') createChildAndExpand(id, 'html')
-                    if (actionKey === 'childDiagram') createChildAndExpand(id, 'diagram')
-                    if (actionKey === 'childMindMap') createChildAndExpand(id, 'mindmap')
-                    if (actionKey === 'rename') requestRenameViaMenu(id)
-                    if (actionKey === 'duplicate') hooksRef.current.onDuplicate(id)
-                    if (actionKey === 'delete') handleDelete(id)
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-              <div className={classes.contextMenuDivider} />
-              {(['up', 'down'] as const).map((dir) => (
-                <button
-                  key={dir}
-                  type="button"
-                  role="menuitem"
-                  className={classes.contextMenuItem}
-                  onClick={() => {
-                    const id = contextMenu.pageId
-                    closeContextMenu()
-                    hooksRef.current.onMoveRelative(id, dir === 'up' ? -1 : 1)
-                  }}
-                >
-                  {dir === 'up' ? UI_TEXT.moveUpLabel : UI_TEXT.moveDownLabel}
-                </button>
-              ))}
-              <div className={classes.contextMenuDivider} />
-              <div className={classes.menuScroll}>
-                {moveTargets
-                  .filter((mt) => mt.id !== contextMenu.pageId)
-                  .map((target) => (
-                    <button
-                      key={target.id}
-                      type="button"
-                      role="menuitem"
-                      className={classes.contextMenuItem}
-                      onClick={() => {
-                        const id = contextMenu.pageId
-                        closeContextMenu()
-                        handleMoveTo(id, target.id)
-                      }}
-                    >
-                      {UI_TEXT.moveToParentLabel}: {target.label}
-                    </button>
-                  ))}
-              </div>
-            </>
-          )}
-        </div>
-      ) : null}
-    </div>
+    <>
+      <div
+        ref={containerRef}
+        className={classes.wbHost}
+        data-testid="page-tree"
+        role="tree"
+        aria-label={UI_TEXT.dashboardTitle}
+      />
+      <TreeContextMenu
+        menu={contextMenu}
+        moveTargets={moveTargets.filter((t) => t.id !== menuPageId)}
+        onAction={handleMenuAction}
+        onDismiss={closeContextMenu}
+      />
+      {/* Inline rename signal consumer: rename is initiated through
+          Wunderbaum's title editor; the apply callback routes the committed
+          title back through hooks.onRename. */}
+      <RenameSignalConsumer signals={editSignals} hostRef={hostRef} />
+    </>
   )
+}
+
+/**
+ * Bridges rename requests to the Wunderbaum title editor (F2 contract).
+ * Wunderbaum starts editing via startEditTitle; the apply callback routes
+ * the committed title back through hooks.onRename.
+ */
+function RenameSignalConsumer({
+  signals,
+  hostRef
+}: {
+  signals: Record<string, number>
+  hostRef: React.RefObject<PageTreeHost | null>
+}): JSX.Element | null {
+  const lastConsumedRef = useRef<Record<string, number>>({})
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    for (const [pageId, count] of Object.entries(signals)) {
+      if ((lastConsumedRef.current[pageId] ?? 0) >= count) continue
+      lastConsumedRef.current[pageId] = count
+      const tree = host.getInstance()
+      const node = tree?.findKey(pageId)
+      if (node) {
+        const startEdit = (
+          node as unknown as { startEditTitle?: () => void }
+        ).startEditTitle
+        startEdit?.call(node)
+      }
+    }
+  }, [signals, hostRef])
+  return null
 }
 
 function buildMoveTargets(pages: Page[]): MoveTarget[] {
@@ -542,6 +356,3 @@ function buildMoveTargets(pages: Page[]): MoveTarget[] {
       label: `${page.title || UI_TEXT.untitledPage} (${pageTypeLabel(page.pageType)})`
     }))
 }
-
-// Re-exported for consumers that need the expanded-state shape in tests.
-export type { UsePageTreeResult }

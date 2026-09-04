@@ -1,122 +1,178 @@
-.row {
-  display: flex;
-  align-items: center;
-  min-height: var(--rtwiki-tree-row-min-height, 32px);
-  border-radius: var(--mantine-radius-sm);
-  position: relative;
-}
-
-.row[data-focused="true"] {
-  outline: none;
-}
-
-.row:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-outline);
-}
-
-.rowInner {
-  display: flex;
-  align-items: center;
-  gap: var(--rtwiki-gap-xs, 4px);
-  flex: 1;
-  min-width: 0;
-}
-
-.label {
-  flex: 1;
-  min-width: 0;
-  cursor: pointer;
-}
-
 /*
- * Drop-target feedback. All visuals are overlays (inset shadows, absolutely
- * positioned lines, background washes) so row height never shifts and the
- * tree never reflows mid-drag. Colors derive from Mantine tokens via the
- * centralized --rtwiki-drop-target-border variable, keeping light and dark
- * themes consistent.
+ * Wunderbaum host styling. RTWiki renders its own page-type icons and row
+ * action buttons through the render hook; the Wunderbaum stylesheet is
+ * imported by the host component and thematically bridged here via Mantine
+ * tokens so light/dark themes stay consistent without touching library CSS.
  */
 
-.dropInside {
-  box-shadow: inset 0 0 0 2px var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
-  background: color-mix(in srgb, var(--mantine-color-blue-filled) 14%, transparent);
-}
-
-.insertLine {
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  height: 3px;
-  border-radius: var(--mantine-radius-xs);
-  background: var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
-  /* Lift the line off the row boundary so it reads against both surfaces. */
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--mantine-color-blue-filled) 25%, transparent),
-    0 1px 4px color-mix(in srgb, var(--mantine-color-blue-filled) 45%, transparent);
-  z-index: 1;
-  pointer-events: none;
-}
-
-.insertLineTop {
-  top: -2px;
-}
-
-.insertLineBottom {
-  bottom: -2px;
-}
-
-.renameInput {
+.wbHost {
   flex: 1;
+  min-height: 0;
   min-width: 0;
-}
 
-.menuScroll {
-  max-height: 320px;
-  overflow-y: auto;
-}
+  /* Bridge Wunderbaum's custom properties to RTWiki theme tokens. */
+  --wb-row-height: 32px;
+  --wb-node-indent: 16px;
+  --wb-indent-guide-color: transparent;
+  --wb-line-height: 32px;
+  --wb-hover-background: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+  --wb-active-background: color-mix(in srgb, var(--mantine-color-blue-filled) 12%, transparent);
+  --wb-focus-outline: 2px solid var(--mantine-color-blue-outline);
+  --wb-toolbar-background: transparent;
+  --wb-header-background: transparent;
+  --wb-header-border-color: transparent;
+  --wb-border-color: transparent;
+  --wb-expander-color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+  --wb-icon-size: 16px;
+  --wb-icon-margin: 4px;
 
-.rootHover {
-  outline: 2px dashed var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
-  outline-offset: -2px;
-  border-radius: var(--mantine-radius-sm);
-}
+  :global(.wunderbaum) {
+    height: 100%;
+    font-size: var(--mantine-font-size-sm);
+    background: transparent;
+    color: var(--rtwiki-text, var(--mantine-color-text));
+    outline: none;
+  }
 
-.contextMenu {
-  position: fixed;
-  z-index: 1000;
-  min-width: 200px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 4px;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
-  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  border-radius: var(--mantine-radius-sm);
-  box-shadow: var(--mantine-shadow-md);
-}
+  /* Full-width visible row hit surface (interaction contract). */
+  :global(div.wb-row) {
+    border-radius: var(--mantine-radius-sm);
+    margin-inline: 2px;
+  }
 
-.contextMenuItem {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  border: none;
-  border-radius: var(--mantine-radius-xs);
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  font-size: var(--mantine-font-size-sm);
-  color: var(--rtwiki-text, var(--mantine-color-text));
-  cursor: pointer;
-}
+  :global(div.wb-row:hover) {
+    background: var(--wb-hover-background);
+  }
 
-.contextMenuItem:hover {
-  background: var(--mantine-color-default-hover);
-}
+  :global(div.wb-row.wb-selected),
+  :global(div.wb-row.wb-active) {
+    background: var(--wb-active-background);
+  }
 
-.contextMenuDanger {
-  color: var(--mantine-color-red-filled);
-}
+  /* Keyboard focus must be visible and accessible. */
+  :global(div.wb-row.wb-focus) {
+    outline: var(--wb-focus-outline);
+    outline-offset: -2px;
+  }
 
-.contextMenuDivider {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--rtwiki-border, var(--mantine-color-default-border));
+  /* Distinct drag/drop states (Feature 1 contract). */
+  :global(div.wb-row.wb-drag-source) {
+    opacity: 0.5;
+  }
+
+  :global(div.wb-row.wb-drop-target.wb-drop-before) {
+    box-shadow: inset 0 3px 0 0 var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
+  }
+
+  :global(div.wb-row.wb-drop-target.wb-drop-after) {
+    box-shadow: inset 0 -3px 0 0 var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
+  }
+
+  :global(div.wb-row.wb-drop-target.wb-drop-over) {
+    box-shadow: inset 0 0 0 2px var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
+    background: color-mix(in srgb, var(--mantine-color-blue-filled) 14%, transparent);
+  }
+
+  /* Expander: disclosure control only expands/collapses. */
+  :global(i.wb-expander) {
+    color: var(--wb-expander-color);
+    cursor: pointer;
+  }
+
+  :global(i.rtw-expander::before) {
+    content: '▸';
+    font-size: 12px;
+  }
+
+  :global(i.rtw-expander.rtw-expanded::before) {
+    content: '▾';
+  }
+
+  /* Page-type icon slot inserted by the render hook. */
+  :global(i.rtw-page-icon) {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    margin-inline: 4px 6px;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  :global(.rtw-type-rich i.rtw-page-icon)::before {
+    content: '📄';
+    font-size: 12px;
+  }
+
+  :global(.rtw-type-html i.rtw-page-icon)::before {
+    content: '🌐';
+    font-size: 12px;
+  }
+
+  :global(.rtw-type-diagram i.rtw-page-icon)::before {
+    content: '📊';
+    font-size: 12px;
+  }
+
+  :global(.rtw-type-mindmap i.rtw-page-icon)::before {
+    content: '🧠';
+    font-size: 12px;
+  }
+
+  :global(.rtw-type-subfile i.rtw-page-icon)::before {
+    content: '↳';
+    font-size: 12px;
+  }
+
+  /* Inert placeholder glyphs Wunderbaum renders for doc/folder icons. */
+  :global(i.rtw-icon-slot) {
+    display: none;
+  }
+
+  /* Row action button: appears on hover/focus without shifting the title. */
+  :global(button.rtw-row-action) {
+    display: none;
+    position: absolute;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: var(--mantine-radius-xs);
+    background: transparent;
+    color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  :global(button.rtw-row-action::before) {
+    content: '⋯';
+  }
+
+  :global(div.wb-row:hover button.rtw-row-action),
+  :global(div.wb-row.wb-focus button.rtw-row-action),
+  :global(button.rtw-row-action:focus-visible) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--rtwiki-surface, var(--mantine-color-body));
+    border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  }
+
+  :global(button.rtw-row-action:hover) {
+    background: var(--mantine-color-default-hover);
+  }
+
+  /* Subfile (virtual) rows are visually quieter and never interactive
+     beyond opening their source editor. */
+  :global(.rtw-type-subfile span.wb-title) {
+    color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+    font-style: italic;
+  }
+
+  /* The title span fills the row so the full-width hit surface works. */
+  :global(span.wb-title) {
+    cursor: pointer;
+  }
 }
