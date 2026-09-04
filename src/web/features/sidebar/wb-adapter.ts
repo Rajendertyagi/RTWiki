@@ -165,6 +165,35 @@ export function forestToNodeData(
   return walk(forest)
 }
 
+/** Parent-id lookup for ancestor walks over a flat page list. */
+export function parentMap(pages: Page[]): Map<string, string | null> {
+  const map = new Map<string, string | null>()
+  for (const page of pages) map.set(page.id, page.parentId ?? null)
+  return map
+}
+
+/**
+ * Builds a self-or-descendant checker bound to one snapshot of the page
+ * list. Iterative with a visited set (cyclic parent chains cannot loop).
+ * The checker is rebuilt on every page-list change; stale snapshots are
+ * replaced wholesale so checks always use fresh truth.
+ */
+export function buildDescendantChecker(
+  pages: Page[]
+): (ancestorId: string, candidateId: string) => boolean {
+  const parents = parentMap(pages)
+  return (ancestorId, candidateId): boolean => {
+    let cursor: string | null = candidateId
+    const visited = new Set<string>()
+    while (cursor !== null && !visited.has(cursor)) {
+      visited.add(cursor)
+      if (cursor === ancestorId) return true
+      cursor = parents.get(cursor) ?? null
+    }
+    return false
+  }
+}
+
 /** Commit payload handed to the controller's positional move. */
 export interface DropMove {
   pageId: string

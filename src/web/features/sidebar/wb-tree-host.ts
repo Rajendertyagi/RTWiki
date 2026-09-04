@@ -86,7 +86,6 @@ interface WbNodeLike {
 
 export class PageTreeHost {
   private tree: Wunderbaum | null = null
-  private element: HTMLElement | null = null
   private options: PageTreeHostOptions | null = null
   private lastExpandedKey: string | null = null
   private contextMenuDismiss: (() => void) | null = null
@@ -96,7 +95,6 @@ export class PageTreeHost {
   /** Creates and mounts the instance (exactly one per element lifetime). */
   mount(element: HTMLElement, options: PageTreeHostOptions): void {
     if (this.tree) throw new Error('PageTreeHost is already mounted')
-    this.element = element
     this.options = options
     this.pagesRef = options.pages
     this.tree = this.createInstance(element, options)
@@ -107,7 +105,6 @@ export class PageTreeHost {
     this.contextMenuDismiss = null
     this.tree?.destroy()
     this.tree = null
-    this.element = null
     this.options = null
     this.lastExpandedKey = null
   }

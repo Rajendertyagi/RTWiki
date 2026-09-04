@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
-import { PageTreeHost, type DropMove } from './wb-tree-host.js'
-import { isMoveToAction, TreeContextMenu } from './tree-context-menu.js'
 import classes from './page-tree.module.css'
+import { isMoveToAction, TreeContextMenu } from './tree-context-menu.js'
+import { buildDescendantChecker } from './wb-adapter.js'
+import { type DropMove, PageTreeHost } from './wb-tree-host.js'
 
 export interface MoveTarget {
   id: string
@@ -119,21 +120,7 @@ export function PageTree({
   }
 
   const isSelfOrDescendantRef = useRef<(a: string, c: string) => boolean>(() => false)
-  const refreshParentMap = (list: Page[]): void => {
-    const parents = new Map<string, string | null>()
-    for (const p of list) parents.set(p.id, p.parentId ?? null)
-    isSelfOrDescendantRef.current = (ancestorId, candidateId): boolean => {
-      let cursor: string | null = candidateId
-      const visited = new Set<string>()
-      while (cursor !== null && !visited.has(cursor)) {
-        visited.add(cursor)
-        if (cursor === ancestorId) return true
-        cursor = parents.get(cursor) ?? null
-      }
-      return false
-    }
-  }
-  refreshParentMap(pages)
+  isSelfOrDescendantRef.current = buildDescendantChecker(pages)
 
   // Mount exactly one host instance (strict-mode safe); data flows through
   // the reload effect below.
@@ -142,7 +129,7 @@ export function PageTree({
     if (!element) return
     const host = new PageTreeHost()
     hostRef.current = host
-    refreshParentMap(callbacksRef.current.pages)
+    isSelfOrDescendantRef.current = buildDescendantChecker(callbacksRef.current.pages)
 
     host.mount(element, {
       pages: callbacksRef.current.pages,
@@ -187,14 +174,13 @@ export function PageTree({
       hostRef.current = null
       imperativeRef.current = { expandPage: () => undefined, restoreFocus: () => undefined }
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-scoped; data flows through the reload effect
   }, [])
 
   // Reload data in place whenever the page list or selection changes.
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
-    refreshParentMap(pages)
+    isSelfOrDescendantRef.current = buildDescendantChecker(pages)
     host.reload({
       pages,
       activePageId,
