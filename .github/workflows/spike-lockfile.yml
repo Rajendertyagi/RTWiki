@@ -1,0 +1,44 @@
+name: Temporary remote lockfile generation
+
+# TEMPORARY workflow — exists only to run the package manager on a GitHub
+# Actions runner and upload the resulting bun.lock as an artifact, per the
+# task's local-tool restriction (no package installation on the local
+# machine). This file must be removed before the final push.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    name: Generate bun.lock with wunderbaum
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.4.0'
+
+      - name: Add wunderbaum dependency (exact pin)
+        run: bun add wunderbaum@0.14.1 --exact
+
+      - name: Verify lockfile was written
+        shell: bash
+        run: |
+          test -f bun.lock || { echo "bun.lock missing"; exit 1; }
+          grep -q '"wunderbaum": "0.14.1"' package.json || { echo "dependency missing"; exit 1; }
+
+      - name: Upload lockfile artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lockfile-update
+          path: |
+            bun.lock
+            package.json
+          if-no-files-found: error
+          retention-days: 7
