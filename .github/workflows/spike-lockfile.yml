@@ -1,14 +1,10 @@
 name: Temporary remote lockfile generation
 
-# TEMPORARY workflow — exists only to run the package manager on a GitHub
-# Actions runner and upload the resulting bun.lock as an artifact, per the
-# task's local-tool restriction (no package installation on the local
-# machine). This file must be removed before the final push.
+# TEMPORARY workflow — runs the package manager on a GitHub Actions runner
+# and uploads the resulting bun.lock as an artifact, per the task's
+# local-tool restriction. Removed before the final push.
 
 on:
-  # workflow_dispatch cannot be dispatched until the file exists on the
-  # default branch (which must never be touched), so this runs on push to
-  # this feature branch only, filtered to its own path and package.json.
   push:
     branches:
       - feature/tree-foundation-workspace-polish
@@ -21,7 +17,7 @@ permissions:
 
 jobs:
   lockfile:
-    name: Generate bun.lock with wunderbaum
+    name: Regenerate bun.lock
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,14 +28,19 @@ jobs:
         with:
           bun-version: '1.4.0'
 
-      - name: Add wunderbaum dependency (exact pin)
-        run: bun add wunderbaum@0.14.1 --exact
+      - name: Install (updates lockfile to match package.json)
+        run: bun install
 
-      - name: Verify lockfile was written
+      - name: Verify lockfile consistency
+        run: bun install --frozen-lockfile
+
+      - name: Verify dependency set
         shell: bash
         run: |
-          test -f bun.lock || { echo "bun.lock missing"; exit 1; }
-          grep -q '"wunderbaum": "0.14.1"' package.json || { echo "dependency missing"; exit 1; }
+          grep -q '"wunderbaum": "0.14.1"' package.json
+          ! grep -q 'atlaskit' package.json
+          grep -q 'wunderbaum' bun.lock
+          ! grep -q 'atlaskit' bun.lock
 
       - name: Upload lockfile artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

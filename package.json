@@ -21,7 +21,6 @@
     "db:migrate": "bun run src/server/database/migrations.ts"
   },
   "dependencies": {
-    "@atlaskit/pragmatic-drag-and-drop": "3.0.0",
     "@blocknote/core": "0.54.0",
     "@blocknote/diagram-block": "0.54.0",
     "@blocknote/mantine": "0.54.0",
@@ -45,6 +44,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-icons": "5.7.0",
+    "wunderbaum": "0.14.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
