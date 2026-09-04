@@ -40,6 +40,7 @@ export type DebugSourceField = (typeof DEBUG_SOURCE_FIELDS)[number]
 export const DEBUG_EVENT_NAMES = {
   ui: [
     'ui_tree_row_open',
+    'ui_subfile_open',
     'ui_card_open',
     'ui_tab_select',
     'ui_context_menu_action',

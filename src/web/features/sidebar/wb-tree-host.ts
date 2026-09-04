@@ -196,8 +196,12 @@ export class PageTreeHost {
   }
 
   private createInstance(element: HTMLElement, options: PageTreeHostOptions): Wunderbaum {
+    const host = this
+    // Constructor options are structurally typed against the bundled public
+    // d.ts; this local shape keeps the RTWiki-specific callbacks honest
+    // without importing the package's internal types.
     const tree = new Wunderbaum({
-      element,
+      element: element as HTMLDivElement,
       id: 'rtwiki-page-tree',
       header: null,
       rowHeightPx: ROW_HEIGHT_PX,
@@ -210,13 +214,29 @@ export class PageTreeHost {
       // icon font is never loaded, so expander/doc glyphs become inert
       // placeholders styled in the CSS module.
       iconMap: {
+        error: 'rtw-icon-slot',
+        loading: 'rtw-icon-slot',
+        noData: 'rtw-icon-slot',
         expanderCollapsed: 'rtw-expander rtw-collapsed',
         expanderExpanded: 'rtw-expander rtw-expanded',
-        doc: 'rtw-icon-slot',
+        expanderLazy: 'rtw-expander rtw-collapsed',
+        checkChecked: 'rtw-icon-slot',
+        checkUnchecked: 'rtw-icon-slot',
+        checkUnknown: 'rtw-icon-slot',
+        radioChecked: 'rtw-icon-slot',
+        radioUnchecked: 'rtw-icon-slot',
+        radioUnknown: 'rtw-icon-slot',
         folder: 'rtw-icon-slot',
         folderOpen: 'rtw-icon-slot',
-        loading: 'rtw-icon-slot'
-      },
+        folderLazy: 'rtw-icon-slot',
+        doc: 'rtw-icon-slot',
+        colSortable: 'rtw-icon-slot',
+        colSortAsc: 'rtw-icon-slot',
+        colSortDesc: 'rtw-icon-slot',
+        colFilter: 'rtw-icon-slot',
+        colFilterActive: 'rtw-icon-slot',
+        colMenu: 'rtw-icon-slot'
+      } as never,
       types: {
         rich: { classes: 'rtw-type-rich' },
         html: { classes: 'rtw-type-html' },
@@ -245,7 +265,6 @@ export class PageTreeHost {
         effectAllowed: 'move',
         dropEffectDefault: 'move',
         guessDropEffect: false,
-        autoExpandMS: 1200,
         preventRecursion: true,
         preventVoidMoves: true,
         scroll: true,
@@ -271,11 +290,11 @@ export class PageTreeHost {
         }
       },
       click: (e) => {
-        const node = this.asNode(e.node)
-        if (!node) return false
+        const node = host.asNode(e.node)
+        if (!node) return undefined
         // The disclosure control toggles expansion through Wunderbaum's
         // default handler — never open the page from the expander region.
-        if ((e.info as { region?: string }).region === 'expander') return true
+        if ((e.info as { region?: string }).region === 'expander') return undefined
         const subfile = parseSubfileKey(node.key)
         if (subfile) {
           this.options?.callbacks.onOpenSubfile(subfile.pageId, subfile.field)

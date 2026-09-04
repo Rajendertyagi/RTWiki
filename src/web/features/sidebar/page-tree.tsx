@@ -135,7 +135,6 @@ export function PageTree({
       pages: callbacksRef.current.pages,
       activePageId: callbacksRef.current.activePageId,
       untitledLabel: UI_TEXT.untitledPage,
-      seedExpandedIds: callbacksRef.current.seedExpandedIds,
       isSelfOrDescendant: (a, c) => isSelfOrDescendantRef.current(a, c),
       callbacks: {
         onOpenPage: (pageId) => {
