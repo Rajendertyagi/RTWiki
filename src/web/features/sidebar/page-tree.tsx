@@ -324,9 +324,7 @@ function RenameSignalConsumer({
       const tree = host.getInstance()
       const node = tree?.findKey(pageId)
       if (node) {
-        const startEdit = (
-          node as unknown as { startEditTitle?: () => void }
-        ).startEditTitle
+        const startEdit = (node as unknown as { startEditTitle?: () => void }).startEditTitle
         startEdit?.call(node)
       }
     }

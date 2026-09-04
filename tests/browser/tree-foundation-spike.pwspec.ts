@@ -184,7 +184,9 @@ test.describe('Wunderbaum tree foundation (spike)', () => {
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('tree-context-menu')).toHaveCount(0)
     }
-    expect(await page.evaluate(() => (window as unknown as { __nativeCtx: number }).__nativeCtx)).toBe(0)
+    expect(
+      await page.evaluate(() => (window as unknown as { __nativeCtx: number }).__nativeCtx)
+    ).toBe(0)
     // Blank space opens the root menu (documented behaviour).
     await page.getByTestId('page-tree').click({ button: 'right', position: { x: 10, y: 10 } })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
@@ -214,7 +216,12 @@ test.describe('Wunderbaum tree foundation (spike)', () => {
     await page.goto('/')
     await rowLocator(page, b.id).waitFor()
     const target = rowLocator(page, a.id)
-    const box = (await target.boundingBox()) as { x: number; y: number; width: number; height: number }
+    const box = (await target.boundingBox()) as {
+      x: number
+      y: number
+      width: number
+      height: number
+    }
     // "inside" = middle of the row -> reparent under a.
     await rowLocator(page, b.id).dragTo(target, {
       targetPosition: { x: Math.round(box.width / 2), y: Math.round(box.height / 2) }
@@ -235,10 +242,7 @@ test.describe('Wunderbaum tree foundation (spike)', () => {
       .toBe(JSON.stringify(before))
   })
 
-  test('virtual source rows render without becoming database pages', async ({
-    page,
-    request
-  }) => {
+  test('virtual source rows render without becoming database pages', async ({ page, request }) => {
     const html = await seedPage(request, uniqueTitle('VirtHtml'), { pageType: 'html' })
     await page.goto('/')
     await expandRow(page, html.id)
@@ -250,11 +254,7 @@ test.describe('Wunderbaum tree foundation (spike)', () => {
       const rows = [...document.querySelectorAll('[role="treeitem"][data-subfile-id]')]
       return rows.map((r) => r.getAttribute('data-subfile-id'))
     })
-    expect(keys).toEqual([
-      `${html.id}::html`,
-      `${html.id}::css`,
-      `${html.id}::javascript`
-    ])
+    expect(keys).toEqual([`${html.id}::html`, `${html.id}::css`, `${html.id}::javascript`])
     // No new database pages were created for the virtual rows.
     const pages = await listPages(request)
     expect(pages.filter((p) => p.parentId === html.id)).toHaveLength(0)
@@ -304,11 +304,7 @@ test.describe('Wunderbaum tree foundation (spike)', () => {
       const rows = [...document.querySelectorAll('[role="treeitem"][data-subfile-id]')]
       return rows.map((r) => r.getAttribute('data-subfile-id'))
     })
-    expect(keys).toEqual([
-      `${html.id}::html`,
-      `${html.id}::css`,
-      `${html.id}::javascript`
-    ])
+    expect(keys).toEqual([`${html.id}::html`, `${html.id}::css`, `${html.id}::javascript`])
     // Duplicate the html page: the copy gets its own intact group.
     await request.post(`/api/pages/${html.id}/duplicate`)
     const after = await listPages(request)
@@ -317,6 +313,9 @@ test.describe('Wunderbaum tree foundation (spike)', () => {
     )
     expect(copy).toBeDefined()
     await expect(subfileLocator(page, html.id, 'html')).toBeVisible()
-    await waitForServerOrder(request, pages.map((p) => p.id).filter((id) => id !== mover.id))
+    await waitForServerOrder(
+      request,
+      pages.map((p) => p.id).filter((id) => id !== mover.id)
+    )
   })
 })

@@ -179,10 +179,7 @@ describe('resolveDropMove', () => {
   it('moving into an HTML parent never lands inside the virtual group', () => {
     // The virtual group is not made of pages: an "over" drop on the HTML
     // parent appends after script.js by construction (append-at-end).
-    const htmlPages = [
-      page('h', { pageType: 'html' }),
-      page('m', { position: 1 })
-    ]
+    const htmlPages = [page('h', { pageType: 'html' }), page('m', { position: 1 })]
     const move = resolveDropMove({
       pages: htmlPages,
       isSelfOrDescendant: (): boolean => false,

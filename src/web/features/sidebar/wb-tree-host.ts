@@ -30,16 +30,15 @@ import type { Page } from '@rtwiki/shared/contracts/pages'
 import { Wunderbaum } from 'wunderbaum'
 import {
   buildForest,
+  type DropMove,
   forestToNodeData,
   parseSubfileKey,
   resolveDropMove,
-  type DropMove,
   type SubfileField
 } from './wb-adapter.js'
 
-export type { DropMove } from './wb-adapter.js'
+export type { DropMove, SubfileField } from './wb-adapter.js'
 export { parseSubfileKey, subfileKey } from './wb-adapter.js'
-export type { SubfileField } from './wb-adapter.js'
 
 export interface PageTreeHostCallbacks {
   /** Opens a persisted page through RTWiki's controller/tab flow. */
@@ -196,12 +195,7 @@ export class PageTreeHost {
     return (value ?? null) as WbNodeLike | null
   }
 
-  private createInstance(
-    element: HTMLElement,
-    options: PageTreeHostOptions
-  ): Wunderbaum {
-    const host = this
-
+  private createInstance(element: HTMLElement, options: PageTreeHostOptions): Wunderbaum {
     const tree = new Wunderbaum({
       element,
       id: 'rtwiki-page-tree',
@@ -242,7 +236,7 @@ export class PageTreeHost {
           if (subfile) return false
           const title = String(e.inputElem?.value ?? '').trim()
           if (title.length > 0 && title !== e.node.title) {
-            host.options?.callbacks.onRenameRequest(e.node.key)
+            this.options?.callbacks.onRenameRequest(e.node.key)
           }
           return undefined
         }
@@ -259,7 +253,7 @@ export class PageTreeHost {
         dragEnter: (e) => {
           // Virtual rows offer NO destinations; neither does a descendant.
           if (parseSubfileKey(e.node.key) !== null) return false
-          if (host.options?.isSelfOrDescendant(e.sourceNode.key, e.node.key)) {
+          if (this.options?.isSelfOrDescendant(e.sourceNode.key, e.node.key)) {
             return false
           }
           return ['before', 'after', 'over']
@@ -270,44 +264,44 @@ export class PageTreeHost {
             sourcePageId: e.sourceNode.key,
             targetPageId: parseSubfileKey(targetKey) !== null ? null : targetKey,
             region: e.region,
-            pages: host.pagesRef,
-            isSelfOrDescendant: (a, c) => host.options?.isSelfOrDescendant(a, c) ?? true
+            pages: this.pagesRef,
+            isSelfOrDescendant: (a, c) => this.options?.isSelfOrDescendant(a, c) ?? true
           })
-          if (move) host.options?.callbacks.onDropMove(move)
+          if (move) this.options?.callbacks.onDropMove(move)
         }
       },
       click: (e) => {
-        const node = host.asNode(e.node)
+        const node = this.asNode(e.node)
         if (!node) return false
         // The disclosure control toggles expansion through Wunderbaum's
         // default handler — never open the page from the expander region.
         if ((e.info as { region?: string }).region === 'expander') return true
         const subfile = parseSubfileKey(node.key)
         if (subfile) {
-          host.options?.callbacks.onOpenSubfile(subfile.pageId, subfile.field)
+          this.options?.callbacks.onOpenSubfile(subfile.pageId, subfile.field)
         } else {
-          host.options?.callbacks.onOpenPage(node.key)
+          this.options?.callbacks.onOpenPage(node.key)
         }
         // RTWiki owns navigation; suppress Wunderbaum's activate default.
         return false
       },
       keydown: (e) => {
-        const node = host.asNode(e.node)
+        const node = this.asNode(e.node)
         if (e.event.key === 'Enter' && node) {
           e.event.preventDefault()
           const subfile = parseSubfileKey(node.key)
           if (subfile) {
-            host.options?.callbacks.onOpenSubfile(subfile.pageId, subfile.field)
+            this.options?.callbacks.onOpenSubfile(subfile.pageId, subfile.field)
           } else {
-            host.options?.callbacks.onOpenPage(node.key)
+            this.options?.callbacks.onOpenPage(node.key)
           }
           return false
         }
         return undefined
       },
-      expand: () => host.observeExpansion(),
+      expand: () => this.observeExpansion(),
       render: (e) => {
-        const node = host.asNode(e.node)
+        const node = this.asNode(e.node)
         const nodeElem = e.nodeElem
         const row = nodeElem.closest('div.wb-row') as HTMLElement | null
         if (!node || !row) return
@@ -346,7 +340,7 @@ export class PageTreeHost {
               ev.stopPropagation()
               ev.preventDefault()
               const rect = action.getBoundingClientRect()
-              host.options?.callbacks.onContextMenu({
+              this.options?.callbacks.onContextMenu({
                 kind: 'page',
                 pageId: node.key,
                 x: rect.left,
@@ -358,8 +352,8 @@ export class PageTreeHost {
         }
       },
       init: () => {
-        host.applyActive(host.options?.activePageId ?? null)
-        host.observeExpansion(true)
+        this.applyActive(this.options?.activePageId ?? null)
+        this.observeExpansion(true)
       }
     })
 

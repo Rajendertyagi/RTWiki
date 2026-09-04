@@ -32,9 +32,7 @@ export function subfileKey(pageId: string, field: SubfileField): string {
   return `${SUBFILE_PREFIX}${pageId}:${field}`
 }
 
-export function parseSubfileKey(
-  key: string
-): { pageId: string; field: SubfileField } | null {
+export function parseSubfileKey(key: string): { pageId: string; field: SubfileField } | null {
   if (!key.startsWith(SUBFILE_PREFIX)) return null
   const rest = key.slice(SUBFILE_PREFIX.length)
   const sep = rest.indexOf(':')

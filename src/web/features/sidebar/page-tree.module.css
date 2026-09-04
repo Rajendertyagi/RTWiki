@@ -80,12 +80,12 @@
   }
 
   :global(i.rtw-expander::before) {
-    content: '▸';
+    content: "▸";
     font-size: 12px;
   }
 
   :global(i.rtw-expander.rtw-expanded::before) {
-    content: '▾';
+    content: "▾";
   }
 
   /* Page-type icon slot inserted by the render hook. */
@@ -100,27 +100,27 @@
   }
 
   :global(.rtw-type-rich i.rtw-page-icon)::before {
-    content: '📄';
+    content: "📄";
     font-size: 12px;
   }
 
   :global(.rtw-type-html i.rtw-page-icon)::before {
-    content: '🌐';
+    content: "🌐";
     font-size: 12px;
   }
 
   :global(.rtw-type-diagram i.rtw-page-icon)::before {
-    content: '📊';
+    content: "📊";
     font-size: 12px;
   }
 
   :global(.rtw-type-mindmap i.rtw-page-icon)::before {
-    content: '🧠';
+    content: "🧠";
     font-size: 12px;
   }
 
   :global(.rtw-type-subfile i.rtw-page-icon)::before {
-    content: '↳';
+    content: "↳";
     font-size: 12px;
   }
 
@@ -147,7 +147,7 @@
   }
 
   :global(button.rtw-row-action::before) {
-    content: '⋯';
+    content: "⋯";
   }
 
   :global(div.wb-row:hover button.rtw-row-action),

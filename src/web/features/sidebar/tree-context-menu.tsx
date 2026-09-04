@@ -154,9 +154,7 @@ export function TreeContextMenu({
 }
 
 /** Type guard for the composed moveTo:<pageId> action payloads. */
-export function isMoveToAction(
-  action: string
-): action is `moveTo:${string}` {
+export function isMoveToAction(action: string): action is `moveTo:${string}` {
   return action.startsWith('moveTo:')
 }
 
