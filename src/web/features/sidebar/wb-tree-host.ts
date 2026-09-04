@@ -368,11 +368,7 @@ export class PageTreeHost {
         // Status changes do not re-run the render hook: mirror aria-expanded.
         const expandEvent = e as unknown as { node: WbNodeLike; flag: boolean }
         const row = this.rowElement(expandEvent.node.key)
-        if (
-          row &&
-          expandEvent.node.children !== null &&
-          expandEvent.node.children.length > 0
-        ) {
+        if (row && expandEvent.node.children !== null && expandEvent.node.children.length > 0) {
           row.setAttribute('aria-expanded', String(expandEvent.flag))
         }
         this.observeExpansion()
