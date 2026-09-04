@@ -126,6 +126,10 @@ export class PageTreeHost {
         options.untitledLabel
       ) as never
     })
+    // Data swaps discard and re-create row markup; the throttled viewport
+    // update would briefly leave rows unpositioned (stale `top` offsets,
+    // pointer interception). Force the render synchronously.
+    tree.update('any' as never, { immediate: true } as never)
     this.applyActive(options.activePageId)
     this.observeExpansion(true)
   }
@@ -133,13 +137,18 @@ export class PageTreeHost {
   applyActive(pageId: string | null): void {
     const tree = this.tree
     if (!tree) return
-    const current = tree.getActiveNode()
+    const previous = tree.getActiveNode()
     if (pageId === null) {
-      current?.setActive(false, { noEvents: true })
+      previous?.setActive(false, { noEvents: true })
+      this.syncRowSelected(previous, false)
       return
     }
-    if (current?.key === pageId) return
-    tree.findKey(pageId)?.setActive(true, { noEvents: true })
+    if (previous?.key === pageId) return
+    const target = tree.findKey(pageId)
+    target?.setActive(true, { noEvents: true })
+    // Status changes do not re-run the render hook: mirror aria-selected.
+    this.syncRowSelected(previous, false)
+    this.syncRowSelected(target ?? null, true)
   }
 
   /** Applies a session-restoration expansion seed (once per identity). */
@@ -168,10 +177,32 @@ export class PageTreeHost {
       tree.getActiveNode() ??
       tree.root.children?.[0] ??
       null
-    target?.setActive(true, { noEvents: true, focusTree: true })
+    if (!target) return
+    target.setActive(true, { noEvents: true })
+    // DOM focus must land on the row itself (tests and screen readers both
+    // observe document.activeElement); the row carries tabindex=-1.
+    const row = this.rowElement(target.key)
+    row?.focus()
   }
 
   // -------------------------------------------------------------------------
+
+  /** Finds the rendered row element for a node key, if visible. */
+  private rowElement(key: string): HTMLElement | null {
+    const element = this.element
+    if (!element) return null
+    return element.querySelector<HTMLElement>(
+      `div.wb-row[data-page-id="${CSS.escape(key)}"]`
+    )
+  }
+
+  /** Mirrors the active state onto the rendered row's aria-selected. */
+  private syncRowSelected(node: unknown, selected: boolean): void {
+    const wbNode = node as { key?: string } | null
+    if (!wbNode?.key) return
+    const row = this.rowElement(wbNode.key)
+    row?.setAttribute('aria-selected', String(selected))
+  }
 
   private collectExpanded(): ReadonlySet<string> {
     const set = new Set<string>()
@@ -210,6 +241,20 @@ export class PageTreeHost {
       checkbox: false,
       autoCollapse: false,
       minExpandLevel: 0,
+      // The container (flex parent) owns height; the library must not fight
+      // it with its own ResizeObserver-driven sizing.
+      adjustHeight: false,
+      // The initial data rides the constructor so the library's own
+      // load -> ready -> init pipeline produces the first viewport render.
+      // A separate post-constructor load raced the constructor's async
+      // empty-load in CI and left the tree visually empty.
+      source: {
+        children: forestToNodeData(
+          buildForest(options.pages),
+          new Set<string>(),
+          options.untitledLabel
+        ) as never
+      },
       // RTWiki ships its own inline icons via the render hook; the bootstrap
       // icon font is never loaded, so expander/doc glyphs become inert
       // placeholders styled in the CSS module.
@@ -318,13 +363,24 @@ export class PageTreeHost {
         }
         return undefined
       },
-      expand: () => this.observeExpansion(),
+      expand: (e) => {
+        // Status changes do not re-run the render hook: mirror aria-expanded.
+        const row = this.rowElement(e.node.key)
+        if (row && e.node.children !== null && e.node.children.length > 0) {
+          row.setAttribute('aria-expanded', String(e.flag))
+        }
+        this.observeExpansion()
+      },
       render: (e) => {
         const node = this.asNode(e.node)
         const nodeElem = e.nodeElem
         const row = nodeElem.closest('div.wb-row') as HTMLElement | null
         if (!node || !row) return
         const subfile = parseSubfileKey(node.key)
+        const expandable =
+          node.children !== null &&
+          node.children.length > 0 &&
+          parseSubfileKey(node.key) === null
         if (subfile) {
           row.setAttribute('role', 'treeitem')
           row.setAttribute('data-subfile-id', `${subfile.pageId}::${subfile.field}`)
@@ -337,7 +393,7 @@ export class PageTreeHost {
           row.setAttribute('data-page-id', node.key)
           row.setAttribute('aria-level', String(node.getLevel()))
           row.setAttribute('aria-selected', String(node.isActive()))
-          if (node.children !== null && node.children.length > 0) {
+          if (expandable) {
             row.setAttribute('aria-expanded', String(node.isExpanded()))
           } else {
             row.removeAttribute('aria-expanded')
@@ -369,6 +425,16 @@ export class PageTreeHost {
             nodeElem.appendChild(action)
           }
         }
+        // The disclosure control must be reachable the way every consumer of
+        // the tree expects it: a labelled button-like element. Wunderbaum
+        // renders an <i> placeholder; the label lives on it.
+        const expander = row.querySelector('i.wb-expander')
+        if (expander) {
+          expander.setAttribute(
+            'aria-label',
+            node.isExpanded() ? 'Collapse' : 'Expand'
+          )
+        }
       },
       init: () => {
         this.applyActive(this.options?.activePageId ?? null)
@@ -376,20 +442,16 @@ export class PageTreeHost {
       }
     })
 
-    tree.load({
-      children: forestToNodeData(
-        buildForest(options.pages),
-        new Set<string>(),
-        options.untitledLabel
-      ) as never
-    })
-
     // One container-level context menu delegation: every row region opens
     // RTWiki's menu (never the native one); blank space opens the root menu.
+    // Node resolution reads the library's own row-node back-reference so
+    // the delegation works for both trusted events and dispatched ones.
     const onContextMenu = (ev: MouseEvent): void => {
       ev.preventDefault()
-      const node = Wunderbaum.getNode(ev)
-      const key = node?.key ?? null
+      const row = (ev.target as HTMLElement | null)?.closest?.(
+        'div.wb-row'
+      ) as HTMLElement | null
+      const key = (row?._wb_node as { key?: string } | undefined)?.key ?? null
       if (key === null || parseSubfileKey(key) !== null) {
         options.callbacks.onContextMenu({ kind: 'root', x: ev.clientX, y: ev.clientY })
         return
