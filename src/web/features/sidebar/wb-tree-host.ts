@@ -85,6 +85,7 @@ interface WbNodeLike {
 
 export class PageTreeHost {
   private tree: Wunderbaum | null = null
+  private element: HTMLElement | null = null
   private options: PageTreeHostOptions | null = null
   private lastExpandedKey: string | null = null
   private contextMenuDismiss: (() => void) | null = null
@@ -94,6 +95,7 @@ export class PageTreeHost {
   /** Creates and mounts the instance (exactly one per element lifetime). */
   mount(element: HTMLElement, options: PageTreeHostOptions): void {
     if (this.tree) throw new Error('PageTreeHost is already mounted')
+    this.element = element
     this.options = options
     this.pagesRef = options.pages
     this.tree = this.createInstance(element, options)
@@ -104,6 +106,7 @@ export class PageTreeHost {
     this.contextMenuDismiss = null
     this.tree?.destroy()
     this.tree = null
+    this.element = null
     this.options = null
     this.lastExpandedKey = null
   }
@@ -363,9 +366,13 @@ export class PageTreeHost {
       },
       expand: (e) => {
         // Status changes do not re-run the render hook: mirror aria-expanded.
-        const row = this.rowElement(e.node.key)
-        if (row && e.node.children !== null && e.node.children.length > 0) {
-          row.setAttribute('aria-expanded', String(e.flag))
+        const expandNode = e.node as unknown as WbNodeLike
+        const row = this.rowElement(expandNode.key)
+        if (row && expandNode.children !== null && expandNode.children.length > 0) {
+          row.setAttribute(
+            'aria-expanded',
+            String((e as unknown as { flag: boolean }).flag)
+          )
         }
         this.observeExpansion()
       },
@@ -442,7 +449,8 @@ export class PageTreeHost {
     const onContextMenu = (ev: MouseEvent): void => {
       ev.preventDefault()
       const row = (ev.target as HTMLElement | null)?.closest?.('div.wb-row') as HTMLElement | null
-      const key = (row?._wb_node as { key?: string } | undefined)?.key ?? null
+      const backRef = (row as (HTMLElement & { _wb_node?: { key: string } }) | null)?._wb_node
+      const key = backRef?.key ?? null
       if (key === null || parseSubfileKey(key) !== null) {
         options.callbacks.onContextMenu({ kind: 'root', x: ev.clientX, y: ev.clientY })
         return
