@@ -369,10 +369,7 @@ export class PageTreeHost {
         const expandNode = e.node as unknown as WbNodeLike
         const row = this.rowElement(expandNode.key)
         if (row && expandNode.children !== null && expandNode.children.length > 0) {
-          row.setAttribute(
-            'aria-expanded',
-            String((e as unknown as { flag: boolean }).flag)
-          )
+          row.setAttribute('aria-expanded', String((e as unknown as { flag: boolean }).flag))
         }
         this.observeExpansion()
       },
