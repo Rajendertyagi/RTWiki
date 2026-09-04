@@ -191,9 +191,7 @@ export class PageTreeHost {
   private rowElement(key: string): HTMLElement | null {
     const element = this.element
     if (!element) return null
-    return element.querySelector<HTMLElement>(
-      `div.wb-row[data-page-id="${CSS.escape(key)}"]`
-    )
+    return element.querySelector<HTMLElement>(`div.wb-row[data-page-id="${CSS.escape(key)}"]`)
   }
 
   /** Mirrors the active state onto the rendered row's aria-selected. */
