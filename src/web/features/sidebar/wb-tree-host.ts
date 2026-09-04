@@ -426,10 +426,7 @@ export class PageTreeHost {
         // renders an <i> placeholder; the label lives on it.
         const expander = row.querySelector('i.wb-expander')
         if (expander) {
-          expander.setAttribute(
-            'aria-label',
-            node.isExpanded() ? 'Collapse' : 'Expand'
-          )
+          expander.setAttribute('aria-label', node.isExpanded() ? 'Collapse' : 'Expand')
         }
       },
       init: () => {
@@ -444,9 +441,7 @@ export class PageTreeHost {
     // the delegation works for both trusted events and dispatched ones.
     const onContextMenu = (ev: MouseEvent): void => {
       ev.preventDefault()
-      const row = (ev.target as HTMLElement | null)?.closest?.(
-        'div.wb-row'
-      ) as HTMLElement | null
+      const row = (ev.target as HTMLElement | null)?.closest?.('div.wb-row') as HTMLElement | null
       const key = (row?._wb_node as { key?: string } | undefined)?.key ?? null
       if (key === null || parseSubfileKey(key) !== null) {
         options.callbacks.onContextMenu({ kind: 'root', x: ev.clientX, y: ev.clientY })
