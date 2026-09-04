@@ -6,7 +6,15 @@ name: Temporary remote lockfile generation
 # machine). This file must be removed before the final push.
 
 on:
-  workflow_dispatch:
+  # workflow_dispatch cannot be dispatched until the file exists on the
+  # default branch (which must never be touched), so this runs on push to
+  # this feature branch only, filtered to its own path and package.json.
+  push:
+    branches:
+      - feature/tree-foundation-workspace-polish
+    paths:
+      - '.github/workflows/spike-lockfile.yml'
+      - 'package.json'
 
 permissions:
   contents: read
