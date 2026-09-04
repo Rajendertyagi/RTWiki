@@ -32,6 +32,7 @@ jobs:
 
       - name: Apply formatter and safe fixes
         run: bunx biome check --write .
+        # Rerun marker: 2026-09-04T21:40Z
 
       - name: Create patch
         shell: bash
