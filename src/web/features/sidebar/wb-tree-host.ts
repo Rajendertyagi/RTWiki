@@ -376,9 +376,7 @@ export class PageTreeHost {
         if (!node || !row) return
         const subfile = parseSubfileKey(node.key)
         const expandable =
-          node.children !== null &&
-          node.children.length > 0 &&
-          parseSubfileKey(node.key) === null
+          node.children !== null && node.children.length > 0 && parseSubfileKey(node.key) === null
         if (subfile) {
           row.setAttribute('role', 'treeitem')
           row.setAttribute('data-subfile-id', `${subfile.pageId}::${subfile.field}`)
