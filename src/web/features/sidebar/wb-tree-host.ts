@@ -27,6 +27,9 @@
  */
 
 import type { Page } from '@rtwiki/shared/contracts/pages'
+// The library stylesheet ships the row/viewport geometry (absolute-positioned
+// rows inside a relative list container); without it rows never lay out.
+import 'wunderbaum/dist/wunderbaum.css'
 import { Wunderbaum } from 'wunderbaum'
 import {
   buildForest,
