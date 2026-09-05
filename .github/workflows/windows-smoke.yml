@@ -1,0 +1,74 @@
+name: Windows Portable Smoke Test
+
+# Manual-only diagnostic: run when we specifically want to launch and verify
+# the packaged Windows application end to end. It is deliberately excluded
+# from push/pull-request triggers so it never gates or delays normal builds.
+
+on:
+  workflow_dispatch:
+
+# Least privilege: the workflow reads the repo, builds, verifies the packaged
+# application on a Windows runner, and uploads artifacts within the same run.
+permissions:
+  contents: read
+
+jobs:
+  windows-smoke:
+    name: Windows portable package smoke test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.0"
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Build web
+        run: bun run build:web
+      - name: Build server (compile portable executable)
+        run: bun run build:server
+
+      # Stage and validate the portable package (RTWiki.exe beside web/).
+      - name: Package portable Windows build
+        shell: pwsh
+        run: ./scripts/ci/package-windows.ps1 -SourceDir build -DestDir package/RTWiki
+
+      # Launch the packaged application and verify it end to end.
+      - name: Windows portable smoke test
+        shell: pwsh
+        run: >
+          ./scripts/ci/windows-smoke.ps1
+          -PackageDir package/RTWiki
+          -BuildExe build/server/RTWiki.exe
+          -RunDir "${{ runner.temp }}/rtwiki-run"
+          -DiagDir "${{ runner.temp }}/rtwiki-diag"
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rtwiki-smoke-diagnostics
+          path: ${{ runner.temp }}/rtwiki-diag/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Report artifact hash
+        if: success()
+        shell: pwsh
+        run: |
+          $exe = Get-Item "package/RTWiki/RTWiki.exe"
+          $exeHash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          Write-Host "ARTIFACT_NAME=RTWiki-0.1.0-windows-x64"
+          Write-Host "EXE_SIZE_BYTES=$($exe.Length)"
+          Write-Host "EXE_SHA256=$exeHash"
+
+      - name: Upload portable package artifact
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: RTWiki-0.1.0-windows-x64
+          path: package/RTWiki/
+          if-no-files-found: error
+          retention-days: 7
