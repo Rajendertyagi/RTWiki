@@ -1,12 +1,33 @@
 /**
  * Shell layout dimensions. Single source of truth so the AppShell navbar
  * width, the rail column and the collapse toggle all agree.
+ *
+ * Slice 2 extends this with pane geometry: defaults, minimums, maximums and
+ * the divider hit-area. Every resizable boundary reads these values — no
+ * scattered widths in CSS or TSX. Minimums also derive the temporary
+ * narrow-window collapse threshold (no fixed breakpoint).
  */
 export const LAYOUT = {
   /** Narrow launcher/action rail (outermost full-height column). */
   railWidth: 60,
-  /** Page-tree pane width when expanded. */
+  /** Mobile drawer width (base breakpoint); decoupled from the desktop tree pane. */
+  mobileDrawerWidth: 280,
+  /** Page-tree pane width when expanded (user default; persisted). */
   treePaneWidth: 336,
+  /** Page-tree pane drag/resize bounds. */
+  treePaneMinWidth: 220,
+  treePaneMaxWidth: 520,
+  /** Central workspace minimum the narrow-window rule preserves first. */
+  workspaceMinWidth: 480,
+  /** Rich Note right-sidebar width (user default; persisted). */
+  rightSidebarWidth: 260,
+  /** Right-sidebar drag/resize bounds. */
+  rightSidebarMinWidth: 220,
+  rightSidebarMaxWidth: 420,
+  /** Pointer hit-area width of pane dividers (visible line is 1px). */
+  dividerHitWidth: 6,
+  /** Divider keyboard-resize step. */
+  dividerStepWidth: 20,
   /**
    * Shared overlay z-index. Every floating layer (menus, popovers, portals,
    * full-screen workspaces) must sit above the AppShell navbar so a
