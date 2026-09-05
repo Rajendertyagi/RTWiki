@@ -39,17 +39,15 @@ import type { LinkablePage } from './wiki-link.js'
 
 /**
  * Temporary responsive collapse (Slice 2, Option B): at or below this
- * viewport width the right sidebar hides so the named minimums (rail +
- * tree + workspace) always fit. Derived from LAYOUT — never a fixed
- * breakpoint. Session-only: never persisted; the saved explicit choice is
- * restored automatically when space returns. (Currently 979px.)
+ * viewport width the right sidebar hides so the named minimums always fit.
+ * Derived from LAYOUT — never a fixed breakpoint. The tree-pane minimum is
+ * the full navbar width (the AppShell navbar contains the rail plus the
+ * tree, so treePaneMinWidth already includes the rail and it must not be
+ * added again). Session-only: never persisted; the saved explicit choice is
+ * restored automatically when space returns. (Currently 919px.)
  */
 const TEMP_COLLAPSE_MAX_WIDTH_PX =
-  LAYOUT.railWidth +
-  LAYOUT.treePaneMinWidth +
-  LAYOUT.workspaceMinWidth +
-  LAYOUT.rightSidebarMinWidth -
-  1
+  LAYOUT.treePaneMinWidth + LAYOUT.workspaceMinWidth + LAYOUT.rightSidebarMinWidth - 1
 
 interface RichEditorProps {
   pageId: string
@@ -301,7 +299,15 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     () => loadLayoutPreferences().rightSidebarCollapsed
   )
   const narrowCollapse = useMediaQueryBelow(TEMP_COLLAPSE_MAX_WIDTH_PX)
-  const sidebarCollapsed = explicitCollapsed || narrowCollapse
+  // Session-only restore of a temporarily collapsed sidebar: shows the
+  // sidebar for the current narrow-window state without reading or writing
+  // the saved preference. Dropped as soon as the viewport leaves the narrow
+  // state so the derived rule governs fresh afterwards.
+  const [narrowOverride, setNarrowOverride] = useState(false)
+  useEffect(() => {
+    if (!narrowCollapse) setNarrowOverride(false)
+  }, [narrowCollapse])
+  const sidebarCollapsed = explicitCollapsed || (narrowCollapse && !narrowOverride)
 
   const persistSidebarPrefs = (patch: {
     rightSidebarWidth?: number
@@ -316,10 +322,15 @@ function RichEditorInner(props: InnerProps): JSX.Element {
   }
 
   const handleSidebarExpand = (): void => {
-    // Clears the explicit choice. A still-narrow viewport keeps the
-    // temporary collapse (and its restore control) until space returns.
-    setExplicitCollapsed(false)
-    persistSidebarPrefs({ rightSidebarCollapsed: false })
+    // Explicit collapse control: clears the saved choice. A temporary
+    // collapse instead restores visibility for the current narrow-window
+    // state only and never changes or persists rightSidebarCollapsed.
+    if (explicitCollapsed) {
+      setExplicitCollapsed(false)
+      persistSidebarPrefs({ rightSidebarCollapsed: false })
+    } else {
+      setNarrowOverride(true)
+    }
   }
 
   const handleSidebarWidthCommit = (width: number): void => {
