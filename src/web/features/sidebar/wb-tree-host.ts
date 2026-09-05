@@ -27,7 +27,7 @@
  */
 
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
-import { pageTypeLabel } from '../components/page-type-badge.js'
+import { pageTypeLabel } from '../../components/page-type-badge.js'
 // The library stylesheet ships the row/viewport geometry (absolute-positioned
 // rows inside a relative list container); without it rows never lay out.
 import 'wunderbaum/dist/wunderbaum.css'
@@ -75,10 +75,18 @@ export interface PageTreeHostOptions {
 const ROW_HEIGHT_PX = 32
 
 /** Minimal structural shape of a Wunderbaum node used by the host. */
+interface WbNodeData {
+  kind: 'page' | 'subfile'
+  pageId: string
+  pageType: PageType | null
+  field: string | null
+}
 interface WbNodeLike {
   key: string
+  title: string
   parent: WbNodeLike | null
   children: WbNodeLike[] | null
+  data?: WbNodeData
   getLevel(): number
   isActive(): boolean
   isExpanded(): boolean
@@ -232,7 +240,6 @@ export class PageTreeHost {
   }
 
   private createInstance(element: HTMLElement, options: PageTreeHostOptions): Wunderbaum {
-    const host = this
     // Constructor options are structurally typed against the bundled public
     // d.ts; this local shape keeps the RTWiki-specific callbacks honest
     // without importing the package's internal types.
@@ -340,7 +347,7 @@ export class PageTreeHost {
         }
       },
       click: (e) => {
-        const node = host.asNode(e.node)
+        const node = this.asNode(e.node)
         if (!node) return undefined
         // The disclosure control toggles expansion through Wunderbaum's
         // default handler — never open the page from the expander region.
@@ -410,7 +417,7 @@ export class PageTreeHost {
         // field label (HTML / CSS / JavaScript). Set on every render because
         // Wunderbaum may reset the title element on re-render.
         if (titleSpan && subfile === null) {
-          const label = pageTypeLabel((node.data?.pageType ?? 'rich') as PageType)
+          const label = pageTypeLabel(node.data?.pageType ?? 'rich')
           titleSpan.textContent = `${node.title} ${label}`
         }
         if (e.isNew) {
