@@ -399,6 +399,9 @@ export class PageTreeHost {
           row.setAttribute('aria-level', String(node.getLevel()))
           row.setAttribute('aria-selected', 'false')
           row.removeAttribute('aria-expanded')
+          // Give the row its own name so the expander's aria-label ("Expand")
+          // does not prefix it; subfile rows are named by their field label.
+          row.setAttribute('aria-label', node.title)
         } else {
           row.setAttribute('role', 'treeitem')
           row.setAttribute('data-page-id', node.key)
@@ -409,6 +412,11 @@ export class PageTreeHost {
           } else {
             row.removeAttribute('aria-expanded')
           }
+          // The row's own aria-label makes its accessible name exactly
+          // "<title> <type>" — without it, the expander's "Expand" label
+          // prefixes the name and breaks "<title> ..."-anchored matchers.
+          const label = pageTypeLabel(node.data?.pageType ?? 'rich')
+          row.setAttribute('aria-label', `${node.title} ${label}`)
         }
         const titleSpan = nodeElem.querySelector('span.wb-title')
         // Page rows carry a type label so consumers can target
