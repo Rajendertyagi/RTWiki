@@ -26,7 +26,8 @@
  * payload types, so structural local types are used at the boundaries.
  */
 
-import type { Page } from '@rtwiki/shared/contracts/pages'
+import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
+import { pageTypeLabel } from '../components/page-type-badge.js'
 // The library stylesheet ships the row/viewport geometry (absolute-positioned
 // rows inside a relative list container); without it rows never lay out.
 import 'wunderbaum/dist/wunderbaum.css'
@@ -402,8 +403,17 @@ export class PageTreeHost {
             row.removeAttribute('aria-expanded')
           }
         }
+        const titleSpan = nodeElem.querySelector('span.wb-title')
+        // Page rows carry a type label so consumers can target
+        // "<title> Rich Note" / "<title> HTML Page" (matches the row-text
+        // contract the browser specs assert). Subfile rows keep their bare
+        // field label (HTML / CSS / JavaScript). Set on every render because
+        // Wunderbaum may reset the title element on re-render.
+        if (titleSpan && subfile === null) {
+          const label = pageTypeLabel((node.data?.pageType ?? 'rich') as PageType)
+          titleSpan.textContent = `${node.title} ${label}`
+        }
         if (e.isNew) {
-          const titleSpan = nodeElem.querySelector('span.wb-title')
           const icon = document.createElement('i')
           icon.className = 'rtw-page-icon'
           icon.setAttribute('aria-hidden', 'true')
