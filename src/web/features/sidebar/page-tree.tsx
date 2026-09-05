@@ -158,7 +158,9 @@ export function PageTree({
           )
         },
         onContextMenu: (payload) => contextMenuRequestRef.current(payload),
-        onRenameRequest: (pageId) => renameSignalRef.current(pageId),
+        onRenameCommit: (pageId, title) => {
+          callbacksRef.current.hooks.onRename(pageId, title)
+        },
         onExpandedChange: (ids) => callbacksRef.current.onExpandedChange?.(ids)
       }
     })
@@ -207,7 +209,9 @@ export function PageTree({
           )
         },
         onContextMenu: (payload) => contextMenuRequestRef.current(payload),
-        onRenameRequest: (pageId) => renameSignalRef.current(pageId),
+        onRenameCommit: (pageId, title) => {
+          hooks.onRename(pageId, title)
+        },
         onExpandedChange: (ids) => onExpandedChange?.(ids)
       }
     })

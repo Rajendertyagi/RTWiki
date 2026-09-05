@@ -139,7 +139,10 @@ export function resolveRestorableWorkspace(
   session: WorkspaceSessionState,
   pages: Page[]
 ): RestorableWorkspace | null {
-  if (session.openPageIds.length === 0) return null
+  // Expansion is independent of open tabs: a session that only persisted an
+  // expanded subtree (no open page) must still restore that expansion. Only
+  // discard when there is genuinely nothing to restore.
+  if (session.openPageIds.length === 0 && session.expandedTreeIds.length === 0) return null
   const byId = new Map(pages.map((page) => [page.id, page]))
 
   const seen = new Set<string>()
@@ -155,20 +158,23 @@ export function resolveRestorableWorkspace(
       pageType: page.pageType
     })
   }
-  if (tabs.length === 0) return null
+  const expandedTreeIds = session.expandedTreeIds.filter((id) => byId.has(id))
+
+  // Expansion is independent of open tabs: a session that only persisted an
+  // expanded subtree (no open page) must still restore that expansion. Only
+  // discard when there is genuinely nothing to restore.
+  if (tabs.length === 0 && expandedTreeIds.length === 0) return null
 
   const activePageId =
     session.activePageId !== null && tabs.some((tab) => tab.pageId === session.activePageId)
       ? session.activePageId
-      : tabs[0].pageId
+      : tabs[0]?.pageId ?? null
 
-  const activePage = byId.get(activePageId)
+  const activePage = activePageId !== null ? byId.get(activePageId) : undefined
   const htmlSource =
     activePage && activePage.pageType === 'html' && session.sourceField !== 'preview'
       ? { pageId: activePage.id, field: session.sourceField }
       : null
-
-  const expandedTreeIds = session.expandedTreeIds.filter((id) => byId.has(id))
 
   return { tabs, activePageId, htmlSource, expandedTreeIds }
 }
