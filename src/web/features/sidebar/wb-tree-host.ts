@@ -31,6 +31,17 @@ import { pageTypeLabel } from '../../components/page-type-badge.js'
 // The library stylesheet ships the row/viewport geometry (absolute-positioned
 // rows inside a relative list container); without it rows never lay out.
 import 'wunderbaum/dist/wunderbaum.css'
+import {
+  IconBraces,
+  IconFileCode,
+  IconFileText,
+  IconGitFork,
+  IconNetwork,
+  IconPalette,
+  IconWorld
+} from '@tabler/icons-react'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { Wunderbaum } from 'wunderbaum'
 import {
   buildForest,
@@ -57,8 +68,8 @@ export interface PageTreeHostCallbacks {
       | { kind: 'page'; pageId: string; x: number; y: number }
       | { kind: 'root'; x: number; y: number }
   ) => void
-  /** Requests an inline rename for a page row (context-menu path). */
-  onRenameRequest: (pageId: string) => void
+  /** Commits an inline rename with the title Wunderbaum's editor collected. */
+  onRenameCommit: (pageId: string, title: string) => void
   /** Expansion observation for session persistence. */
   onExpandedChange?: (ids: ReadonlySet<string>) => void
 }
@@ -73,6 +84,25 @@ export interface PageTreeHostOptions {
 }
 
 const ROW_HEIGHT_PX = 32
+
+/**
+ * RTWiki page-type → Tabler icon. Real pages share a 16px visual weight; the
+ * mapping is the single source of truth for the tree's type signal (no emoji
+ * or faint generic glyphs).
+ */
+const PAGE_TYPE_ICONS: Record<string, typeof IconFileText> = {
+  rich: IconFileText,
+  html: IconWorld,
+  diagram: IconNetwork,
+  mindmap: IconGitFork
+}
+
+/** Virtual HTML/CSS/JS source handles use 14px icons. */
+const SUBFILE_ICONS: Record<string, typeof IconFileText> = {
+  html: IconFileCode,
+  css: IconPalette,
+  javascript: IconBraces
+}
 
 /** Minimal structural shape of a Wunderbaum node used by the host. */
 interface WbNodeData {
@@ -313,7 +343,7 @@ export class PageTreeHost {
           if (subfile) return false
           const title = String(e.inputElem?.value ?? '').trim()
           if (title.length > 0 && title !== e.node.title) {
-            this.options?.callbacks.onRenameRequest(e.node.key)
+            this.options?.callbacks.onRenameCommit(e.node.key, title)
           }
           return undefined
         }
@@ -328,18 +358,39 @@ export class PageTreeHost {
         dragStart: (e) => parseSubfileKey(e.node.key) === null,
         dragEnter: (e) => {
           // Virtual rows offer NO destinations; neither does a descendant.
+          // Guard the source identity first: foreign drags may arrive without
+          // a Wunderbaum source node, and must never throw or offer a target.
+          const sourceKey = (e as unknown as { sourceNode?: { key?: unknown } }).sourceNode?.key
+          if (typeof sourceKey !== 'string' || sourceKey.length === 0) return false
+          if (parseSubfileKey(sourceKey) !== null) return false
           if (parseSubfileKey(e.node.key) !== null) return false
-          if (this.options?.isSelfOrDescendant(e.sourceNode.key, e.node.key)) {
+          if (this.options?.isSelfOrDescendant(sourceKey, e.node.key)) {
             return false
           }
           return ['before', 'after', 'over']
         },
         drop: (e) => {
+          // Strict region contract: only the three documented regions map to
+          // a move. Wunderbaum's runtime may emit false/undefined/null when
+          // the dragover geometry was skipped — those drop silently with no
+          // API request, no optimistic mutation, and no navigation change.
+          const region = (e as unknown as { region?: unknown }).region
+          if (region !== 'before' && region !== 'after' && region !== 'over') return
+          // Validate the drag source before touching its key: it must be a
+          // persisted RTWiki page (present in the latest page snapshot).
+          // Virtual subfile sources and unknown IDs are rejected silently.
+          const sourceKey = (e as unknown as { sourceNode?: { key?: unknown } }).sourceNode?.key
+          if (typeof sourceKey !== 'string' || sourceKey.length === 0) return
+          if (parseSubfileKey(sourceKey) !== null) return
+          if (!this.pagesRef.some((page) => page.id === sourceKey)) return
           const targetKey = e.node.key
+          // Virtual subfile rows are never drop targets (not even root
+          // append): reject with no side effects.
+          if (parseSubfileKey(targetKey) !== null) return
           const move = resolveDropMove({
-            sourcePageId: e.sourceNode.key,
-            targetPageId: parseSubfileKey(targetKey) !== null ? null : targetKey,
-            region: e.region,
+            sourcePageId: sourceKey,
+            targetPageId: targetKey,
+            region,
             pages: this.pagesRef,
             isSelfOrDescendant: (a, c) => this.options?.isSelfOrDescendant(a, c) ?? true
           })
@@ -362,9 +413,16 @@ export class PageTreeHost {
         return false
       },
       keydown: (e) => {
+        const keyEvent = e.event as KeyboardEvent | undefined
+        // While Wunderbaum's inline title editor is open, its input owns
+        // Enter (commit) and Escape (discard): the edit pre-processor runs
+        // only when this handler does NOT return false, so navigation must
+        // yield here or renames could never commit.
+        const target = keyEvent?.target as HTMLElement | null | undefined
+        if (target?.closest?.('input.wb-input-edit')) return undefined
         const node = this.asNode(e.node)
-        if (e.event.key === 'Enter' && node) {
-          e.event.preventDefault()
+        if (keyEvent?.key === 'Enter' && node) {
+          keyEvent.preventDefault()
           const subfile = parseSubfileKey(node.key)
           if (subfile) {
             this.options?.callbacks.onOpenSubfile(subfile.pageId, subfile.field)
@@ -394,8 +452,10 @@ export class PageTreeHost {
           node.children !== null && node.children.length > 0 && parseSubfileKey(node.key) === null
         if (subfile) {
           row.setAttribute('role', 'treeitem')
+          // Subfile rows are addressed only by data-subfile-id; they must NOT
+          // carry data-page-id, or `[data-page-id="<pageId>"]` locators match
+          // the parent and all three subfiles at once (strict-mode violation).
           row.setAttribute('data-subfile-id', `${subfile.pageId}::${subfile.field}`)
-          row.setAttribute('data-page-id', subfile.pageId)
           row.setAttribute('aria-level', String(node.getLevel()))
           row.setAttribute('aria-selected', 'false')
           row.removeAttribute('aria-expanded')
@@ -432,6 +492,15 @@ export class PageTreeHost {
           const icon = document.createElement('i')
           icon.className = 'rtw-page-icon'
           icon.setAttribute('aria-hidden', 'true')
+          const pageType = node.data?.pageType ?? 'rich'
+          const IconComp =
+            subfile !== null
+              ? SUBFILE_ICONS[subfile.field]
+              : (PAGE_TYPE_ICONS[pageType] ?? IconFileText)
+          const iconSize = subfile !== null ? 14 : 16
+          icon.innerHTML = renderToStaticMarkup(
+            createElement(IconComp, { size: iconSize, stroke: 1.75 })
+          )
           if (titleSpan) nodeElem.insertBefore(icon, titleSpan)
           if (subfile === null) {
             const action = document.createElement('button')
@@ -476,10 +545,13 @@ export class PageTreeHost {
       const row = (ev.target as HTMLElement | null)?.closest?.('div.wb-row') as HTMLElement | null
       const backRef = (row as (HTMLElement & { _wb_node?: { key: string } }) | null)?._wb_node
       const key = backRef?.key ?? null
-      if (key === null || parseSubfileKey(key) !== null) {
+      // Blank space opens the root/new-page menu; subfile rows carry no context
+      // menu (they are virtual source handles, not pages).
+      if (key === null) {
         options.callbacks.onContextMenu({ kind: 'root', x: ev.clientX, y: ev.clientY })
         return
       }
+      if (parseSubfileKey(key) !== null) return
       options.callbacks.onContextMenu({
         kind: 'page',
         pageId: key,
