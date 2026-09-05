@@ -6,6 +6,14 @@
   border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
 }
 
+/* Dashboard scroll owner (Slice 1: scroll ownership). The only vertically
+ * scrolling element on the dashboard route; .mainContent never scrolls. */
+.scrollRegion {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

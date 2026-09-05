@@ -159,7 +159,7 @@ export function RichEditor({
           </Text>
         </Alert>
 
-        <Text size="sm" c="dimmed" style={{ wordBreak: 'break-all' }}>
+        <Text size="sm" c="dimmed" className={classes.parseDump}>
           {parseResult.originalValue.slice(0, 500)}
         </Text>
 

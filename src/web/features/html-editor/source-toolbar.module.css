@@ -1,0 +1,17 @@
+/* Text-glyph labels for toolbar actions that carry no icon.
+ * Static presentational rules extracted from TSX (inventory #39);
+ * values preserved exactly. */
+.glyphSmall {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.glyphMedium {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.glyphLarge {
+  font-size: 13px;
+  font-weight: 700;
+}

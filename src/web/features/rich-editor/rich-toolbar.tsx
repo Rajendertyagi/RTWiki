@@ -353,7 +353,7 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
               aria-haspopup="menu"
               onClick={() => setHighlightOpened((o) => !o)}
             >
-              <IconLetterA size={16} style={{ fill: 'var(--mantine-color-yellow-filled)' }} />
+              <IconLetterA size={16} className={classes.swatchIconFill} />
               <IconChevronDown size={10} />
             </ActionIcon>
           </Tooltip>

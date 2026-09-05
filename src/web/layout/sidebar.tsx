@@ -83,7 +83,7 @@ export function Sidebar({
             {error}
           </Alert>
         ) : (
-          <Stack gap={2} style={{ height: '100%' }}>
+          <Stack gap={2} className={classes.treeStack}>
             {/* Home / Dashboard entry — always visible, outside role=tree */}
             <NavLink
               label={UI_TEXT.dashboardTitle}

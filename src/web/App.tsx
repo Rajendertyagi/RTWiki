@@ -498,7 +498,11 @@ export function App(): JSX.Element {
           />
         }
       >
-        <Stack gap="sm">
+        {/* Layout pass-through only: fills .mainContent so the dashboard scroll
+          region and page workspaces bind to a definite height. Never a
+          scroll container — scrolling belongs to the dashboard region and
+          the per-page-type editor surfaces. */}
+        <Stack gap="sm" flex={1} mih={0} miw={0}>
           {controller.mutationError ? (
             <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
               {controller.mutationError}

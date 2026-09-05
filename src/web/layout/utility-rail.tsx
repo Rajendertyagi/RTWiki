@@ -186,15 +186,7 @@ export function UtilityRail({
               </Text>
               {debugEnabled ? (
                 <Group gap="xs">
-                  <Box
-                    aria-hidden="true"
-                    w={8}
-                    h={8}
-                    style={{
-                      borderRadius: '50%',
-                      background: 'var(--mantine-color-teal-filled)'
-                    }}
-                  />
+                  <Box aria-hidden="true" className={classes.statusDot} />
                   <Text size="xs" c="teal">
                     {UI_TEXT.debugActiveLabel}
                   </Text>

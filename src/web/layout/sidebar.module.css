@@ -19,6 +19,13 @@
   background: var(--rtwiki-surface, var(--mantine-color-body));
 }
 
+/* Tree column. Static presentational rule extracted from TSX (inventory
+ * #21). The parent (.listSection) has a definite height through the fixed
+ * navbar chain, so this fills identically to the former inline value. */
+.treeStack {
+  height: 100%;
+}
+
 .navItem {
   color: var(--rtwiki-text, var(--mantine-color-text));
 }

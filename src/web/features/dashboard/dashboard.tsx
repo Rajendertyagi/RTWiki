@@ -18,7 +18,15 @@ interface DashboardProps {
   onCreateHtml: () => void
 }
 
-export function Dashboard({
+export function Dashboard(props: DashboardProps): JSX.Element {
+  return (
+    <div className={classes.scrollRegion} data-testid="dashboard-scroll">
+      <DashboardContent {...props} />
+    </div>
+  )
+}
+
+function DashboardContent({
   pages,
   loading,
   error,

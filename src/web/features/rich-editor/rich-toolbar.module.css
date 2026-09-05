@@ -21,6 +21,12 @@
   font-weight: 600;
 }
 
+/* Highlight-swatch letter icon fill. Static presentational rule extracted
+ * from TSX (inventory #57); value preserved exactly. */
+.swatchIconFill {
+  fill: var(--mantine-color-yellow-filled);
+}
+
 .swatchGrid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);

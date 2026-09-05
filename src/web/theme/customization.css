@@ -10,3 +10,16 @@
   --rtwiki-tree-row-min-height: 32px;
   --rtwiki-drop-target-border: var(--mantine-color-blue-6);
 }
+
+/*
+ * Application height-chain root (Slice 1: scroll ownership). The shell
+ * (.main in app-shell.module.css) is the single definite-height flex column
+ * (100dvh); every region below it binds through flex with min-height: 0.
+ * html/body/#root carry full height so no browser default can break the
+ * chain above the shell. (Mantine already resets body margin.)
+ */
+html,
+body,
+#root {
+  height: 100%;
+}

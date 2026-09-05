@@ -2,13 +2,17 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  flex: 1;
 }
 
 .editorContainer {
   flex: 1;
   min-width: 0;
-  min-height: 400px;
+  /* Was min-height: 400px. Definite height comes from the flex chain
+   * (.content is a flex column with a definite height); this will be
+   * verified by the focused runtime test. If verification ever fails,
+   * restore this as a --rtwiki-* token. */
+  min-height: 0;
 }
 
 .toolbarArea {
@@ -20,11 +24,15 @@
 .blockNoteWrapper {
   flex: 1;
   min-width: 0;
+  /* Rich-document scroll owner: the only vertically scrolling element on
+   * the Rich Note route. Was min-height: 300px; definite height now comes
+   * from the flex chain (see .editorContainer note). */
+  min-height: 0;
+  overflow-y: auto;
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   padding: var(--mantine-spacing-sm);
   background: var(--rtwiki-surface, var(--mantine-color-body));
-  min-height: 300px;
 }
 
 /* Display formulas must never overflow a narrow document; scroll the block
@@ -62,6 +70,12 @@
   min-width: 0;
   min-height: 0;
   width: 100%;
+}
+
+/* Malformed-content diagnostic dump: long tokens must wrap. Static
+ * presentational rule extracted from TSX (inventory #56). */
+.parseDump {
+  word-break: break-all;
 }
 
 /* Internal wiki links */

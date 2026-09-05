@@ -7,6 +7,15 @@
   background: var(--rtwiki-surface-raised, var(--mantine-color-default));
 }
 
+/* Debug-active status dot. Static presentational rule extracted from TSX
+ * (inventory #24); values preserved exactly. */
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mantine-color-teal-filled);
+}
+
 .railActions {
   display: flex;
   flex-direction: column;

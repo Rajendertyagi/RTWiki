@@ -1,11 +1,22 @@
+/*
+ * Shell height anchor (Slice 1: scroll ownership). Verified against
+ * @mantine/core AppShell internals: the root has no height of its own and the
+ * navbar is position:fixed, so Main is the only place to establish a
+ * definite height. Everything below binds through flex with min-height: 0.
+ */
 .main {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   background: var(--rtwiki-background, var(--mantine-color-body));
 }
 
 .mobileBar {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
 }
 
@@ -43,7 +54,17 @@
   }
 }
 
+/*
+ * Non-scrolling flex viewport. Never scrolls itself: the dashboard owns its
+ * scroll region, and each page type owns scrolling inside its editor surface.
+ * Sole horizontal padding layer for main content (page-workspace .content
+ * keeps vertical padding only).
+ */
 .mainContent {
-  padding: var(--mantine-spacing-md);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
+  padding: var(--mantine-spacing-md);
 }

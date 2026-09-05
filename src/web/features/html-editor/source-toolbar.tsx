@@ -15,6 +15,7 @@ import {
 } from '@tabler/icons-react'
 import type { JSX } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import classes from './source-toolbar.module.css'
 
 /**
  * IDE-style source toolbar for the HTML/CSS/JavaScript subfile editors.
@@ -105,7 +106,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           data-testid="ide-format"
           onClick={props.onFormat}
         >
-          <span aria-hidden="true" style={{ fontSize: 11, fontWeight: 700 }}>
+          <span aria-hidden="true" className={classes.glyphMedium}>
             F
           </span>
         </ActionIcon>
@@ -129,7 +130,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           data-testid="ide-fold-all"
           onClick={withView((view) => foldAll(view))}
         >
-          <span aria-hidden="true" style={{ fontSize: 10, fontWeight: 700 }}>
+          <span aria-hidden="true" className={classes.glyphSmall}>
             −×
           </span>
         </ActionIcon>
@@ -141,7 +142,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           data-testid="ide-unfold-all"
           onClick={withView((view) => unfoldAll(view))}
         >
-          <span aria-hidden="true" style={{ fontSize: 10, fontWeight: 700 }}>
+          <span aria-hidden="true" className={classes.glyphSmall}>
             +×
           </span>
         </ActionIcon>
@@ -157,7 +158,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           disabled={props.fontSize <= FONT_MIN}
           onClick={() => props.onFontSizeChange(Math.max(FONT_MIN, props.fontSize - FONT_STEP))}
         >
-          <span aria-hidden="true" style={{ fontSize: 10, fontWeight: 700 }}>
+          <span aria-hidden="true" className={classes.glyphSmall}>
             A−
           </span>
         </ActionIcon>
@@ -169,7 +170,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           data-testid="ide-font-reset"
           onClick={() => props.onFontSizeChange(14)}
         >
-          <span aria-hidden="true" style={{ fontSize: 11, fontWeight: 700 }}>
+          <span aria-hidden="true" className={classes.glyphMedium}>
             A
           </span>
         </ActionIcon>
@@ -182,7 +183,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           disabled={props.fontSize >= FONT_MAX}
           onClick={() => props.onFontSizeChange(Math.min(FONT_MAX, props.fontSize + FONT_STEP))}
         >
-          <span aria-hidden="true" style={{ fontSize: 13, fontWeight: 700 }}>
+          <span aria-hidden="true" className={classes.glyphLarge}>
             A+
           </span>
         </ActionIcon>
@@ -225,7 +226,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           data-testid="return-to-preview"
           onClick={props.onReturnToPreview}
         >
-          <span aria-hidden="true" style={{ fontSize: 11, fontWeight: 700 }}>
+          <span aria-hidden="true" className={classes.glyphMedium}>
             ◀
           </span>
         </ActionIcon>

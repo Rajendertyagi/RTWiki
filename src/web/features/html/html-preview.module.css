@@ -1,11 +1,16 @@
 .root {
-  width: 100%;
+  flex: 1;
   min-height: 0;
+  width: 100%;
 }
 
 .frame {
+  /* Was height: 60vh. The frame fills its pane: the parent chain
+   * (.previewPaneFull -> .root) is now a definite-height flex column, so
+   * flex:1 binds. Sandbox-internal content scrolls inside the frame. */
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 60vh;
   border: 1px solid var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-sm);
   background: var(--mantine-color-body);
