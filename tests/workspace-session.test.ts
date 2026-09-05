@@ -102,10 +102,82 @@ describe('workspace session model', () => {
   })
 
   it('returns null when nothing valid remains (Home fallback)', () => {
+    // No tabs and no expansion: genuinely nothing to restore.
     expect(resolveRestorableWorkspace(validState(), [])).toBeNull()
     expect(
-      resolveRestorableWorkspace({ ...validState(), openPageIds: [] }, [page(ID_A, 'rich')])
+      resolveRestorableWorkspace({ ...validState(), openPageIds: [], expandedTreeIds: [] }, [
+        page(ID_A, 'rich')
+      ])
     ).toBeNull()
+    // All IDs deleted from the database: tabs and expansion both vanish.
+    expect(
+      resolveRestorableWorkspace(
+        validState(),
+        [page(ID_B, 'rich')].filter((p) => p.id === ID_C)
+      )
+    ).toBeNull()
+  })
+
+  it('case 1: no open tabs and no expanded rows restores nothing', () => {
+    const session: WorkspaceSessionState = {
+      version: WORKSPACE_SESSION_VERSION,
+      openPageIds: [],
+      activePageId: null,
+      sourceField: 'preview',
+      expandedTreeIds: []
+    }
+    expect(resolveRestorableWorkspace(session, [page(ID_A, 'rich')])).toBeNull()
+  })
+
+  it('case 2: expansion-only session restores expansion with zero tabs', () => {
+    const session: WorkspaceSessionState = {
+      version: WORKSPACE_SESSION_VERSION,
+      openPageIds: [],
+      activePageId: null,
+      sourceField: 'preview',
+      expandedTreeIds: [ID_A]
+    }
+    const resolved = resolveRestorableWorkspace(session, [page(ID_A, 'rich'), page(ID_B, 'rich')])
+    expect(resolved).not.toBeNull()
+    expect(resolved?.tabs).toEqual([])
+    expect(resolved?.activePageId).toBeNull()
+    expect(resolved?.htmlSource).toBeNull()
+    expect(resolved?.expandedTreeIds).toEqual([ID_A])
+  })
+
+  it('case 3: tabs plus expansion restore together', () => {
+    const resolved = resolveRestorableWorkspace(validState(), [
+      page(ID_A, 'rich'),
+      page(ID_B, 'html')
+    ])
+    expect(resolved?.tabs.map((t) => t.pageId)).toEqual([ID_A, ID_B])
+    expect(resolved?.activePageId).toBe(ID_B)
+    expect(resolved?.expandedTreeIds).toEqual([ID_A])
+  })
+
+  it('case 4: deleted or malformed IDs fall back gracefully', () => {
+    // Every referenced page was deleted: nothing valid remains.
+    const deleted: WorkspaceSessionState = {
+      version: WORKSPACE_SESSION_VERSION,
+      openPageIds: [ID_C],
+      activePageId: ID_C,
+      sourceField: 'preview',
+      expandedTreeIds: [ID_C]
+    }
+    expect(resolveRestorableWorkspace(deleted, [page(ID_A, 'rich')])).toBeNull()
+    // Malformed IDs cannot leak through the parser into the resolver.
+    const parsed = parseWorkspaceSession(
+      JSON.stringify({
+        version: WORKSPACE_SESSION_VERSION,
+        openPageIds: ['../etc/passwd', 'not-a-uuid'],
+        activePageId: '../etc/passwd',
+        sourceField: 'preview',
+        expandedTreeIds: ['not-a-uuid']
+      })
+    )
+    expect(parsed?.openPageIds).toEqual([])
+    expect(parsed?.activePageId).toBeNull()
+    expect(parsed && resolveRestorableWorkspace(parsed, [page(ID_A, 'rich')])).toBeNull()
   })
 
   it('deduplicates repeated ids while rebuilding tabs', () => {
