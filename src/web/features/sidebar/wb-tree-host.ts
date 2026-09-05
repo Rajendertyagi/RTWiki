@@ -83,6 +83,12 @@ export interface PageTreeHostOptions {
   isSelfOrDescendant: (ancestorId: string, candidateId: string) => boolean
 }
 
+/**
+ * Real-page row height in px. Must equal --rtwiki-tree-row-height
+ * (customization.css): Wunderbaum needs the number for its viewport layout
+ * math and cannot read it from the stylesheet, so this constant mirrors the
+ * token by hand. Change both together; never change density here alone.
+ */
 const ROW_HEIGHT_PX = 32
 
 /**
@@ -116,7 +122,13 @@ interface WbNodeLike {
   title: string
   parent: WbNodeLike | null
   children: WbNodeLike[] | null
-  data?: WbNodeData
+  /**
+   * Wunderbaum copies unknown top-level source props into node.data —
+   * including our `data` object itself — so the adapter payload lives at
+   * node.data.data, never node.data.pageType directly. Read it only through
+   * nodePageType below (verified against wunderbaum 0.14.1 Node).
+   */
+  data?: { data?: WbNodeData } | null
   getLevel(): number
   isActive(): boolean
   isExpanded(): boolean
@@ -125,12 +137,30 @@ interface WbNodeLike {
   startEditTitle(): unknown
 }
 
+/**
+ * Our page type for a node, or null when unknown. Never trust a bare
+ * `node.data?.pageType` read — see WbNodeLike.data.
+ */
+function nodePageType(node: WbNodeLike): PageType | null {
+  const value: unknown = node.data?.data?.pageType
+  return value === 'rich' || value === 'html' || value === 'diagram' || value === 'mindmap'
+    ? value
+    : null
+}
+
 export class PageTreeHost {
   private tree: Wunderbaum | null = null
   private element: HTMLElement | null = null
   private options: PageTreeHostOptions | null = null
   private lastExpandedKey: string | null = null
   private contextMenuDismiss: (() => void) | null = null
+  /**
+   * Timestamp until which container-level contextmenu events are swallowed.
+   * The ContextMenu key and Shift+F10 fire a native contextmenu event in
+   * addition to keydown; the keydown handler below already opens RTWiki's
+   * menu at the focused row, so the echo must not open it a second time.
+   */
+  private suppressNextContextMenuUntil = 0
   /** Latest pages list, mirrored for drop resolution at event time. */
   private pagesRef: Page[] = []
 
@@ -421,6 +451,31 @@ export class PageTreeHost {
         const target = keyEvent?.target as HTMLElement | null | undefined
         if (target?.closest?.('input.wb-input-edit')) return undefined
         const node = this.asNode(e.node)
+        // Keyboard context menu (ContextMenu key or Shift+F10): the library
+        // tracks keyboard focus internally — DOM focus stays on the
+        // container while arrows move the wb-focus ring — so the focused
+        // node comes from the library event, never the event target. Never
+        // selects or opens the page. Anything without a focused real page
+        // row (virtual subfile, no focus) yields so the native contextmenu
+        // path below applies the usual contract. Editing takes precedence
+        // via the guard above.
+        if (
+          keyEvent?.key === 'ContextMenu' ||
+          (keyEvent?.shiftKey === true && keyEvent?.key === 'F10')
+        ) {
+          const focused = node && parseSubfileKey(node.key) === null ? node : null
+          if (!focused) return undefined
+          keyEvent?.preventDefault()
+          const rect = this.rowElement(focused.key)?.getBoundingClientRect()
+          this.suppressNextContextMenuUntil = Date.now() + 500
+          this.options?.callbacks.onContextMenu({
+            kind: 'page',
+            pageId: focused.key,
+            x: rect ? rect.left + 48 : 0,
+            y: rect ? rect.bottom + 2 : 0
+          })
+          return false
+        }
         if (keyEvent?.key === 'Enter' && node) {
           keyEvent.preventDefault()
           const subfile = parseSubfileKey(node.key)
@@ -462,6 +517,7 @@ export class PageTreeHost {
           // Give the row its own name so the expander's aria-label ("Expand")
           // does not prefix it; subfile rows are named by their field label.
           row.setAttribute('aria-label', node.title)
+          row.setAttribute('title', node.title)
         } else {
           row.setAttribute('role', 'treeitem')
           row.setAttribute('data-page-id', node.key)
@@ -475,8 +531,11 @@ export class PageTreeHost {
           // The row's own aria-label makes its accessible name exactly
           // "<title> <type>" — without it, the expander's "Expand" label
           // prefixes the name and breaks "<title> ..."-anchored matchers.
-          const label = pageTypeLabel(node.data?.pageType ?? 'rich')
+          // The title attribute keeps the full title on hover for truncated
+          // rows; the library sets none itself.
+          const label = pageTypeLabel(nodePageType(node) ?? 'rich')
           row.setAttribute('aria-label', `${node.title} ${label}`)
+          row.setAttribute('title', node.title)
         }
         const titleSpan = nodeElem.querySelector('span.wb-title')
         // Page rows carry a type label so consumers can target
@@ -485,14 +544,14 @@ export class PageTreeHost {
         // field label (HTML / CSS / JavaScript). Set on every render because
         // Wunderbaum may reset the title element on re-render.
         if (titleSpan && subfile === null) {
-          const label = pageTypeLabel(node.data?.pageType ?? 'rich')
+          const label = pageTypeLabel(nodePageType(node) ?? 'rich')
           titleSpan.textContent = `${node.title} ${label}`
         }
         if (e.isNew) {
           const icon = document.createElement('i')
           icon.className = 'rtw-page-icon'
           icon.setAttribute('aria-hidden', 'true')
-          const pageType = node.data?.pageType ?? 'rich'
+          const pageType = nodePageType(node) ?? 'rich'
           const IconComp =
             subfile !== null
               ? SUBFILE_ICONS[subfile.field]
@@ -542,6 +601,9 @@ export class PageTreeHost {
     // the delegation works for both trusted events and dispatched ones.
     const onContextMenu = (ev: MouseEvent): void => {
       ev.preventDefault()
+      // Echo of a keyboard open (ContextMenu key / Shift+F10 also fires a
+      // native contextmenu event): already opened at the focused row above.
+      if (Date.now() < this.suppressNextContextMenuUntil) return
       const row = (ev.target as HTMLElement | null)?.closest?.('div.wb-row') as HTMLElement | null
       const backRef = (row as (HTMLElement & { _wb_node?: { key: string } }) | null)?._wb_node
       const key = backRef?.key ?? null

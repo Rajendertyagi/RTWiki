@@ -17,17 +17,21 @@
 }
 
 :global(div.wunderbaum) {
-  /* Bridge Wunderbaum's custom properties to RTWiki theme tokens. */
-  --wb-row-outer-height: 32px;
-  --wb-row-inner-height: 30px;
-  --wb-header-height: 32px;
-  --wb-node-indent: 16px;
+  /* Bridge Wunderbaum's custom properties to the single named RTWiki tree
+   * token source (customization.css). Every number here references a token;
+   * no raw tree metrics live in this file. Missing bridges default to the
+   * library's pale values and leak in dark mode, so this list is complete
+   * by inspection of the bundled stylesheet. */
+  --wb-row-outer-height: var(--rtwiki-tree-row-height);
+  --wb-row-inner-height: var(--rtwiki-tree-row-inner-height);
+  --wb-header-height: var(--rtwiki-tree-row-height);
+  --wb-node-indent: var(--rtwiki-tree-indent-step);
   --wb-indent-guide-color: transparent;
-  --wb-line-height: 32px;
-  --wb-icon-outer-width: 16px;
-  --wb-icon-outer-height: 24px;
-  --wb-icon-width: 16px;
-  --wb-icon-height: 16px;
+  --wb-line-height: var(--rtwiki-tree-row-height);
+  --wb-icon-outer-width: var(--rtwiki-tree-icon-size);
+  --wb-icon-outer-height: var(--rtwiki-tree-icon-outer-height);
+  --wb-icon-width: var(--rtwiki-tree-icon-size);
+  --wb-icon-height: var(--rtwiki-tree-icon-size);
   --wb-icon-padding-x: 0px;
   --wb-icon-padding-y: 0px;
   --wb-col-padding-x: 0px;
@@ -36,6 +40,12 @@
   --wb-header-background: transparent;
   --wb-header-border-color: transparent;
   --wb-toolbar-background: transparent;
+  --wb-background-color: var(--rtwiki-surface, var(--mantine-color-body));
+  --wb-alternate-row-color: transparent;
+  --wb-alternate-row-color-hover: transparent;
+  --wb-hover-border-color: transparent;
+  --wb-drop-source-color: transparent;
+  --wb-drop-target-color: transparent;
   --wb-expander-color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   /* Use RTWiki foreground tokens instead of Wunderbaum's default text colour. */
   --wb-node-text-color: var(--rtwiki-text, var(--mantine-color-text));
@@ -68,6 +78,18 @@
   scrollbar-color: var(--rtwiki-border, var(--mantine-color-default-border)) transparent;
 }
 
+/*
+ * The library paints a 2px container border that turns blue on
+ * :focus/:focus-within. Focus visibility belongs on the focused row only
+ * (see .wb-row.wb-focus below), so the container border stays transparent
+ * in every state. !important outranks the library's pseudo-class rule;
+ * geometry is unchanged (the 2px box is preserved, only its colour).
+ */
+:global(div.wunderbaum:focus),
+:global(div.wunderbaum:focus-within) {
+  border-color: transparent !important;
+}
+
 :global(div.wunderbaum)::-webkit-scrollbar {
   width: 10px;
 }
@@ -81,13 +103,13 @@
   background: transparent;
 }
 
-/* Full-width row hit surface. */
+/* Full-width row hit surface. Horizontal padding from the token source. */
 :global(div.wb-row) {
   border-radius: var(--mantine-radius-sm);
   margin-inline: 0;
   box-sizing: border-box;
-  padding-left: 2px;
-  padding-right: 8px;
+  padding-left: var(--rtwiki-tree-row-padding-left);
+  padding-right: var(--rtwiki-tree-row-padding-right);
 }
 
 /* Hover covers the full row width with a subtle neutral fill. */
@@ -137,12 +159,12 @@
   background: color-mix(in srgb, var(--mantine-color-blue-filled) 14%, transparent);
 }
 
-/* Expander: disclosure control only. 24x24 clickable area, 14px glyph. */
+/* Expander: disclosure control only. Click target and glyph from tokens. */
 :global(i.wb-expander) {
   color: var(--wb-expander-color);
   cursor: pointer;
-  width: 24px !important;
-  height: 24px !important;
+  width: var(--rtwiki-tree-expander-size) !important;
+  height: var(--rtwiki-tree-expander-size) !important;
   padding: 0;
   margin: 0;
   display: inline-flex;
@@ -152,7 +174,7 @@
 
 :global(i.rtw-expander::before) {
   content: "\25B8";
-  font-size: 14px;
+  font-size: var(--rtwiki-tree-glyph-size);
   line-height: 1;
 }
 
@@ -163,9 +185,9 @@
 /* Page-type icon slot filled by the render hook with a Tabler SVG. */
 :global(i.rtw-page-icon) {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
-  margin: 0 6px 0 4px;
+  width: var(--rtwiki-tree-icon-size);
+  height: var(--rtwiki-tree-icon-size);
+  margin: 0 var(--rtwiki-tree-icon-title-gap) 0 var(--rtwiki-tree-expander-icon-gap);
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
@@ -178,8 +200,8 @@
 }
 
 :global(.rtw-type-subfile i.rtw-page-icon) {
-  width: 14px;
-  height: 14px;
+  width: var(--rtwiki-tree-subfile-icon-size);
+  height: var(--rtwiki-tree-subfile-icon-size);
 }
 
 /* Inert placeholder glyphs Wunderbaum renders for doc/folder icons. */
@@ -218,7 +240,7 @@
 /* Reserve space for the hover/focus action button so reveal never shifts the
    title or interferes with truncation (page rows only). */
 :global(.wb-row:not(.rtw-type-subfile) span.wb-title) {
-  padding-right: 22px;
+  padding-right: var(--rtwiki-tree-action-reserve);
 }
 
 /* Row action button: hidden until hover/focus; absolutely positioned so it
@@ -259,10 +281,10 @@
   color: var(--rtwiki-text, var(--mantine-color-text));
 }
 
-/* Virtual HTML/CSS/JS rows: 28px, secondary colour, 12.5px, never italic. */
+/* Virtual HTML/CSS/JS rows: shorter, secondary colour, never italic. */
 :global(div.wb-row.rtw-type-subfile) {
-  height: 28px !important;
-  line-height: 28px !important;
+  height: var(--rtwiki-tree-subfile-row-height) !important;
+  line-height: var(--rtwiki-tree-subfile-row-height) !important;
 }
 
 :global(.rtw-type-subfile span.wb-title) {
@@ -275,12 +297,13 @@
  * RTWiki's portalled tree context menu. Rendered into document.body with a
  * fixed position and the shared overlay z-index so it always paints above
  * the rail, editor, toolbars, tabs, and right sidebar. The host clamps
- * coordinates into the viewport.
+ * coordinates into the viewport. Width is fixed and compact (token) so page
+ * titles can never stretch it; picker entries truncate with ellipsis.
  */
 .contextMenu {
   position: fixed;
   z-index: var(--rtwiki-overlay-z-index, 1000);
-  min-width: 200px;
+  width: var(--rtwiki-tree-menu-width);
   max-height: 60vh;
   overflow-y: auto;
   padding: 4px;
@@ -321,4 +344,39 @@
 .menuScroll {
   max-height: 320px;
   overflow-y: auto;
+}
+
+/*
+ * Move-to picker (opened only from the "Move to…" menu item): a filter
+ * input plus a compact result list. Entries truncate so long titles clamp
+ * to the fixed menu width.
+ */
+.movePickerSearch {
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-xs);
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  color: var(--rtwiki-text, var(--mantine-color-text));
+  font: inherit;
+  font-size: var(--mantine-font-size-sm);
+  outline: none;
+}
+
+.movePickerSearch:focus {
+  border-color: var(--mantine-color-blue-outline);
+}
+
+/* Picker entries truncate so long titles clamp to the fixed menu width. */
+.menuScroll .contextMenuItem {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movePickerEmpty {
+  padding: 6px 10px;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
 }

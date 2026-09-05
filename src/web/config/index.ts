@@ -163,6 +163,7 @@ export const UI_TEXT = {
   moveToLabel: 'Move',
   moveUpLabel: 'Move up',
   moveDownLabel: 'Move down',
+  moveToPickerLabel: 'Move to…',
   removeBlockLabel: 'Delete block',
   moveToParentLabel: 'Move to parent page',
   hierarchyFutureNote: 'Hierarchical page organization is planned for a future release.',

@@ -1,13 +1,34 @@
 /*
- * Hierarchy-specific layout variables (Workspace Hierarchy phase).
- *
- * This file is the single place where tree density and indentation can be
- * tuned without touching component CSS modules. Values intentionally derive
- * from Mantine tokens so light/dark stay consistent.
+ * Tree density and interaction metrics (Tree Polish). Single named source
+ * for every tree measurement: the Wunderbaum bridge in
+ * page-tree.module.css consumes these through its --wb-* variables, and
+ * wb-tree-host.ts keeps ROW_HEIGHT_PX in sync for the library's layout
+ * math. Values intentionally derive from Mantine tokens where possible so
+ * light/dark stay consistent. Do not restate these numbers elsewhere.
  */
 :root {
+  /* Row geometry. */
+  --rtwiki-tree-row-height: 32px;
+  --rtwiki-tree-row-inner-height: 30px;
+  --rtwiki-tree-subfile-row-height: 28px;
   --rtwiki-tree-indent-step: 16px;
-  --rtwiki-tree-row-min-height: 32px;
+  /* Chevron: 24px click target, ~14px visible glyph. */
+  --rtwiki-tree-expander-size: 24px;
+  --rtwiki-tree-glyph-size: 14px;
+  /* Icon slots. */
+  --rtwiki-tree-icon-size: 16px;
+  --rtwiki-tree-icon-outer-height: 24px;
+  --rtwiki-tree-subfile-icon-size: 14px;
+  /* Horizontal rhythm: chevron -> icon 4px, icon -> title 6px. */
+  --rtwiki-tree-expander-icon-gap: 4px;
+  --rtwiki-tree-icon-title-gap: 6px;
+  /* Row outer padding. */
+  --rtwiki-tree-row-padding-left: 6px;
+  --rtwiki-tree-row-padding-right: 8px;
+  /* Reserved trailing space so the hover action button never shifts titles. */
+  --rtwiki-tree-action-reserve: 22px;
+  /* Context menu width: fixed and compact, independent of title length. */
+  --rtwiki-tree-menu-width: 240px;
   --rtwiki-drop-target-border: var(--mantine-color-blue-6);
 }
 

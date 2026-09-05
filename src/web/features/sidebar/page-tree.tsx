@@ -291,7 +291,16 @@ export function PageTree({
         role="tree"
         aria-label={UI_TEXT.dashboardTitle}
       />
+      {/* Remounted per invocation (key) so transient menu state such as the
+          move-to picker always starts fresh; dismissal unmounts it. */}
       <TreeContextMenu
+        key={
+          contextMenu === null
+            ? 'closed'
+            : contextMenu.kind === 'root'
+              ? `root:${contextMenu.x},${contextMenu.y}`
+              : `page:${contextMenu.pageId}:${contextMenu.x},${contextMenu.y}`
+        }
         menu={contextMenu}
         moveTargets={moveTargets.filter((t) => t.id !== menuPageId)}
         onAction={handleMenuAction}
