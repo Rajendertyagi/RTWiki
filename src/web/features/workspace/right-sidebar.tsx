@@ -1,7 +1,7 @@
 import { ActionIcon, Divider, Stack, Text, Tooltip } from '@mantine/core'
 import { IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { UI_TEXT } from '../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { getBacklinks } from '../../services/pages-api.js'
 import type { DocumentOutlineEntry } from '../rich-editor/document.js'
 import classes from './right-sidebar.module.css'
@@ -23,6 +23,12 @@ interface RightSidebarProps {
   /** Opens a backlink source through the controller/tab flow. */
   onOpenPage?: (pageId: string) => void
   onCollapse: () => void
+  /**
+   * Explicit pane width (persisted user preference). Valid dynamic inline
+   * geometry (same contract as block-resize.tsx); the stylesheet keeps the
+   * default as fallback.
+   */
+  width?: number
 }
 
 /**
@@ -38,7 +44,8 @@ export function RightSidebar({
   pageId,
   onNavigateToHeading,
   onOpenPage,
-  onCollapse
+  onCollapse,
+  width = LAYOUT.rightSidebarWidth
 }: RightSidebarProps): JSX.Element {
   const [backlinks, setBacklinks] = useState<BacklinkEntryView[] | null>(null)
   const backlinksKeyRef = useRef<string | null>(null)
@@ -70,7 +77,11 @@ export function RightSidebar({
     }
   }, [pageId, updatedDate])
   return (
-    <aside className={classes.panel} aria-label={UI_TEXT.rightSidebarLabel}>
+    <aside
+      className={classes.panel}
+      style={{ width, flexBasis: width }}
+      aria-label={UI_TEXT.rightSidebarLabel}
+    >
       <div className={classes.header}>
         <Text size="xs" fw={600} c="dimmed">
           {UI_TEXT.rightSidebarLabel}

@@ -2,6 +2,7 @@ import { AppShell, Box, Burger } from '@mantine/core'
 import { useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../config/index.js'
 import classes from './app-shell.module.css'
+import { PaneDivider } from './pane-divider.js'
 
 interface AppShellLayoutProps {
   utilityRail: React.ReactNode
@@ -10,6 +11,12 @@ interface AppShellLayoutProps {
   tabStrip?: React.ReactNode
   /** Desktop-only page-tree visibility; owned by the composition root. */
   treeOpen: boolean
+  /** Current desktop tree-pane width (persisted user preference; Slice 2). */
+  treeWidth: number
+  /** Live tree-width updates during divider drag (unsaved until commit). */
+  onTreeWidthChange: (width: number) => void
+  /** Divider pointer-up / keyboard commit (persist the width). */
+  onTreeWidthCommit: (width: number) => void
   children: React.ReactNode
 }
 
@@ -29,6 +36,9 @@ export function AppShellLayout({
   navbar,
   tabStrip,
   treeOpen,
+  treeWidth,
+  onTreeWidthChange,
+  onTreeWidthCommit,
   children
 }: AppShellLayoutProps): JSX.Element {
   const [mobileNavOpened, setMobileNavOpened] = useState(false)
@@ -36,9 +46,9 @@ export function AppShellLayout({
   return (
     <AppShell
       navbar={{
-        // Mobile drawers keep a usable width even when the desktop tree
-        // is collapsed; desktop shrinks to just the rail width.
-        width: { base: 280, sm: treeOpen ? LAYOUT.treePaneWidth : LAYOUT.railWidth },
+        // Mobile drawer keeps its own named width; desktop uses the persisted
+        // tree width (or the rail alone when collapsed).
+        width: { base: LAYOUT.mobileDrawerWidth, sm: treeOpen ? treeWidth : LAYOUT.railWidth },
         breakpoint: 'sm',
         collapsed: { mobile: !mobileNavOpened }
       }}
@@ -58,6 +68,21 @@ export function AppShellLayout({
           >
             {navbar}
           </div>
+          {/* Tree divider: resizes the actual Mantine desktop navbar width.
+              Rendered only while the tree is expanded; inert below sm via
+              the shared divider CSS (mobile drawer owns navigation). */}
+          {treeOpen ? (
+            <PaneDivider
+              value={treeWidth}
+              min={LAYOUT.treePaneMinWidth}
+              max={LAYOUT.treePaneMaxWidth}
+              direction={1}
+              onChange={onTreeWidthChange}
+              onCommit={onTreeWidthCommit}
+              ariaLabel={UI_TEXT.resizeTreePaneLabel}
+              testId="tree-pane-divider"
+            />
+          ) : null}
         </div>
       </AppShell.Navbar>
 

@@ -14,6 +14,11 @@ import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
 import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
 import {
+  loadLayoutPreferences,
+  saveLayoutPreferences,
+  type LayoutPreferences
+} from './features/workspace/layout-preferences.js'
+import {
   loadWorkspaceSession,
   resolveRestorableWorkspace,
   saveWorkspaceSession,
@@ -42,8 +47,29 @@ function createSessionStorage(): WorkspaceStorage | null {
 export function App(): JSX.Element {
   const controller = usePagesController()
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
-  // Session-only desktop tree-pane visibility (no persistence by design).
-  const [treeOpen, setTreeOpen] = useState(true)
+  // Pane geometry preferences (Slice 2): explicit user widths and collapse
+  // flags, persisted to a versioned localStorage store. Never tabs, page
+  // IDs, or content — document/session restoration stays in workspace-session.
+  const [layoutPrefs, setLayoutPrefs] = useState<LayoutPreferences>(loadLayoutPreferences)
+  const [treeWidth, setTreeWidth] = useState(layoutPrefs.treeWidth)
+  const [treeOpen, setTreeOpen] = useState(!layoutPrefs.treeCollapsed)
+  const prefsRef = useRef(layoutPrefs)
+  prefsRef.current = layoutPrefs
+
+  const persistLayoutPrefs = (next: LayoutPreferences): void => {
+    setLayoutPrefs(next)
+    saveLayoutPreferences(next)
+  }
+
+  const handleToggleTree = (): void => {
+    const next = !treeOpen
+    setTreeOpen(next)
+    persistLayoutPrefs({ ...prefsRef.current, treeCollapsed: !next })
+  }
+
+  const handleTreeWidthCommit = (width: number): void => {
+    persistLayoutPrefs({ ...prefsRef.current, treeWidth: width })
+  }
 
   // --- Browser-refresh workspace restoration (metadata only) ---
   const workspaceStorageRef = useRef<WorkspaceStorage | null>(null)
@@ -447,6 +473,9 @@ export function App(): JSX.Element {
     <>
       <AppShellLayout
         treeOpen={treeOpen}
+        treeWidth={treeWidth}
+        onTreeWidthChange={setTreeWidth}
+        onTreeWidthCommit={handleTreeWidthCommit}
         tabStrip={
           <TabStrip
             tabs={openTabs}
@@ -467,7 +496,7 @@ export function App(): JSX.Element {
             onNewPage={handleNewPage}
             onStop={handleStop}
             treeOpen={treeOpen}
-            onToggleTree={() => setTreeOpen((o) => !o)}
+            onToggleTree={handleToggleTree}
           />
         }
         navbar={

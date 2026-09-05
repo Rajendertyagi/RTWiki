@@ -9,10 +9,13 @@ import { Alert, Button, Stack, Text, Tooltip } from '@mantine/core'
 import { parseInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { IconAlertCircle, IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { UI_TEXT } from '../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
+import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
+import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
 import { RightSidebar } from '../workspace/right-sidebar.js'
+import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
 import {
   containUnknownBlocks,
   createDefaultDocument,
@@ -33,6 +36,20 @@ import { RTSideMenu } from './side-menu.js'
 import { RTSuggestionMenu, RTWikiLinkMenu } from './slash-menu.js'
 import { useAutosave } from './use-autosave.js'
 import type { LinkablePage } from './wiki-link.js'
+
+/**
+ * Temporary responsive collapse (Slice 2, Option B): at or below this
+ * viewport width the right sidebar hides so the named minimums (rail +
+ * tree + workspace) always fit. Derived from LAYOUT — never a fixed
+ * breakpoint. Session-only: never persisted; the saved explicit choice is
+ * restored automatically when space returns. (Currently 979px.)
+ */
+const TEMP_COLLAPSE_MAX_WIDTH_PX =
+  LAYOUT.railWidth +
+  LAYOUT.treePaneMinWidth +
+  LAYOUT.workspaceMinWidth +
+  LAYOUT.rightSidebarMinWidth -
+  1
 
 interface RichEditorProps {
   pageId: string
@@ -274,7 +291,40 @@ function RichEditorInner(props: InnerProps): JSX.Element {
   const [outline, setOutline] = useState<DocumentOutlineEntry[]>(() =>
     extractOutline(initialDocument)
   )
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // Right-sidebar geometry (Slice 2): the explicit width/collapse are the
+  // user's persisted preference; the temporary narrow-window collapse is
+  // derived from the viewport and never persisted. Effective visibility is
+  // explicit OR temporary; the saved explicit choice restores automatically
+  // when space returns.
+  const [sidebarWidth, setSidebarWidth] = useState(() => loadLayoutPreferences().rightSidebarWidth)
+  const [explicitCollapsed, setExplicitCollapsed] = useState(
+    () => loadLayoutPreferences().rightSidebarCollapsed
+  )
+  const narrowCollapse = useMediaQueryBelow(TEMP_COLLAPSE_MAX_WIDTH_PX)
+  const sidebarCollapsed = explicitCollapsed || narrowCollapse
+
+  const persistSidebarPrefs = (patch: {
+    rightSidebarWidth?: number
+    rightSidebarCollapsed?: boolean
+  }): void => {
+    saveLayoutPreferences({ ...loadLayoutPreferences(), ...patch })
+  }
+
+  const handleSidebarCollapse = (): void => {
+    setExplicitCollapsed(true)
+    persistSidebarPrefs({ rightSidebarCollapsed: true })
+  }
+
+  const handleSidebarExpand = (): void => {
+    // Clears the explicit choice. A still-narrow viewport keeps the
+    // temporary collapse (and its restore control) until space returns.
+    setExplicitCollapsed(false)
+    persistSidebarPrefs({ rightSidebarCollapsed: false })
+  }
+
+  const handleSidebarWidthCommit = (width: number): void => {
+    persistSidebarPrefs({ rightSidebarWidth: width })
+  }
 
   // Hand the live editor instance to the parent so an externally hosted
   // toolbar can bind to it; cleared on unmount/editor replacement.
@@ -446,28 +496,46 @@ function RichEditorInner(props: InnerProps): JSX.Element {
         </Stack>
 
         {sidebarCollapsed ? (
-          <Tooltip label={UI_TEXT.rightSidebarLabel} position="left">
+          <Tooltip
+            label={explicitCollapsed ? UI_TEXT.rightSidebarLabel : UI_TEXT.restoreSidebarLabel}
+            position="left"
+          >
             <button
               type="button"
               className={classes.sidebarExpand}
-              aria-label={UI_TEXT.rightSidebarLabel}
-              onClick={() => setSidebarCollapsed(false)}
+              aria-label={
+                explicitCollapsed ? UI_TEXT.rightSidebarLabel : UI_TEXT.restoreSidebarLabel
+              }
+              onClick={handleSidebarExpand}
             >
               <IconLayoutSidebar size={16} />
             </button>
           </Tooltip>
         ) : (
-          <RightSidebar
-            key={pageId}
-            outline={outline}
-            pageTypeLabel={UI_TEXT.richNote}
-            createdDate={createdDate ?? ''}
-            updatedDate={updatedDate ?? ''}
-            pageId={pageId}
-            onNavigateToHeading={navigateToHeading}
-            onOpenPage={onOpenPage}
-            onCollapse={() => setSidebarCollapsed(true)}
-          />
+          <>
+            <PaneDivider
+              value={sidebarWidth}
+              min={LAYOUT.rightSidebarMinWidth}
+              max={LAYOUT.rightSidebarMaxWidth}
+              direction={-1}
+              onChange={setSidebarWidth}
+              onCommit={handleSidebarWidthCommit}
+              ariaLabel={UI_TEXT.resizeSidebarLabel}
+              testId="sidebar-divider"
+            />
+            <RightSidebar
+              key={pageId}
+              width={sidebarWidth}
+              outline={outline}
+              pageTypeLabel={UI_TEXT.richNote}
+              createdDate={createdDate ?? ''}
+              updatedDate={updatedDate ?? ''}
+              pageId={pageId}
+              onNavigateToHeading={navigateToHeading}
+              onOpenPage={onOpenPage}
+              onCollapse={handleSidebarCollapse}
+            />
+          </>
         )}
       </div>
     </div>

@@ -178,6 +178,10 @@ export const UI_TEXT = {
   toggleNavigation: 'Toggle navigation',
   collapseTreeLabel: 'Collapse page tree',
   expandTreeLabel: 'Expand page tree',
+  // Resizable shell panes (Slice 2)
+  resizeTreePaneLabel: 'Resize page tree pane',
+  resizeSidebarLabel: 'Resize sidebar',
+  restoreSidebarLabel: 'Restore sidebar',
   // Rich Document toolbar
   richToolbarLabel: 'Formatting',
   undoLabel: 'Undo',

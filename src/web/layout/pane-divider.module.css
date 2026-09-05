@@ -1,0 +1,46 @@
+/*
+ * Shared pane divider (Slice 2). The element is the pointer hit-area (width
+ * comes from LAYOUT.dividerHitWidth through a single inline style in the
+ * component); the 1px visible line appears on hover, focus, or while
+ * dragging. Inert below Mantine sm, where the mobile drawer owns
+ * navigation and dividers are never rendered for the right sidebar.
+ */
+.divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  outline: none;
+}
+
+.line {
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.divider:hover .line,
+.divider:focus-visible .line {
+  background: var(--rtwiki-border, var(--mantine-color-default-border));
+}
+
+.divider[data-dragging="true"] .line {
+  background: var(--mantine-color-blue-filled);
+}
+
+.divider:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-outline);
+  outline-offset: -2px;
+}
+
+@media (max-width: 47.99em) {
+  .divider {
+    display: none;
+  }
+}
