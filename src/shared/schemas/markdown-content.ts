@@ -7,17 +7,36 @@ import { z } from 'zod'
  * column is unconstrained TEXT, so no migration is required for these pages.
  */
 
-export const MARKDOWN_STARTER_SOURCE = `# Heading
+export const MARKDOWN_STARTER_SOURCE = `# Topic Title
 
-Write **Markdown** with _emphasis_, [links](https://example.com), and:
+> A one-line summary of what this note covers.
 
-- task lists
-- GFM tables
-- ~~strikethrough~~
+## Key Points
 
-| Column A | Column B |
-| -------- | -------- |
-| Cell 1   | Cell 2   |
+- First important point
+- Second important point
+- Third important point
+
+## Definitions
+
+| Term      | Meaning        |
+| --------- | -------------- |
+| Concept A | Short meaning |
+| Concept B | Short meaning |
+
+## Code
+
+\`\`\`ts
+const example = 'replace with real code';
+\`\`\`
+
+## Checklist
+
+- [ ] Read the source material
+- [ ] Summarize in your own words
+- [ ] Test your understanding
+
+See the [project home](https://example.com) for related notes.
 `
 
 export const MarkdownPageContentSchema = z.object({

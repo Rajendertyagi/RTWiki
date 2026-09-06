@@ -1,5 +1,6 @@
 import { Alert, Stack, Text } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
+import { serializeMarkdownContent } from '@rtwiki/shared/schemas/markdown-content.js'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { pageTypeLabel } from './components/page-type-badge.js'
@@ -209,6 +210,23 @@ export function App(): JSX.Element {
     setNewDialogType('html')
     setNewDialogOpen(true)
   }
+
+  const handleImportMarkdown = useCallback(
+    async (fileName: string, source: string): Promise<void> => {
+      const title = fileName.replace(/\.(md|markdown)$/i, '').trim() || UI_TEXT.untitledPage
+      const page = await controller.createPage(title, 'markdown')
+      if (!page) return
+      const ok = await controller.savePageContent(
+        page.id,
+        serializeMarkdownContent({ version: 1, markdown: source })
+      )
+      if (ok) {
+        if (flushRef.current) await flushRef.current()
+        controller.selectPage(page.id)
+      }
+    },
+    [controller]
+  )
 
   const handleNewPage = (): void => {
     setNewDialogType('rich')
@@ -682,6 +700,7 @@ export function App(): JSX.Element {
               onDelete={handleDeleteRequest}
               onCreateRich={handleCreateRich}
               onCreateHtml={handleCreateHtml}
+              onImportMarkdown={handleImportMarkdown}
             />
           )}
         </Stack>

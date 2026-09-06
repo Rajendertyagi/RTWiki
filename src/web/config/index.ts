@@ -311,6 +311,11 @@ export const UI_TEXT = {
   quickFinderEmptyLabel: 'No pages found',
   // Settings / diagnostics
   settingsLabel: 'Settings',
+  markdownImportLabel: 'Import Markdown',
+  markdownImportErrorType: 'Please choose a .md or .markdown file.',
+  markdownImportErrorSize: 'That file is too large to import.',
+  markdownImportErrorRead: 'Could not read that file.',
+  markdownExportLabel: 'Export .md',
   settingsCloseLabel: 'Close settings',
   settingsAppearance: 'Appearance',
   settingsLayout: 'Layout',

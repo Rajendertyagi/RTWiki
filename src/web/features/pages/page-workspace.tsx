@@ -1,13 +1,13 @@
 import { Box, Skeleton, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
+import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import { RichToolbar } from '../rich-editor/rich-toolbar.js'
 import type { AnyRichEditor } from '../rich-editor/schema.js'
 import { EditorHeader } from './editor-header.js'
-import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import classes from './page-workspace.module.css'
 
 // CodeMirror is heavy and only needed on HTML pages — loaded as its own chunk.
@@ -237,6 +237,7 @@ function PageEditors({
         <MarkdownPageWorkspace
           key={page.id}
           pageId={page.id}
+          pageTitle={page.title}
           storedContent={page.content}
           onSaveContent={onSaveContent}
           onFlushRef={onFlushRef}

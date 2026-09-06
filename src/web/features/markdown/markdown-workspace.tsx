@@ -1,9 +1,10 @@
 import { Button, Group, Text } from '@mantine/core'
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content'
-import { IconEye, IconPencil } from '@tabler/icons-react'
+import { IconDownload, IconEye, IconPencil } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { updatePage } from '../../services/pages-api.js'
+import { downloadTextFile, sanitizeFileName } from '../../util/file-download.js'
 import { CodeEditor } from '../html-editor/code-editor.js'
 import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
@@ -13,6 +14,7 @@ import classes from './markdown-workspace.module.css'
 
 export interface MarkdownPageWorkspaceProps {
   pageId: string
+  pageTitle: string
   storedContent: string
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
@@ -35,6 +37,7 @@ export interface MarkdownPageWorkspaceProps {
  */
 export default function MarkdownPageWorkspace({
   pageId,
+  pageTitle,
   storedContent,
   onSaveContent,
   onFlushRef,
@@ -132,6 +135,17 @@ export default function MarkdownPageWorkspace({
             {UI_TEXT.markdownWorkspacePreviewLabel}
           </Button>
         </Group>
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          leftSection={<IconDownload size={12} />}
+          onClick={() =>
+            downloadTextFile(`${sanitizeFileName(pageTitle)}.md`, draft, 'text/markdown')
+          }
+          data-testid="markdown-export-button"
+        >
+          {UI_TEXT.markdownExportLabel}
+        </Button>
       </Group>
 
       {mode === 'edit' ? (
