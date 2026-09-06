@@ -5,6 +5,7 @@ import { UI_TEXT } from '../config/index.js'
 const LABELS: Record<PageType, string> = {
   rich: UI_TEXT.richNote,
   html: UI_TEXT.htmlPage,
+  markdown: UI_TEXT.markdownNote,
   diagram: UI_TEXT.diagramPage,
   mindmap: UI_TEXT.mindMapPage
 }
@@ -12,6 +13,7 @@ const LABELS: Record<PageType, string> = {
 const COLORS: Record<PageType, string> = {
   rich: 'blue',
   html: 'teal',
+  markdown: 'cyan',
   diagram: 'violet',
   mindmap: 'grape'
 }

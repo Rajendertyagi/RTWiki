@@ -5,6 +5,10 @@ import {
   parseHtmlContent,
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
+import {
+  createStarterMarkdownContent,
+  parseMarkdownPageContent
+} from '@rtwiki/shared/schemas/markdown-content'
 import { extractPageLinks, findLinkContext } from '@rtwiki/shared/schemas/page-links'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
 import {
@@ -57,6 +61,16 @@ function resolveCreatedContent(pageType: PageType, content: string): string {
       return createStarterVisualContent(pageType)
     }
     const parsed = parseVisualPageContent(content)
+    if (!parsed.ok) {
+      throw new PageValidationError(parsed.error)
+    }
+    return content
+  }
+  if (pageType === 'markdown') {
+    if (content === '') {
+      return createStarterMarkdownContent()
+    }
+    const parsed = parseMarkdownPageContent(content)
     if (!parsed.ok) {
       throw new PageValidationError(parsed.error)
     }

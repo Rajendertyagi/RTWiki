@@ -233,6 +233,23 @@ export function extractSearchableContent(pageType: PageType, storedContent: stri
     }
     return ''
   }
+  // Markdown pages: index the source text (readable markdown), never raw JSON.
+  if (pageType === 'markdown') {
+    try {
+      const parsed: unknown = JSON.parse(storedContent)
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        'markdown' in parsed &&
+        typeof (parsed as { markdown: unknown }).markdown === 'string'
+      ) {
+        return (parsed as { markdown: string }).markdown
+      }
+    } catch {
+      // Malformed/legacy content falls through to the empty-string contract.
+    }
+    return ''
+  }
   // Rich pages: parse BlockNote JSON into readable text (never raw JSON).
   return extractSearchableRich(storedContent)
 }

@@ -3,6 +3,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import { javascript } from '@codemirror/lang-javascript'
+import { markdown } from '@codemirror/lang-markdown'
 import {
   bracketMatching,
   foldGutter,
@@ -24,7 +25,7 @@ import {
 import { useEffect, useRef } from 'react'
 import { htmlEditorHighlighting, htmlEditorTheme } from './editor-theme.js'
 
-export type CodeEditorLanguage = 'html' | 'css' | 'javascript'
+export type CodeEditorLanguage = 'html' | 'css' | 'javascript' | 'markdown'
 
 export interface EditorStats {
   line: number
@@ -41,6 +42,8 @@ function languageExtension(language: CodeEditorLanguage): Extension {
       return css()
     case 'javascript':
       return javascript()
+    case 'markdown':
+      return markdown()
   }
 }
 

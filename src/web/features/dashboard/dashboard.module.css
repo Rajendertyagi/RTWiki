@@ -7,11 +7,14 @@
 }
 
 /* Dashboard scroll owner (Slice 1: scroll ownership). The only vertically
- * scrolling element on the dashboard route; .mainContent never scrolls. */
+ * scrolling element on the dashboard route; .mainContent never scrolls.
+ * Restores the horizontal inset that .mainContent no longer provides so the
+ * page grid does not run flush to the tree-pane edge. */
 .scrollRegion {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-inline: var(--mantine-spacing-md);
 }
 
 .grid {

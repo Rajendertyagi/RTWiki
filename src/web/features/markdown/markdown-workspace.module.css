@@ -1,0 +1,110 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.bar {
+  flex-shrink: 0;
+  padding: 0 var(--rtwiki-chrome-pad-x);
+}
+
+.editorPane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+}
+
+.previewPane {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--mantine-spacing-md);
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-md);
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  /* Rendered Markdown: readable line length, native block styling. */
+  line-height: 1.6;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.previewPane :global(h1),
+.previewPane :global(h2),
+.previewPane :global(h3) {
+  margin: 0.6em 0 0.3em;
+  line-height: 1.25;
+}
+
+.previewPane :global(p) {
+  margin: 0 0 0.75em;
+}
+
+.previewPane :global(ul),
+.previewPane :global(ol) {
+  margin: 0 0 0.75em;
+  padding-left: 1.5em;
+}
+
+.previewPane :global(table) {
+  border-collapse: collapse;
+  margin: 0 0 0.75em;
+}
+
+.previewPane :global(th),
+.previewPane :global(td) {
+  border: 1px solid var(--mantine-color-default-border);
+  padding: 4px 8px;
+}
+
+.previewPane :global(code) {
+  background: var(--mantine-color-default-hover);
+  border-radius: var(--mantine-radius-xs);
+  padding: 1px 4px;
+  font-size: 0.9em;
+}
+
+.previewPane :global(pre) {
+  background: var(--mantine-color-default-hover);
+  border-radius: var(--mantine-radius-sm);
+  padding: var(--mantine-spacing-sm);
+  overflow-x: auto;
+}
+
+.previewPane :global(pre code) {
+  background: transparent;
+  padding: 0;
+}
+
+.previewPane :global(blockquote) {
+  margin: 0 0 0.75em;
+  padding-left: var(--mantine-spacing-md);
+  border-left: 3px solid var(--mantine-color-default-border);
+  color: var(--mantine-color-dimmed);
+}
+
+.previewPane :global(a) {
+  color: var(--mantine-color-blue-filled);
+}
+
+/* GFM task-list checkboxes render as disabled inputs (sanitizer allows them). */
+.previewPane :global(li.task-list-item) {
+  list-style: none;
+}
+
+.previewPane :global(input[type="checkbox"]) {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.parseError {
+  flex: 1;
+  min-height: 0;
+}

@@ -1,4 +1,4 @@
-export type PageType = 'rich' | 'html' | 'diagram' | 'mindmap'
+export type PageType = 'rich' | 'html' | 'diagram' | 'mindmap' | 'markdown'
 
 export interface Page {
   id: string

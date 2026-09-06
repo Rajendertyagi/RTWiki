@@ -36,6 +36,7 @@ import {
   IconFileCode,
   IconFileText,
   IconGitFork,
+  IconLetterM,
   IconNetwork,
   IconPalette,
   IconWorld
@@ -99,6 +100,7 @@ const ROW_HEIGHT_PX = 32
 const PAGE_TYPE_ICONS: Record<string, typeof IconFileText> = {
   rich: IconFileText,
   html: IconWorld,
+  markdown: IconLetterM,
   diagram: IconNetwork,
   mindmap: IconGitFork
 }
@@ -143,7 +145,11 @@ interface WbNodeLike {
  */
 function nodePageType(node: WbNodeLike): PageType | null {
   const value: unknown = node.data?.data?.pageType
-  return value === 'rich' || value === 'html' || value === 'diagram' || value === 'mindmap'
+  return value === 'rich' ||
+    value === 'html' ||
+    value === 'markdown' ||
+    value === 'diagram' ||
+    value === 'mindmap'
     ? value
     : null
 }

@@ -24,6 +24,10 @@ async function loadPlugins(language: CodeEditorLanguage): Promise<Plugin[]> {
       const estree = (await import('prettier/plugins/estree')).default as unknown as Plugin
       return [babel, estree]
     }
+    case 'markdown':
+      // Markdown has no standalone formatter wired into the source toolbar;
+      // callers only format html/css/javascript, so this stays empty.
+      return []
   }
 }
 
