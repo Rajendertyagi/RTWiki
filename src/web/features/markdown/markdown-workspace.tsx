@@ -7,6 +7,7 @@ import { updatePage } from '../../services/pages-api.js'
 import { CodeEditor } from '../html-editor/code-editor.js'
 import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
+import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { renderMarkdown } from './markdown-render.js'
 import classes from './markdown-workspace.module.css'
 
@@ -62,7 +63,7 @@ export default function MarkdownPageWorkspace({
     await updatePage(pid, { content })
   }
 
-  const { status, error, notifyEdit, retry, flush } = useAutosave({
+  const { status, error, notifyEdit, flush } = useAutosave({
     pageId,
     onSave: handleSave
   })
@@ -94,7 +95,7 @@ export default function MarkdownPageWorkspace({
 
   const html = useMemo(() => renderMarkdown(draft), [draft])
 
-  const wordCount = useMemo(() => draft.trim().match(/\S+/g)?.length ?? 0, [draft])
+  const editorPrefs = useEditorPreferences()
 
   if (parseFailed) {
     return (
@@ -140,7 +141,7 @@ export default function MarkdownPageWorkspace({
             onChange={updateMarkdown}
             language="markdown"
             label={UI_TEXT.markdownEditorLabel}
-            wordWrap
+            wordWrap={editorPrefs.wordWrap}
             onStatsChange={(s) => setStats((prev) => ({ ...prev, ...s }))}
           />
         </div>

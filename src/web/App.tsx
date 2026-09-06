@@ -2,25 +2,27 @@ import { Alert, Stack, Text } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { pageTypeLabel } from './components/page-type-badge.js'
 import { UI_TEXT } from './config/index.js'
 import { debugLog } from './diagnostics/debug-log.js'
 import { Dashboard } from './features/dashboard/dashboard.js'
 import { QuickFinder } from './features/finder/quick-finder.js'
+import type { EditorStatus } from './features/html-editor/use-codemirror.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
+import { SettingsWorkspace } from './features/settings/settings-workspace.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
 import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
-import { pageTypeLabel } from './components/page-type-badge.js'
-import { StatusBar } from './features/workspace/status-bar.js'
-import type { EditorStatus } from './features/html-editor/use-codemirror.js'
 import {
   type LayoutPreferences,
   loadLayoutPreferences,
+  resetLayoutPreferences,
   saveLayoutPreferences
 } from './features/workspace/layout-preferences.js'
+import { StatusBar } from './features/workspace/status-bar.js'
 import {
   loadWorkspaceSession,
   resolveRestorableWorkspace,
@@ -156,6 +158,8 @@ export function App(): JSX.Element {
   }, [controller.pages, controller.selectedPage])
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [newDialogType, setNewDialogType] = useState<PageType>('rich')
+  // Settings workspace view (replaces the page/dashboard in the main area).
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [shutdownToken, setShutdownToken] = useState<string | null>(null)
@@ -227,6 +231,32 @@ export function App(): JSX.Element {
     controller.selectPage(null)
   }
 
+  // Opens the Settings workspace, flushing pending edits first so leaving a
+  // page never silently drops unsaved work.
+  const handleOpenSettings = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    setSettingsOpen(true)
+  }
+
+  const handleCloseSettings = (): void => {
+    setSettingsOpen(false)
+  }
+
+  // Resets persisted layout preferences and re-applies the defaults live.
+  const handleLayoutReset = (): void => {
+    const defaults = resetLayoutPreferences()
+    setLayoutPrefs(defaults)
+    setTreeWidth(defaults.treeWidth)
+    setTreeOpen(!defaults.treeCollapsed)
+  }
+
   const handleSelectPage = async (id: string | null): Promise<void> => {
     if (flushRef.current) {
       const ok = await flushRef.current()
@@ -254,7 +284,9 @@ export function App(): JSX.Element {
   } | null>(null)
 
   // Lifted editor status for the global application status bar.
-  const [pageSaveState, setPageSaveState] = useState<'clean' | 'saving' | 'saved' | 'error'>('saved')
+  const [pageSaveState, setPageSaveState] = useState<'clean' | 'saving' | 'saved' | 'error'>(
+    'saved'
+  )
   const [pageSaveError, setPageSaveError] = useState<string | null>(null)
   const [editorStatus, setEditorStatus] = useState<EditorStatus | null>(null)
 
@@ -531,6 +563,8 @@ export function App(): JSX.Element {
             onSearchFocus={handleSearchFocus}
             onNewPage={handleNewPage}
             onStop={handleStop}
+            onOpenSettings={() => void handleOpenSettings()}
+            settingsOpen={settingsOpen}
             treeOpen={treeOpen}
             onToggleTree={handleToggleTree}
           />
@@ -604,7 +638,13 @@ export function App(): JSX.Element {
             </Alert>
           ) : null}
 
-          {controller.selectedPage ? (
+          {settingsOpen ? (
+            <SettingsWorkspace
+              layoutPrefs={layoutPrefs}
+              onLayoutReset={handleLayoutReset}
+              onClose={handleCloseSettings}
+            />
+          ) : controller.selectedPage ? (
             <PageWorkspace
               page={controller.selectedPage}
               breadcrumb={breadcrumb}

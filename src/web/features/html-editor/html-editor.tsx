@@ -8,12 +8,15 @@ import {
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
 import { IconInfoCircle } from '@tabler/icons-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { createThrottledEmitter, debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { PreviewFrame } from '../html/preview-frame.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
-import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
+import {
+  setWordWrap as setWordWrapPref,
+  useEditorPreferences
+} from '../workspace/editor-preferences.js'
 // NOTE: StatusBar is now rendered once, globally, in the app-shell footer
 // (see App.tsx). It is no longer mounted per HTML source view.
 import { CodeEditor } from './code-editor.js'
@@ -81,7 +84,7 @@ export default function HtmlEditorWorkspace({
   onExitSource,
   onSourceFieldChange,
   onSaveContent,
-  breadcrumbLabels = [],
+  breadcrumbLabels: _breadcrumbLabels = [],
   onFlushRef,
   onSaveStateChange,
   onEditorStatusChange,
@@ -309,7 +312,10 @@ export default function HtmlEditorWorkspace({
   const modSaveKeys = useMemo(() => [{ key: 'Mod-s', run: manualSave }], [manualSave])
 
   // ---- IDE state: toolbar-controlled editor presentation -----------------
-  const [wordWrap, setWordWrap] = useState(true)
+  // Word wrap is a global editor preference (Settings > Editor) so it applies
+  // consistently across every code editor; the toolbar toggle updates it.
+  const editorPrefs = useEditorPreferences()
+  const wordWrap = editorPrefs.wordWrap
   const [fontSize, setFontSize] = useState(14)
   const [fullscreen, setFullscreen] = useState(false)
   const [stats, setStats] = useState<EditorStatus>({
@@ -411,7 +417,7 @@ export default function HtmlEditorWorkspace({
             getView={() => getViewRef.current?.() ?? null}
             onFormat={() => void handleFormat()}
             wordWrap={wordWrap}
-            onToggleWordWrap={() => setWordWrap((w) => !w)}
+            onToggleWordWrap={() => setWordWrapPref(!wordWrap)}
             fontSize={fontSize}
             onFontSizeChange={setFontSize}
             fullscreen={fullscreen}
@@ -459,7 +465,9 @@ export default function HtmlEditorWorkspace({
     onExitSource,
     save,
     content.jsEnabled,
-    toggleJs
+    toggleJs,
+    openFind,
+    pageId
   ])
 
   useEffect(() => {
@@ -495,7 +503,8 @@ export default function HtmlEditorWorkspace({
       }
     }
     host.addEventListener('keydown', listener, { capture: true })
-    return () => host.removeEventListener('keydown', listener, { capture: true } as EventListenerOptions)
+    return () =>
+      host.removeEventListener('keydown', listener, { capture: true } as EventListenerOptions)
   }, [handleFormat, openFind])
 
   if (!parseResult.ok) {
@@ -550,7 +559,7 @@ export default function HtmlEditorWorkspace({
           getView={() => getViewRef.current?.() ?? null}
           onFormat={() => void handleFormat()}
           wordWrap={wordWrap}
-          onToggleWordWrap={() => setWordWrap((w) => !w)}
+          onToggleWordWrap={() => setWordWrapPref(!wordWrap)}
           fontSize={fontSize}
           onFontSizeChange={setFontSize}
           fullscreen={fullscreen}

@@ -1,0 +1,147 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  min-height: 0;
+}
+
+.levelChip {
+  text-transform: none;
+}
+
+.categorySelect {
+  max-width: 220px;
+}
+
+.logRegion {
+  flex: 1;
+  min-height: 220px;
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-sm);
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  padding: var(--mantine-spacing-xs);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rtwiki-border, var(--mantine-color-default-border)) transparent;
+}
+
+.emptyState {
+  padding: var(--mantine-spacing-md);
+  text-align: center;
+}
+
+.row {
+  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.rowHeader:hover {
+  background: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+}
+
+.rowChevron {
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+}
+
+.rowChevronOpen {
+  transform: rotate(180deg);
+}
+
+.time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+}
+
+.level {
+  flex: 0 0 auto;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.level-debug {
+  background: var(--mantine-color-gray-light);
+  color: var(--mantine-color-gray-light-color);
+}
+
+.level-info {
+  background: var(--mantine-color-blue-light);
+  color: var(--mantine-color-blue-light-color);
+}
+
+.level-warn {
+  background: var(--mantine-color-yellow-light);
+  color: var(--mantine-color-yellow-light-color);
+}
+
+.level-error {
+  background: var(--mantine-color-red-light);
+  color: var(--mantine-color-red-light-color);
+}
+
+.category {
+  flex: 0 0 auto;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+}
+
+.event {
+  flex: 0 0 auto;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  color: var(--rtwiki-text, var(--mantine-color-text));
+}
+
+.summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+}
+
+.meta {
+  padding: 4px 4px 8px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metaRow {
+  display: flex;
+  gap: 8px;
+  font-size: var(--mantine-font-size-xs);
+}
+
+.metaKey {
+  flex: 0 0 90px;
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+}
+
+.metaValue {
+  color: var(--rtwiki-text, var(--mantine-color-text));
+  word-break: break-all;
+}

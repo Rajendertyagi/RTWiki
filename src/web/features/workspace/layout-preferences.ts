@@ -83,3 +83,19 @@ export function saveLayoutPreferences(prefs: LayoutPreferences): void {
     // Privacy modes can throw on access; preferences stay session-only.
   }
 }
+
+/**
+ * Clears the persisted preference store and returns the defaults. Used by the
+ * Settings > Layout reset action; the caller re-applies the returned defaults
+ * to the live shell. Never touches tabs, page data or session state.
+ */
+export function resetLayoutPreferences(): LayoutPreferences {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(LAYOUT_PREFS_KEY)
+    }
+  } catch {
+    // Privacy modes can throw on access; the in-memory reset still applies.
+  }
+  return defaultLayoutPreferences()
+}

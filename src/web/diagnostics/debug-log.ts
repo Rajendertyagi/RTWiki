@@ -163,6 +163,75 @@ function deactivateSession(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// In-memory live viewer buffer (Settings > Debug Logs)
+// ---------------------------------------------------------------------------
+//
+// The same allowlisted events that are flushed to the server are mirrored into
+// a bounded ring buffer here so the Settings live viewer can display them. This
+// is NOT a parallel logging system: it reuses the single debugLog() entry
+// point and the exact same event shape. The buffer holds only IDs, codes,
+// lengths and other safe fields (never note content), and is capped so a long
+// session cannot slow the app.
+
+export type DebugLogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+export interface DebugLogEntry {
+  id: number
+  ts: number
+  cat: DebugEventCategory
+  evt: DebugEventName
+  fields: DebugLogFields
+  level: DebugLogLevel
+}
+
+const DISPLAY_BUFFER_MAX = 1000
+
+let displayBuffer: DebugLogEntry[] = []
+let displaySeq = 0
+const displayListeners = new Set<(entries: DebugLogEntry[]) => void>()
+
+/** Heuristic level derived from the existing event taxonomy (no new field). */
+function deriveLevel(cat: DebugEventCategory, evt: DebugEventName): DebugLogLevel {
+  if (cat === 'error') return 'error'
+  if (/fail|error|reject/.test(evt)) return 'error'
+  if (/warn|invalid|blank|stale|hint|cancel|skip/.test(evt)) return 'warn'
+  if (cat === 'navigation' || cat === 'preview') return 'info'
+  return 'debug'
+}
+
+function pushDisplay(entry: DebugLogEntry): void {
+  displayBuffer.push(entry)
+  if (displayBuffer.length > DISPLAY_BUFFER_MAX) {
+    displayBuffer.splice(0, displayBuffer.length - DISPLAY_BUFFER_MAX)
+  }
+  for (const listener of displayListeners) listener(displayBuffer)
+}
+
+/** Subscribes to live log updates; immediately receives the current buffer. */
+export function subscribeDebugLog(listener: (entries: DebugLogEntry[]) => void): () => void {
+  displayListeners.add(listener)
+  listener(displayBuffer)
+  return () => {
+    displayListeners.delete(listener)
+  }
+}
+
+/** Snapshot of the current in-memory buffer (read-only use). */
+export function getDebugLogEntries(): readonly DebugLogEntry[] {
+  return displayBuffer
+}
+
+/**
+ * Clears only the visible viewer buffer. It must never delete persistent
+ * diagnostic files — the server owns those; this only resets the on-screen
+ * stream.
+ */
+export function clearDebugLogView(): void {
+  displayBuffer = []
+  for (const listener of displayListeners) listener(displayBuffer)
+}
+
 /**
  * Records one allowlisted debug event. Type-level guarantee: the event name
  * must belong to the declared category. No-op when Debug Mode is off.
@@ -173,7 +242,16 @@ export function debugLog<C extends DebugEventCategory>(
   fields: DebugLogFields = {}
 ): void {
   if (!enabled || sessionId === null) return
-  queue.push({ ts: Date.now(), cat: category, evt: event, fields })
+  const ts = Date.now()
+  queue.push({ ts, cat: category, evt: event, fields })
+  pushDisplay({
+    id: displaySeq++,
+    ts,
+    cat: category,
+    evt: event,
+    fields,
+    level: deriveLevel(category, event)
+  })
   if (queue.length > DEBUG_LOG_MAX_QUEUE) {
     // Drop oldest to keep memory bounded during event storms.
     queue.splice(0, queue.length - DEBUG_LOG_MAX_QUEUE)
