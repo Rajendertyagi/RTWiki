@@ -90,7 +90,7 @@ export interface PageTreeHostOptions {
  * math and cannot read it from the stylesheet, so this constant mirrors the
  * token by hand. Change both together; never change density here alone.
  */
-const ROW_HEIGHT_PX = 32
+const ROW_HEIGHT_PX = 30
 
 /**
  * RTWiki page-type → Tabler icon. Real pages share a 16px visual weight; the
@@ -269,7 +269,9 @@ export class PageTreeHost {
         if (++frames < 5) requestAnimationFrame(tick)
       }
       requestAnimationFrame(tick)
-      Promise.resolve(activation).finally(restore).catch(() => {})
+      Promise.resolve(activation)
+        .finally(restore)
+        .catch(() => {})
     }
     // Status changes do not re-run the render hook: mirror aria-selected.
     this.syncRowSelected(previous, false)

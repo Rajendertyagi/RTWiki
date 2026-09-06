@@ -159,7 +159,9 @@
   background: color-mix(in srgb, var(--mantine-color-blue-filled) 14%, transparent);
 }
 
-/* Expander: disclosure control only. Click target and glyph from tokens. */
+/* Expander: disclosure control only. Click target and glyph from tokens. A
+   subtle rounded hover/focus fill signals it is interactive without a heavy
+   outline; the glyph is a solid chevron so it reads clearly in either theme. */
 :global(i.wb-expander) {
   color: var(--wb-expander-color);
   cursor: pointer;
@@ -167,19 +169,30 @@
   height: var(--rtwiki-tree-expander-size) !important;
   padding: 0;
   margin: 0;
+  border-radius: var(--mantine-radius-xs);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: background-color 80ms ease;
+}
+
+:global(div.wb-row:hover i.wb-expander),
+:global(div.wb-row.wb-focus i.wb-expander) {
+  background: color-mix(
+    in srgb,
+    var(--rtwiki-text-muted, var(--mantine-color-dimmed)) 16%,
+    transparent
+  );
 }
 
 :global(i.rtw-expander::before) {
-  content: "\25B8";
+  content: "\25B6";
   font-size: var(--rtwiki-tree-glyph-size);
   line-height: 1;
 }
 
 :global(i.rtw-expander.rtw-expanded::before) {
-  content: "\25BE";
+  content: "\25BC";
 }
 
 /* Page-type icon slot filled by the render hook with a Tabler SVG. */
@@ -191,6 +204,13 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+}
+
+/* Leaf and subfile rows render no expander, so reserve its width before the
+   icon. Without this the icon floats left of the parent's icon column and
+   looks stranded; the spacer keeps every type's icon on one vertical line. */
+:global(span.wb-node:not(:has(i.wb-expander)) i.rtw-page-icon) {
+  margin-left: calc(var(--rtwiki-tree-expander-size) + var(--rtwiki-tree-expander-icon-gap));
 }
 
 :global(i.rtw-page-icon svg) {

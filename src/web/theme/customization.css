@@ -7,26 +7,27 @@
  * light/dark stay consistent. Do not restate these numbers elsewhere.
  */
 :root {
-  /* Row geometry. */
-  --rtwiki-tree-row-height: 32px;
-  --rtwiki-tree-row-inner-height: 30px;
-  --rtwiki-tree-subfile-row-height: 28px;
+  /* Row geometry — tight but comfortable: 30px rows keep a full click target
+     and visible focus ring while reading denser than the former 32px. */
+  --rtwiki-tree-row-height: 30px;
+  --rtwiki-tree-row-inner-height: 28px;
+  --rtwiki-tree-subfile-row-height: 26px;
   --rtwiki-tree-indent-step: 16px;
-  /* Chevron: 24px click target, ~14px visible glyph. */
-  --rtwiki-tree-expander-size: 24px;
+  /* Chevron: 22px click target, ~14px visible glyph, sits close to the icon. */
+  --rtwiki-tree-expander-size: 22px;
   --rtwiki-tree-glyph-size: 14px;
   /* Icon slots. */
   --rtwiki-tree-icon-size: 16px;
-  --rtwiki-tree-icon-outer-height: 24px;
+  --rtwiki-tree-icon-outer-height: 22px;
   --rtwiki-tree-subfile-icon-size: 14px;
-  /* Horizontal rhythm: chevron -> icon 4px, icon -> title 6px. */
-  --rtwiki-tree-expander-icon-gap: 4px;
+  /* Horizontal rhythm: chevron -> icon 3px (close), icon -> title 6px. */
+  --rtwiki-tree-expander-icon-gap: 3px;
   --rtwiki-tree-icon-title-gap: 6px;
   /* Row outer padding. */
   --rtwiki-tree-row-padding-left: 6px;
   --rtwiki-tree-row-padding-right: 8px;
-  /* Reserved trailing space so the hover action button never shifts titles. */
-  --rtwiki-tree-action-reserve: 22px;
+  /* Reserved trailing space so the hover action button never overlaps titles. */
+  --rtwiki-tree-action-reserve: 24px;
   /* Context menu width: fixed and compact, independent of title length. */
   --rtwiki-tree-menu-width: 240px;
   --rtwiki-drop-target-border: var(--mantine-color-blue-6);
