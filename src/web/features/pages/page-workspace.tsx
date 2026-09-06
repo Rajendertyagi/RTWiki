@@ -22,16 +22,15 @@ const RichEditor = lazy(() =>
 // (Mermaid itself is further code-split inside the render pipeline).
 const MermaidPageWorkspace = lazy(() => import('../visual-pages/mermaid-workspace.js'))
 
+// Markdown pages: source editor + rendered preview, lazily loaded.
+const MarkdownPageWorkspace = lazy(() => import('../markdown/markdown-workspace.js'))
+
 interface PageWorkspaceProps {
   page: Page
   /** Display-only parent chain for the open page (no navigation). */
   breadcrumb?: string[]
   /** Persists editor content and syncs the pages list. */
   onSaveContent?: (id: string, content: string) => Promise<boolean>
-  isDirty: boolean
-  saveState: 'clean' | 'saving' | 'saved' | 'error'
-  onSave: () => Promise<boolean>
-  onRetry: () => Promise<boolean>
   onBack: () => void
   /**
    * Renames THIS page by id — the same (id, title) contract as the tree, so
@@ -47,6 +46,8 @@ interface PageWorkspaceProps {
   }) => void
   /** Active HTML source subfile for this page; null = rendered preview. */
   htmlSourceField?: 'html' | 'css' | 'javascript' | null
+  /** Switches the active HTML source subfile (or back to preview). */
+  onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
   /** All living pages (id+title) for internal-link insertion. */
   linkablePages?: Array<{ id: string; title: string }>
   /** Opens a page through the controller/tab flow. */
@@ -59,10 +60,6 @@ export function PageWorkspace({
   page,
   breadcrumb = [],
   onSaveContent,
-  isDirty,
-  saveState,
-  onSave,
-  onRetry,
   onBack,
   onRenamePage,
   onDuplicate,
@@ -70,6 +67,7 @@ export function PageWorkspace({
   onFlushRef,
   onSaveStateChange,
   htmlSourceField = null,
+  onSourceFieldChange,
   onExitHtmlSource,
   linkablePages = [],
   onOpenPageLink
@@ -99,10 +97,6 @@ export function PageWorkspace({
 
       <EditorHeader
         page={page}
-        isDirty={isDirty}
-        saveState={saveState}
-        onSave={onSave}
-        onRetry={onRetry}
         onBack={onBack}
         onRename={(title) => onRenamePage(page.id, title)}
         onDuplicate={onDuplicate}
@@ -124,6 +118,7 @@ export function PageWorkspace({
           onOpenPageLink={onOpenPageLink}
           sourceField={htmlSourceField}
           onExitSource={onExitHtmlSource}
+          onSourceFieldChange={onSourceFieldChange}
           onSaveContent={onSaveContent}
           onBack={onBack}
           onFlushRef={onFlushRef}
@@ -149,6 +144,7 @@ function PageEditors({
   onOpenPageLink,
   sourceField,
   onExitSource,
+  onSourceFieldChange,
   onSaveContent,
   onBack,
   onFlushRef,
@@ -161,6 +157,7 @@ function PageEditors({
   onOpenPageLink?: (pageId: string) => void
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
+  onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
@@ -213,12 +210,27 @@ function PageEditors({
       </Suspense>
     )
   }
+  if (page.pageType === 'markdown') {
+    return (
+      <Suspense fallback={<VisualWorkspaceSkeleton />}>
+        <MarkdownPageWorkspace
+          key={page.id}
+          pageId={page.id}
+          storedContent={page.content}
+          onSaveContent={onSaveContent}
+          onFlushRef={onFlushRef}
+          onSaveStateChange={onSaveStateChange}
+        />
+      </Suspense>
+    )
+  }
   return (
     <HtmlEditorSurface
       page={page}
       breadcrumb={breadcrumb ?? []}
       sourceField={sourceField}
       onExitSource={onExitSource}
+      onSourceFieldChange={onSourceFieldChange}
       onSaveContent={onSaveContent}
       onBack={onBack}
       onFlushRef={onFlushRef}
@@ -237,6 +249,7 @@ function HtmlEditorSurface({
   breadcrumb,
   sourceField,
   onExitSource,
+  onSourceFieldChange,
   onSaveContent,
   onBack,
   onFlushRef,
@@ -246,6 +259,7 @@ function HtmlEditorSurface({
   breadcrumb: string[]
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
+  onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
@@ -267,6 +281,7 @@ function HtmlEditorSurface({
           storedContent={page.content}
           sourceField={sourceField}
           onExitSource={onExitSource}
+          onSourceFieldChange={onSourceFieldChange}
           onSaveContent={onSaveContent}
           breadcrumbLabels={[...breadcrumb, page.title]}
           onBack={onBack}

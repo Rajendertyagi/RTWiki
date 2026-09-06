@@ -57,8 +57,9 @@
 /*
  * Non-scrolling flex viewport. Never scrolls itself: the dashboard owns its
  * scroll region, and each page type owns scrolling inside its editor surface.
- * Sole horizontal padding layer for main content (page-workspace .content
- * keeps vertical padding only).
+ * Vertical padding only: the workspace chrome rows (tab strip, toolbars,
+ * header, status bar) span the full width and meet the tree-pane boundary
+ * flush. The dashboard restores its own horizontal inset below.
  */
 .mainContent {
   display: flex;
@@ -66,5 +67,8 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  padding: var(--mantine-spacing-md);
+  /* Flush at the tree-pane boundary: the tab strip already sits at the
+   * viewport top, so no vertical padding here — chrome rows meet with only
+   * their shared 1px separators. The dashboard restores its own inset. */
+  padding: 0;
 }

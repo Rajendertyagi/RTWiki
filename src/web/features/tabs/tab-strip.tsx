@@ -1,5 +1,6 @@
-import { ActionIcon, Tooltip } from '@mantine/core'
-import { IconPlus, IconX } from '@tabler/icons-react'
+import { ActionIcon } from '@mantine/core'
+import { IconX } from '@tabler/icons-react'
+import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './tab-strip.module.css'
 import type { OpenTab } from './tabs-model.js'
@@ -9,20 +10,16 @@ interface TabStripProps {
   activePageId: string | null
   onSelect: (pageId: string) => void
   onClose: (pageId: string) => void
-  onNew: () => void
 }
 
 /**
  * In-session document tabs. Session-only: tabs reference open pages and are
  * never persisted. Horizontal overflow scrolls instead of crushing content.
+ * Compact and consistent: a small page-type icon, the truncated title, and a
+ * close control. The separate "new page" affordance lives in the launcher
+ * rail, so no `+` button is rendered here.
  */
-export function TabStrip({
-  tabs,
-  activePageId,
-  onSelect,
-  onClose,
-  onNew
-}: TabStripProps): JSX.Element {
+export function TabStrip({ tabs, activePageId, onSelect, onClose }: TabStripProps): JSX.Element {
   return (
     <div className={classes.strip} role="tablist" aria-label={UI_TEXT.tabStripLabel}>
       <div className={classes.tabScroller}>
@@ -43,6 +40,9 @@ export function TabStrip({
                 }
               }}
             >
+              <span className={classes.tabTypeIcon}>
+                <PageTypeIcon pageType={tab.pageType} size={14} />
+              </span>
               <span className={classes.tabTitle}>{tab.title}</span>
               <ActionIcon
                 variant="subtle"
@@ -61,17 +61,6 @@ export function TabStrip({
           )
         })}
       </div>
-      <Tooltip label={UI_TEXT.utilityRailNewPage} position="bottom">
-        <ActionIcon
-          variant="subtle"
-          size="sm"
-          className={classes.newButton}
-          aria-label={UI_TEXT.utilityRailNewPage}
-          onClick={onNew}
-        >
-          <IconPlus size={16} />
-        </ActionIcon>
-      </Tooltip>
     </div>
   )
 }

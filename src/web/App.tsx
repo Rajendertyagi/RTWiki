@@ -30,8 +30,6 @@ import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
 import { recordRecentPage } from './util/recent-pages.js'
 
-type SaveState = 'clean' | 'saving' | 'saved' | 'error'
-
 /** sessionStorage adapter; unavailable storage degrades to no persistence. */
 function createSessionStorage(): WorkspaceStorage | null {
   try {
@@ -163,8 +161,6 @@ export function App(): JSX.Element {
   )
   const [shutdownError, setShutdownError] = useState<string | null>(null)
   const [pendingFlushError, setPendingFlushError] = useState<string | null>(null)
-  const [saveState, setSaveState] = useState<SaveState>('clean')
-  const [isDirty, setIsDirty] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const flushRef = useRef<(() => Promise<boolean>) | null>(null)
 
@@ -442,22 +438,6 @@ export function App(): JSX.Element {
     controller.selectPage(null)
   }
 
-  const handleSave = useCallback(async (): Promise<boolean> => {
-    if (flushRef.current) {
-      const ok = await flushRef.current()
-      return ok
-    }
-    return true
-  }, [])
-
-  const handleRetry = useCallback(async (): Promise<boolean> => {
-    if (flushRef.current) {
-      // Retry is handled by the editor's own retry
-      return true
-    }
-    return false
-  }, [])
-
   if (shutdownStatus === 'stopped') {
     return (
       <Stack align="center" justify="center" h="100vh">
@@ -485,7 +465,6 @@ export function App(): JSX.Element {
               void handleSelectPage(id)
             }}
             onClose={(id) => void handleTabClose(id)}
-            onNew={handleNewPage}
           />
         }
         utilityRail={
@@ -581,10 +560,6 @@ export function App(): JSX.Element {
               }
               onExitHtmlSource={() => void handleExitHtmlSource()}
               onSaveContent={controller.savePageContent}
-              isDirty={isDirty}
-              saveState={saveState}
-              onSave={handleSave}
-              onRetry={handleRetry}
               onBack={handleWorkspaceClose}
               onRenamePage={handleRenamePage}
               onDuplicate={handleWorkspaceDuplicate}
@@ -592,10 +567,7 @@ export function App(): JSX.Element {
               onFlushRef={(fn) => {
                 flushRef.current = fn
               }}
-              onSaveStateChange={({ isDirty: dirty, saveState: state }) => {
-                setIsDirty(dirty)
-                setSaveState(state)
-              }}
+              onSaveStateChange={() => {}}
             />
           ) : (
             <Dashboard

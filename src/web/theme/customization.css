@@ -33,6 +33,29 @@
 }
 
 /*
+ * Workspace chrome geometry (Compact Workspace Chrome). Single named source
+ * for every top/bottom chrome measurement: tab strip, toolbars, page header
+ * and status bar all read these so the rows meet cleanly with only their
+ * shared 1px separators. Values derive from Mantine tokens where possible so
+ * light/dark stay consistent. Do not restate these numbers elsewhere.
+ */
+:root {
+  /* Surfaces and separators. */
+  --rtwiki-chrome-bg: var(--mantine-color-body);
+  --rtwiki-chrome-surface: var(--mantine-color-body);
+  --rtwiki-chrome-border: var(--mantine-color-default-border);
+  /* Shared horizontal chrome padding (left/right of each row). */
+  --rtwiki-chrome-pad-x: var(--mantine-spacing-sm);
+  /* Row heights. */
+  --rtwiki-tab-height: 34px;
+  --rtwiki-toolbar-height: 42px;
+  --rtwiki-header-height: 44px;
+  --rtwiki-statusbar-height: 26px;
+  /* Compact divider between toolbar groups. */
+  --rtwiki-chrome-divider: var(--mantine-color-default-border);
+}
+
+/*
  * Application height-chain root (Slice 1: scroll ownership). The shell
  * (.main in app-shell.module.css) is the single definite-height flex column
  * (100dvh); every region below it binds through flex with min-height: 0.

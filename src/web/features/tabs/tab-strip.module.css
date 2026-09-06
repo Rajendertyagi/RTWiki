@@ -3,10 +3,10 @@
   align-items: center;
   flex-shrink: 0;
   gap: var(--mantine-spacing-xs);
-  min-height: 36px;
-  padding: 0 var(--mantine-spacing-xs);
-  border-bottom: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
+  min-height: var(--rtwiki-tab-height);
+  padding: 0 var(--rtwiki-chrome-pad-x);
+  border-bottom: 1px solid var(--rtwiki-chrome-border);
+  background: var(--rtwiki-chrome-bg);
 }
 
 .tabScroller {
@@ -23,10 +23,11 @@
 .tab {
   display: inline-flex;
   align-items: center;
-  gap: var(--rtwiki-gap-xs, 4px);
-  max-width: 200px;
+  gap: var(--mantine-spacing-xs);
+  max-width: 160px;
   min-width: 0;
-  padding: 4px 8px;
+  height: calc(var(--rtwiki-tab-height) - 6px);
+  padding: 0 6px;
   border-radius: var(--mantine-radius-sm) var(--mantine-radius-sm) 0 0;
   border: 1px solid transparent;
   border-bottom: none;
@@ -40,7 +41,7 @@
 
 .tabActive {
   background: var(--mantine-color-body);
-  border-color: var(--mantine-color-default-border);
+  border-color: var(--rtwiki-chrome-border);
 }
 
 .tab:focus-visible {
@@ -59,6 +60,7 @@
   flex: 0 0 auto;
 }
 
-.newButton {
+.tabTypeIcon {
   flex: 0 0 auto;
+  display: inline-flex;
 }

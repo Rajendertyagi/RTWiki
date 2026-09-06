@@ -50,7 +50,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
 
   return (
     <div
-      className="ide-toolbar"
+      className={classes.toolbar}
       role="toolbar"
       aria-label={UI_TEXT.ideToolbarLabel}
       data-testid="source-toolbar"

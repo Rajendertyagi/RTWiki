@@ -1,3 +1,23 @@
+/* Source toolbar root: one compact horizontal row. The previous global
+ * `ide-toolbar` class was never defined in CSS, so the buttons fell back to
+ * block layout and stacked vertically. This module class is the single owner
+ * of the row geometry and matches the Rich toolbar height. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  height: var(--rtwiki-toolbar-height);
+  padding-inline: var(--rtwiki-chrome-pad-x);
+  border-bottom: 1px solid var(--rtwiki-chrome-border);
+  background: var(--rtwiki-chrome-bg);
+  /* Scroll horizontally on narrow widths; never wrap into vertical columns. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
 /* Text-glyph labels for toolbar actions that carry no icon.
  * Static presentational rules extracted from TSX (inventory #39);
  * values preserved exactly. */

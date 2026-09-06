@@ -18,13 +18,13 @@
  * skeleton placeholder occupies exactly the same space as the real controls.
  */
 .toolbarRow {
-  height: 42px;
+  height: var(--rtwiki-toolbar-height);
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding-inline: var(--mantine-spacing-sm);
-  background: var(--rtwiki-surface, var(--mantine-color-body));
-  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  padding-inline: var(--rtwiki-chrome-pad-x);
+  background: var(--rtwiki-chrome-surface);
+  border-bottom: 1px solid var(--rtwiki-chrome-border);
 }
 
 .toolbarSkeleton {
@@ -50,7 +50,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: var(--mantine-spacing-md) 0;
+  padding: 0;
   background: var(--rtwiki-background, var(--mantine-color-body));
 }
 
