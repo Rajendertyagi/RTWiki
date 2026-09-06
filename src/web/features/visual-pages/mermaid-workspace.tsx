@@ -20,12 +20,14 @@ import {
   IconZoomOut
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
+import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { DIAGRAM_TEMPLATES } from '../rich-editor/insert-blocks.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
+import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
 import classes from './mermaid-workspace.module.css'
 
 /**
@@ -266,14 +268,8 @@ export default function MermaidPageWorkspace({
     </div>
   )
 
-  const statusLabel =
-    status === 'error'
-      ? UI_TEXT.saveStatusError
-      : status === 'saving'
-        ? UI_TEXT.saveStatusSaving
-        : isDirty
-          ? '…'
-          : UI_TEXT.saveStatusSaved
+  const statusBarSaveState: StatusSaveState =
+    status === 'error' ? 'error' : status === 'saving' ? 'saving' : 'saved'
 
   return (
     <div
@@ -403,18 +399,22 @@ export default function MermaidPageWorkspace({
         </>
       )}
 
-      <div className={classes.statusRow} data-testid={`${pageType}-save-status`}>
-        <Text size="xs" c={status === 'error' ? 'red' : 'dimmed'}>
-          {status === 'error'
-            ? `${UI_TEXT.saveStatusError}${error ? `: ${error}` : ''}`
-            : statusLabel}
+      <StatusBar
+        pageTypeLabel={pageTypeLabel(pageType)}
+        saveState={statusBarSaveState}
+        saveError={status === 'error' ? error : null}
+        onRetry={retry}
+      >
+        <Text size="xs" c="dimmed" data-testid={`${pageType}-zoom-status`}>
+          {Math.round(zoom * 100)}%
         </Text>
-        {status === 'error' ? (
-          <Button size="compact-xs" variant="light" ml="xs" onClick={() => void retry()}>
-            {UI_TEXT.saveStatusRetry}
-          </Button>
-        ) : null}
-      </div>
+        <Text size="xs" c="dimmed">
+          {fit ? UI_TEXT.diagramFitLabel : UI_TEXT.diagramActualSizeLabel}
+        </Text>
+        <Text size="xs" c={errorCode || liveError ? 'red' : 'dimmed'}>
+          {errorCode || liveError ? UI_TEXT.diagramErrorTitle : UI_TEXT.saveStatusSaved}
+        </Text>
+      </StatusBar>
     </div>
   )
 }

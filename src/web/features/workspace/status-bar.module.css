@@ -1,0 +1,40 @@
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-md);
+  flex-shrink: 0;
+  height: var(--rtwiki-statusbar-height);
+  padding: 0 var(--rtwiki-chrome-pad-x);
+  border-top: 1px solid var(--rtwiki-chrome-border);
+  background: var(--rtwiki-chrome-bg);
+  /* One compact line; scroll horizontally on narrow widths instead of wrapping. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  flex: 1;
+  min-width: 0;
+}
+
+.right {
+  flex-shrink: 0;
+}
+
+.typeLabel {
+  flex-shrink: 0;
+}
+
+.saveState {
+  flex-shrink: 0;
+}
+
+.field {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+}

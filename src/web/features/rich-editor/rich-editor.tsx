@@ -9,6 +9,7 @@ import { Alert, Button, Stack, Text, Tooltip } from '@mantine/core'
 import { parseInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { IconAlertCircle, IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
@@ -16,6 +17,7 @@ import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
 import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
 import { RightSidebar } from '../workspace/right-sidebar.js'
+import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
 import {
   containUnknownBlocks,
   createDefaultDocument,
@@ -36,6 +38,29 @@ import { RTSideMenu } from './side-menu.js'
 import { RTSuggestionMenu, RTWikiLinkMenu } from './slash-menu.js'
 import { useAutosave } from './use-autosave.js'
 import type { LinkablePage } from './wiki-link.js'
+
+/**
+ * Cheap word count over a BlockNote document. Walks block inline content only
+ * (no deep recursion into nested structures beyond one level); runs on every
+ * change but stays O(n) over visible text, so it never lags editing.
+ */
+function countBlockWords(document: ReadonlyArray<{ content?: unknown }>): number {
+  let words = 0
+  for (const block of document) {
+    const inline = block.content
+    if (!Array.isArray(inline)) continue
+    for (const node of inline as ReadonlyArray<unknown>) {
+      const text =
+        typeof node === 'object' && node !== null && 'text' in node
+          ? (node as { text?: unknown }).text
+          : undefined
+      if (typeof text !== 'string') continue
+      const matches = text.trim().match(/\S+/g)
+      if (matches) words += matches.length
+    }
+  }
+  return words
+}
 
 /**
  * Temporary responsive collapse (Slice 2, Option B): at or below this
@@ -228,6 +253,7 @@ export function RichEditor({
           notifyEdit={notifyEdit}
           status={status}
           error={error}
+          retry={retry}
           createdDate={createdDate}
           updatedDate={updatedDate}
           onEditorReady={onEditorReady}
@@ -246,6 +272,7 @@ interface InnerProps {
   notifyEdit: (content: string) => void
   status: AutosaveStatus
   error: string | null
+  retry: () => Promise<boolean>
   createdDate?: string
   updatedDate?: string
   /** Hands the live editor instance to the parent once initialized. */
@@ -263,6 +290,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     notifyEdit,
     status,
     error,
+    retry,
     createdDate,
     updatedDate,
     onEditorReady,
@@ -289,6 +317,9 @@ function RichEditorInner(props: InnerProps): JSX.Element {
   const [outline, setOutline] = useState<DocumentOutlineEntry[]>(() =>
     extractOutline(initialDocument)
   )
+  const [wordCount, setWordCount] = useState(() => countBlockWords(initialDocument))
+  const statusBarSaveState: StatusSaveState =
+    status === 'error' ? 'error' : status === 'saving' ? 'saving' : 'saved'
   // Right-sidebar geometry (Slice 2): the explicit width/collapse are the
   // user's persisted preference; the temporary narrow-window collapse is
   // derived from the viewport and never persisted. Effective visibility is
@@ -384,6 +415,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
       const content = JSON.stringify(editor.document)
       notifyEdit(content)
       setOutline(extractOutline(editor.document))
+      setWordCount(countBlockWords(editor.document))
     })
     return () => {
       subscription()
@@ -549,6 +581,18 @@ function RichEditorInner(props: InnerProps): JSX.Element {
           </>
         )}
       </div>
+      <StatusBar
+        pageTypeLabel={pageTypeLabel('rich')}
+        saveState={statusBarSaveState}
+        saveError={status === 'error' ? error : null}
+        onRetry={retry}
+      >
+        {wordCount > 0 ? (
+          <Text size="xs" c="dimmed" data-testid="status-word-count">
+            {wordCount} words
+          </Text>
+        ) : null}
+      </StatusBar>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { Box, Button, Group, Stack, Switch, Text, Tooltip } from '@mantine/core'
+import { Box, Button, Group, SegmentedControl, Stack, Switch, Text, Tooltip } from '@mantine/core'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import {
   createEmptyHtmlContent,
@@ -9,10 +9,12 @@ import {
 } from '@rtwiki/shared/schemas/html-content'
 import { IconInfoCircle } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { createThrottledEmitter, debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { PreviewFrame } from '../html/preview-frame.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
+import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
 import { CodeEditor } from './code-editor.js'
 import { formatSource } from './format-source.js'
 import classes from './html-editor.module.css'
@@ -26,6 +28,8 @@ export interface HtmlEditorWorkspaceProps {
   sourceField: 'html' | 'css' | 'javascript' | null
   /** Returns from a source subfile to the rendered preview. */
   onExitSource?: () => void
+  /** Switches the active HTML source subfile (or back to preview). */
+  onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
   /** Persists editor content and syncs the pages list. */
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   /** Returns to the pages dashboard from recovery UIs. */
@@ -67,6 +71,7 @@ export default function HtmlEditorWorkspace({
   storedContent,
   sourceField,
   onExitSource,
+  onSourceFieldChange,
   onSaveContent,
   breadcrumbLabels = [],
   onFlushRef,
@@ -345,6 +350,27 @@ export default function HtmlEditorWorkspace({
     return () => host.removeEventListener('keydown', listener)
   }, [handleFormat])
 
+  const sourceSwitcher = (
+    <SegmentedControl
+      size="xs"
+      value={sourceField ?? 'preview'}
+      onChange={(value: string) =>
+        onSourceFieldChange?.(value as 'preview' | 'html' | 'css' | 'javascript')
+      }
+      aria-label={UI_TEXT.editorTabsLabel}
+      data-testid="html-source-switcher"
+      data={[
+        { value: 'preview', label: UI_TEXT.editorTabPreview },
+        { value: 'html', label: UI_TEXT.editorTabHtml },
+        { value: 'css', label: UI_TEXT.editorTabCss },
+        { value: 'javascript', label: UI_TEXT.editorTabJs }
+      ]}
+    />
+  )
+
+  const statusBarSaveState: StatusSaveState =
+    status === 'error' ? 'error' : status === 'saving' ? 'saving' : 'saved'
+
   if (!parseResult.ok) {
     return (
       <Stack gap="md" p="md" data-testid="html-editor">
@@ -367,21 +393,24 @@ export default function HtmlEditorWorkspace({
       content.html.trim() === '' && content.css.trim() === '' && content.javascript.trim() === ''
     return (
       <div className={classes.root} data-testid="html-preview-view">
-        <Group justify="flex-end" gap="sm" className={classes.controls}>
-          {refreshing ? (
-            <Text size="xs" c="dimmed" role="status" data-testid="preview-refresh-status">
-              {UI_TEXT.previewRefreshingLabel}
-            </Text>
-          ) : null}
-          <Button
-            size="compact-xs"
-            variant="light"
-            onClick={handleRefreshPreview}
-            aria-label={UI_TEXT.refreshPreviewLabel}
-            data-testid="refresh-preview"
-          >
-            {UI_TEXT.refreshPreviewLabel}
-          </Button>
+        <Group justify="space-between" wrap="nowrap" gap="sm" className={classes.controls}>
+          {sourceSwitcher}
+          <Group gap="sm" wrap="nowrap">
+            {refreshing ? (
+              <Text size="xs" c="dimmed" role="status" data-testid="preview-refresh-status">
+                {UI_TEXT.previewRefreshingLabel}
+              </Text>
+            ) : null}
+            <Button
+              size="compact-xs"
+              variant="light"
+              onClick={handleRefreshPreview}
+              aria-label={UI_TEXT.refreshPreviewLabel}
+              data-testid="refresh-preview"
+            >
+              {UI_TEXT.refreshPreviewLabel}
+            </Button>
+          </Group>
         </Group>
         {isEmpty ? (
           <Stack align="center" justify="center" gap="xs" className={classes.previewPane}>
@@ -402,14 +431,6 @@ export default function HtmlEditorWorkspace({
   // lives ONLY in the JavaScript subfile.
   const fieldLabel = UI_TEXT[FIELD_LABELS[sourceField]]
   const breadcrumbText = [...breadcrumbLabels, fieldLabel].join(' / ')
-  const saveStateLabel =
-    status === 'error'
-      ? UI_TEXT.saveStatusError
-      : status === 'saving'
-        ? UI_TEXT.saveStatusSaving
-        : status === 'saved'
-          ? UI_TEXT.saveStatusSaved
-          : ''
   return (
     <div
       ref={sourceViewRef}
@@ -422,6 +443,7 @@ export default function HtmlEditorWorkspace({
           {breadcrumbText}
         </Text>
         <Group gap="sm" wrap="nowrap">
+          {sourceSwitcher}
           {sourceField === 'javascript' ? (
             <>
               <Switch
@@ -442,17 +464,6 @@ export default function HtmlEditorWorkspace({
               </Tooltip>
             </>
           ) : null}
-          <Button
-            size="compact-xs"
-            variant="light"
-            onClick={() => {
-              debugLog('ui', 'ui_return_to_preview', { pageId, field: sourceField })
-              onExitSource?.()
-            }}
-            data-testid="return-to-preview-button"
-          >
-            {UI_TEXT.htmlSourceBackToPreview}
-          </Button>
         </Group>
       </Group>
 
@@ -488,9 +499,13 @@ export default function HtmlEditorWorkspace({
         />
       </Box>
 
-      {/* Compact bottom status row: language, caret, selection, save state. */}
-      <Group gap="md" wrap="nowrap" className={classes.statusRow} data-testid="ide-status-row">
-        <Text size="xs" c="dimmed">
+      <StatusBar
+        pageTypeLabel={pageTypeLabel('html')}
+        saveState={statusBarSaveState}
+        saveError={status === 'error' ? error : null}
+        onRetry={retry}
+      >
+        <Text size="xs" c="dimmed" data-testid="status-subfile">
           {fieldLabel}
         </Text>
         <Text size="xs" c="dimmed" data-testid="ide-caret-position">
@@ -506,32 +521,7 @@ export default function HtmlEditorWorkspace({
             {UI_TEXT.ideFormatErrorLabel}
           </Text>
         ) : null}
-        {/* On failure the header already announces "Save failed"; here we
-            surface only the underlying detail plus the retry control so the
-            failure text appears exactly once in the DOM. */}
-        {status === 'error' && error ? (
-          <Text size="xs" c="red">
-            {error}
-          </Text>
-        ) : status !== 'error' ? (
-          <Text size="xs" c="dimmed" ml="auto">
-            {saveStateLabel}
-          </Text>
-        ) : null}
-        {/* Content-save retry lives here (parity with the Rich editor); the
-            header's Retry action belongs to page-list mutations. */}
-        {status === 'error' ? (
-          <Button
-            size="compact-xs"
-            variant="light"
-            ml="auto"
-            data-testid="html-editor-retry"
-            onClick={retry}
-          >
-            {UI_TEXT.saveStatusRetry}
-          </Button>
-        ) : null}
-      </Group>
+      </StatusBar>
     </div>
   )
 }
