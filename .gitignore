@@ -1,5 +1,8 @@
-# node_modules/
 # Bun / npm / yarn dependency caches
+node_modules/
+
+# Playwright test output
+test-results/
 .bun/
 .pnpm-store/
 

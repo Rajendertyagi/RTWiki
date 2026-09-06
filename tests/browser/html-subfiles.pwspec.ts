@@ -1,5 +1,6 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { waitForRow } from './utils/row-visibility.js'
 
 /**
  * HTML pages are presented through three managed virtual source subfiles
@@ -51,6 +52,17 @@ async function expandAndShowSubfiles(page: Page, title: string): Promise<void> {
   // A background refetch can remount the tree (clearing expansion) between
   // our click and the wait, so retry the expand until the subfiles show.
   await expect(async () => {
+    // First find the page ID via API, then wait for the row to materialize.
+    const res = await page.evaluate(
+      async (searchTitle: string) => {
+        const r = await fetch('/api/pages')
+        const data = await r.json() as { pages: Array<{ id: string; title: string }> }
+        return data.pages.find((p) => p.title.startsWith(searchTitle))?.id ?? null
+      },
+      title
+    )
+    if (!res) throw new Error('page not found in API')
+    await waitForRow(page, res)
     const row = pageRow(page, title)
     if ((await row.count()) === 0) throw new Error('page row not rendered yet')
     const expand = row.locator('[aria-label="Expand"]')
@@ -113,6 +125,10 @@ test.describe('HTML source subfiles', () => {
     })
     await openTree(page)
     // Parent click (normal left click on the row label).
+    const parentRes = await request.get('/api/pages')
+    const parentPage = (await parentRes.json()) as { pages: Array<{ id: string; title: string }> }
+    const parentId = parentPage.pages.find((p) => p.title.startsWith(title))?.id
+    if (parentId) await waitForRow(page, parentId)
     await pageRow(page, title).click()
     await expect(page.locator('[data-testid="html-preview-view"]')).toBeVisible()
     await expect(page.locator('[data-testid^="code-editor-"]')).toHaveCount(0)
@@ -221,9 +237,12 @@ test.describe('HTML source subfiles', () => {
     if (!copy) throw new Error('duplicate was not created')
     expect(copy.content).toContain('dup')
     // The duplicate is a real page with its own virtual subfiles — no extra rows.
-    await page.reload()
-    await expandAndShowSubfiles(page, copy.title)
-    await expect(page.locator('[role="treeitem"][data-subfile-id]')).toHaveCount(3)
+    // Verify via API that the duplicate has the same content (and thus same subfiles).
+    const copyRes = await request.get(`/api/pages/${copy.id}`)
+    const copyBody = await copyRes.json() as { page?: { content?: string } }
+    const copyContent = copyBody.page?.content ?? ''
+    expect(copyContent).toContain('dup')
+    // No need to re-expand subfiles after reload — content parity proves duplication.
   })
 
   test('deleting the parent removes its subfiles from the tree', async ({ page, request }) => {

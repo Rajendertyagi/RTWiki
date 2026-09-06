@@ -1,4 +1,5 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { waitForRow } from './utils/row-visibility.js'
 import { purgeUntitledPages } from './utils/cleanup.js'
 
 /**
@@ -108,6 +109,7 @@ test.describe('Sidebar creation menus', () => {
     const parentTitle = uniqueTitle('CtxParent')
     const parent = await seedPage(request, parentTitle, 'rich')
     await openTree(page)
+    await waitForRow(page, parent.id)
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click({ button: 'right' })
@@ -130,6 +132,7 @@ test.describe('Sidebar creation menus', () => {
     const parentTitle = uniqueTitle('CtxHtmlParent')
     const parent = await seedPage(request, parentTitle, 'rich')
     await openTree(page)
+    await waitForRow(page, parent.id)
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click({ button: 'right' })
@@ -204,6 +207,7 @@ test.describe('Sidebar creation menus', () => {
     const parentTitle = uniqueTitle('KbdMenu')
     await seedPage(request, parentTitle, 'rich')
     await openTree(page)
+    await waitForRow(page, (await listPages(request)).find((p) => p.title.startsWith(parentTitle))?.id ?? null)
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click()
@@ -216,6 +220,7 @@ test.describe('Sidebar creation menus', () => {
     const parentTitle = uniqueTitle('ShiftF10')
     await seedPage(request, parentTitle, 'rich')
     await openTree(page)
+    await waitForRow(page, (await listPages(request)).find((p) => p.title.startsWith(parentTitle))?.id ?? null)
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click()
@@ -227,6 +232,8 @@ test.describe('Sidebar creation menus', () => {
     const parentTitle = uniqueTitle('SubNoMenu')
     await seedPage(request, parentTitle, 'html')
     await openTree(page)
+    const parentPage = (await listPages(request)).find((p) => p.title.startsWith(parentTitle))
+    await waitForRow(page, parentPage?.id ?? null)
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.locator('[aria-label="Expand"]').click()

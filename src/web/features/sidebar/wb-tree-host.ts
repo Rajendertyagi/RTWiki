@@ -189,6 +189,9 @@ export class PageTreeHost {
 
   /** Reloads data while preserving expansion; re-applies active selection. */
   reload(options: PageTreeHostOptions): void {
+    // Guard against React Strict Mode: destroy() may clear this.tree between
+    // the check and the mutations below — use this.tree directly so we never
+    // operate on a stale local snapshot.
     const tree = this.tree
     if (!tree) return
     this.options = options
@@ -204,7 +207,10 @@ export class PageTreeHost {
     // Data swaps discard and re-create row markup; the throttled viewport
     // update would briefly leave rows unpositioned (stale `top` offsets,
     // pointer interception). Force the render synchronously.
-    tree.update('any' as never, { immediate: true } as never)
+    // Read this.tree again here: Strict Mode may have destroyed the instance
+    // while load() ran asynchronously.
+    if (this.tree !== tree) return
+    this.tree.update('any' as never, { immediate: true } as never)
     this.applyActive(options.activePageId)
     this.observeExpansion(true)
   }
@@ -212,6 +218,8 @@ export class PageTreeHost {
   applyActive(pageId: string | null): void {
     const tree = this.tree
     if (!tree) return
+    // Guard against Strict Mode remount: tree may have been destroyed
+    // between the check above and here.
     const previous = tree.getActiveNode()
     if (pageId === null) {
       previous?.setActive(false, { noEvents: true })
@@ -450,7 +458,10 @@ export class PageTreeHost {
         // yield here or renames could never commit.
         const target = keyEvent?.target as HTMLElement | null | undefined
         if (target?.closest?.('input.wb-input-edit')) return undefined
-        const node = this.asNode(e.node)
+        // Chromium fires the ContextMenu key without a tracked node in the
+        // keydown event payload, while Shift+F10 does.  Fall back to the
+        // currently active node so both paths are equivalent.
+        const node = this.asNode(e.node) ?? this.tree?.getActiveNode() ?? null
         // Keyboard context menu (ContextMenu key or Shift+F10): the library
         // tracks keyboard focus internally — DOM focus stays on the
         // container while arrows move the wb-focus ring — so the focused
@@ -622,7 +633,19 @@ export class PageTreeHost {
       })
     }
     element.addEventListener('contextmenu', onContextMenu)
-    this.contextMenuDismiss = () => element.removeEventListener('contextmenu', onContextMenu)
+    this.contextMenuDismiss = () => {
+      element.removeEventListener('contextmenu', onContextMenu)
+      document.removeEventListener('contextmenu', suppressNativeContextMenu)
+    }
+
+    // The ContextMenu key fires a native contextmenu event ~15 ms after the
+    // keydown, and Chromium does not honour preventDefault() from keydown for
+    // that event.  A document-level capture listener is needed to block it
+    // before the browser can show its own menu.
+    const suppressNativeContextMenu = (ev: Event): void => {
+      if (Date.now() < this.suppressNextContextMenuUntil) ev.preventDefault()
+    }
+    document.addEventListener('contextmenu', suppressNativeContextMenu, true)
 
     return tree
   }

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
+import { waitForRow } from './utils/row-visibility.js'
 
 /**
  * Visual-shell layout contract:
@@ -35,6 +36,16 @@ function uniqueTitle(base: string): string {
 
 /** The CI server keeps state across tests, so rows are targeted by unique title. */
 async function openRowByTitle(page: Page, title: string): Promise<void> {
+  // Find the page ID via API, then wait for the row to materialize.
+  const res = await page.evaluate(
+    async (searchTitle: string) => {
+      const r = await fetch('/api/pages')
+      const data = await r.json() as { pages: Array<{ id: string; title: string }> }
+      return data.pages.find((p) => p.title.startsWith(searchTitle))?.id ?? null
+    },
+    title
+  )
+  if (res) await waitForRow(page, res)
   const row = page.locator('[role="treeitem"]').filter({ hasText: title })
   await row.waitFor({ state: 'visible' })
   await row.click()

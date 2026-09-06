@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { waitForRow } from './utils/row-visibility.js'
 
 /**
  * HTML/CSS/JavaScript source IDE: toolbar, status row, formatting, shortcuts,
@@ -14,7 +15,11 @@ function uniqueTitle(base: string): string {
 }
 
 async function openSource(page: Page, field: 'HTML' | 'CSS' | 'JavaScript'): Promise<void> {
-  const sub = page.locator(`[data-subfile-id]`, { hasText: field }).first()
+  // Subfile rows may be outside the virtualized viewport; wait for them to
+  // materialise (the helper scrolls the tree if needed) before clicking.
+  const fieldKey = field === 'JavaScript' ? 'javascript' : field.toLowerCase()
+  const sub = page.locator(`[data-subfile-id$="::${fieldKey}"]`).first()
+  await sub.waitFor({ state: 'visible', timeout: 10_000 })
   await sub.click()
   await expect(page.getByTestId('html-source-view')).toBeVisible()
 }
@@ -182,7 +187,8 @@ test.describe('source-file IDE', () => {
   })
 
   test('rapid HTML/CSS/JS switching preserves typed text; return to preview uses latest draft', async ({
-    page
+    page,
+    request
   }) => {
     const title = await newHtmlPage(page)
     const row = page.locator('[role="treeitem"]', { hasText: title }).first()
@@ -199,6 +205,15 @@ test.describe('source-file IDE', () => {
     await page.keyboard.type('.switch-probe { color: green; }')
 
     // Switch away to JavaScript and back — the CSS text must survive.
+    // The parent page row may have scrolled out of the virtualized viewport
+    // after opening CSS; re-open the page from the dashboard to bring it
+    // into view before switching subfiles.
+    const res = await request.get('/api/pages')
+    const body = (await res.json()) as { pages: Array<{ id: string; title: string }> }
+    const idePage = body.pages.find((p) => p.title.startsWith(title))
+    if (idePage) {
+      await waitForRow(page, idePage.id)
+    }
     await openSource(page, 'JavaScript')
     await openSource(page, 'CSS')
     await expect(cssEditor).toContainText('.switch-probe')

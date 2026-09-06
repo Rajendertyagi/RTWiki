@@ -10,7 +10,7 @@ const editorRoot = '[data-testid="rich-editor"]'
 const editable = '.bn-editor.ProseMirror'
 
 // Shared across the ordered scenarios: the note created through the UI flow.
-let savedTitle = ''
+let _savedTitle = ''
 
 let titleSeq = 0
 
@@ -131,7 +131,7 @@ test.describe('Rich Note lifecycle (real application)', () => {
     const title = uniqueTitle('Created note')
     await page.goto('/')
     await page.locator('[aria-label="New page"]').first().click()
-    await page.getByLabel('Title').fill(title)
+    await page.getByRole('dialog').getByLabel('Title').fill(title)
     await page.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(page.locator(editorRoot)).toBeVisible()
     await expect(page.locator('.bn-editor')).toBeVisible()
@@ -149,44 +149,57 @@ test.describe('Rich Note lifecycle (real application)', () => {
     const saveButton = page.getByRole('button', { name: 'Save note' })
     await expect(saveButton).toHaveText('Saved', { timeout: 10_000 })
     await expect(saveButton).toBeDisabled()
-    savedTitle = title
+    _savedTitle = title
   })
 
-  test('manual Save persists typed content', async ({ page }) => {
+  test('manual Save persists typed content', async ({ page, request }) => {
+    const title = uniqueTitle('Save probe')
+    await seedPage(request, title, 'rich', '')
     await page.goto('/')
-    await openNote(page, savedTitle)
+    await openNote(page, title)
     await page.locator(editable).click()
     await page.keyboard.type(' Manual save line.')
-    await page.getByLabel('Save note').click()
+    await page.getByRole('button', { name: 'Save note' }).click()
     // Completion signal: the header button disables once the save lands
     // (both its label and the status paragraph read 'Saved', so text alone
     // trips strict mode).
-    await expect(page.getByLabel('Save note')).toBeDisabled({ timeout: 10_000 })
+    await expect(page.getByRole('button', { name: 'Save note' })).toBeDisabled({ timeout: 10_000 })
 
     // Reload reproduces the saved content.
     await page.reload()
-    await openNote(page, savedTitle)
+    await openNote(page, title)
     await expect(page.locator(editable)).toContainText('Manual save line.')
   })
 
-  test('returning home and reopening reproduces saved content', async ({ page }) => {
+  test('returning home and reopening reproduces saved content', async ({ page, request }) => {
+    const title = uniqueTitle('Reload probe')
+    await seedPage(request, title, 'rich', '')
     await page.goto('/')
-    await openNote(page, savedTitle)
-    await expect(page.locator(editable)).toContainText('Manual save line.')
+    await openNote(page, title)
+    await page.locator(editable).click()
+    await page.keyboard.type(' Reload probe text.')
+    await expect(page.getByRole('button', { name: 'Save note' })).toHaveText('Saved', {
+      timeout: 10_000
+    })
     await goHome(page)
-    await openNote(page, savedTitle)
-    await expect(page.locator(editable)).toContainText('Manual save line.')
+    await openNote(page, title)
+    await expect(page.locator(editable)).toContainText('Reload probe text.')
   })
 
-  test('switching pages while a save is pending flushes without data loss', async ({ page }) => {
+  test('switching pages while a save is pending flushes without data loss', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('Flush probe')
+    await seedPage(request, title, 'rich', '')
     await page.goto('/')
-    await openNote(page, savedTitle)
+    await openNote(page, title)
     await page.locator(editable).click()
     await page.keyboard.type(' Pending flush line.')
     // Leave before the 2000 ms autosave debounce fires; navigation must flush.
     await goHome(page)
     await expect(page.getByText('unsaved changes')).toHaveCount(0)
-    await openNote(page, savedTitle)
+    await openNote(page, title)
     await expect(page.locator(editable)).toContainText('Pending flush line.')
   })
 

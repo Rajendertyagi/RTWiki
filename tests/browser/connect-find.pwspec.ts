@@ -37,7 +37,9 @@ async function openNote(page: Page, title: string): Promise<void> {
   // Session restoration may reopen the last workspace directly; go Home
   // first so the dashboard card lookup is always valid.
   await page.locator('[aria-label="Home"]').click()
-  await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
+  // The dashboard heading may be a <h1>, <h2>, or plain text depending on
+  // the current layout; match on the "Pages" text rather than role=heading.
+  await expect(page.getByText('Pages', { exact: true }).first()).toBeVisible()
   await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
   await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 }
@@ -293,7 +295,7 @@ test.describe('connect and find', () => {
     expect(htmlRes.status()).toBe(201)
     await page.goto('/')
     await page.locator('[aria-label="Home"]').click()
-    await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
+    await expect(page.getByText('Pages', { exact: true }).first()).toBeVisible()
     const htmlCard = page.getByRole('button', { name: `Open ${htmlTitle}`, exact: true })
     await htmlCard.waitFor()
     await htmlCard.click()
