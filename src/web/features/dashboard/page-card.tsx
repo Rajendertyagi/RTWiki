@@ -2,6 +2,7 @@ import { ActionIcon, Card, Menu } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
 import { pageTypeLabel } from '../../components/page-type-badge.js'
+import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
 import { pagePreviewText } from '../../util/page-preview-text.js'
@@ -38,6 +39,8 @@ function formatDate(value: string): string {
  */
 export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps): JSX.Element {
   const displayTitle = page.title || UI_TEXT.untitledPage
+  const preview = pagePreviewText(page)
+  const isVisual = page.pageType === 'diagram' || page.pageType === 'mindmap'
 
   return (
     <Card withBorder padding={0} radius="md" className={classes.card}>
@@ -50,12 +53,22 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
         }}
         aria-label={`Open ${displayTitle}`}
       >
-        <span className={classes.cardTitle}>{displayTitle}</span>
-        <span className={classes.cardPreview}>
-          {pagePreviewText(page) || UI_TEXT.editorPlaceholderContent}
+        <span className={classes.cardTitle} title={displayTitle}>
+          {displayTitle}
         </span>
+        {preview ? (
+          <span className={classes.cardPreview}>{preview}</span>
+        ) : isVisual ? (
+          <span className={classes.cardPlaceholder}>
+            <PageTypeIcon pageType={page.pageType} size={28} />
+            <span>{pageTypeLabel(page.pageType)}</span>
+          </span>
+        ) : (
+          <span className={classes.cardPreview}>{UI_TEXT.editorPlaceholderContent}</span>
+        )}
         <span className={classes.cardMeta}>
           <span className={`${classes.cardType} ${classes[`type-${page.pageType}`]}`}>
+            <PageTypeIcon pageType={page.pageType} size={13} />
             {pageTypeLabel(page.pageType)}
           </span>
           <span>{formatDate(page.updatedAt)}</span>

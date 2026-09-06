@@ -58,6 +58,32 @@ function stripTags(html: string): string {
     .trim()
 }
 
+/**
+ * Reduces authored Markdown to safe, readable plain text for card previews.
+ *
+ * Markdown pages store opaque page JSON ({ version, markdown }); we never
+ * render that to HTML on the dashboard (no DOMPurify round-trip, no script
+ * execution). Instead we strip the lightweight syntax — code fences, list and
+ * heading markers, links/images, emphasis — and keep the prose so the card
+ * shows a calm text excerpt, exactly like the other page types.
+ */
+function markdownToPlainText(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_~]{1,3}([^*_~]+)[*_~]{1,3}/g, '$1')
+    .replace(/^\s*([-*_]){3,}\s*$/gm, ' ')
+    .replace(/[#*_~`>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function pagePreviewText(page: Page, maxChars = 120): string {
   const raw = page.content ?? ''
   if (!raw) return ''
@@ -71,6 +97,9 @@ export function pagePreviewText(page: Page, maxChars = 120): string {
     let text = ''
     if (page.pageType === 'rich' && Array.isArray(parsed)) {
       text = textFromBlocks(parsed as BlockLike[])
+    } else if (page.pageType === 'markdown') {
+      const md = (parsed as { markdown?: unknown }).markdown
+      if (typeof md === 'string') text = markdownToPlainText(md)
     } else if (page.pageType === 'html' && parsed && typeof parsed === 'object') {
       const html = (parsed as { html?: unknown }).html
       if (typeof html === 'string') text = stripTags(html)

@@ -57,6 +57,22 @@
   flex: 1;
 }
 
+/*
+ * Diagram / Mind Map cards have no readable text source, so the preview slot
+ * shows a calm, type-appropriate placeholder (icon + label) rather than a
+ * blank or "no preview" card. No Mermaid render runs on the dashboard.
+ */
+.cardPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mantine-spacing-xs);
+  flex: 1;
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+  font-size: var(--mantine-font-size-sm);
+}
+
 .cardMeta {
   display: flex;
   align-items: center;
@@ -67,6 +83,9 @@
 }
 
 .cardType {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px 8px;
   border-radius: var(--mantine-radius-sm);
   font-weight: 500;
