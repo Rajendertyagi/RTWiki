@@ -1,4 +1,5 @@
 import { ActionIcon, Box, Popover, TextInput, Tooltip } from '@mantine/core'
+import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { buildInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { IconLink } from '@tabler/icons-react'
 import type { JSX } from 'react'
@@ -20,6 +21,10 @@ import type { AnyRichEditor } from './schema.js'
 export interface LinkablePage {
   id: string
   title: string
+  /** Page type for type-aware icons in link/card surfaces. */
+  pageType?: PageType
+  /** Short safe preview text for card surfaces. */
+  preview?: string
 }
 
 export function filterLinkablePages(

@@ -64,7 +64,7 @@ export interface PagesController {
   searchQuery: string
   setSearchQuery: (query: string) => void
   selectPage: (id: string | null) => void
-  createPage: (title: string, pageType: PageType) => Promise<Page | null>
+  createPage: (title: string, pageType: PageType, content?: string) => Promise<Page | null>
   moveTo: (id: string, newParentId: string | null) => void
   moveRelative: (id: string, delta: number) => void
   moveToPosition: (id: string, newParentId: string | null, newPosition: number) => void
@@ -314,11 +314,11 @@ export function usePagesController(): PagesController {
   )
 
   const createPage = useCallback(
-    async (title: string, pageType: PageType): Promise<Page | null> => {
+    async (title: string, pageType: PageType, content?: string): Promise<Page | null> => {
       setMutationStatus('saving')
       setMutationError(null)
       try {
-        const page = await api.createPage({ title, pageType })
+        const page = await api.createPage({ title, pageType, content })
         // Insert into the local list BEFORE refreshing: the selection-sync
         // effect clears selectedPage whenever the list lacks its id, so a
         // bare refreshPages() would bounce the user back to the dashboard

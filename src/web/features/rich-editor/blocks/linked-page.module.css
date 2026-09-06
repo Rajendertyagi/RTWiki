@@ -1,0 +1,72 @@
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-default-subtle);
+  margin: 6px 0;
+}
+
+.cardIcon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-default);
+  color: var(--mantine-color-text);
+}
+
+.cardBody {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cardTitle {
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardPreview {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--mantine-color-dimmed);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cardActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.broken {
+  border-color: var(--mantine-color-orange-4);
+  background: var(--mantine-color-orange-0);
+}
+
+.brokenText {
+  font-size: 13px;
+  color: var(--mantine-color-orange-7);
+}
+
+.picker {
+  margin: 6px 0;
+  max-width: 360px;
+}
+
+.hiddenHost {
+  display: none;
+}

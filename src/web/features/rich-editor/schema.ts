@@ -2,6 +2,7 @@ import { type BlockNoteEditor, BlockNoteSchema, type PartialBlock } from '@block
 import { createReactInlineMathSpec, createReactMathBlockSpec } from '@blocknote/math-block'
 import { createReactCalloutSpec } from './blocks/callout.js'
 import { createReactDiagramSpec } from './blocks/diagram.js'
+import { createReactLinkedPageSpec } from './blocks/linked-page-block.js'
 import { createReactMindMapSpec } from './blocks/mindmap.js'
 
 /**
@@ -15,14 +16,19 @@ import { createReactMindMapSpec } from './blocks/mindmap.js'
  * - `callout`: official custom-block API with a stored `variant` prop and
  *   editable inline rich text.
  *
- * Diagram and mind-map blocks join this schema in their own commit.
+ * Diagram, mind-map and linked-page blocks join this schema in their own
+ * commits.
  */
 export const rtwikiBlockSchema = BlockNoteSchema.create().extend({
   blockSpecs: {
     mathBlock: createReactMathBlockSpec(),
     callout: createReactCalloutSpec(),
     diagram: createReactDiagramSpec(),
-    mindMap: createReactMindMapSpec()
+    mindMap: createReactMindMapSpec(),
+    // BlockNote's `extend` BlockSpecs index signature rejects this otherwise
+    // valid custom block spec for a brand-new block-type name; the runtime
+    // spec is correct, so the cast only bridges the generic-inference gap.
+    linkedPage: createReactLinkedPageSpec() as unknown as ReturnType<typeof createReactDiagramSpec>
   },
   inlineContentSpecs: {
     math: createReactInlineMathSpec()

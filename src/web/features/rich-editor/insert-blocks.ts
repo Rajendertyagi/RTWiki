@@ -86,6 +86,7 @@ export interface InsertEntry {
     | 'formula'
     | 'diagram'
     | 'mindMap'
+    | 'linkedPage'
     | 'table'
     | 'code'
     | 'quote'
@@ -152,6 +153,20 @@ const CALLOUT_VARIANT_ENTRIES: Array<{
   { variant: 'danger', label: UI_TEXT.calloutDangerLabel, icon: 'calloutDanger' }
 ]
 
+function linkedPageEntry(): InsertEntry {
+  return {
+    key: 'insert-linked-page',
+    label: UI_TEXT.linkedPageLabel,
+    icon: 'linkedPage',
+    group: 'visual',
+    insert: (editor) =>
+      insertOrReplace(editor, {
+        type: 'linkedPage',
+        props: { targetId: '' }
+      } as never)
+  }
+}
+
 function calloutEntries(): InsertEntry[] {
   return CALLOUT_VARIANT_ENTRIES.map(({ variant, label, icon }) => ({
     key: `insert-callout-${variant}`,
@@ -179,6 +194,9 @@ function baseEntries(editor: AnyEditor): InsertEntry[] {
   }
   if ('callout' in editor.schema.blockSchema) {
     entries.push(...calloutEntries())
+  }
+  if ('linkedPage' in editor.schema.blockSchema) {
+    entries.push(linkedPageEntry())
   }
   return entries
 }

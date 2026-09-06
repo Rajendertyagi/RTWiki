@@ -1,13 +1,29 @@
-import { Alert, Button, Group, Modal, Radio, Stack, TextInput } from '@mantine/core'
+import {
+  Alert,
+  Button,
+  Group,
+  Modal,
+  Radio,
+  SegmentedControl,
+  Stack,
+  Text,
+  TextInput
+} from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { RICH_TEMPLATES, type RichTemplateKey } from '../rich-editor/rich-templates.js'
+
+const TEMPLATE_OPTIONS = (Object.keys(RICH_TEMPLATES) as RichTemplateKey[]).map((key) => ({
+  value: key,
+  label: UI_TEXT[RICH_TEMPLATES[key].labelKey]
+}))
 
 interface NewPageDialogProps {
   opened: boolean
   onClose: () => void
-  onCreate: (title: string, pageType: PageType) => Promise<void>
+  onCreate: (title: string, pageType: PageType, template?: RichTemplateKey) => Promise<void>
   initialType?: PageType
 }
 
@@ -19,6 +35,7 @@ export function NewPageDialog({
 }: NewPageDialogProps): JSX.Element {
   const [title, setTitle] = useState('')
   const [pageType, setPageType] = useState<PageType>(initialType)
+  const [template, setTemplate] = useState<RichTemplateKey>('blank')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -26,6 +43,7 @@ export function NewPageDialog({
     if (opened) {
       setTitle('')
       setPageType(initialType)
+      setTemplate('blank')
       setError(null)
       setSubmitting(false)
     }
@@ -44,7 +62,7 @@ export function NewPageDialog({
     setSubmitting(true)
     setError(null)
     try {
-      await onCreate(trimmed, pageType)
+      await onCreate(trimmed, pageType, pageType === 'rich' ? template : undefined)
       onClose()
     } catch (err) {
       const message = err instanceof Error ? err.message : UI_TEXT.errorCreatingPage
@@ -101,6 +119,21 @@ export function NewPageDialog({
             />
           </Group>
         </Radio.Group>
+
+        {pageType === 'rich' ? (
+          <Stack gap={4}>
+            <Text size="sm" fw={500}>
+              {UI_TEXT.richTemplateLabel}
+            </Text>
+            <SegmentedControl
+              fullWidth
+              data={TEMPLATE_OPTIONS}
+              value={template}
+              onChange={(value) => setTemplate(value as RichTemplateKey)}
+              aria-label={UI_TEXT.richTemplateLabel}
+            />
+          </Stack>
+        ) : null}
 
         <Group justify="flex-end" gap="sm">
           <Button variant="subtle" onClick={onClose} disabled={submitting}>

@@ -12,6 +12,10 @@ import type { EditorStatus } from './features/html-editor/use-codemirror.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
+import {
+  buildTemplateContent,
+  type RichTemplateKey
+} from './features/rich-editor/rich-templates.js'
 import { SettingsWorkspace } from './features/settings/settings-workspace.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
@@ -34,6 +38,7 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
+import { pagePreviewText } from './util/page-preview-text.js'
 import { recordRecentPage } from './util/recent-pages.js'
 
 /** sessionStorage adapter; unavailable storage degrades to no persistence. */
@@ -214,16 +219,14 @@ export function App(): JSX.Element {
   const handleImportMarkdown = useCallback(
     async (fileName: string, source: string): Promise<void> => {
       const title = fileName.replace(/\.(md|markdown)$/i, '').trim() || UI_TEXT.untitledPage
-      const page = await controller.createPage(title, 'markdown')
-      if (!page) return
-      const ok = await controller.savePageContent(
-        page.id,
+      const page = await controller.createPage(
+        title,
+        'markdown',
         serializeMarkdownContent({ version: 1, markdown: source })
       )
-      if (ok) {
-        if (flushRef.current) await flushRef.current()
-        controller.selectPage(page.id)
-      }
+      if (!page) return
+      if (flushRef.current) await flushRef.current()
+      controller.selectPage(page.id)
     },
     [controller]
   )
@@ -403,8 +406,16 @@ export function App(): JSX.Element {
     }
   }
 
-  const handleCreatePage = async (title: string, pageType: PageType): Promise<void> => {
-    await controller.createPage(title, pageType)
+  const handleCreatePage = async (
+    title: string,
+    pageType: PageType,
+    template?: RichTemplateKey
+  ): Promise<void> => {
+    const content =
+      pageType === 'rich' && template && template !== 'blank'
+        ? buildTemplateContent(template)
+        : undefined
+    await controller.createPage(title, pageType, content)
   }
 
   const handleDeleteRequest = (id: string): void => {
@@ -666,7 +677,12 @@ export function App(): JSX.Element {
             <PageWorkspace
               page={controller.selectedPage}
               breadcrumb={breadcrumb}
-              linkablePages={controller.pages.map((p) => ({ id: p.id, title: p.title }))}
+              linkablePages={controller.pages.map((p) => ({
+                id: p.id,
+                title: p.title,
+                pageType: p.pageType,
+                preview: pagePreviewText(p)
+              }))}
               onOpenPageLink={(id) => void handleSelectPage(id)}
               htmlSourceField={
                 htmlSource && htmlSource.pageId === controller.selectedPage.id

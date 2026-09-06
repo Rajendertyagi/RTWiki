@@ -9,7 +9,6 @@ import { Alert, Button, Stack, Text, Tooltip } from '@mantine/core'
 import { parseInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { IconAlertCircle, IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
@@ -17,6 +16,7 @@ import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
 import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
 import { RightSidebar } from '../workspace/right-sidebar.js'
+import { LinkedPageContext, type LinkedPageContextValue } from './blocks/linked-page-block.js'
 import {
   containUnknownBlocks,
   createDefaultDocument,
@@ -294,7 +294,6 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     notifyEdit,
     status,
     error,
-    retry,
     createdDate,
     updatedDate,
     onEditorReady,
@@ -321,7 +320,7 @@ function RichEditorInner(props: InnerProps): JSX.Element {
   const [outline, setOutline] = useState<DocumentOutlineEntry[]>(() =>
     extractOutline(initialDocument)
   )
-  const [wordCount, setWordCount] = useState(() => countBlockWords(initialDocument))
+  const [, setWordCount] = useState(() => countBlockWords(initialDocument))
   // Right-sidebar geometry (Slice 2): the explicit width/collapse are the
   // user's persisted preference; the temporary narrow-window collapse is
   // derived from the viewport and never persisted. Effective visibility is
@@ -499,6 +498,26 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     editor.focus()
   }
 
+  // Shared page-list + navigation context for linked-page blocks. Resolves a
+  // target by ID and opens it through RTWiki's normal tab/nav flow.
+  const linkedPageContextValue = useMemo<LinkedPageContextValue>(
+    () => ({
+      pages: linkablePages,
+      resolvePage: (id) => {
+        const page = linkablePages.find((candidate) => candidate.id === id)
+        if (!page) return null
+        return {
+          id: page.id,
+          title: page.title,
+          pageType: page.pageType ?? 'rich',
+          preview: page.preview ?? ''
+        }
+      },
+      openPage: (id) => onOpenPage?.(id)
+    }),
+    [linkablePages, onOpenPage]
+  )
+
   return (
     <div className={classes.richColumn}>
       {status === 'error' ? (
@@ -518,21 +537,23 @@ function RichEditorInner(props: InnerProps): JSX.Element {
       <div className={classes.richRow}>
         <Stack gap="xs" className={classes.editorContainer}>
           <div className={classes.blockNoteWrapper} ref={wrapperRef}>
-            <BlockNoteView
-              editor={editor}
-              theme={blocknoteTheme}
-              formattingToolbar={false}
-              sideMenu={false}
-            >
-              {/* Custom side menu replaces the built-in controller (disabled
-                  above) so exactly ONE drag-handle menu exists, carrying the
-                  Move up / Move down actions. */}
-              <RTSideMenu editor={editor} />
-              <RTSuggestionMenu editor={editor} />
-              {linkablePages.length > 0 ? (
-                <RTWikiLinkMenu editor={editor} pages={linkablePages} />
-              ) : null}
-            </BlockNoteView>
+            <LinkedPageContext.Provider value={linkedPageContextValue}>
+              <BlockNoteView
+                editor={editor}
+                theme={blocknoteTheme}
+                formattingToolbar={false}
+                sideMenu={false}
+              >
+                {/* Custom side menu replaces the built-in controller (disabled
+                    above) so exactly ONE drag-handle menu exists, carrying the
+                    Move up / Move down actions. */}
+                <RTSideMenu editor={editor} />
+                <RTSuggestionMenu editor={editor} />
+                {linkablePages.length > 0 ? (
+                  <RTWikiLinkMenu editor={editor} pages={linkablePages} />
+                ) : null}
+              </BlockNoteView>
+            </LinkedPageContext.Provider>
           </div>
         </Stack>
 

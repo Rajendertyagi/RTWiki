@@ -23,6 +23,17 @@
   opacity: 1;
 }
 
+.caption {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 2;
+  color: var(--mantine-color-dimmed);
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .editButton {
   opacity: 0.55;
 }

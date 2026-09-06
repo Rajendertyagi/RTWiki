@@ -48,6 +48,7 @@ const INSERT_ICONS = {
   formula: IconLetterA,
   diagram: IconSitemap,
   mindMap: IconSitemap,
+  linkedPage: IconLink,
   table: IconTable,
   code: IconCode,
   quote: IconQuote,
@@ -499,10 +500,12 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
           behind an Insert dropdown; the slash menu remains as an alternative
           surface. The row scrolls horizontally on narrow screens instead of
           wrapping or collapsing into menus. */}
-      {(['insert-formula', 'insert-diagram', 'insert-mind-map'] as const).map((key) => {
-        const entry = getInsertEntries(editor).find((candidate) => candidate.key === key)
-        return entry ? <InsertButton key={key} editor={editor} entry={entry} /> : null
-      })}
+      {(['insert-formula', 'insert-diagram', 'insert-mind-map', 'insert-linked-page'] as const).map(
+        (key) => {
+          const entry = getInsertEntries(editor).find((candidate) => candidate.key === key)
+          return entry ? <InsertButton key={key} editor={editor} entry={entry} /> : null
+        }
+      )}
 
       <span className={classes.divider} />
 
