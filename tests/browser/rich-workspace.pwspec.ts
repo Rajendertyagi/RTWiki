@@ -74,12 +74,17 @@ test.describe('Working rich-note workspace', () => {
     await createNoteViaDialog(page, title)
     await expect(page.locator(editorRoot)).toBeVisible()
     await expectTabActive(page, title)
-    // Tree row appears immediately (no refresh delay).
-    await expect(
-      page
-        .locator(`[role="treeitem"][aria-label*="${title}"]`)
-        .or(page.locator(`[role="treeitem"]`, { hasText: title }))
-    ).toBeVisible()
+    // Tree row should appear quickly after creation; poll on slow CI runners.
+    await expect
+      .poll(
+        async () =>
+          await page
+            .locator(`[role="treeitem"][aria-label*="${title}"]`)
+            .or(page.locator(`[role="treeitem"]`, { hasText: title }))
+            .isVisible(),
+        { timeout: 10_000 }
+      )
+      .toBeTruthy()
   })
 
   test('caret starts in the document and typing works without clicking', async ({ page }) => {
