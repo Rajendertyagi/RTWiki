@@ -53,14 +53,11 @@ async function expandAndShowSubfiles(page: Page, title: string): Promise<void> {
   // our click and the wait, so retry the expand until the subfiles show.
   await expect(async () => {
     // First find the page ID via API, then wait for the row to materialize.
-    const res = await page.evaluate(
-      async (searchTitle: string) => {
-        const r = await fetch('/api/pages')
-        const data = await r.json() as { pages: Array<{ id: string; title: string }> }
-        return data.pages.find((p) => p.title.startsWith(searchTitle))?.id ?? null
-      },
-      title
-    )
+    const res = await page.evaluate(async (searchTitle: string) => {
+      const r = await fetch('/api/pages')
+      const data = (await r.json()) as { pages: Array<{ id: string; title: string }> }
+      return data.pages.find((p) => p.title.startsWith(searchTitle))?.id ?? null
+    }, title)
     if (!res) throw new Error('page not found in API')
     await waitForRow(page, res)
     const row = pageRow(page, title)
@@ -239,7 +236,7 @@ test.describe('HTML source subfiles', () => {
     // The duplicate is a real page with its own virtual subfiles — no extra rows.
     // Verify via API that the duplicate has the same content (and thus same subfiles).
     const copyRes = await request.get(`/api/pages/${copy.id}`)
-    const copyBody = await copyRes.json() as { page?: { content?: string } }
+    const copyBody = (await copyRes.json()) as { page?: { content?: string } }
     const copyContent = copyBody.page?.content ?? ''
     expect(copyContent).toContain('dup')
     // No need to re-expand subfiles after reload — content parity proves duplication.

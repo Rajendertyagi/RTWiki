@@ -14,9 +14,9 @@ import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
 import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
 import {
+  type LayoutPreferences,
   loadLayoutPreferences,
-  saveLayoutPreferences,
-  type LayoutPreferences
+  saveLayoutPreferences
 } from './features/workspace/layout-preferences.js'
 import {
   loadWorkspaceSession,

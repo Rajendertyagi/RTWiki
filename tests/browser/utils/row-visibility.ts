@@ -46,20 +46,17 @@ export async function waitForRow(
   while (Date.now() - start < timeoutMs) {
     // Scroll by 3000px per step — covers ~90 rows per step at 32px/row.
     try {
-      await tree.evaluate(
-        (el: HTMLElement, dy: number) => {
-          // Scroll the inner Wunderbaum viewport directly — it owns the
-          // virtualisation and only responds to its own scroll events.
-          const wb = el.querySelector('.wunderbaum') as HTMLElement | null
-          if (wb) {
-            wb.scrollTop += dy
-          } else {
-            // Fallback: scroll the container itself.
-            el.scrollTop += dy
-          }
-        },
-        3000
-      )
+      await tree.evaluate((el: HTMLElement, dy: number) => {
+        // Scroll the inner Wunderbaum viewport directly — it owns the
+        // virtualisation and only responds to its own scroll events.
+        const wb = el.querySelector('.wunderbaum') as HTMLElement | null
+        if (wb) {
+          wb.scrollTop += dy
+        } else {
+          // Fallback: scroll the container itself.
+          el.scrollTop += dy
+        }
+      }, 3000)
     } catch {
       // Page may have been closed during reload — give up gracefully.
       return
@@ -80,9 +77,7 @@ export async function waitForRow(
   // Final diagnostic: tell the user exactly what we found.
   const count = await row.count()
   const totalRows = await page.locator('[role="treeitem"][data-page-id]').count()
-  const label = subfileField
-    ? `subfile[${pageId}::${subfileField}]`
-    : `page[${pageId}]`
+  const label = subfileField ? `subfile[${pageId}::${subfileField}]` : `page[${pageId}]`
   throw new Error(
     `Tree row ${label} did not materialize after ${timeoutMs} ms of scrolling. ` +
       `DOM row count = ${count}, total tree rows = ${totalRows}. ` +
@@ -91,7 +86,11 @@ export async function waitForRow(
 }
 
 /** Convenience wrapper for page rows. */
-export async function scrollToPageRow(page: Page, pageId: string, timeoutMs = 20_000): Promise<void> {
+export async function scrollToPageRow(
+  page: Page,
+  pageId: string,
+  timeoutMs = 20_000
+): Promise<void> {
   await waitForRow(page, pageId, undefined, timeoutMs)
 }
 

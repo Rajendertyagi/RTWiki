@@ -14,8 +14,8 @@ import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
 import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
-import { RightSidebar } from '../workspace/right-sidebar.js'
 import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
+import { RightSidebar } from '../workspace/right-sidebar.js'
 import {
   containUnknownBlocks,
   createDefaultDocument,

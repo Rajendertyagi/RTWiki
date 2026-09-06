@@ -1,4 +1,4 @@
-import { type APIRequestContext, expect, type Page, test as baseTest } from '@playwright/test'
+import { type APIRequestContext, test as baseTest, expect, type Page } from '@playwright/test'
 import { waitForRow } from './utils/row-visibility.js'
 
 /**
@@ -200,7 +200,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await waitForServerOrder(request, [c.id, a.id, b.id])
   })
 
-  test('reorders siblings by dropping after a sibling', async ({ page, request, seedOwnedPage }) => {
+  test('reorders siblings by dropping after a sibling', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const a = await seedOwnedPage(uniqueTitle('SibA'))
     const b = await seedOwnedPage(uniqueTitle('SibB'))
     await page.goto('/')
@@ -220,7 +224,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await waitForServerOrder(request, [b.id, a.id])
   })
 
-  test('drops inside a sibling to reparent across levels', async ({ page, request, seedOwnedPage }) => {
+  test('drops inside a sibling to reparent across levels', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const parent = await seedOwnedPage(uniqueTitle('Parent'))
     const child = await seedOwnedPage(uniqueTitle('Child'), parent.id)
     const other = await seedOwnedPage(uniqueTitle('Other'))
@@ -263,7 +271,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     expect(kids).toEqual([c2.id, c1.id])
   })
 
-  test('drop inside works while the target parent row is collapsed', async ({ page, request, seedOwnedPage }) => {
+  test('drop inside works while the target parent row is collapsed', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const root = await seedOwnedPage(uniqueTitle('CollapsedRoot'))
     await seedOwnedPage(uniqueTitle('HiddenKid'), root.id)
     const mover = await seedOwnedPage(uniqueTitle('Mover'))
@@ -302,7 +314,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await expectUnchanged(request, JSON.stringify(before))
   })
 
-  test('dropping a parent onto its own descendant is rejected', async ({ page, request, seedOwnedPage }) => {
+  test('dropping a parent onto its own descendant is rejected', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const root = await seedOwnedPage(uniqueTitle('DescRoot'))
     const kid = await seedOwnedPage(uniqueTitle('DescKid'), root.id)
     const before = await listPages(request)
@@ -325,7 +341,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await expectUnchanged(request, JSON.stringify(before))
   })
 
-  test('escape mid-drag cancels without changing the hierarchy', async ({ page, request, seedOwnedPage }) => {
+  test('escape mid-drag cancels without changing the hierarchy', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const a = await seedOwnedPage(uniqueTitle('EscA'))
     const b = await seedOwnedPage(uniqueTitle('EscB'))
     const before = await listPages(request)
@@ -372,7 +392,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await expectUnchanged(request, JSON.stringify(before))
   })
 
-  test('failed server move rolls back the optimistic arrangement', async ({ page, request, seedOwnedPage }) => {
+  test('failed server move rolls back the optimistic arrangement', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const a = await seedOwnedPage(uniqueTitle('RbA'))
     const b = await seedOwnedPage(uniqueTitle('RbB'))
     await page.goto('/')
@@ -397,7 +421,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await page.unroute('**/api/pages/*/move')
   })
 
-  test('focus returns to the moved row after a successful drop', async ({ page, request, seedOwnedPage }) => {
+  test('focus returns to the moved row after a successful drop', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const a = await seedOwnedPage(uniqueTitle('FocA'))
     const b = await seedOwnedPage(uniqueTitle('FocB'))
     await page.goto('/')
@@ -421,7 +449,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await expect(rowLocator(page, b.id)).toBeVisible()
   })
 
-  test('dragging preserves the active open page and fires no PATCH', async ({ page, request, seedOwnedPage }) => {
+  test('dragging preserves the active open page and fires no PATCH', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const patchCalls: string[] = []
     page.on('request', (req) => {
       if (req.method() === 'PATCH') patchCalls.push(req.url())
@@ -488,7 +520,11 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     await waitForServerOrder(request, [b.id, a.id])
   })
 
-  test('reorders roots beyond the default list window', async ({ page, request, seedOwnedPage }) => {
+  test('reorders roots beyond the default list window', async ({
+    page,
+    request,
+    seedOwnedPage
+  }) => {
     const patchCalls: string[] = []
     page.on('request', (req) => {
       if (req.method() === 'PATCH') patchCalls.push(req.url())

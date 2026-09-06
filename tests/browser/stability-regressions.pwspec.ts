@@ -181,14 +181,11 @@ function nextSave(page: Page): {
 
 async function openPageByRow(page: Page, title: string): Promise<void> {
   // Find the page ID via API, then wait for the row to materialize.
-  const res = await page.evaluate(
-    async (searchTitle: string) => {
-      const r = await fetch('/api/pages')
-      const data = await r.json() as { pages: Array<{ id: string; title: string }> }
-      return data.pages.find((p) => p.title.startsWith(searchTitle))?.id ?? null
-    },
-    title
-  )
+  const res = await page.evaluate(async (searchTitle: string) => {
+    const r = await fetch('/api/pages')
+    const data = (await r.json()) as { pages: Array<{ id: string; title: string }> }
+    return data.pages.find((p) => p.title.startsWith(searchTitle))?.id ?? null
+  }, title)
   if (res) await waitForRow(page, res)
   await pageRow(page, title).click()
 }
@@ -231,7 +228,8 @@ test.describe('stability regressions', () => {
       })
     }
   })
-  test.afterEach((_ctx, testInfo) => {
+  // biome-ignore lint/correctness/noEmptyPattern: Playwright requires fixture destructuring
+  test.afterEach(({}, testInfo) => {
     if (!RENAME_TESTS.has(testInfo.title)) {
       expect(pageErrors, 'no uncaught browser exceptions').toEqual([])
     }

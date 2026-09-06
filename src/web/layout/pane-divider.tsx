@@ -1,10 +1,10 @@
-import { LAYOUT } from '../config/index.js'
 import type {
   JSX,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent
 } from 'react'
 import { useEffect, useRef, useState } from 'react'
+import { LAYOUT } from '../config/index.js'
 import classes from './pane-divider.module.css'
 
 /**
@@ -94,7 +94,8 @@ export function PaneDivider({
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     let next: number | null = null
     if (event.key === 'ArrowRight') next = valueRef.current + direction * LAYOUT.dividerStepWidth
-    else if (event.key === 'ArrowLeft') next = valueRef.current - direction * LAYOUT.dividerStepWidth
+    else if (event.key === 'ArrowLeft')
+      next = valueRef.current - direction * LAYOUT.dividerStepWidth
     else if (event.key === 'Home') next = min
     else if (event.key === 'End') next = max
     if (next === null) return

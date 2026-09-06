@@ -1,6 +1,6 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
-import { waitForRow } from './utils/row-visibility.js'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { waitForRow } from './utils/row-visibility.js'
 
 /**
  * Tree creation menus (Trilium-pattern): right-click on empty tree space
@@ -207,7 +207,10 @@ test.describe('Sidebar creation menus', () => {
     const parentTitle = uniqueTitle('KbdMenu')
     await seedPage(request, parentTitle, 'rich')
     await openTree(page)
-    await waitForRow(page, (await listPages(request)).find((p) => p.title.startsWith(parentTitle))?.id ?? null)
+    await waitForRow(
+      page,
+      (await listPages(request)).find((p) => p.title.startsWith(parentTitle))?.id ?? null
+    )
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click()
@@ -220,7 +223,10 @@ test.describe('Sidebar creation menus', () => {
     const parentTitle = uniqueTitle('ShiftF10')
     await seedPage(request, parentTitle, 'rich')
     await openTree(page)
-    await waitForRow(page, (await listPages(request)).find((p) => p.title.startsWith(parentTitle))?.id ?? null)
+    await waitForRow(
+      page,
+      (await listPages(request)).find((p) => p.title.startsWith(parentTitle))?.id ?? null
+    )
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click()
