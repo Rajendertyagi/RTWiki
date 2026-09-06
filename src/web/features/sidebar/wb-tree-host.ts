@@ -234,10 +234,46 @@ export class PageTreeHost {
     }
     if (previous?.key === pageId) return
     const target = tree.findKey(pageId)
-    target?.setActive(true, { noEvents: true })
+    if (!target) return
+    // setActive() always calls makeVisible() -> scrollTo(), which re-pins the
+    // node to the viewport edge (a below-fold node is pinned to the BOTTOM).
+    // When the target already overlaps the visible viewport (e.g. the user
+    // clicked a row they can see, even one straddling the bottom edge) that
+    // scroll makes the whole list jump, which is disorienting. Preserve the
+    // scroll position in that case; only let it scroll when the node is fully
+    // outside the viewport so an off-screen selection still becomes reachable.
+    const scroller = (tree as unknown as { element?: HTMLElement }).element
+    const rowEl = this.rowElement(target.key)
+    let keepScroll = false
+    if (scroller && rowEl) {
+      const r = rowEl.getBoundingClientRect()
+      const s = scroller.getBoundingClientRect()
+      keepScroll = r.bottom > s.top && r.top < s.bottom
+    }
+    const savedScroll = scroller?.scrollTop ?? 0
+    const activation = target.setActive(true, { noEvents: true })
+    if (keepScroll && scroller) {
+      // Wunderbaum's makeVisible() promise can hang: its scrollIntoView()
+      // returns undefined, so the chained `.then(resolve)` throws and the
+      // activation promise never settles. We therefore cannot rely on it to
+      // know when the scroll was applied. Instead, pin the scroll position
+      // back across the next few frames — the offending scrollIntoView() sets
+      // scrollTop synchronously within a microtask, so a rAF restore lands
+      // after it and cancels the jump. (The promise fallback is best-effort.)
+      const restore = () => {
+        if (scroller.scrollTop !== savedScroll) scroller.scrollTop = savedScroll
+      }
+      let frames = 0
+      const tick = () => {
+        restore()
+        if (++frames < 5) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+      Promise.resolve(activation).finally(restore).catch(() => {})
+    }
     // Status changes do not re-run the render hook: mirror aria-selected.
     this.syncRowSelected(previous, false)
-    this.syncRowSelected(target ?? null, true)
+    this.syncRowSelected(target, true)
   }
 
   /** Applies a session-restoration expansion seed (once per identity). */

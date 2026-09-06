@@ -1,12 +1,13 @@
 import { Box, Skeleton, Stack, Text } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
 import { RichToolbar } from '../rich-editor/rich-toolbar.js'
 import type { AnyRichEditor } from '../rich-editor/schema.js'
 import { EditorHeader } from './editor-header.js'
+import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import classes from './page-workspace.module.css'
 
 // CodeMirror is heavy and only needed on HTML pages — loaded as its own chunk.
@@ -43,11 +44,14 @@ interface PageWorkspaceProps {
   onSaveStateChange: (state: {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
+    error?: string | null
   }) => void
   /** Active HTML source subfile for this page; null = rendered preview. */
   htmlSourceField?: 'html' | 'css' | 'javascript' | null
   /** Switches the active HTML source subfile (or back to preview). */
   onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
+  /** Lifts caret/selection + format error to the global status bar. */
+  onEditorStatusChange?: (status: EditorStatus) => void
   /** All living pages (id+title) for internal-link insertion. */
   linkablePages?: Array<{ id: string; title: string }>
   /** Opens a page through the controller/tab flow. */
@@ -68,6 +72,7 @@ export function PageWorkspace({
   onSaveStateChange,
   htmlSourceField = null,
   onSourceFieldChange,
+  onEditorStatusChange,
   onExitHtmlSource,
   linkablePages = [],
   onOpenPageLink
@@ -76,24 +81,34 @@ export function PageWorkspace({
   // it sits directly under the tab strip, above the title/actions row. The
   // slot is unconditional with a fixed height: while the editor instance
   // initializes a same-height placeholder holds the space, so the title and
-  // document never shift when the real controls arrive.
+  // document never shift when the real controls arrive. HTML pages expose
+  // their toolbar through onToolbarReady into the same row (see below).
   const [richEditor, setRichEditor] = useState<AnyRichEditor | null>(null)
+  const [htmlToolbar, setHtmlToolbar] = useState<ReactNode | null>(null)
 
   return (
     <div className={classes.workspace}>
-      {page.pageType === 'rich' ? (
-        <div className={classes.toolbarRow} data-testid="rich-toolbar-row" aria-busy={!richEditor}>
-          {richEditor ? (
-            <RichToolbar editor={richEditor} linkablePages={linkablePages} />
+      {(page.pageType === 'rich' || page.pageType === 'html') && (
+        <div
+          className={classes.toolbarRow}
+          data-testid="rich-toolbar-row"
+          aria-busy={page.pageType === 'rich' && !richEditor}
+        >
+          {page.pageType === 'rich' ? (
+            richEditor ? (
+              <RichToolbar editor={richEditor} linkablePages={linkablePages} />
+            ) : (
+              <div className={classes.toolbarSkeleton} aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            )
           ) : (
-            <div className={classes.toolbarSkeleton} aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
+            htmlToolbar
           )}
         </div>
-      ) : null}
+      )}
 
       <EditorHeader
         page={page}
@@ -119,11 +134,13 @@ export function PageWorkspace({
           sourceField={htmlSourceField}
           onExitSource={onExitHtmlSource}
           onSourceFieldChange={onSourceFieldChange}
+          onEditorStatusChange={onEditorStatusChange}
           onSaveContent={onSaveContent}
           onBack={onBack}
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}
           onRichEditorReady={setRichEditor}
+          onToolbarReady={setHtmlToolbar}
         />
       </div>
     </div>
@@ -145,11 +162,13 @@ function PageEditors({
   sourceField,
   onExitSource,
   onSourceFieldChange,
+  onEditorStatusChange,
   onSaveContent,
   onBack,
   onFlushRef,
   onSaveStateChange,
-  onRichEditorReady
+  onRichEditorReady,
+  onToolbarReady
 }: {
   page: Page
   breadcrumb?: string[]
@@ -158,6 +177,7 @@ function PageEditors({
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
   onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
+  onEditorStatusChange?: (status: EditorStatus) => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
@@ -166,6 +186,7 @@ function PageEditors({
     saveState: 'clean' | 'saving' | 'saved' | 'error'
   }) => void
   onRichEditorReady: (editor: AnyRichEditor | null) => void
+  onToolbarReady?: (node: ReactNode | null) => void
 }): JSX.Element | null {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
@@ -220,6 +241,7 @@ function PageEditors({
           onSaveContent={onSaveContent}
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}
+          onEditorStatusChange={onEditorStatusChange}
         />
       </Suspense>
     )
@@ -231,10 +253,12 @@ function PageEditors({
       sourceField={sourceField}
       onExitSource={onExitSource}
       onSourceFieldChange={onSourceFieldChange}
+      onEditorStatusChange={onEditorStatusChange}
       onSaveContent={onSaveContent}
       onBack={onBack}
       onFlushRef={onFlushRef}
       onSaveStateChange={onSaveStateChange}
+      onToolbarReady={onToolbarReady}
     />
   )
 }
@@ -250,16 +274,19 @@ function HtmlEditorSurface({
   sourceField,
   onExitSource,
   onSourceFieldChange,
+  onEditorStatusChange,
   onSaveContent,
   onBack,
   onFlushRef,
-  onSaveStateChange
+  onSaveStateChange,
+  onToolbarReady
 }: {
   page: Page
   breadcrumb: string[]
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
   onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
+  onEditorStatusChange?: (status: EditorStatus) => void
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
@@ -267,6 +294,7 @@ function HtmlEditorSurface({
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
   }) => void
+  onToolbarReady?: (node: ReactNode | null) => void
 }): JSX.Element {
   const parsed = parseHtmlContent(page.content)
   if (!parsed.ok) {
@@ -282,11 +310,13 @@ function HtmlEditorSurface({
           sourceField={sourceField}
           onExitSource={onExitSource}
           onSourceFieldChange={onSourceFieldChange}
+          onEditorStatusChange={onEditorStatusChange}
           onSaveContent={onSaveContent}
           breadcrumbLabels={[...breadcrumb, page.title]}
           onBack={onBack}
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}
+          onToolbarReady={onToolbarReady}
         />
       </Suspense>
     </HtmlEditorErrorBoundary>

@@ -36,6 +36,8 @@ export const LAYOUT = {
    * --rtwiki-overlay-z-index CSS variable for stylesheet consumers.
    */
   overlayZIndex: 1000,
+  /** Global application status-bar height (footer). */
+  statusBarHeight: 26,
   /** Visual-block container size clamps (px). */
   blockMinWidth: 240,
   blockMaxWidth: 1600,
@@ -62,6 +64,7 @@ export const UI_TEXT = {
   connectionFailed: 'The backend server is not responding. Make sure the application is running.',
   retry: 'Retry',
   dashboardTitle: 'Pages',
+  rootEntryLabel: 'Root',
   emptyTitle: 'No pages yet',
   emptyDescription: 'Create your first page to get started.',
   createRichNote: 'Create Rich Note',
@@ -275,7 +278,25 @@ export const UI_TEXT = {
   ideFontResetLabel: 'Reset font size',
   ideFontLargerLabel: 'Increase font size',
   ideSaveNowLabel: 'Save now',
+  ideCommentLabel: 'Comment or uncomment lines',
+  ideIndentLabel: 'Indent selection',
+  ideOutdentLabel: 'Outdent selection',
+  ideSelectAllLabel: 'Select all',
   ideFormatErrorLabel: 'Cannot format: the source has a syntax error.',
+  // Find / replace floating dialog
+  findDialogFindTitle: 'Find',
+  findDialogReplaceTitle: 'Find and replace',
+  findDialogSearchPlaceholder: 'Find…',
+  findDialogReplacePlaceholder: 'Replace with…',
+  findDialogNextLabel: 'Next match',
+  findDialogPreviousLabel: 'Previous match',
+  findDialogReplaceLabel: 'Replace',
+  findDialogReplaceAllLabel: 'Replace all',
+  findDialogMatchCaseLabel: 'Match case',
+  findDialogRegexLabel: 'Regex',
+  findDialogWholeWordLabel: 'Whole word',
+  findDialogNoMatchLabel: 'No matches',
+  findDialogMatchesLabel: 'Matches found',
   wikiLinkLabel: 'Link to page',
   wikiLinkSearchPlaceholder: 'Find a page…',
   wikiLinkEmptyLabel: 'No pages match',

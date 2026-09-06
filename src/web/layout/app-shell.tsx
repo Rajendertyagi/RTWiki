@@ -1,5 +1,5 @@
 import { AppShell, Box, Burger } from '@mantine/core'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { LAYOUT, UI_TEXT } from '../config/index.js'
 import classes from './app-shell.module.css'
 import { PaneDivider } from './pane-divider.js'
@@ -17,6 +17,8 @@ interface AppShellLayoutProps {
   onTreeWidthChange: (width: number) => void
   /** Divider pointer-up / keyboard commit (persist the width). */
   onTreeWidthCommit: (width: number) => void
+  /** Global application status bar, always visible at the viewport bottom. */
+  statusBar?: ReactNode
   children: React.ReactNode
 }
 
@@ -39,6 +41,7 @@ export function AppShellLayout({
   treeWidth,
   onTreeWidthChange,
   onTreeWidthCommit,
+  statusBar,
   children
 }: AppShellLayoutProps): JSX.Element {
   const [mobileNavOpened, setMobileNavOpened] = useState(false)
@@ -52,6 +55,8 @@ export function AppShellLayout({
         breakpoint: 'sm',
         collapsed: { mobile: !mobileNavOpened }
       }}
+      // Global status bar pinned to the viewport bottom, always visible.
+      footer={{ height: LAYOUT.statusBarHeight }}
       // No shell padding: the tab strip must sit flush at the viewport top;
       // inner regions manage their own spacing.
       padding={0}
@@ -99,6 +104,8 @@ export function AppShellLayout({
         {tabStrip}
         <div className={classes.mainContent}>{children}</div>
       </AppShell.Main>
+
+      <AppShell.Footer className={classes.footer}>{statusBar}</AppShell.Footer>
     </AppShell>
   )
 }

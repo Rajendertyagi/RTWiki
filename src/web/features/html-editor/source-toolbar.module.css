@@ -1,17 +1,14 @@
-/* Source toolbar root: one compact horizontal row. The previous global
- * `ide-toolbar` class was never defined in CSS, so the buttons fell back to
- * block layout and stacked vertically. This module class is the single owner
- * of the row geometry and matches the Rich toolbar height. */
+/* Source toolbar root: one compact horizontal row. It is hosted inside the
+ * shared PageWorkspace toolbar row (which already owns the 40px height,
+ * background, padding and bottom divider), so this class only governs the row
+ * geometry of the buttons themselves — no own box. Inside full-screen it draws
+ * its own box again (see .sourceFullscreen .toolbar in html-editor.module.css). */
 .toolbar {
   display: flex;
   align-items: center;
   gap: 2px;
   flex-wrap: nowrap;
   min-width: 0;
-  height: var(--rtwiki-toolbar-height);
-  padding-inline: var(--rtwiki-chrome-pad-x);
-  border-bottom: 1px solid var(--rtwiki-chrome-border);
-  background: var(--rtwiki-chrome-bg);
   /* Scroll horizontally on narrow widths; never wrap into vertical columns. */
   overflow-x: auto;
   overflow-y: hidden;

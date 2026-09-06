@@ -54,7 +54,7 @@
   /* State colours driven by RTWiki tokens so light/dark stay consistent and
      the selected row reads as a soft blue fill (no heavy grey outline). */
   --wb-hover-color: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
-  --wb-active-color: color-mix(in srgb, var(--mantine-color-blue-filled) 16%, transparent);
+  --wb-active-color: var(--rtwiki-active-fill);
   --wb-active-color-grayscale: color-mix(
     in srgb,
     var(--mantine-color-blue-filled) 16%,
@@ -63,7 +63,7 @@
   --wb-active-hover-color: color-mix(in srgb, var(--mantine-color-blue-filled) 24%, transparent);
   --wb-active-border-color: transparent;
   --wb-active-border-color-grayscale: transparent;
-  --wb-focus-border-color: var(--mantine-color-blue-outline);
+  --wb-focus-border-color: transparent;
 
   height: 100%;
   font-size: var(--mantine-font-size-sm);

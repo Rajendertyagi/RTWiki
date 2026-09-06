@@ -46,13 +46,19 @@
   --rtwiki-chrome-border: var(--mantine-color-default-border);
   /* Shared horizontal chrome padding (left/right of each row). */
   --rtwiki-chrome-pad-x: var(--mantine-spacing-sm);
-  /* Row heights. */
-  --rtwiki-tab-height: 34px;
-  --rtwiki-toolbar-height: 42px;
-  --rtwiki-header-height: 44px;
+  /* Row heights — tab strip, toolbars and the page header share one equal,
+     compact height so the chrome reads as a single stacked bar. */
+  --rtwiki-row-height: 40px;
+  --rtwiki-tab-height: var(--rtwiki-row-height);
+  --rtwiki-toolbar-height: var(--rtwiki-row-height);
+  --rtwiki-header-height: var(--rtwiki-row-height);
   --rtwiki-statusbar-height: 26px;
   /* Compact divider between toolbar groups. */
   --rtwiki-chrome-divider: var(--mantine-color-default-border);
+  /* Shared selected/active row fill — tree rows and the Home/root nav entry
+     read this so their selection colour is identical. */
+  --rtwiki-active-fill: color-mix(in srgb, var(--mantine-color-blue-filled) 16%, transparent);
+  --rtwiki-active-accent: var(--mantine-color-blue-filled);
 }
 
 /*

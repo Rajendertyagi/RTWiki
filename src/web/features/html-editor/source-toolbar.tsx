@@ -1,6 +1,5 @@
-import { redo, undo } from '@codemirror/commands'
+import { indentLess, indentMore, redo, toggleComment, undo } from '@codemirror/commands'
 import { foldAll, unfoldAll } from '@codemirror/language'
-import { openSearchPanel } from '@codemirror/search'
 import type { EditorView } from '@codemirror/view'
 import { ActionIcon, Divider, Tooltip } from '@mantine/core'
 import {
@@ -8,6 +7,8 @@ import {
   IconArrowForwardUp,
   IconArrowsDiagonal,
   IconArrowsMinimize,
+  IconChevronDown,
+  IconChevronUp,
   IconDeviceFloppy,
   IconReplace,
   IconSearch,
@@ -36,6 +37,10 @@ export interface SourceToolbarProps {
   onToggleFullscreen: () => void
   onReturnToPreview: () => void
   onSaveNow: () => void
+  /** Opens the floating find dialog (replaces the CodeMirror bottom panel). */
+  onOpenFind: () => void
+  /** Opens the floating find/replace dialog. */
+  onOpenReplace: () => void
 }
 
 const FONT_MIN = 10
@@ -81,7 +86,7 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           variant="subtle"
           aria-label={UI_TEXT.ideFindLabel}
           data-testid="ide-find"
-          onClick={withView((view) => openSearchPanel(view))}
+          onClick={props.onOpenFind}
         >
           <IconSearch size={16} />
         </ActionIcon>
@@ -91,9 +96,44 @@ export function SourceToolbar(props: SourceToolbarProps): JSX.Element {
           variant="subtle"
           aria-label={UI_TEXT.ideReplaceLabel}
           data-testid="ide-replace"
-          onClick={withView((view) => openSearchPanel(view))}
+          onClick={props.onOpenReplace}
         >
           <IconReplace size={16} />
+        </ActionIcon>
+      </Tooltip>
+
+      <Divider orientation="vertical" mx={4} />
+
+      <Tooltip label={UI_TEXT.ideCommentLabel}>
+        <ActionIcon
+          variant="subtle"
+          aria-label={UI_TEXT.ideCommentLabel}
+          data-testid="ide-comment"
+          onClick={withView((view) => toggleComment(view))}
+        >
+          <span aria-hidden="true" className={classes.glyphSmall}>
+            {'//'}
+          </span>
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip label={UI_TEXT.ideIndentLabel}>
+        <ActionIcon
+          variant="subtle"
+          aria-label={UI_TEXT.ideIndentLabel}
+          data-testid="ide-indent"
+          onClick={withView((view) => indentMore(view))}
+        >
+          <IconChevronUp size={16} />
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip label={UI_TEXT.ideOutdentLabel}>
+        <ActionIcon
+          variant="subtle"
+          aria-label={UI_TEXT.ideOutdentLabel}
+          data-testid="ide-outdent"
+          onClick={withView((view) => indentLess(view))}
+        >
+          <IconChevronDown size={16} />
         </ActionIcon>
       </Tooltip>
 

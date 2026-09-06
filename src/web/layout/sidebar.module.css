@@ -6,8 +6,9 @@
 }
 
 .searchSection {
-  padding: var(--mantine-spacing-sm);
-  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  /* Sits at the very top of the pane with only minor top padding; no separator
+   * below it so the search box and the file list read as one continuous pane. */
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
 }
 
 .listSection {
@@ -32,6 +33,14 @@
 
 .navItem:hover {
   background: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+}
+
+/* Active (selected) Home/root entry matches the tree-row selection colour so
+   the root and page rows read as one consistent selection state. */
+.navItem[data-active='true'] {
+  background: var(--rtwiki-active-fill) !important;
+  color: var(--rtwiki-text, var(--mantine-color-text));
+  box-shadow: inset 3px 0 0 var(--rtwiki-active-accent) !important;
 }
 
 .listEmpty {

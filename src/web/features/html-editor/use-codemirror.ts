@@ -33,6 +33,11 @@ export interface EditorStats {
   selectedChars: number
 }
 
+/** Editor status surfaced to the global application status bar. */
+export interface EditorStatus extends EditorStats {
+  formatError: string | null
+}
+
 function languageExtension(language: CodeEditorLanguage): Extension {
   switch (language) {
     case 'html':

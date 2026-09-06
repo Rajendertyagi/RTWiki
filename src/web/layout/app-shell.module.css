@@ -26,7 +26,6 @@
   min-height: 0;
   overflow: hidden;
   background: var(--rtwiki-surface, var(--mantine-color-body));
-  border-right: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
 }
 
 .railColumn {
@@ -71,4 +70,12 @@
    * viewport top, so no vertical padding here — chrome rows meet with only
    * their shared 1px separators. The dashboard restores its own inset. */
   padding: 0;
+}
+
+/* Global application status bar host (AppShell footer). The StatusBar child
+ * owns its own height/border/background; this only removes shell padding so it
+ * spans the full width flush against the viewport bottom. */
+.footer {
+  padding: 0;
+  background: var(--rtwiki-chrome-bg);
 }

@@ -17,7 +17,6 @@ import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
 import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
 import { RightSidebar } from '../workspace/right-sidebar.js'
-import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
 import {
   containUnknownBlocks,
   createDefaultDocument,
@@ -88,6 +87,7 @@ interface RichEditorProps {
   onSaveStateChange?: (state: {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
+    error?: string | null
   }) => void
   /** Hands the live editor instance to the parent once initialized. */
   onEditorReady?: (editor: AnyRichEditor | null) => void
@@ -135,9 +135,13 @@ export function RichEditor({
   // Sync state changes back to parent
   useEffect(() => {
     if (onSaveStateChange) {
-      onSaveStateChange({ isDirty, saveState: status as 'clean' | 'saving' | 'saved' | 'error' })
+      onSaveStateChange({
+        isDirty,
+        saveState: status as 'clean' | 'saving' | 'saved' | 'error',
+        error: status === 'error' ? error : null
+      })
     }
-  }, [isDirty, status, onSaveStateChange])
+  }, [isDirty, status, error, onSaveStateChange])
 
   useEffect(() => {
     if (onFlushRef) onFlushRef(flush)
@@ -318,8 +322,6 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     extractOutline(initialDocument)
   )
   const [wordCount, setWordCount] = useState(() => countBlockWords(initialDocument))
-  const statusBarSaveState: StatusSaveState =
-    status === 'error' ? 'error' : status === 'saving' ? 'saving' : 'saved'
   // Right-sidebar geometry (Slice 2): the explicit width/collapse are the
   // user's persisted preference; the temporary narrow-window collapse is
   // derived from the viewport and never persisted. Effective visibility is
@@ -532,10 +534,6 @@ function RichEditorInner(props: InnerProps): JSX.Element {
               ) : null}
             </BlockNoteView>
           </div>
-
-          <Text size="xs" c="dimmed">
-            {UI_TEXT.abruptExitNotice}
-          </Text>
         </Stack>
 
         {sidebarCollapsed ? (
@@ -581,18 +579,6 @@ function RichEditorInner(props: InnerProps): JSX.Element {
           </>
         )}
       </div>
-      <StatusBar
-        pageTypeLabel={pageTypeLabel('rich')}
-        saveState={statusBarSaveState}
-        saveError={status === 'error' ? error : null}
-        onRetry={retry}
-      >
-        {wordCount > 0 ? (
-          <Text size="xs" c="dimmed" data-testid="status-word-count">
-            {wordCount} words
-          </Text>
-        ) : null}
-      </StatusBar>
     </div>
   )
 }

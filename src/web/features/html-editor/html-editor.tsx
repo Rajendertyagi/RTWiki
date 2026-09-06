@@ -8,18 +8,20 @@ import {
   serializeHtmlContent
 } from '@rtwiki/shared/schemas/html-content'
 import { IconInfoCircle } from '@tabler/icons-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { pageTypeLabel } from '../../components/page-type-badge.js'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { createThrottledEmitter, debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { PreviewFrame } from '../html/preview-frame.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
+// NOTE: StatusBar is now rendered once, globally, in the app-shell footer
+// (see App.tsx). It is no longer mounted per HTML source view.
 import { CodeEditor } from './code-editor.js'
 import { formatSource } from './format-source.js'
 import classes from './html-editor.module.css'
+import { SourceFindDialog } from './source-find-dialog.js'
 import { SourceToolbar } from './source-toolbar.js'
-import type { EditorStats } from './use-codemirror.js'
+import type { EditorStatus } from './use-codemirror.js'
 
 export interface HtmlEditorWorkspaceProps {
   pageId: string
@@ -34,13 +36,19 @@ export interface HtmlEditorWorkspaceProps {
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   /** Returns to the pages dashboard from recovery UIs. */
   onBack?: () => void
+  /** Hands the page-level toolbar node up so the parent hosts it in the shared
+   *  toolbar row directly under the tab strip (matching the Rich page layout). */
+  onToolbarReady?: (node: ReactNode | null) => void
   /** Display-only parent chain for the breadcrumb. */
   breadcrumbLabels?: string[]
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
+    error?: string | null
   }) => void
+  /** Lifts caret/selection + format-error up to the global status bar. */
+  onEditorStatusChange?: (status: EditorStatus) => void
 }
 
 type ContentField = 'html' | 'css' | 'javascript'
@@ -75,7 +83,9 @@ export default function HtmlEditorWorkspace({
   onSaveContent,
   breadcrumbLabels = [],
   onFlushRef,
-  onSaveStateChange
+  onSaveStateChange,
+  onEditorStatusChange,
+  onToolbarReady
 }: HtmlEditorWorkspaceProps): JSX.Element {
   const parseResult = useMemo(() => parseHtmlContent(storedContent), [storedContent])
 
@@ -122,7 +132,7 @@ export default function HtmlEditorWorkspace({
 
   // The autosave hook is content-agnostic: it persists whatever string we
   // hand it — here always canonical v2 JSON.
-  const { status, error, notifyEdit, save, retry, flush } = useAutosave({
+  const { status, error, notifyEdit, save, flush } = useAutosave({
     pageId,
     onSave: handleSave
   })
@@ -140,9 +150,13 @@ export default function HtmlEditorWorkspace({
             : status === 'error'
               ? ('error' as const)
               : ('clean' as const)
-      onSaveStateChange({ isDirty: status !== 'idle' && status !== 'saved', saveState })
+      onSaveStateChange({
+        isDirty: status !== 'idle' && status !== 'saved',
+        saveState,
+        error: status === 'error' ? error : null
+      })
     }
-  }, [status, onSaveStateChange])
+  }, [status, error, onSaveStateChange])
 
   useEffect(() => {
     if (onFlushRef) {
@@ -298,8 +312,24 @@ export default function HtmlEditorWorkspace({
   const [wordWrap, setWordWrap] = useState(true)
   const [fontSize, setFontSize] = useState(14)
   const [fullscreen, setFullscreen] = useState(false)
-  const [stats, setStats] = useState<EditorStats>({ line: 1, column: 1, selectedChars: 0 })
+  const [stats, setStats] = useState<EditorStatus>({
+    line: 1,
+    column: 1,
+    selectedChars: 0,
+    formatError: null
+  })
   const [formatError, setFormatError] = useState<string | null>(null)
+
+  // Lift caret/selection + format error to the global status bar.
+  useEffect(() => {
+    onEditorStatusChange?.({ ...stats, formatError })
+  }, [stats, formatError, onEditorStatusChange])
+  const [findOpen, setFindOpen] = useState(false)
+  const [findMode, setFindMode] = useState<'find' | 'replace'>('find')
+  const openFind = useCallback((mode: 'find' | 'replace'): void => {
+    setFindMode(mode)
+    setFindOpen(true)
+  }, [])
   const getViewRef = useRef<(() => import('@codemirror/view').EditorView | null) | null>(null)
 
   // Format Document: lazily loads Prettier standalone, formats the CURRENT
@@ -328,6 +358,115 @@ export default function HtmlEditorWorkspace({
     })
   }, [pageId, sourceField])
 
+  // Expose the page-level toolbar to the parent so it renders in the shared
+  // toolbar row directly under the tab strip (matching the Rich page layout),
+  // above the file/header bar. Built here because every piece of IDE state it
+  // needs lives in this component; the parent only hosts the node.
+  const toolbarNode = useMemo(() => {
+    const switcher = (
+      <SegmentedControl
+        size="xs"
+        value={sourceField ?? 'preview'}
+        onChange={(value: string) =>
+          onSourceFieldChange?.(value as 'preview' | 'html' | 'css' | 'javascript')
+        }
+        aria-label={UI_TEXT.editorTabsLabel}
+        data-testid="html-source-switcher"
+        data={[
+          { value: 'preview', label: UI_TEXT.editorTabPreview },
+          { value: 'html', label: UI_TEXT.editorTabHtml },
+          { value: 'css', label: UI_TEXT.editorTabCss },
+          { value: 'javascript', label: UI_TEXT.editorTabJs }
+        ]}
+      />
+    )
+    if (sourceField === null) {
+      return (
+        <Group w="100%" justify="space-between" gap="sm" wrap="nowrap">
+          {switcher}
+          <Group gap="sm" wrap="nowrap">
+            {refreshing ? (
+              <Text size="xs" c="dimmed" role="status" data-testid="preview-refresh-status">
+                {UI_TEXT.previewRefreshingLabel}
+              </Text>
+            ) : null}
+            <Button
+              size="compact-xs"
+              variant="light"
+              onClick={handleRefreshPreview}
+              aria-label={UI_TEXT.refreshPreviewLabel}
+              data-testid="refresh-preview"
+            >
+              {UI_TEXT.refreshPreviewLabel}
+            </Button>
+          </Group>
+        </Group>
+      )
+    }
+    return (
+      <Group w="100%" justify="space-between" gap="sm" wrap="nowrap">
+        <Group gap="sm" wrap="nowrap">
+          {switcher}
+          <SourceToolbar
+            getView={() => getViewRef.current?.() ?? null}
+            onFormat={() => void handleFormat()}
+            wordWrap={wordWrap}
+            onToggleWordWrap={() => setWordWrap((w) => !w)}
+            fontSize={fontSize}
+            onFontSizeChange={setFontSize}
+            fullscreen={fullscreen}
+            onToggleFullscreen={() => setFullscreen((f) => !f)}
+            onReturnToPreview={() => {
+              debugLog('ui', 'ui_return_to_preview', { pageId, field: sourceField })
+              onExitSource?.()
+            }}
+            onSaveNow={() => void save()}
+            onOpenFind={() => openFind('find')}
+            onOpenReplace={() => openFind('replace')}
+          />
+        </Group>
+        {sourceField === 'javascript' ? (
+          <Group gap="sm" wrap="nowrap">
+            <Switch
+              checked={content.jsEnabled}
+              onChange={toggleJs}
+              label={UI_TEXT.jsEnabledToggleLabel}
+              aria-label={UI_TEXT.jsEnabledToggleLabel}
+              data-testid="js-enabled-toggle"
+            />
+            <Tooltip
+              label={UI_TEXT.jsSandboxHint}
+              position="bottom-end"
+              withArrow
+              multiline
+              w={260}
+            >
+              <IconInfoCircle size={16} aria-label={UI_TEXT.jsSandboxHint} />
+            </Tooltip>
+          </Group>
+        ) : null}
+      </Group>
+    )
+  }, [
+    sourceField,
+    onSourceFieldChange,
+    refreshing,
+    handleRefreshPreview,
+    wordWrap,
+    fontSize,
+    fullscreen,
+    handleFormat,
+    onExitSource,
+    save,
+    content.jsEnabled,
+    toggleJs
+  ])
+
+  useEffect(() => {
+    onToolbarReady?.(toolbarNode)
+    return () => onToolbarReady?.(null)
+  }, [toolbarNode, onToolbarReady])
+
   // Keyboard shortcuts (Shift+Alt+F format, F11 full-screen) attach to the
   // source view container via a ref listener so the static wrapper element
   // carries no interaction ARIA contract.
@@ -336,6 +475,15 @@ export default function HtmlEditorWorkspace({
     const host = sourceViewRef.current
     if (!host) return
     const listener = (event: KeyboardEvent): void => {
+      if (event.ctrlKey && !event.altKey && !event.shiftKey) {
+        const key = event.key.toLowerCase()
+        if (key === 'f' || key === 'h') {
+          event.preventDefault()
+          event.stopPropagation()
+          openFind(key === 'h' ? 'replace' : 'find')
+          return
+        }
+      }
       if (event.shiftKey && event.altKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         void handleFormat()
@@ -346,30 +494,9 @@ export default function HtmlEditorWorkspace({
         setFullscreen((f) => !f)
       }
     }
-    host.addEventListener('keydown', listener)
-    return () => host.removeEventListener('keydown', listener)
-  }, [handleFormat])
-
-  const sourceSwitcher = (
-    <SegmentedControl
-      size="xs"
-      value={sourceField ?? 'preview'}
-      onChange={(value: string) =>
-        onSourceFieldChange?.(value as 'preview' | 'html' | 'css' | 'javascript')
-      }
-      aria-label={UI_TEXT.editorTabsLabel}
-      data-testid="html-source-switcher"
-      data={[
-        { value: 'preview', label: UI_TEXT.editorTabPreview },
-        { value: 'html', label: UI_TEXT.editorTabHtml },
-        { value: 'css', label: UI_TEXT.editorTabCss },
-        { value: 'javascript', label: UI_TEXT.editorTabJs }
-      ]}
-    />
-  )
-
-  const statusBarSaveState: StatusSaveState =
-    status === 'error' ? 'error' : status === 'saving' ? 'saving' : 'saved'
+    host.addEventListener('keydown', listener, { capture: true })
+    return () => host.removeEventListener('keydown', listener, { capture: true } as EventListenerOptions)
+  }, [handleFormat, openFind])
 
   if (!parseResult.ok) {
     return (
@@ -393,25 +520,6 @@ export default function HtmlEditorWorkspace({
       content.html.trim() === '' && content.css.trim() === '' && content.javascript.trim() === ''
     return (
       <div className={classes.root} data-testid="html-preview-view">
-        <Group justify="space-between" wrap="nowrap" gap="sm" className={classes.controls}>
-          {sourceSwitcher}
-          <Group gap="sm" wrap="nowrap">
-            {refreshing ? (
-              <Text size="xs" c="dimmed" role="status" data-testid="preview-refresh-status">
-                {UI_TEXT.previewRefreshingLabel}
-              </Text>
-            ) : null}
-            <Button
-              size="compact-xs"
-              variant="light"
-              onClick={handleRefreshPreview}
-              aria-label={UI_TEXT.refreshPreviewLabel}
-              data-testid="refresh-preview"
-            >
-              {UI_TEXT.refreshPreviewLabel}
-            </Button>
-          </Group>
-        </Group>
         {isEmpty ? (
           <Stack align="center" justify="center" gap="xs" className={classes.previewPane}>
             <Text c="dimmed">{UI_TEXT.htmlPreviewEmpty}</Text>
@@ -430,7 +538,6 @@ export default function HtmlEditorWorkspace({
   // toolbar, large editor area and a compact status row. The preview-JS gate
   // lives ONLY in the JavaScript subfile.
   const fieldLabel = UI_TEXT[FIELD_LABELS[sourceField]]
-  const breadcrumbText = [...breadcrumbLabels, fieldLabel].join(' / ')
   return (
     <div
       ref={sourceViewRef}
@@ -438,50 +545,33 @@ export default function HtmlEditorWorkspace({
       data-testid="html-source-view"
       data-fullscreen={fullscreen ? 'true' : 'false'}
     >
-      <Group justify="space-between" wrap="nowrap" gap="sm" className={classes.controls}>
-        <Text size="xs" c="dimmed" data-testid="source-breadcrumb">
-          {breadcrumbText}
-        </Text>
-        <Group gap="sm" wrap="nowrap">
-          {sourceSwitcher}
-          {sourceField === 'javascript' ? (
-            <>
-              <Switch
-                checked={content.jsEnabled}
-                onChange={toggleJs}
-                label={UI_TEXT.jsEnabledToggleLabel}
-                aria-label={UI_TEXT.jsEnabledToggleLabel}
-                data-testid="js-enabled-toggle"
-              />
-              <Tooltip
-                label={UI_TEXT.jsSandboxHint}
-                position="bottom-end"
-                withArrow
-                multiline
-                w={260}
-              >
-                <IconInfoCircle size={16} aria-label={UI_TEXT.jsSandboxHint} />
-              </Tooltip>
-            </>
-          ) : null}
-        </Group>
-      </Group>
+      {fullscreen ? (
+        <SourceToolbar
+          getView={() => getViewRef.current?.() ?? null}
+          onFormat={() => void handleFormat()}
+          wordWrap={wordWrap}
+          onToggleWordWrap={() => setWordWrap((w) => !w)}
+          fontSize={fontSize}
+          onFontSizeChange={setFontSize}
+          fullscreen={fullscreen}
+          onToggleFullscreen={() => setFullscreen((f) => !f)}
+          onReturnToPreview={() => {
+            debugLog('ui', 'ui_return_to_preview', { pageId, field: sourceField })
+            onExitSource?.()
+          }}
+          onSaveNow={() => void save()}
+          onOpenFind={() => openFind('find')}
+          onOpenReplace={() => openFind('replace')}
+        />
+      ) : null}
 
-      <SourceToolbar
-        getView={() => getViewRef.current?.() ?? null}
-        onFormat={() => void handleFormat()}
-        wordWrap={wordWrap}
-        onToggleWordWrap={() => setWordWrap((w) => !w)}
-        fontSize={fontSize}
-        onFontSizeChange={setFontSize}
-        fullscreen={fullscreen}
-        onToggleFullscreen={() => setFullscreen((f) => !f)}
-        onReturnToPreview={() => {
-          debugLog('ui', 'ui_return_to_preview', { pageId, field: sourceField })
-          onExitSource?.()
-        }}
-        onSaveNow={() => void save()}
-      />
+      {findOpen ? (
+        <SourceFindDialog
+          getView={() => getViewRef.current?.() ?? null}
+          mode={findMode}
+          onClose={() => setFindOpen(false)}
+        />
+      ) : null}
 
       <Box className={classes.editorPaneSingle}>
         <CodeEditor
@@ -491,37 +581,13 @@ export default function HtmlEditorWorkspace({
           label={fieldLabel}
           wordWrap={wordWrap}
           fontSize={fontSize}
-          onStatsChange={setStats}
+          onStatsChange={(s) => setStats((prev) => ({ ...prev, ...s }))}
           onViewAccessor={(getView) => {
             getViewRef.current = getView
           }}
           extraKeys={modSaveKeys}
         />
       </Box>
-
-      <StatusBar
-        pageTypeLabel={pageTypeLabel('html')}
-        saveState={statusBarSaveState}
-        saveError={status === 'error' ? error : null}
-        onRetry={retry}
-      >
-        <Text size="xs" c="dimmed" data-testid="status-subfile">
-          {fieldLabel}
-        </Text>
-        <Text size="xs" c="dimmed" data-testid="ide-caret-position">
-          Ln {stats.line}, Col {stats.column}
-        </Text>
-        {stats.selectedChars > 0 ? (
-          <Text size="xs" c="dimmed" data-testid="ide-selection-count">
-            {stats.selectedChars} selected
-          </Text>
-        ) : null}
-        {formatError !== null ? (
-          <Text size="xs" c="red" role="alert" data-testid="ide-format-error">
-            {UI_TEXT.ideFormatErrorLabel}
-          </Text>
-        ) : null}
-      </StatusBar>
     </div>
   )
 }

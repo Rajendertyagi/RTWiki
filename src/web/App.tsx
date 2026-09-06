@@ -13,6 +13,9 @@ import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdow
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
 import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
+import { pageTypeLabel } from './components/page-type-badge.js'
+import { StatusBar } from './features/workspace/status-bar.js'
+import type { EditorStatus } from './features/html-editor/use-codemirror.js'
 import {
   type LayoutPreferences,
   loadLayoutPreferences,
@@ -250,6 +253,11 @@ export function App(): JSX.Element {
     field: 'html' | 'css' | 'javascript'
   } | null>(null)
 
+  // Lifted editor status for the global application status bar.
+  const [pageSaveState, setPageSaveState] = useState<'clean' | 'saving' | 'saved' | 'error'>('saved')
+  const [pageSaveError, setPageSaveError] = useState<string | null>(null)
+  const [editorStatus, setEditorStatus] = useState<EditorStatus | null>(null)
+
   // Global Ctrl+K page finder. Safe everywhere: no installed CodeMirror
   // keymap binds Mod-K, and the finder is a plain Mantine modal.
   const [finderOpen, setFinderOpen] = useState(false)
@@ -331,6 +339,18 @@ export function App(): JSX.Element {
       field: 'preview'
     })
     setHtmlSource(null)
+  }
+
+  // Drives the Preview/HTML/CSS/JavaScript switcher in the shared toolbar row.
+  // 'preview' returns to the rendered view; a field opens that source subfile.
+  const handleSourceFieldChange = (field: 'preview' | 'html' | 'css' | 'javascript'): void => {
+    const pageId = controller.selectedPage?.id
+    if (!pageId) return
+    if (field === 'preview') {
+      void handleExitHtmlSource()
+    } else {
+      void handleOpenHtmlSource(pageId, field)
+    }
   }
 
   const handleCreatePage = async (title: string, pageType: PageType): Promise<void> => {
@@ -449,6 +469,42 @@ export function App(): JSX.Element {
     )
   }
 
+  // Global application status bar, always visible at the viewport bottom. Shows
+  // page type + save state on any open page, and caret/selection/format status
+  // while editing code; on the dashboard it shows the app is ready.
+  const globalStatusBar = controller.selectedPage ? (
+    <StatusBar
+      pageTypeLabel={pageTypeLabel(controller.selectedPage.pageType)}
+      saveState={pageSaveState}
+      saveError={pageSaveState === 'error' ? pageSaveError : null}
+      onRetry={() => void flushQuietly()}
+    >
+      {editorStatus ? (
+        <>
+          <Text size="xs" c="dimmed" data-testid="status-caret-position">
+            Ln {editorStatus.line}, Col {editorStatus.column}
+          </Text>
+          {editorStatus.selectedChars > 0 ? (
+            <Text size="xs" c="dimmed" data-testid="status-selection-count">
+              {editorStatus.selectedChars} selected
+            </Text>
+          ) : null}
+          {editorStatus.formatError !== null ? (
+            <Text size="xs" c="red" role="alert" data-testid="status-format-error">
+              {UI_TEXT.ideFormatErrorLabel}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+    </StatusBar>
+  ) : (
+    <StatusBar pageTypeLabel={UI_TEXT.appName} saveState="saved">
+      <Text size="xs" c="dimmed" data-testid="status-ready">
+        {UI_TEXT.ready}
+      </Text>
+    </StatusBar>
+  )
+
   return (
     <>
       <AppShellLayout
@@ -456,6 +512,7 @@ export function App(): JSX.Element {
         treeWidth={treeWidth}
         onTreeWidthChange={setTreeWidth}
         onTreeWidthCommit={handleTreeWidthCommit}
+        statusBar={globalStatusBar}
         tabStrip={
           <TabStrip
             tabs={openTabs}
@@ -510,7 +567,7 @@ export function App(): JSX.Element {
           region and page workspaces bind to a definite height. Never a
           scroll container — scrolling belongs to the dashboard region and
           the per-page-type editor surfaces. */}
-        <Stack gap="sm" flex={1} mih={0} miw={0}>
+        <Stack gap={0} flex={1} mih={0} miw={0}>
           {controller.mutationError ? (
             <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" title="Error">
               {controller.mutationError}
@@ -558,6 +615,7 @@ export function App(): JSX.Element {
                   ? htmlSource.field
                   : null
               }
+              onSourceFieldChange={handleSourceFieldChange}
               onExitHtmlSource={() => void handleExitHtmlSource()}
               onSaveContent={controller.savePageContent}
               onBack={handleWorkspaceClose}
@@ -567,7 +625,11 @@ export function App(): JSX.Element {
               onFlushRef={(fn) => {
                 flushRef.current = fn
               }}
-              onSaveStateChange={() => {}}
+              onSaveStateChange={(state) => {
+                setPageSaveState(state.saveState)
+                setPageSaveError(state.error ?? null)
+              }}
+              onEditorStatusChange={setEditorStatus}
             />
           ) : (
             <Dashboard

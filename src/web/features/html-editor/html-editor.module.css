@@ -1,7 +1,8 @@
 .root {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--mantine-spacing-xs);
+  gap: 0;
   flex: 1;
   min-height: 0;
 }
@@ -65,4 +66,16 @@
   z-index: var(--rtwiki-overlay-z-index, 1000);
   background: var(--rtwiki-background, var(--mantine-color-body));
   padding: var(--mantine-spacing-md);
+}
+
+/* Inside full-screen the toolbar is re-rendered within this overlay (the shared
+ * top toolbar row is covered), so it draws its own box again. */
+.sourceFullscreen .toolbar {
+  border-bottom: 1px solid var(--rtwiki-chrome-border);
+  background: var(--rtwiki-chrome-bg);
+  padding-inline: var(--rtwiki-chrome-pad-x);
+  height: var(--rtwiki-toolbar-height);
+  flex-shrink: 0;
+  border-top-left-radius: var(--mantine-radius-md);
+  border-top-right-radius: var(--mantine-radius-md);
 }

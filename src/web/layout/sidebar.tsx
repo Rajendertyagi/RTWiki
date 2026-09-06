@@ -86,12 +86,12 @@ export function Sidebar({
           <Stack gap={2} className={classes.treeStack}>
             {/* Home / Dashboard entry — always visible, outside role=tree */}
             <NavLink
-              label={UI_TEXT.dashboardTitle}
+              label={UI_TEXT.rootEntryLabel}
               leftSection={<IconHome size={16} />}
               active={selectedId === null}
               onClick={() => onSelect(null)}
               className={classes.navItem}
-              aria-label={UI_TEXT.dashboardTitle}
+              aria-label={UI_TEXT.rootEntryLabel}
             />
 
             {loading ? null : pages.length === 0 && !loading ? (

@@ -2,13 +2,11 @@ import { Button, Group, Text } from '@mantine/core'
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content'
 import { IconEye, IconPencil } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { updatePage } from '../../services/pages-api.js'
 import { CodeEditor } from '../html-editor/code-editor.js'
-import type { EditorStats } from '../html-editor/use-codemirror.js'
+import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
-import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
 import { renderMarkdown } from './markdown-render.js'
 import classes from './markdown-workspace.module.css'
 
@@ -20,7 +18,9 @@ export interface MarkdownPageWorkspaceProps {
   onSaveStateChange?: (state: {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
+    error?: string | null
   }) => void
+  onEditorStatusChange?: (status: EditorStatus) => void
 }
 
 /**
@@ -37,7 +37,8 @@ export default function MarkdownPageWorkspace({
   storedContent,
   onSaveContent,
   onFlushRef,
-  onSaveStateChange
+  onSaveStateChange,
+  onEditorStatusChange
 }: MarkdownPageWorkspaceProps): JSX.Element {
   const parsed = parseMarkdownPageContent(storedContent)
   const committedSource = parsed.ok ? parsed.value.markdown : ''
@@ -45,7 +46,12 @@ export default function MarkdownPageWorkspace({
 
   const [mode, setMode] = useState<'edit' | 'preview'>('preview')
   const [draft, setDraft] = useState(committedSource)
-  const [stats, setStats] = useState<EditorStats>({ line: 1, column: 1, selectedChars: 0 })
+  const [stats, setStats] = useState<EditorStatus>({
+    line: 1,
+    column: 1,
+    selectedChars: 0,
+    formatError: null
+  })
 
   const handleSave = async (pid: string, content: string): Promise<void> => {
     if (onSaveContent) {
@@ -64,9 +70,10 @@ export default function MarkdownPageWorkspace({
   useEffect(() => {
     onSaveStateChange?.({
       isDirty: status !== 'idle' && status !== 'saved',
-      saveState: mapStatus(status)
+      saveState: mapStatus(status),
+      error: status === 'error' ? error : null
     })
-  }, [status, onSaveStateChange])
+  }, [status, error, onSaveStateChange])
 
   useEffect(() => {
     onFlushRef?.(flush)
@@ -75,6 +82,11 @@ export default function MarkdownPageWorkspace({
     }
   }, [flush, onFlushRef])
 
+  // Lift caret/selection to the global status bar.
+  useEffect(() => {
+    onEditorStatusChange?.({ ...stats, formatError: null })
+  }, [stats, onEditorStatusChange])
+
   const updateMarkdown = (value: string): void => {
     setDraft(value)
     notifyEdit(JSON.stringify({ version: 1, markdown: value }))
@@ -82,8 +94,6 @@ export default function MarkdownPageWorkspace({
 
   const html = useMemo(() => renderMarkdown(draft), [draft])
 
-  const statusBarSaveState: StatusSaveState =
-    status === 'error' ? 'error' : status === 'saving' ? 'saving' : 'saved'
   const wordCount = useMemo(() => draft.trim().match(/\S+/g)?.length ?? 0, [draft])
 
   if (parseFailed) {
@@ -131,7 +141,7 @@ export default function MarkdownPageWorkspace({
             language="markdown"
             label={UI_TEXT.markdownEditorLabel}
             wordWrap
-            onStatsChange={setStats}
+            onStatsChange={(s) => setStats((prev) => ({ ...prev, ...s }))}
           />
         </div>
       ) : (
@@ -142,27 +152,6 @@ export default function MarkdownPageWorkspace({
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
-
-      <StatusBar
-        pageTypeLabel={pageTypeLabel('markdown')}
-        saveState={statusBarSaveState}
-        saveError={status === 'error' ? error : null}
-        onRetry={retry}
-      >
-        {wordCount > 0 ? (
-          <Text size="xs" c="dimmed" data-testid="status-word-count">
-            {wordCount} words
-          </Text>
-        ) : null}
-        <Text size="xs" c="dimmed" data-testid="ide-caret-position">
-          Ln {stats.line}, Col {stats.column}
-        </Text>
-        {stats.selectedChars > 0 ? (
-          <Text size="xs" c="dimmed" data-testid="ide-selection-count">
-            {stats.selectedChars} selected
-          </Text>
-        ) : null}
-      </StatusBar>
     </div>
   )
 }

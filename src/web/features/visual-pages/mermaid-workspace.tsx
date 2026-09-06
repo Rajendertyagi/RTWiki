@@ -20,14 +20,12 @@ import {
   IconZoomOut
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { DIAGRAM_TEMPLATES } from '../rich-editor/insert-blocks.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
-import { StatusBar, type StatusSaveState } from '../workspace/status-bar.js'
 import classes from './mermaid-workspace.module.css'
 
 /**
@@ -50,6 +48,7 @@ export interface MermaidPageWorkspaceProps {
   onSaveStateChange?: (state: {
     isDirty: boolean
     saveState: 'clean' | 'saving' | 'saved' | 'error'
+    error?: string | null
   }) => void
 }
 
@@ -107,8 +106,12 @@ export default function MermaidPageWorkspace({
   })
 
   useEffect(() => {
-    onSaveStateChange?.({ isDirty, saveState: status as 'clean' | 'saving' | 'saved' | 'error' })
-  }, [isDirty, status, onSaveStateChange])
+    onSaveStateChange?.({
+      isDirty,
+      saveState: status as 'clean' | 'saving' | 'saved' | 'error',
+      error: status === 'error' ? error : null
+    })
+  }, [isDirty, status, error, onSaveStateChange])
 
   useEffect(() => {
     onFlushRef?.(flush)
@@ -268,9 +271,6 @@ export default function MermaidPageWorkspace({
     </div>
   )
 
-  const statusBarSaveState: StatusSaveState =
-    status === 'error' ? 'error' : status === 'saving' ? 'saving' : 'saved'
-
   return (
     <div
       className={`${classes.root} ${fullscreen ? classes.fullscreen : ''}`}
@@ -398,23 +398,6 @@ export default function MermaidPageWorkspace({
           </div>
         </>
       )}
-
-      <StatusBar
-        pageTypeLabel={pageTypeLabel(pageType)}
-        saveState={statusBarSaveState}
-        saveError={status === 'error' ? error : null}
-        onRetry={retry}
-      >
-        <Text size="xs" c="dimmed" data-testid={`${pageType}-zoom-status`}>
-          {Math.round(zoom * 100)}%
-        </Text>
-        <Text size="xs" c="dimmed">
-          {fit ? UI_TEXT.diagramFitLabel : UI_TEXT.diagramActualSizeLabel}
-        </Text>
-        <Text size="xs" c={errorCode || liveError ? 'red' : 'dimmed'}>
-          {errorCode || liveError ? UI_TEXT.diagramErrorTitle : UI_TEXT.saveStatusSaved}
-        </Text>
-      </StatusBar>
     </div>
   )
 }
