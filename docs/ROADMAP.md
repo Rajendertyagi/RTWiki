@@ -33,6 +33,167 @@ After the MVP is accepted, Phase 2 focuses on hardening and quality improvements
 | Keyboard shortcut reference | In-app help panel listing all keyboard shortcuts |
 | Performance optimization | Virtualized page list, debounced search input, lazy-loaded heavy components |
 
+## Approved Next Slices (Post-MVP UI/UX, in priority order)
+
+The following five slices are approved for the next implementation cycle, in this exact order. Each is a separate future slice tracked independently. The current workspace-chrome compaction, base Markdown page, and global status bar have passed basic manual testing; the broader automated test suite is deferred to the owner after further manual checking, so none of these slices add tests or run the suite during implementation. Each slice records its user-visible outcome, affected systems, dependencies, storage impact, manual owner checklist, and exclusions.
+
+### Slice 1: Tree Polish Round 2
+
+**User-visible outcome**
+A cleaner, more legible page tree: consistent row spacing, clearer expand/collapse chevrons, distinct per-type icons (Rich / HTML / Markdown / Diagram / Mind Map), obvious selection and keyboard focus, a polished dark theme, reliable hover action buttons, a compact context menu, and a graceful narrow-layout collapse.
+
+**Affected systems**
+- `src/web/features/sidebar/*` (Sidebar shell, tree host)
+- `src/web/features/pages/page-tree*` (Wunderbaum bridge, `wb-tree-host.ts`, tree context menu)
+- `src/web/theme/customization.css` (`--rtwiki-tree-*` tokens) and `page-tree.module.css` / `sidebar.module.css`
+- `src/web/components/page-type-badge.*` (type icons/labels)
+
+**Dependencies**
+- Existing functional tree (expand/collapse, select, rename, drag-move, context actions) and the compact-chrome token set already in place. No backend or schema changes required.
+
+**Storage impact**
+- None. Pure UI/CSS. Tree expanded-state persistence already exists via the workspace session (`expandedIds`); no new storage is introduced.
+
+**Manual owner checklist**
+- Row spacing/alignment matches the compact-chrome design intent.
+- Chevron hit-area is correct (≈24px) and toggles reliably.
+- Type icons render distinctly per page type.
+- Selection colour matches the shared chrome active-fill token.
+- Dark-theme contrast is acceptable (no low-contrast text/borders).
+- Hover action button appears without shifting the title.
+- Context menu is compact and keyboard-accessible.
+- Narrow window (<48em) collapses gracefully with no overflow.
+- No behaviour regressions: expand/collapse, select, rename, drag-move, and context actions all still work.
+
+**Exclusions**
+- Do **not** change tree behaviour unless a visible defect requires it.
+- No new tree features (e.g., multi-select, new node types).
+- No backend, schema, or data-model changes.
+- No automated tests added during implementation (owner runs the suite later).
+
+### Slice 2: Dashboard Card Improvements
+
+**User-visible outcome**
+Dashboard cards become less basic and more useful: a page-type icon, the title, a short safe preview excerpt, a visual preview where appropriate, and clear hover/open/context-menu behaviour — while staying fast and responsive even with many pages.
+
+**Affected systems**
+- `src/web/features/dashboard/*` (Dashboard, card component)
+- `src/web/components/page-type-badge.*` (icons/labels)
+- Content parsing for safe excerpts (`@rtwiki/shared/schemas/html-content`, `markdown-content`)
+- `use-pages-controller` (page data access)
+
+**Dependencies**
+- Page-type badges already exist. Safe preview text is derived from parsed page content (HTML/Markdown schemas). Visual preview (e.g., a rendered snapshot) only where it is cheap and safe.
+
+**Storage impact**
+- None. Previews are derived at render time from existing page content; no thumbnails or preview blobs are stored.
+
+**Manual owner checklist**
+- Card shows the correct type icon and title.
+- Preview text is a safe excerpt: no raw HTML/script execution, no secrets.
+- Visual preview (rendered snippet/thumbnail) appears only where safe and inexpensive.
+- Hover highlights the card; click opens the page.
+- Context menu (open / rename / duplicate / delete) works.
+- Large page lists stay smooth (no layout thrash; virtualize if needed).
+
+**Exclusions**
+- No new data stored for cards.
+- No change to the page content model.
+- No in-card editing.
+- No automated tests added during implementation.
+
+### Slice 3: Settings Workspace + Live Debug Logs
+
+**User-visible outcome**
+A proper Settings page with its own settings sidebar and sections: **Appearance**, **Layout**, **Editor**, and **Debug Logs**. Live Debug Logs are scrollable, support pause/resume and clearing the visible view, level/category filters, and timestamps — and never contain note content or secrets.
+
+**Affected systems**
+- New `src/web/features/settings/*` (SettingsWorkspace, settings sidebar, section panels)
+- `src/web/diagnostics/debug-log.ts` (expose an in-memory, subscribable live log stream)
+- `src/web/layout/utility-rail.tsx` (the current gear is a debug toggle — replace/augment with a Settings entry)
+- `src/web/features/workspace/layout-preferences.*` (persist Appearance/Layout/Editor prefs)
+- `UI_TEXT` additions
+
+**Dependencies**
+- Debug logging already writes `logs/rtwiki-debug.jsonl` via `debug-log.ts` (which already excludes note content). Mantine color-scheme and theme tokens already exist for the Appearance section to reuse.
+
+**Storage impact**
+- Settings preferences persist to the existing local preference store (localStorage / layout-preferences); no new page or note content is stored.
+- Debug logs continue to write to `logs/` on disk. The Live view reads an in-memory buffer only; "clear visible log view" clears the view, not the file. Logs must never include note content or secrets (already enforced by `DEBUG_MODE.md`).
+
+**Manual owner checklist**
+- Settings entry from the rail opens a page with a left settings sidebar.
+- Appearance, Layout, Editor, and Debug Logs sections are present.
+- Debug Logs live-updates as actions occur.
+- Pause/resume stops/starts live updates; Clear empties the visible list.
+- Level (debug/info/warn/error) and category filters work; timestamps are shown.
+- Verify no page content or secrets appear in log output.
+- Appearance/Layout/Editor changes persist across reload.
+
+**Exclusions**
+- The **Data / Backup** section is reserved for a later slice — do **not** build it now.
+- Do not store note content or secrets in logs.
+- Do not change the underlying debug file format.
+- No automated tests added during implementation.
+
+### Slice 4: Markdown Polish
+
+**User-visible outcome**
+Safe `.md` import and export, Markdown templates, preview refinements, and clear Markdown-specific editing behaviour. Raw HTML stays disabled.
+
+**Affected systems**
+- `src/web/features/markdown/*` (markdown-workspace, markdown-render, import/export)
+- Shared import pipeline (ADR-006) and `markdown-content` schema
+- `UI_TEXT` additions (templates, labels)
+
+**Dependencies**
+- The Markdown page type already supports edit/preview. The shared import pipeline (HTML/Markdown import) already exists. `.md` round-trip must stay safe (DOMPurify; no HTML/script execution).
+
+**Storage impact**
+- None new. Templates are code constants; import/export are file operations and are not stored in the database.
+
+**Manual owner checklist**
+- `.md` import produces a valid Markdown page with no script execution (sanitized).
+- `.md` export round-trips content faithfully.
+- Templates create pages with sensible starter content.
+- Preview renders correctly (headings, lists, code, tables, links).
+- Editing behaviour is clearly Markdown (not rich blocks).
+- Raw HTML is disabled/escaped in preview — no XSS via imported Markdown.
+
+**Exclusions**
+- Keep raw HTML disabled in Markdown (do not enable HTML rendering).
+- Do not change the canonical storage format (BlockNote JSON / v2). Markdown is a dedicated, source-editable page type with preview; import/export are additional capabilities, not its only purpose.
+- No automated tests added during implementation.
+
+### Slice 5: Rich Document Improvements
+
+**User-visible outcome**
+Linked child-page cards (embed/navigate to child pages from a rich document), better Formula / Diagram / Mind Map presentation, and subject/chapter templates — without redesigning the whole rich editor.
+
+**Affected systems**
+- `src/web/features/rich-editor/*` (formula, diagram, mindmap blocks; linked child-page card block; insert menus; templates)
+- `VISUAL_BLOCKS.md` reference and the rich-content schema (new linked-page block type, backward-compatible)
+- Existing wiki-links / backlinks (`WIKI_LINKS.md`) as the foundation for linked child-page cards
+
+**Dependencies**
+- BlockNote plus `@blocknote/math-block` and `@blocknote/diagram-block` are already integrated. Wiki-links/backlinks already exist. A templates mechanism is required for subject/chapter starters.
+
+**Storage impact**
+- A new linked child-page card block extends the existing BlockNote JSON (rich content) schema in a backward-compatible way. Templates are constants. No new database tables.
+
+**Manual owner checklist**
+- Linked child-page cards render with title/type and open the child on click.
+- Formula blocks render clearly (KaTeX) and edit smoothly.
+- Diagram / Mind Map blocks present cleanly with clear edit/preview.
+- Subject/chapter templates create well-structured starter documents.
+- No regression in core rich editing; existing documents still load.
+
+**Exclusions**
+- Do **not** redesign the whole rich editor.
+- Do not make breaking changes to the BlockNote JSON canonical format.
+- Keep all existing block types working.
+- No automated tests added during implementation.
+
 ## Phase 3: LAN Access from Other Devices
 
 This phase adds the capability for family members to open and read the same shared workspace from phones and tablets on the home network. The user accesses the application through their device's browser by navigating to the PC's LAN address. This requires an explicit opt-in configuration change (see [ADR-001](adr/ADR-001-browser-first-local-application.md)).
