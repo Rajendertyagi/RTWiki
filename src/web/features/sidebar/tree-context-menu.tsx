@@ -11,28 +11,33 @@ export type TreeContextMenuState =
 
 interface TreeContextMenuProps {
   menu: TreeContextMenuState | null
+  /** Page type of the target page (page menus only); gates export options. */
+  pageType?: PageType | null
   moveTargets: MoveTarget[]
   onAction: (action: string) => void
   onDismiss: () => void
+  /** Opens the OS file picker for a Markdown import (root menu). */
+  onRequestImport?: () => void
+  /** Exports the target page (page menu). */
+  onExportPage?: (pageId: string) => void
 }
 
-const ROOT_ACTIONS = [
-  ['rootRich', UI_TEXT.newRichPage],
-  ['rootHtml', UI_TEXT.newHtmlRootPage],
-  ['rootDiagram', UI_TEXT.createDiagramPage],
-  ['rootMindMap', UI_TEXT.createMindMapPage]
-] as const
+type Submenu = 'new' | 'child' | 'export' | null
 
-const PAGE_ACTIONS = [
-  ['open', UI_TEXT.openAction],
+const NEW_TYPES: ReadonlyArray<readonly [string, string]> = [
+  ['newRich', UI_TEXT.newRichPage],
+  ['newHtml', UI_TEXT.newHtmlRootPage],
+  ['newMarkdown', UI_TEXT.newMarkdownPage],
+  ['newDiagram', UI_TEXT.createDiagramPage],
+  ['newMindMap', UI_TEXT.createMindMapPage]
+]
+
+const CHILD_TYPES: ReadonlyArray<readonly [string, string]> = [
   ['childRich', UI_TEXT.newChildRichPage],
   ['childHtml', UI_TEXT.newChildHtmlPage],
   ['childDiagram', UI_TEXT.newDiagramPage],
-  ['childMindMap', UI_TEXT.newMindMapPage],
-  ['rename', UI_TEXT.renameAction],
-  ['duplicate', UI_TEXT.duplicateAction],
-  ['delete', UI_TEXT.deleteAction]
-] as const
+  ['childMindMap', UI_TEXT.newMindMapPage]
+]
 
 /**
  * RTWiki's portalled tree context menu. Rendered into document.body with a
@@ -40,21 +45,37 @@ const PAGE_ACTIONS = [
  * the rail, editor, toolbars, tabs, and right sidebar while being clamped
  * into the viewport. Dismisses on Escape, outside pointer-down, and action
  * completion.
+ *
+ * Root space opens the new-page submenu (any type) and Markdown import; a
+ * page row opens Open / New-child submenu / Rename / Duplicate / Delete plus
+ * Move and an Export submenu (Markdown pages export their source).
  */
 export function TreeContextMenu({
   menu,
+  pageType,
   moveTargets,
   onAction,
-  onDismiss
+  onDismiss,
+  onRequestImport,
+  onExportPage
 }: TreeContextMenuProps): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
+  const [submenu, setSubmenu] = useState<Submenu>(null)
   // Move-to picker view: the parent remounts this component per menu
   // invocation (key), so picker state always starts closed and empty. The
   // full page list never renders by default; targets appear only here,
   // filtered by the query.
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [moveQuery, setMoveQuery] = useState('')
+
+  // Reset transient views whenever the menu identity changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stable setters
+  useEffect(() => {
+    setSubmenu(null)
+    setMovePickerOpen(false)
+    setMoveQuery('')
+  }, [menu, setSubmenu, setMovePickerOpen, setMoveQuery])
 
   // Move keyboard focus into the picker when it opens (replaces autoFocus,
   // which lint forbids); Escape and outside pointer-down still dismiss.
@@ -71,8 +92,8 @@ export function TreeContextMenu({
   // the current top, so this converges in one step from any prior shift
   // (reopened menu, actions/picker view switch).
   const [shiftUp, setShiftUp] = useState(0)
-  // Flip re-measures when the picker view opens (it changes menu height);
-  // movePickerOpen is read for change, not value.
+  // Flip re-measures when the picker/submenu view opens (it changes height).
+  // movePickerOpen / submenu are read for change, not value.
   // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate re-measure trigger
   useEffect(() => {
     const el = menuRef.current
@@ -80,7 +101,7 @@ export function TreeContextMenu({
     const overflow = baseY + el.offsetHeight - (window.innerHeight - 8)
     const next = overflow > 0 ? Math.ceil(overflow) : 0
     setShiftUp((prev) => (prev === next ? prev : next))
-  }, [movePickerOpen, baseY])
+  }, [movePickerOpen, submenu, baseY])
 
   useEffect(() => {
     if (menu === null) return
@@ -114,6 +135,209 @@ export function TreeContextMenu({
       : moveTargets.filter((target) => target.label.toLowerCase().includes(query))
   const visibleTargets = filteredTargets.slice(0, 50)
 
+  const renderItems = (
+    items: ReadonlyArray<readonly [string, string]>,
+    testId?: string
+  ): JSX.Element => (
+    <>
+      {items.map(([action, label]) => (
+        <button
+          key={action}
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          data-testid={action === testId ? `tree-${action}` : undefined}
+          onClick={() => onAction(action)}
+        >
+          {label}
+        </button>
+      ))}
+    </>
+  )
+
+  const backButton = (
+    <button
+      type="button"
+      role="menuitem"
+      className={`${classes.contextMenuItem} ${classes.contextMenuBack}`}
+      onClick={() => setSubmenu(null)}
+    >
+      {UI_TEXT.backLabel}
+    </button>
+  )
+
+  let body: JSX.Element
+  if (menu.kind === 'root') {
+    if (submenu === 'new') {
+      body = (
+        <>
+          {backButton}
+          {renderItems(NEW_TYPES, 'newRich')}
+        </>
+      )
+    } else {
+      body = (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            className={classes.contextMenuItem}
+            onClick={() => setSubmenu('new')}
+          >
+            {UI_TEXT.newPageSubmenu}…
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={classes.contextMenuItem}
+            data-testid="tree-import-markdown"
+            onClick={() => onRequestImport?.()}
+          >
+            {UI_TEXT.importMarkdownLabel}
+          </button>
+        </>
+      )
+    }
+  } else if (movePickerOpen) {
+    body = (
+      <>
+        <input
+          ref={searchRef}
+          type="search"
+          aria-label={UI_TEXT.searchLabel}
+          placeholder={UI_TEXT.searchPlaceholder}
+          value={moveQuery}
+          onChange={(event) => setMoveQuery(event.currentTarget.value)}
+          className={classes.movePickerSearch}
+          data-testid="tree-move-picker-search"
+        />
+        <div className={classes.menuScroll}>
+          {visibleTargets.length === 0 ? (
+            <div className={classes.movePickerEmpty}>{UI_TEXT.noResults}</div>
+          ) : (
+            visibleTargets.map((target) => (
+              <button
+                key={target.id}
+                type="button"
+                role="menuitem"
+                className={classes.contextMenuItem}
+                title={target.label}
+                onClick={() => onAction(`moveTo:${target.id}`)}
+              >
+                {target.label}
+              </button>
+            ))
+          )}
+        </div>
+      </>
+    )
+  } else if (submenu === 'child') {
+    body = (
+      <>
+        {backButton}
+        {renderItems(CHILD_TYPES, 'childRich')}
+      </>
+    )
+  } else if (submenu === 'export') {
+    body = (
+      <>
+        {backButton}
+        {pageType === 'markdown' ? (
+          <button
+            type="button"
+            role="menuitem"
+            className={classes.contextMenuItem}
+            data-testid="tree-export-markdown"
+            onClick={() => onExportPage?.(menu.pageId)}
+          >
+            {UI_TEXT.markdownExportLabel}
+          </button>
+        ) : (
+          <div className={classes.movePickerEmpty}>{UI_TEXT.exportUnavailable}</div>
+        )}
+      </>
+    )
+  } else {
+    body = (
+      <>
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => onAction('open')}
+        >
+          {UI_TEXT.openAction}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => setSubmenu('child')}
+        >
+          {UI_TEXT.newChildSubmenu}…
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => onAction('rename')}
+        >
+          {UI_TEXT.renameAction}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => onAction('duplicate')}
+        >
+          {UI_TEXT.duplicateAction}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={`${classes.contextMenuItem} ${classes.contextMenuDanger}`}
+          onClick={() => onAction('delete')}
+        >
+          {UI_TEXT.deleteAction}
+        </button>
+        <div className={classes.contextMenuDivider} />
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => onAction('moveUp')}
+        >
+          {UI_TEXT.moveUpLabel}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => onAction('moveDown')}
+        >
+          {UI_TEXT.moveDownLabel}
+        </button>
+        <div className={classes.contextMenuDivider} />
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => setMovePickerOpen(true)}
+        >
+          {UI_TEXT.moveToPickerLabel}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={classes.contextMenuItem}
+          onClick={() => setSubmenu('export')}
+        >
+          {UI_TEXT.exportSubmenu}…
+        </button>
+      </>
+    )
+  }
+
   return createPortal(
     <div
       ref={menuRef}
@@ -122,102 +346,7 @@ export function TreeContextMenu({
       className={classes.contextMenu}
       style={{ left: clampX, top: clampY }}
     >
-      {menu.kind === 'root' ? (
-        ROOT_ACTIONS.map(([action, label]) => (
-          <button
-            key={action}
-            type="button"
-            role="menuitem"
-            className={classes.contextMenuItem}
-            data-testid={
-              action === 'rootDiagram'
-                ? 'tree-new-root-diagram'
-                : action === 'rootMindMap'
-                  ? 'tree-new-root-mindmap'
-                  : undefined
-            }
-            onClick={() => onAction(action)}
-          >
-            {label}
-          </button>
-        ))
-      ) : movePickerOpen ? (
-        <>
-          <input
-            ref={searchRef}
-            type="search"
-            aria-label={UI_TEXT.searchLabel}
-            placeholder={UI_TEXT.searchPlaceholder}
-            value={moveQuery}
-            onChange={(event) => setMoveQuery(event.currentTarget.value)}
-            className={classes.movePickerSearch}
-            data-testid="tree-move-picker-search"
-          />
-          <div className={classes.menuScroll}>
-            {visibleTargets.length === 0 ? (
-              <div className={classes.movePickerEmpty}>{UI_TEXT.noResults}</div>
-            ) : (
-              visibleTargets.map((target) => (
-                <button
-                  key={target.id}
-                  type="button"
-                  role="menuitem"
-                  className={classes.contextMenuItem}
-                  title={target.label}
-                  onClick={() => onAction(`moveTo:${target.id}`)}
-                >
-                  {target.label}
-                </button>
-              ))
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          {PAGE_ACTIONS.map(([action, label]) => (
-            <button
-              key={action}
-              type="button"
-              role="menuitem"
-              className={
-                action === 'delete'
-                  ? `${classes.contextMenuItem} ${classes.contextMenuDanger}`
-                  : classes.contextMenuItem
-              }
-              onClick={() => onAction(action)}
-            >
-              {label}
-            </button>
-          ))}
-          <div className={classes.contextMenuDivider} />
-          <button
-            type="button"
-            role="menuitem"
-            className={classes.contextMenuItem}
-            onClick={() => onAction('moveUp')}
-          >
-            {UI_TEXT.moveUpLabel}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={classes.contextMenuItem}
-            onClick={() => onAction('moveDown')}
-          >
-            {UI_TEXT.moveDownLabel}
-          </button>
-          <div className={classes.contextMenuDivider} />
-          <button
-            type="button"
-            role="menuitem"
-            className={classes.contextMenuItem}
-            data-testid="tree-move-to-picker"
-            onClick={() => setMovePickerOpen(true)}
-          >
-            {UI_TEXT.moveToPickerLabel}
-          </button>
-        </>
-      )}
+      {body}
     </div>,
     document.body
   )
@@ -229,9 +358,10 @@ export function isMoveToAction(action: string): action is `moveTo:${string}` {
 }
 
 export function pageTypeOf(action: string): PageType | null {
-  if (action === 'rootRich' || action === 'childRich') return 'rich'
-  if (action === 'rootHtml' || action === 'childHtml') return 'html'
-  if (action === 'rootDiagram' || action === 'childDiagram') return 'diagram'
-  if (action === 'rootMindMap' || action === 'childMindMap') return 'mindmap'
+  if (action === 'newRich' || action === 'childRich') return 'rich'
+  if (action === 'newHtml' || action === 'childHtml') return 'html'
+  if (action === 'newMarkdown') return 'markdown'
+  if (action === 'newDiagram' || action === 'childDiagram') return 'diagram'
+  if (action === 'newMindMap' || action === 'childMindMap') return 'mindmap'
   return null
 }

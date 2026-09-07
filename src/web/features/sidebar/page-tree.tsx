@@ -25,6 +25,10 @@ export interface PageTreeControllerHooks {
   onMoveRelative: (id: string, delta: number) => void
   /** Positional move used by drag-and-drop (optimistic + rollback). */
   onDropMove: (id: string, newParentId: string | null, newPosition: number) => void
+  /** Opens the OS file picker for a Markdown import (root context menu). */
+  onRequestImport?: () => void
+  /** Exports the given page (page context menu). */
+  onExportPage?: (pageId: string) => void
 }
 
 interface PageTreeProps {
@@ -177,7 +181,10 @@ export function PageTree({
     }
   }, [])
 
-  // Reload data in place whenever the page list or selection changes.
+  // Reload data in place only when the page collection or selection changes.
+  // Callbacks are read through callbacksRef (always latest) so identity churn
+  // in the inline props (onOpen/hooks are recreated every App render) cannot
+  // retrigger a full Wunderbaum reload — that thrash once blanked the tree.
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -190,11 +197,11 @@ export function PageTree({
       callbacks: {
         onOpenPage: (pageId) => {
           debugLog('ui', 'ui_tree_row_open', { pageId })
-          onOpen(pageId)
+          callbacksRef.current.onOpen(pageId)
         },
         onOpenSubfile: (pageId, field) => {
           debugLog('ui', 'ui_subfile_open', { pageId, field })
-          onOpenHtmlSource(pageId, field)
+          callbacksRef.current.onOpenHtmlSource(pageId, field)
         },
         onDropMove: (move: DropMove) => {
           debugLog('ui', 'ui_drag_drop', {
@@ -202,7 +209,7 @@ export function PageTree({
             targetId: move.newParentId ?? undefined,
             code: move.newPosition === null ? 'append' : String(move.newPosition)
           })
-          hooks.onDropMove(
+          callbacksRef.current.hooks.onDropMove(
             move.pageId,
             move.newParentId,
             move.newPosition ?? Number.MAX_SAFE_INTEGER
@@ -210,12 +217,12 @@ export function PageTree({
         },
         onContextMenu: (payload) => contextMenuRequestRef.current(payload),
         onRenameCommit: (pageId, title) => {
-          hooks.onRename(pageId, title)
+          callbacksRef.current.hooks.onRename(pageId, title)
         },
-        onExpandedChange: (ids) => onExpandedChange?.(ids)
+        onExpandedChange: (ids) => callbacksRef.current.onExpandedChange?.(ids)
       }
     })
-  }, [pages, activePageId, onOpen, onOpenHtmlSource, hooks, onExpandedChange])
+  }, [pages, activePageId])
 
   // Apply the session-expansion seed once per distinct identity.
   const seedRef = useRef<ReadonlySet<string> | null>(null)
@@ -227,6 +234,11 @@ export function PageTree({
 
   const moveTargets = buildMoveTargets(pages)
   const closeContextMenu = (): void => setContextMenu(null)
+
+  const menuPageType =
+    contextMenu?.kind === 'page'
+      ? (pages.find((p) => p.id === contextMenu.pageId)?.pageType ?? null)
+      : null
 
   const handleMenuAction = (rawAction: string): void => {
     const menu = contextMenu
@@ -250,6 +262,8 @@ export function PageTree({
       if (action === 'rootHtml') onCreateRoot?.('html')
       if (action === 'rootDiagram') onCreateRoot?.('diagram')
       if (action === 'rootMindMap') onCreateRoot?.('mindmap')
+      if (action === 'newMarkdown') onCreateRoot?.('markdown')
+      if (action === 'importMarkdown') hooks.onRequestImport?.()
       return
     }
     const id = menu.pageId
@@ -278,6 +292,7 @@ export function PageTree({
     }
     if (action === 'moveUp') hooks.onMoveRelative(id, -1)
     if (action === 'moveDown') hooks.onMoveRelative(id, 1)
+    if (action === 'exportMarkdown') hooks.onExportPage?.(id)
   }
 
   const menuPageId = contextMenu?.kind === 'page' ? contextMenu.pageId : null
@@ -302,9 +317,12 @@ export function PageTree({
               : `page:${contextMenu.pageId}:${contextMenu.x},${contextMenu.y}`
         }
         menu={contextMenu}
+        pageType={menuPageType}
         moveTargets={moveTargets.filter((t) => t.id !== menuPageId)}
         onAction={handleMenuAction}
         onDismiss={closeContextMenu}
+        onRequestImport={hooks.onRequestImport}
+        onExportPage={hooks.onExportPage}
       />
       {/* Inline rename signal consumer: rename is initiated through
           Wunderbaum's title editor; the apply callback routes the committed

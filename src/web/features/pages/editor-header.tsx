@@ -1,7 +1,7 @@
 import { ActionIcon, Menu, TextInput, Tooltip } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconArrowLeft, IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './editor-header.module.css'
@@ -28,10 +28,15 @@ export function EditorHeader({
 }: EditorHeaderProps): JSX.Element {
   const [title, setTitle] = useState(page.title)
   const [editing, setEditing] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     setTitle(page.title)
   }, [page.title])
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
 
   const handleBlur = async (): Promise<void> => {
     setEditing(false)
@@ -63,19 +68,37 @@ export function EditorHeader({
           </ActionIcon>
         </Tooltip>
 
-        <TextInput
-          value={title}
-          onChange={(event) => setTitle(event.currentTarget.value)}
-          onFocus={() => setEditing(true)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          placeholder={UI_TEXT.editorPlaceholderTitle}
-          aria-label={UI_TEXT.titleLabel}
-          className={classes.titleInput}
-          variant={editing ? 'default' : 'unstyled'}
-          size="md"
-          fw={600}
-        />
+        {editing ? (
+          <TextInput
+            ref={inputRef}
+            value={title}
+            onChange={(event) => setTitle(event.currentTarget.value)}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            placeholder={UI_TEXT.editorPlaceholderTitle}
+            aria-label={UI_TEXT.titleLabel}
+            className={classes.titleInput}
+            variant="default"
+            size="md"
+            fw={600}
+          />
+        ) : (
+          <button
+            type="button"
+            className={classes.titleDisplay}
+            onDoubleClick={() => setEditing(true)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === 'F2') {
+                event.preventDefault()
+                setEditing(true)
+              }
+            }}
+            title={UI_TEXT.renameHint}
+            aria-label={UI_TEXT.titleLabel}
+          >
+            {title || UI_TEXT.untitledPage}
+          </button>
+        )}
 
         <span className={classes.typeIcon} aria-hidden="true">
           <PageTypeIcon pageType={page.pageType} size={16} />

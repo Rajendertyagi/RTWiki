@@ -355,6 +355,10 @@
   color: var(--mantine-color-red-filled);
 }
 
+.contextMenuBack {
+  font-weight: 600;
+}
+
 .contextMenuDivider {
   height: 1px;
   margin: 4px 6px;

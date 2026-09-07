@@ -1,20 +1,24 @@
 .header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  padding-bottom: var(--mantine-spacing-sm);
-  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  flex-shrink: 0;
+  gap: var(--mantine-spacing-md);
+  height: var(--rtwiki-header-height);
+  padding: 0 var(--rtwiki-chrome-pad-x);
+  border-bottom: 1px solid var(--rtwiki-chrome-border);
+  background: var(--rtwiki-chrome-bg);
 }
 
 /* Dashboard scroll owner (Slice 1: scroll ownership). The only vertically
  * scrolling element on the dashboard route; .mainContent never scrolls.
- * Restores the horizontal inset that .mainContent no longer provides so the
- * page grid does not run flush to the tree-pane edge. */
+ * Uses the shared chrome inset so the page grid and header align with the
+ * tab strip and toolbar above. */
 .scrollRegion {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-inline: var(--mantine-spacing-md);
+  padding-inline: var(--rtwiki-chrome-pad-x);
 }
 
 .grid {

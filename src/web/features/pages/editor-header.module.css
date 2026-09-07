@@ -23,6 +23,25 @@
   min-width: 0;
 }
 
+.titleDisplay {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--mantine-font-size-md);
+  font-weight: 600;
+  line-height: var(--rtwiki-header-height);
+  color: inherit;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+  user-select: none;
+}
+
 .typeIcon {
   flex: 0 0 auto;
   display: inline-flex;

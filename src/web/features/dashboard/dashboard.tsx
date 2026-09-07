@@ -1,13 +1,10 @@
-import { Alert, Button, Group, Loader, Stack, Text, Title } from '@mantine/core'
+import { Alert, Loader, Stack, Text, Title } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { IconAlertCircle, IconFileImport } from '@tabler/icons-react'
-import { useRef, useState } from 'react'
+import { IconAlertCircle } from '@tabler/icons-react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './dashboard.module.css'
 import { EmptyState } from './empty-state.js'
 import { PageCard } from './page-card.js'
-
-const IMPORT_MAX_BYTES = 1_000_000
 
 interface DashboardProps {
   pages: Page[]
@@ -19,8 +16,6 @@ interface DashboardProps {
   onDelete: (id: string) => void
   onCreateRich: () => void
   onCreateHtml: () => void
-  /** Imports a local .md file as a new Markdown Page (filename → title). */
-  onImportMarkdown: (fileName: string, source: string) => void
 }
 
 export function Dashboard(props: DashboardProps): JSX.Element {
@@ -40,39 +35,8 @@ function DashboardContent({
   onDuplicate,
   onDelete,
   onCreateRich,
-  onCreateHtml,
-  onImportMarkdown
+  onCreateHtml
 }: DashboardProps): JSX.Element {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [importError, setImportError] = useState<string | null>(null)
-
-  const handleFileChosen = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const file = event.target.files?.[0]
-    // Reset so selecting the same file again re-triggers change.
-    event.target.value = ''
-    if (!file) return
-    const isMd =
-      /\.(md|markdown)$/i.test(file.name) ||
-      file.type === 'text/markdown' ||
-      file.type === 'text/plain'
-    if (!isMd) {
-      setImportError(UI_TEXT.markdownImportErrorType)
-      return
-    }
-    if (file.size > IMPORT_MAX_BYTES) {
-      setImportError(UI_TEXT.markdownImportErrorSize)
-      return
-    }
-    const reader = new FileReader()
-    reader.onerror = () => setImportError(UI_TEXT.markdownImportErrorRead)
-    reader.onload = () => {
-      const text = typeof reader.result === 'string' ? reader.result : ''
-      setImportError(null)
-      onImportMarkdown(file.name, text)
-    }
-    reader.readAsText(file)
-  }
-
   if (loading) {
     return (
       <Stack align="center" gap="sm" py="xl">
@@ -115,38 +79,7 @@ function DashboardContent({
             {UI_TEXT.appName} — {pages.length} {pages.length === 1 ? 'page' : 'pages'}
           </Text>
         </div>
-        <Group gap="xs" wrap="nowrap">
-          <Button
-            variant="light"
-            size="sm"
-            leftSection={<IconFileImport size={16} />}
-            onClick={() => fileInputRef.current?.click()}
-            data-testid="dashboard-import-markdown"
-          >
-            {UI_TEXT.markdownImportLabel}
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".md,.markdown,text/markdown,text/plain"
-            onChange={handleFileChosen}
-            style={{ display: 'none' }}
-            tabIndex={-1}
-          />
-        </Group>
       </div>
-
-      {importError ? (
-        <Alert
-          color="red"
-          variant="light"
-          title="Import failed"
-          onClose={() => setImportError(null)}
-          withCloseButton
-        >
-          {importError}
-        </Alert>
-      ) : null}
 
       <div className={classes.grid}>
         {pages.map((page) => (

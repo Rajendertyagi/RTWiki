@@ -1,10 +1,13 @@
 import { Alert, Loader, NavLink, Stack, Text } from '@mantine/core'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle, IconHome } from '@tabler/icons-react'
+import { useRef, useState } from 'react'
 import { SearchInput } from '../components/search-input.js'
 import { UI_TEXT } from '../config/index.js'
 import { PageTree } from '../features/sidebar/page-tree.js'
 import classes from './sidebar.module.css'
+
+const IMPORT_MAX_BYTES = 1_000_000
 
 interface SidebarProps {
   pages: Page[]
@@ -35,6 +38,10 @@ interface SidebarProps {
   seedExpandedIds?: ReadonlySet<string>
   /** Expansion observation for session persistence. */
   onExpandedChange?: (ids: ReadonlySet<string>) => void
+  /** Imports a local .md file as a new Markdown Page (filename → title). */
+  onImportMarkdown: (fileName: string, source: string) => void
+  /** Exports the given page (context-menu action). */
+  onExportPage: (pageId: string) => void
 }
 
 export function Sidebar({
@@ -58,8 +65,41 @@ export function Sidebar({
   onCreateRoot,
   onOpenHtmlSource,
   seedExpandedIds,
-  onExpandedChange
+  onExpandedChange,
+  onImportMarkdown,
+  onExportPage
 }: SidebarProps): JSX.Element {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+
+  const handleFileChosen = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const isMd =
+      /\.(md|markdown)$/i.test(file.name) ||
+      file.type === 'text/markdown' ||
+      file.type === 'text/plain'
+    if (!isMd) {
+      setImportError(UI_TEXT.markdownImportErrorType)
+      return
+    }
+    if (file.size > IMPORT_MAX_BYTES) {
+      setImportError(UI_TEXT.markdownImportErrorSize)
+      return
+    }
+    const reader = new FileReader()
+    reader.onerror = () => setImportError(UI_TEXT.markdownImportErrorRead)
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : ''
+      setImportError(null)
+      onImportMarkdown(file.name, text)
+    }
+    reader.readAsText(file)
+  }
+
+  const requestImport = (): void => fileInputRef.current?.click()
+
   return (
     <div className={classes.sidebarRoot}>
       <div className={classes.searchSection}>
@@ -112,7 +152,9 @@ export function Sidebar({
                   onCreateChildOfType,
                   onMoveTo,
                   onMoveRelative,
-                  onDropMove
+                  onDropMove,
+                  onRequestImport: requestImport,
+                  onExportPage
                 }}
                 onCreateRoot={onCreateRoot}
                 onOpenHtmlSource={onOpenHtmlSource}
@@ -123,6 +165,28 @@ export function Sidebar({
           </Stack>
         )}
       </div>
+
+      {importError ? (
+        <Alert
+          color="red"
+          variant="light"
+          title="Import failed"
+          onClose={() => setImportError(null)}
+          withCloseButton
+          className={classes.importError}
+        >
+          {importError}
+        </Alert>
+      ) : null}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".md,.markdown,text/markdown,text/plain"
+        onChange={handleFileChosen}
+        style={{ display: 'none' }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </div>
   )
 }

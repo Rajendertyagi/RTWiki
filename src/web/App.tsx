@@ -1,6 +1,9 @@
 import { Alert, Stack, Text } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
-import { serializeMarkdownContent } from '@rtwiki/shared/schemas/markdown-content.js'
+import {
+  parseMarkdownPageContent,
+  serializeMarkdownContent
+} from '@rtwiki/shared/schemas/markdown-content.js'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { pageTypeLabel } from './components/page-type-badge.js'
@@ -38,6 +41,7 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
+import { downloadTextFile, sanitizeFileName } from './util/file-download.js'
 import { pagePreviewText } from './util/page-preview-text.js'
 import { recordRecentPage } from './util/recent-pages.js'
 
@@ -51,6 +55,27 @@ function createSessionStorage(): WorkspaceStorage | null {
     // Privacy modes can throw on access; restoration is best-effort.
   }
   return null
+}
+
+/** Builds a clean URL keeping only the host (ip:port) plus an optional
+ * ?page=<id> deep-link param — never a path segment. */
+function buildPageUrl(id: string | null): string {
+  const params = new URLSearchParams(window.location.search)
+  if (id) params.set('page', id)
+  else params.delete('page')
+  const qs = params.toString()
+  return qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+}
+
+/** Mirrors the active page into the URL. Skipped when the URL already matches
+ * (avoids duplicate history entries); during a popstate we replace rather than
+ * push so the browser's own history entry is authoritative. */
+function syncHistory(id: string | null, isPopstate: boolean): void {
+  const current = new URLSearchParams(window.location.search).get('page') ?? null
+  if (current === id) return
+  const url = buildPageUrl(id)
+  if (isPopstate) window.history.replaceState({ pageId: id }, '', url)
+  else window.history.pushState({ pageId: id }, '', url)
 }
 
 export function App(): JSX.Element {
@@ -88,6 +113,10 @@ export function App(): JSX.Element {
   // Flips true once per app lifetime when loading first completes; guards
   // both the restore attempt and all subsequent saves.
   const sessionReadyRef = useRef(false)
+  // Set while we are responding to a browser back/forward (popstate) so the
+  // resulting selection does not push a fresh history entry (that would trap
+  // the user in a loop).
+  const isPopstateRef = useRef(false)
   const [seedExpandedIds, setSeedExpandedIds] = useState<ReadonlySet<string>>(new Set())
   // Live expansion mirror for persistence writes (avoids re-render coupling).
   const expandedIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -97,6 +126,24 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (controller.loading || sessionReadyRef.current) return
     sessionReadyRef.current = true
+    // Deep-link: a ?page=<id> URL opens that page directly (Issue 5), taking
+    // precedence over the saved session.
+    const deepLinkId = new URLSearchParams(window.location.search).get('page')
+    if (deepLinkId) {
+      const target = controller.pages.find((p) => p.id === deepLinkId)
+      if (target) {
+        controller.selectPage(deepLinkId)
+        const params = new URLSearchParams(window.location.search)
+        params.set('page', deepLinkId)
+        window.history.replaceState(
+          { pageId: deepLinkId },
+          '',
+          `${window.location.pathname}?${params.toString()}`
+        )
+        debugLog('navigation', 'nav_active_page_changed', { pageId: deepLinkId })
+        return
+      }
+    }
     const storage = workspaceStorageRef.current
     if (!storage) return
     const session = loadWorkspaceSession(storage)
@@ -216,6 +263,42 @@ export function App(): JSX.Element {
     setNewDialogOpen(true)
   }
 
+  // Browser back/forward support: read the deep-link param and select that page.
+  useEffect(() => {
+    const onPopState = (): void => {
+      isPopstateRef.current = true
+      const id = new URLSearchParams(window.location.search).get('page') ?? null
+      controller.selectPage(id)
+      isPopstateRef.current = false
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [controller])
+
+  const handleSelectPage = useCallback(
+    async (id: string | null): Promise<void> => {
+      if (flushRef.current) {
+        const ok = await flushRef.current()
+        if (!ok) {
+          setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+          return
+        }
+        setPendingFlushError(null)
+      }
+      controller.selectPage(id)
+      if (id !== null) {
+        // Genuinely-opened tracking for the Ctrl+K finder (parent pages only:
+        // virtual HTML subfiles resolve before this point).
+        recordRecentPage(id)
+      }
+      debugLog('navigation', 'nav_active_page_changed', { pageId: id ?? undefined })
+      // Any normal navigation lands on the rendered parent view.
+      setHtmlSource(null)
+      syncHistory(id, isPopstateRef.current)
+    },
+    [controller]
+  )
+
   const handleImportMarkdown = useCallback(
     async (fileName: string, source: string): Promise<void> => {
       const title = fileName.replace(/\.(md|markdown)$/i, '').trim() || UI_TEXT.untitledPage
@@ -226,7 +309,19 @@ export function App(): JSX.Element {
       )
       if (!page) return
       if (flushRef.current) await flushRef.current()
-      controller.selectPage(page.id)
+      void handleSelectPage(page.id)
+    },
+    [controller, handleSelectPage]
+  )
+
+  const handleExportPage = useCallback(
+    (pageId: string): void => {
+      const page = controller.pages.find((p) => p.id === pageId)
+      if (page?.pageType !== 'markdown') return
+      const parsed = parseMarkdownPageContent(page.content)
+      const markdown = parsed.ok ? parsed.value.markdown : ''
+      const title = page.title.replace(/\.(md|markdown)$/i, '').trim() || UI_TEXT.untitledPage
+      downloadTextFile(`${sanitizeFileName(title)}.md`, markdown, 'text/markdown')
     },
     [controller]
   )
@@ -276,26 +371,6 @@ export function App(): JSX.Element {
     setLayoutPrefs(defaults)
     setTreeWidth(defaults.treeWidth)
     setTreeOpen(!defaults.treeCollapsed)
-  }
-
-  const handleSelectPage = async (id: string | null): Promise<void> => {
-    if (flushRef.current) {
-      const ok = await flushRef.current()
-      if (!ok) {
-        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
-        return
-      }
-      setPendingFlushError(null)
-    }
-    controller.selectPage(id)
-    if (id !== null) {
-      // Genuinely-opened tracking for the Ctrl+K finder (parent pages only:
-      // virtual HTML subfiles resolve before this point).
-      recordRecentPage(id)
-    }
-    debugLog('navigation', 'nav_active_page_changed', { pageId: id ?? undefined })
-    // Any normal navigation lands on the rendered parent view.
-    setHtmlSource(null)
   }
 
   // HTML source-subfile view: which field of which page is being edited.
@@ -415,7 +490,8 @@ export function App(): JSX.Element {
       pageType === 'rich' && template && template !== 'blank'
         ? buildTemplateContent(template)
         : undefined
-    await controller.createPage(title, pageType, content)
+    const page = await controller.createPage(title, pageType, content)
+    if (page) void handleSelectPage(page.id)
   }
 
   const handleDeleteRequest = (id: string): void => {
@@ -508,15 +584,9 @@ export function App(): JSX.Element {
   )
 
   const handleWorkspaceClose = async (): Promise<void> => {
-    if (flushRef.current) {
-      const ok = await flushRef.current()
-      if (!ok) {
-        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
-        return
-      }
-      setPendingFlushError(null)
-    }
-    controller.selectPage(null)
+    // Back arrow navigates to the direct parent page, not the dashboard root.
+    const parentId = controller.selectedPage?.parentId ?? null
+    void handleSelectPage(parentId)
   }
 
   if (shutdownStatus === 'stopped') {
@@ -623,6 +693,8 @@ export function App(): JSX.Element {
             onOpenHtmlSource={(pageId, field) => void handleOpenHtmlSource(pageId, field)}
             seedExpandedIds={seedExpandedIds}
             onExpandedChange={handleExpandedChange}
+            onImportMarkdown={handleImportMarkdown}
+            onExportPage={handleExportPage}
           />
         }
       >
@@ -716,7 +788,6 @@ export function App(): JSX.Element {
               onDelete={handleDeleteRequest}
               onCreateRich={handleCreateRich}
               onCreateHtml={handleCreateHtml}
-              onImportMarkdown={handleImportMarkdown}
             />
           )}
         </Stack>
