@@ -61,3 +61,43 @@ export const UNSUPPORTED_BLOCK_MARKER = '[unsupported block preserved below]' as
 export const DIAGRAM_STARTER_SOURCE = 'graph TD\n    A[Start] --> B[End]' as const
 export const MINDMAP_STARTER_SOURCE =
   'mindmap\n  root((Main topic))\n    Topic A\n    Topic B' as const
+
+// Study timetable / calendar (Slice 1). Single source of truth for the allowed
+// event colors and default notification preferences. Colors are Mantine theme
+// color keys so they map directly onto `ScheduleEventData.color`.
+export const SCHEDULE_COLORS = [
+  'blue',
+  'grape',
+  'violet',
+  'indigo',
+  'cyan',
+  'teal',
+  'green',
+  'lime',
+  'yellow',
+  'orange',
+  'red',
+  'pink'
+] as const
+
+export type ScheduleColor = (typeof SCHEDULE_COLORS)[number]
+
+export const DEFAULT_PERIOD_NOTIFICATIONS = {
+  enabled: true,
+  start: true,
+  fiveMinBefore: true,
+  customOffsets: [] as number[]
+} as const
+
+export const DEFAULT_REMINDER_NOTIFICATIONS = {
+  enabled: true,
+  customOffsets: [] as number[]
+} as const
+
+// Default visible time range for the week/day study views (HH:mm:ss).
+export const SCHEDULE_DAY_START = '06:00:00' as const
+export const SCHEDULE_DAY_END = '22:00:00' as const
+// 1 = Monday, matching the school-week default.
+export const SCHEDULE_FIRST_DAY_OF_WEEK = 1 as const
+// Color used for one-off reminders in the calendar grid (distinct from periods).
+export const SCHEDULE_REMINDER_COLOR = 'orange' as const

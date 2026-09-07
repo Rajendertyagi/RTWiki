@@ -19,6 +19,7 @@ import {
   buildTemplateContent,
   type RichTemplateKey
 } from './features/rich-editor/rich-templates.js'
+import { Calendar } from './features/calendar/calendar.js'
 import { SettingsWorkspace } from './features/settings/settings-workspace.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
@@ -213,6 +214,8 @@ export function App(): JSX.Element {
   const [newDialogType, setNewDialogType] = useState<PageType>('rich')
   // Settings workspace view (replaces the page/dashboard in the main area).
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Calendar / study timetable view (replaces the page/dashboard in the main area).
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [shutdownToken, setShutdownToken] = useState<string | null>(null)
@@ -363,6 +366,24 @@ export function App(): JSX.Element {
 
   const handleCloseSettings = (): void => {
     setSettingsOpen(false)
+  }
+
+  // Opens the Calendar view, flushing pending edits first so leaving a page
+  // never silently drops unsaved work.
+  const handleOpenCalendar = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    setCalendarOpen(true)
+  }
+
+  const handleCloseCalendar = (): void => {
+    setCalendarOpen(false)
   }
 
   // Resets persisted layout preferences and re-applies the defaults live.
@@ -669,6 +690,8 @@ export function App(): JSX.Element {
             onStop={handleStop}
             onOpenSettings={() => void handleOpenSettings()}
             settingsOpen={settingsOpen}
+            onOpenCalendar={() => void handleOpenCalendar()}
+            calendarOpen={calendarOpen}
             treeOpen={treeOpen}
             onToggleTree={handleToggleTree}
           />
@@ -752,6 +775,11 @@ export function App(): JSX.Element {
               layoutPrefs={layoutPrefs}
               onLayoutReset={handleLayoutReset}
               onClose={handleCloseSettings}
+            />
+          ) : calendarOpen ? (
+            <Calendar
+              pages={controller.pages.map((p) => ({ id: p.id, title: p.title }))}
+              onClose={handleCloseCalendar}
             />
           ) : controller.selectedPage ? (
             <PageWorkspace

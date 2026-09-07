@@ -84,6 +84,55 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
     `)
     db.run('CREATE INDEX idx_page_links_target ON page_links(target_id)')
   })
+
+  await applyMigration(db, '005_schedule', (db) => {
+    // Study timetable: weekly/one-off periods, one-off reminders, and
+    // user-created presets. No FK constraints: a linked page may be deleted,
+    // and presets are independent user data.
+    db.run(`
+      CREATE TABLE IF NOT EXISTS schedule_entries (
+        id TEXT PRIMARY KEY,
+        recurrence_kind TEXT NOT NULL CHECK (recurrence_kind IN ('weekly', 'oneoff')),
+        title TEXT NOT NULL,
+        weekdays TEXT,
+        date TEXT,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        linked_page_id TEXT,
+        category TEXT,
+        color TEXT,
+        notes TEXT,
+        notifications TEXT NOT NULL DEFAULT '{"enabled":true,"start":true,"fiveMinBefore":true,"customOffsets":[]}',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS reminders (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        due_datetime TEXT NOT NULL,
+        linked_page_id TEXT,
+        message TEXT,
+        notifications TEXT NOT NULL DEFAULT '{"enabled":true,"customOffsets":[]}',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS schedule_presets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        data TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `)
+    db.run('CREATE INDEX idx_schedule_entries_enabled ON schedule_entries(enabled)')
+    db.run('CREATE INDEX idx_reminders_enabled ON reminders(enabled)')
+  })
 }
 
 async function applyMigration(

@@ -6,6 +6,8 @@ import { createConsoleLogger, type Logger } from './logging/index.js'
 import { createClientDebugEventRoutes, type DebugEventSink } from './routes/client-debug-events.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
 import { createPageRoutes } from './routes/pages.js'
+import { createScheduleRoutes } from './routes/schedule.js'
+import { createSchedulePresetRoutes } from './routes/schedule-presets.js'
 import { createShutdownRoutes } from './routes/shutdown.js'
 import type { ShutdownCoordinator } from './shutdown-coordinator.js'
 import { serveStatic } from './static.js'
@@ -110,6 +112,8 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   })
 
   app.route('/api/pages', createPageRoutes(deps.getDb))
+  app.route('/api/schedule', createScheduleRoutes(deps.getDb))
+  app.route('/api/schedule/presets', createSchedulePresetRoutes(deps.getDb))
   app.route(
     '/api/shutdown',
     createShutdownRoutes({ coordinator: deps.coordinator, token: deps.token })

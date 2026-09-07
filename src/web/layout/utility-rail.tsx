@@ -6,6 +6,7 @@ import {
   useMantineColorScheme
 } from '@mantine/core'
 import {
+  IconCalendar,
   IconHome,
   IconLayoutSidebar,
   IconMoon,
@@ -28,6 +29,10 @@ interface UtilityRailProps {
   onOpenSettings: () => void
   /** Reflects whether the Settings workspace is currently open. */
   settingsOpen?: boolean
+  /** Opens the Calendar / study timetable view. */
+  onOpenCalendar?: () => void
+  /** Reflects whether the Calendar view is currently open. */
+  calendarOpen?: boolean
   /** Desktop-only tree-pane visibility, mirrored into the toggle state. */
   treeOpen?: boolean
   /** Desktop-only collapse/expand control for the page-tree pane. */
@@ -42,6 +47,8 @@ export function UtilityRail({
   onStop,
   onOpenSettings,
   settingsOpen,
+  onOpenCalendar,
+  calendarOpen,
   treeOpen,
   onToggleTree
 }: UtilityRailProps): JSX.Element {
@@ -115,6 +122,23 @@ export function UtilityRail({
             <IconPlus size={18} />
           </ActionIcon>
         </Tooltip>
+
+        {onOpenCalendar ? (
+          <Tooltip label={UI_TEXT.scheduleOpen} position="right">
+            <ActionIcon
+              variant={calendarOpen ? 'filled' : 'subtle'}
+              color={calendarOpen ? 'blue' : 'gray'}
+              size="lg"
+              onClick={onOpenCalendar}
+              aria-label={UI_TEXT.scheduleOpen}
+              aria-pressed={calendarOpen}
+              className={classes.action}
+              data-testid="calendar-toggle"
+            >
+              <IconCalendar size={18} />
+            </ActionIcon>
+          </Tooltip>
+        ) : null}
 
         <Tooltip label={UI_TEXT.utilityRailTheme} position="right">
           <ActionIcon
