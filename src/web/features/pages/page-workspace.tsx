@@ -1,4 +1,4 @@
-import { Box, Skeleton, Stack, Text } from '@mantine/core'
+import { Box, Skeleton, Stack } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
 import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
@@ -118,11 +118,6 @@ export function PageWorkspace({
         onDelete={onDelete}
       />
 
-      {breadcrumb.length > 0 ? (
-        <Text size="xs" c="dimmed" aria-label="Page location" data-testid="page-breadcrumb">
-          {breadcrumb.join(' / ')}
-        </Text>
-      ) : null}
       <div className={classes.content}>
         {/* Keyed by page: a page switch remounts the editors fresh. */}
         <PageEditors

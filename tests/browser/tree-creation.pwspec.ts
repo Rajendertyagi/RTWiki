@@ -70,6 +70,7 @@ test.describe('Sidebar creation menus', () => {
       )
     })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
+    await page.getByRole('menuitem', { name: 'New page' }).hover()
     await page.getByRole('menuitem', { name: 'New Rich Note' }).click()
 
     await expect(page.getByRole('tab', { name: /Untitled/i })).toHaveAttribute(
@@ -95,6 +96,7 @@ test.describe('Sidebar creation menus', () => {
         })
       )
     })
+    await page.getByRole('menuitem', { name: 'New page' }).hover()
     await page.getByRole('menuitem', { name: 'New HTML Page' }).click()
 
     const pages = await listPages(request)
@@ -114,6 +116,7 @@ test.describe('Sidebar creation menus', () => {
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click({ button: 'right' })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
+    await page.getByRole('menuitem', { name: 'Insert child note' }).hover()
     await page.getByRole('menuitem', { name: 'New child Rich Note' }).click()
 
     const pages = await listPages(request)
@@ -136,6 +139,7 @@ test.describe('Sidebar creation menus', () => {
 
     const row = page.locator('[role="treeitem"]').filter({ hasText: parentTitle })
     await row.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Insert child note' }).hover()
     await page.getByRole('menuitem', { name: 'New child HTML Page' }).click()
 
     // Creation is async relative to the menu click: poll until it lands.
@@ -216,7 +220,7 @@ test.describe('Sidebar creation menus', () => {
     await row.click()
     await page.keyboard.press('ContextMenu')
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
-    await expect(page.getByRole('menuitem', { name: 'New child Rich Note' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Insert child note' })).toBeVisible()
   })
 
   test('Shift+F10 opens the row menu', async ({ page, request }) => {

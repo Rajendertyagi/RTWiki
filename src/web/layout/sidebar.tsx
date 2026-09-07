@@ -26,6 +26,8 @@ interface SidebarProps {
   onCreateChildHtml?: (parentId: string) => void
   /** Creates a child of any type (Diagram / Mind Map entry points). */
   onCreateChildOfType?: (parentId: string, pageType: PageType) => void
+  /** Creates a sibling of a page of any type, placed directly after it. */
+  onCreateAfterOfType?: (pageId: string, pageType: PageType) => void
   onMoveTo: (id: string, newParentId: string | null) => void
   onMoveRelative: (id: string, delta: number) => void
   /** Positional move used by drag-and-drop (optimistic + rollback). */
@@ -59,6 +61,7 @@ export function Sidebar({
   onCreateChild,
   onCreateChildHtml,
   onCreateChildOfType,
+  onCreateAfterOfType,
   onMoveTo,
   onMoveRelative,
   onDropMove,
@@ -149,7 +152,8 @@ export function Sidebar({
                   onDelete,
                   onCreateChild,
                   onCreateChildHtml,
-                  onCreateChildOfType,
+  onCreateChildOfType,
+  onCreateAfterOfType,
                   onMoveTo,
                   onMoveRelative,
                   onDropMove,

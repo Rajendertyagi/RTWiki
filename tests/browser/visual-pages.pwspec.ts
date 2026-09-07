@@ -71,7 +71,8 @@ test.describe('dedicated diagram and mind map pages', () => {
     const row = page.locator('[role="treeitem"]', { hasText: parentTitle }).first()
     await row.click({ button: 'right' })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
-    await page.getByText('Mind map page').click()
+    await page.getByRole('menuitem', { name: 'Insert child note' }).hover()
+    await page.getByRole('menuitem', { name: 'Mind map page' }).click()
     await expect(page.getByTestId('mindmap-workspace')).toBeVisible({ timeout: 15_000 })
     // The new page is a child of the parent (visible in breadcrumb or tree).
     await expect(page.getByTestId('mindmap-rendered').locator('svg')).toBeVisible()

@@ -69,6 +69,8 @@ export interface PagesController {
   moveRelative: (id: string, delta: number) => void
   moveToPosition: (id: string, newParentId: string | null, newPosition: number) => void
   createChild: (parentId: string, pageType?: PageType) => Promise<void>
+  /** Creates a sibling of `pageId` of the given type, placed directly after it. */
+  createSiblingAfter: (pageId: string, pageType: PageType) => Promise<void>
   /** Persists editor content and merges the server-returned page into local state. */
   savePageContent: (id: string, content: string) => Promise<boolean>
   renamePage: (id: string, title: string) => Promise<boolean>
@@ -313,6 +315,40 @@ export function usePagesController(): PagesController {
     []
   )
 
+  /**
+   * Creates a sibling of `pageId` of the given type, placed directly after it
+   * in the same parent. The page is first created as the parent's last child
+   * (server-side append), then moved to the slot right after the reference
+   * page so it reads as an "insert after" rather than an append.
+   */
+  const createSiblingAfter = useCallback(
+    async (pageId: string, pageType: PageType): Promise<void> => {
+      const reference = pages.find((p) => p.id === pageId)
+      if (!reference) return
+      const parentId = reference.parentId ?? null
+      try {
+        const page = await api.createPage({
+          title: UI_TEXT.untitledPage,
+          pageType,
+          content: '',
+          parentId
+        })
+        setPages((prev) => [...prev, page])
+        const reconciliation = await api.movePage(page.id, {
+          newParentId: parentId,
+          newPosition: reference.position + 1
+        })
+        applyMoveReconciliation(reconciliation)
+        setSelectedPage(page)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to create page'
+        setMutationStatus('error')
+        setMutationError(message)
+      }
+    },
+    [pages, applyMoveReconciliation]
+  )
+
   const createPage = useCallback(
     async (title: string, pageType: PageType, content?: string): Promise<Page | null> => {
       setMutationStatus('saving')
@@ -432,6 +468,7 @@ export function usePagesController(): PagesController {
     moveRelative,
     moveToPosition,
     createChild,
+    createSiblingAfter,
     renamePage,
     duplicatePage,
     deletePage,

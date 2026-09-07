@@ -21,6 +21,8 @@ export interface PageTreeControllerHooks {
   onCreateChildHtml?: (parentId: string) => void
   /** Creates a child of any type (Diagram / Mind Map entry points). */
   onCreateChildOfType?: (parentId: string, pageType: PageType) => void
+  /** Creates a sibling of `pageId` of any type, placed directly after it. */
+  onCreateAfterOfType?: (pageId: string, pageType: PageType) => void
   onMoveTo: (id: string, newParentId: string | null) => void
   onMoveRelative: (id: string, delta: number) => void
   /** Positional move used by drag-and-drop (optimistic + rollback). */
@@ -258,44 +260,76 @@ export function PageTree({
       code: action
     })
     if (menu.kind === 'root') {
-      if (action === 'rootRich') onCreateRoot?.('rich')
-      if (action === 'rootHtml') onCreateRoot?.('html')
-      if (action === 'rootDiagram') onCreateRoot?.('diagram')
-      if (action === 'rootMindMap') onCreateRoot?.('mindmap')
-      if (action === 'newMarkdown') onCreateRoot?.('markdown')
+      const rootType = typeFromAction(action)
+      if (rootType) onCreateRoot?.(rootType)
       if (action === 'importMarkdown') hooks.onRequestImport?.()
       return
     }
     const id = menu.pageId
     if (action === 'open') onOpen(id)
-    if (action === 'childRich') {
+    if (action.startsWith('after')) {
+      const pageType = typeFromAction(action)
+      if (pageType) hooks.onCreateAfterOfType?.(id, pageType)
+    } else if (action.startsWith('child')) {
+      const pageType = typeFromAction(action)
+      if (!pageType) return
       imperativeRef.current.expandPage(id)
-      hooks.onCreateChild(id)
-    }
-    if (action === 'childHtml') {
-      imperativeRef.current.expandPage(id)
-      hooks.onCreateChildHtml?.(id)
-    }
-    if (action === 'childDiagram') {
-      imperativeRef.current.expandPage(id)
-      hooks.onCreateChildOfType?.(id, 'diagram')
-    }
-    if (action === 'childMindMap') {
-      imperativeRef.current.expandPage(id)
-      hooks.onCreateChildOfType?.(id, 'mindmap')
-    }
-    if (action === 'rename') renameSignalRef.current(id)
-    if (action === 'duplicate') hooks.onDuplicate(id)
-    if (action === 'delete') {
+      if (pageType === 'rich') hooks.onCreateChild(id)
+      else if (pageType === 'html') hooks.onCreateChildHtml?.(id)
+      else hooks.onCreateChildOfType?.(id, pageType)
+    } else if (action === 'rename') {
+      renameSignalRef.current(id)
+    } else if (action === 'duplicate') {
+      hooks.onDuplicate(id)
+    } else if (action === 'delete') {
       hooks.onDelete(id)
       imperativeRef.current.restoreFocus(null)
+    } else if (action === 'moveUp') {
+      hooks.onMoveRelative(id, -1)
+    } else if (action === 'moveDown') {
+      hooks.onMoveRelative(id, 1)
+    } else if (action === 'exportMarkdown') {
+      hooks.onExportPage?.(id)
     }
-    if (action === 'moveUp') hooks.onMoveRelative(id, -1)
-    if (action === 'moveDown') hooks.onMoveRelative(id, 1)
-    if (action === 'exportMarkdown') hooks.onExportPage?.(id)
   }
 
   const menuPageId = contextMenu?.kind === 'page' ? contextMenu.pageId : null
+
+  // Keyboard shortcuts that act on the focused/active tree row. Scoped to the
+  // tree container so they never fire while typing in the editor or rename
+  // input. Mirrors the context-menu actions for fast, mouse-free operation.
+  const handleTreeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    const target = event.target as HTMLElement | null
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      return
+    }
+    const id = activePageId
+    const ctrl = event.ctrlKey || event.metaKey
+    if (event.key === 'Delete') {
+      if (id) {
+        event.preventDefault()
+        hooks.onDelete(id)
+        imperativeRef.current.restoreFocus(null)
+      }
+      return
+    }
+    if (ctrl && (event.key === 'd' || event.key === 'D')) {
+      if (id) {
+        event.preventDefault()
+        hooks.onDuplicate(id)
+      }
+      return
+    }
+    if (ctrl && event.key === 'Enter') {
+      event.preventDefault()
+      if (event.shiftKey) {
+        if (id) hooks.onCreateAfterOfType?.(id, 'rich')
+      } else if (id) {
+        hooks.onCreateChild(id)
+      }
+      return
+    }
+  }
 
   return (
     <>
@@ -305,6 +339,7 @@ export function PageTree({
         data-testid="page-tree"
         role="tree"
         aria-label={UI_TEXT.dashboardTitle}
+        onKeyDown={handleTreeKeyDown}
       />
       {/* Remounted per invocation (key) so transient menu state such as the
           move-to picker always starts fresh; dismissal unmounts it. */}
@@ -359,6 +394,16 @@ function RenameSignalConsumer({
       }
     }
   }, [signals, hostRef])
+  return null
+}
+
+/** Maps a context-menu action (new / after / child prefix) to its page type. */
+function typeFromAction(action: string): PageType | null {
+  if (action === 'newRich' || action === 'afterRich' || action === 'childRich') return 'rich'
+  if (action === 'newHtml' || action === 'afterHtml' || action === 'childHtml') return 'html'
+  if (action === 'newMarkdown' || action === 'afterMarkdown' || action === 'childMarkdown') return 'markdown'
+  if (action === 'newDiagram' || action === 'afterDiagram' || action === 'childDiagram') return 'diagram'
+  if (action === 'newMindMap' || action === 'afterMindMap' || action === 'childMindMap') return 'mindmap'
   return null
 }
 

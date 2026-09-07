@@ -606,6 +606,11 @@ export function App(): JSX.Element {
   const globalStatusBar = controller.selectedPage ? (
     <StatusBar
       pageTypeLabel={pageTypeLabel(controller.selectedPage.pageType)}
+      pagePath={
+        breadcrumb.length > 0
+          ? [...breadcrumb, controller.selectedPage.title || UI_TEXT.untitledPage].join(' / ')
+          : (controller.selectedPage.title || UI_TEXT.untitledPage)
+      }
       saveState={pageSaveState}
       saveError={pageSaveState === 'error' ? pageSaveError : null}
       onRetry={() => void flushQuietly()}
@@ -685,6 +690,9 @@ export function App(): JSX.Element {
             onCreateChildHtml={(parentId) => void controller.createChild(parentId, 'html')}
             onCreateChildOfType={(parentId, pageType) =>
               void controller.createChild(parentId, pageType)
+            }
+            onCreateAfterOfType={(pageId, pageType) =>
+              void controller.createSiblingAfter(pageId, pageType)
             }
             onMoveTo={(id, newParentId) => controller.moveTo(id, newParentId)}
             onMoveRelative={(id, delta) => controller.moveRelative(id, delta)}

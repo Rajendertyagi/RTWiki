@@ -314,93 +314,16 @@
 }
 
 /*
- * RTWiki's portalled tree context menu. Rendered into document.body with a
- * fixed position and the shared overlay z-index so it always paints above
- * the rail, editor, toolbars, tabs, and right sidebar. The host clamps
- * coordinates into the viewport. Width is fixed and compact (token) so page
- * titles can never stretch it; picker entries truncate with ellipsis.
+ * RTWiki tree context menu (Mantine Menu). Scoped under .treeMenu so these
+ * rules outrank Mantine's single-class item styles without inline styles.
+ * Adds left breathing room (icon no longer hugs the panel edge) and a clear
+ * gap between each icon and its label.
  */
-.contextMenu {
-  position: fixed;
-  z-index: var(--rtwiki-overlay-z-index, 1000);
-  width: var(--rtwiki-tree-menu-width);
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 4px;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
-  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  border-radius: var(--mantine-radius-sm);
-  box-shadow: var(--mantine-shadow-md);
+.treeMenu .treeMenuItem {
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
-.contextMenuItem {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  border: none;
-  border-radius: var(--mantine-radius-xs);
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  font-size: var(--mantine-font-size-sm);
-  color: var(--rtwiki-text, var(--mantine-color-text));
-  cursor: pointer;
-}
-
-.contextMenuItem:hover {
-  background: var(--mantine-color-default-hover);
-}
-
-.contextMenuDanger {
-  color: var(--mantine-color-red-filled);
-}
-
-.contextMenuBack {
-  font-weight: 600;
-}
-
-.contextMenuDivider {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--rtwiki-border, var(--mantine-color-default-border));
-}
-
-.menuScroll {
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-/*
- * Move-to picker (opened only from the "Move to…" menu item): a filter
- * input plus a compact result list. Entries truncate so long titles clamp
- * to the fixed menu width.
- */
-.movePickerSearch {
-  width: 100%;
-  margin-bottom: 4px;
-  padding: 6px 10px;
-  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  border-radius: var(--mantine-radius-xs);
-  background: var(--rtwiki-surface, var(--mantine-color-body));
-  color: var(--rtwiki-text, var(--mantine-color-text));
-  font: inherit;
-  font-size: var(--mantine-font-size-sm);
-  outline: none;
-}
-
-.movePickerSearch:focus {
-  border-color: var(--mantine-color-blue-outline);
-}
-
-/* Picker entries truncate so long titles clamp to the fixed menu width. */
-.menuScroll .contextMenuItem {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.movePickerEmpty {
-  padding: 6px 10px;
-  font-size: var(--mantine-font-size-sm);
-  color: var(--mantine-color-dimmed);
+.treeMenu .treeMenuItemSection {
+  margin-right: 10px;
 }
