@@ -14,6 +14,7 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-006](ADR-006-rich-content-and-import-contract.md) | Rich-Content Model and Note-Package Import Contract | **Accepted** |
 | [ADR-007](ADR-007-sandboxed-custom-content.md) | Sandboxed Custom HTML/CSS/JS | **Accepted** |
 | [ADR-008](ADR-008-page-hierarchy-and-workspace-tree.md) | Page Hierarchy and the Workspace Tree | **Accepted** |
+| [ADR-009](ADR-009-study-scheduler-notifications.md) | Study Scheduler Notification Engine and Settings | **Accepted** |
 
 ## How to Read an ADR
 
