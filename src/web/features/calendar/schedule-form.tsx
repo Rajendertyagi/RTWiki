@@ -219,11 +219,12 @@ export function ScheduleForm({
                     key={d}
                     label={WEEKDAY_LABELS[i]}
                     checked={weekdays.includes(d)}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const checked = e.currentTarget.checked
                       setWeekdays((prev) =>
-                        e.currentTarget.checked ? [...prev, d] : prev.filter((x) => x !== d)
+                        checked ? [...prev, d] : prev.filter((x) => x !== d)
                       )
-                    }
+                    }}
                   />
                 ))}
               </Group>
