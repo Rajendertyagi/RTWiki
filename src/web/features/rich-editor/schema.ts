@@ -25,10 +25,7 @@ export const rtwikiBlockSchema = BlockNoteSchema.create().extend({
     callout: createReactCalloutSpec(),
     diagram: createReactDiagramSpec(),
     mindMap: createReactMindMapSpec(),
-    // BlockNote's `extend` BlockSpecs index signature rejects this otherwise
-    // valid custom block spec for a brand-new block-type name; the runtime
-    // spec is correct, so the cast only bridges the generic-inference gap.
-    linkedPage: createReactLinkedPageSpec() as unknown as ReturnType<typeof createReactDiagramSpec>
+    linkedPage: createReactLinkedPageSpec()
   },
   inlineContentSpecs: {
     math: createReactInlineMathSpec()
