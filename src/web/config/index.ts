@@ -396,6 +396,7 @@ export const UI_TEXT = {
   scheduleNewReminder: 'New reminder',
   schedulePresets: 'Presets',
   scheduleAgenda: 'Today',
+  scheduleDragHint: 'Drag onto the calendar',
   schedulePeriod: 'Study period',
   scheduleReminder: 'Reminder',
   scheduleWeekly: 'Weekly',

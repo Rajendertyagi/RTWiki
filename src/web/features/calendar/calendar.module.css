@@ -5,36 +5,67 @@
   min-height: 0;
 }
 
-.header {
-  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+.toolbar {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
   border-bottom: 1px solid var(--mantine-color-gray-3);
   flex-shrink: 0;
 }
 
-.body {
+.content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-md);
+}
+
+.mainRow {
   display: flex;
   flex: 1;
   min-height: 0;
+  gap: var(--mantine-spacing-md);
 }
 
-.week {
+.palette {
+  width: 220px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: var(--mantine-spacing-sm);
+}
+
+.paletteBox {
+  padding: 8px 12px;
+  border-radius: var(--mantine-radius-md);
+  cursor: grab;
+  user-select: none;
+}
+
+.paletteBox:active {
+  cursor: grabbing;
+}
+
+.schedule {
   flex: 1;
   min-width: 0;
   height: 100%;
-  overflow: hidden;
 }
 
-.side {
-  width: 320px;
+.schedule :global(.mantine-Schedule-root) {
+  height: 100%;
+}
+
+.todayBar {
   flex-shrink: 0;
-  border-left: 1px solid var(--mantine-color-gray-3);
+  max-height: 220px;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.agenda {
+.todayScroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding: 0 var(--mantine-spacing-sm) var(--mantine-spacing-sm);
 }

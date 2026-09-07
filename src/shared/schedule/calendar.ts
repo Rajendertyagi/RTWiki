@@ -77,6 +77,59 @@ export function expandForWeek(
   return events
 }
 
+/**
+ * Expands the recurring/one-off models into render-ready occurrences for an
+ * arbitrary inclusive date range (`rangeStart`/`rangeEnd` in YYYY-MM-DD). Used
+ * to feed the full-range `Schedule` component so Day/Week/Month/Year views all
+ * have data without per-view re-expansion.
+ */
+export function expandForRange(
+  entries: ScheduleEntry[],
+  reminders: Reminder[],
+  rangeStart: string,
+  rangeEnd: string
+): CalendarEvent[] {
+  const events: CalendarEvent[] = []
+  const start = dayjs(`${rangeStart} 00:00:00`)
+  const end = dayjs(`${rangeEnd} 23:59:59`)
+  const dayCount = end.diff(start, 'day')
+
+  for (let i = 0; i <= dayCount; i += 1) {
+    const day = start.add(i, 'day')
+    const ds = day.format('YYYY-MM-DD')
+    const dow = day.day()
+
+    for (const entry of entries) {
+      if (!entry.enabled) continue
+      if (entry.recurrenceKind === 'weekly') {
+        if ((entry.weekdays ?? []).includes(dow)) events.push(periodToEvent(entry, ds))
+      } else if (entry.date === ds) {
+        events.push(periodToEvent(entry, ds))
+      }
+    }
+
+    for (const reminder of reminders) {
+      if (!reminder.enabled) continue
+      if (reminder.dueDatetime.slice(0, 10) === ds) {
+        const s = dayjs(reminder.dueDatetime).format('YYYY-MM-DD HH:mm:ss')
+        const e = dayjs(reminder.dueDatetime).add(30, 'minute').format('YYYY-MM-DD HH:mm:ss')
+        events.push({
+          id: `reminder-${reminder.id}-${ds}`,
+          title: reminder.title,
+          start: s,
+          end: e,
+          color: SCHEDULE_REMINDER_COLOR,
+          kind: 'reminder',
+          sourceId: reminder.id,
+          allDay: false
+        })
+      }
+    }
+  }
+
+  return events
+}
+
 /** True when two timed ranges on the same day overlap. */
 export function rangesOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
   return startA < endB && startB < endA

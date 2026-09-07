@@ -13,6 +13,7 @@ import type {
   SchedulePresetData
 } from '@rtwiki/shared/contracts/schedule'
 import { expandForWeek, getWeekStart } from '@rtwiki/shared/schedule/calendar'
+import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../services/schedule-api.js'
 
@@ -40,7 +41,7 @@ export interface ScheduleController {
 }
 
 function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10)
+  return dayjs().format('YYYY-MM-DD')
 }
 
 export function useScheduleController(): ScheduleController {

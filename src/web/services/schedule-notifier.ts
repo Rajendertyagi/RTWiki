@@ -1,9 +1,5 @@
 import { notifications } from '@mantine/notifications'
-import type {
-  PeriodNotificationPrefs,
-  Reminder,
-  ScheduleEntry
-} from '@rtwiki/shared/contracts/schedule'
+import type { Reminder, ScheduleEntry } from '@rtwiki/shared/contracts/schedule'
 import { listEntries, listReminders } from '../services/schedule-api.js'
 import { showBrowserNotification } from './browser-notify.js'
 import {
