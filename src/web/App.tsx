@@ -21,6 +21,7 @@ import {
 } from './features/rich-editor/rich-templates.js'
 import { Calendar } from './features/calendar/calendar.js'
 import { SettingsWorkspace } from './features/settings/settings-workspace.js'
+import { ScheduleNotifierHost } from './features/calendar/schedule-notifications.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
@@ -855,6 +856,8 @@ export function App(): JSX.Element {
         pages={controller.pages}
         onOpenPage={(id) => void handleSelectPage(id)}
       />
+
+      <ScheduleNotifierHost />
     </>
   )
 }

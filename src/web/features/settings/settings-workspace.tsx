@@ -11,16 +11,24 @@ import {
   useComputedColorScheme,
   useMantineColorScheme
 } from '@mantine/core'
+import { TimeInput } from '@mantine/dates'
 import { IconX } from '@tabler/icons-react'
 import { useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { isDebugLoggingEnabled, setDebugLoggingEnabled } from '../../diagnostics/debug-log.js'
 import { setWordWrap, useEditorPreferences } from '../workspace/editor-preferences.js'
+import {
+  loadSchedulerPreferences,
+  saveSchedulerPreferences,
+  type SchedulerPreferences
+} from '../workspace/scheduler-preferences.js'
 import type { LayoutPreferences } from '../workspace/layout-preferences.js'
+import { browserNotificationPermission, requestBrowserNotificationPermission, type BrowserPermission } from '../../services/browser-notify.js'
+import { scheduleNotifier } from '../../services/schedule-notifier.js'
 import { DebugLogViewer } from './debug-log-viewer.js'
 import classes from './settings.module.css'
 
-type Section = 'appearance' | 'layout' | 'editor' | 'debugLogs'
+type Section = 'appearance' | 'layout' | 'editor' | 'debugLogs' | 'scheduler'
 
 interface SettingsWorkspaceProps {
   layoutPrefs: LayoutPreferences
@@ -32,8 +40,22 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: 'appearance', label: UI_TEXT.settingsAppearance },
   { id: 'layout', label: UI_TEXT.settingsLayout },
   { id: 'editor', label: UI_TEXT.settingsEditor },
+  { id: 'scheduler', label: UI_TEXT.settingsScheduler },
   { id: 'debugLogs', label: UI_TEXT.settingsDebugLogs }
 ]
+
+function browserPermissionText(permission: BrowserPermission): string {
+  switch (permission) {
+    case 'granted':
+      return UI_TEXT.schedulerBrowserAllowed
+    case 'denied':
+      return UI_TEXT.schedulerBrowserBlocked
+    case 'unsupported':
+      return UI_TEXT.schedulerBrowserUnsupported
+    default:
+      return UI_TEXT.schedulerBrowserDefault
+  }
+}
 
 export function SettingsWorkspace({
   layoutPrefs,
@@ -45,10 +67,29 @@ export function SettingsWorkspace({
   const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
   const editorPrefs = useEditorPreferences()
   const [debugEnabled, setDebugEnabled] = useState<boolean>(() => isDebugLoggingEnabled())
+  const [schedPrefs, setSchedPrefs] = useState<SchedulerPreferences>(() => loadSchedulerPreferences())
+  const [browserPerm, setBrowserPerm] = useState<BrowserPermission>(() => browserNotificationPermission())
 
   const handleDebugToggle = (checked: boolean): void => {
     setDebugLoggingEnabled(checked)
     setDebugEnabled(checked)
+  }
+
+  const updateScheduler = (patch: Partial<SchedulerPreferences>): void => {
+    const next = { ...schedPrefs, ...patch }
+    setSchedPrefs(next)
+    saveSchedulerPreferences(next)
+    scheduleNotifier.applyPreferences(next)
+  }
+
+  const handleBrowserToggle = async (checked: boolean): Promise<void> => {
+    if (!checked) {
+      updateScheduler({ browserEnabled: false })
+      return
+    }
+    const result = await requestBrowserNotificationPermission()
+    setBrowserPerm(result)
+    updateScheduler({ browserEnabled: result === 'granted' })
   }
 
   return (
@@ -154,6 +195,73 @@ export function SettingsWorkspace({
                   data-testid="settings-word-wrap"
                 />
               </Group>
+            </Stack>
+          ) : null}
+
+          {section === 'scheduler' ? (
+            <Stack gap="sm" className={classes.section}>
+              <Title order={5}>{UI_TEXT.settingsScheduler}</Title>
+
+              <Group justify="space-between" wrap="nowrap">
+                <div>
+                  <Text size="sm" w={500}>
+                    {UI_TEXT.schedulerInApp}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {UI_TEXT.schedulerInAppHint}
+                  </Text>
+                </div>
+                <Switch
+                  checked={schedPrefs.inAppEnabled}
+                  onChange={(event) => updateScheduler({ inAppEnabled: event.currentTarget.checked })}
+                  aria-label={UI_TEXT.schedulerInApp}
+                  data-testid="scheduler-inapp"
+                />
+              </Group>
+
+              <Group justify="space-between" wrap="nowrap">
+                <div>
+                  <Text size="sm" w={500}>
+                    {UI_TEXT.schedulerBrowser}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {UI_TEXT.schedulerBrowserHint}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {browserPermissionText(browserPerm)}
+                  </Text>
+                </div>
+                <Switch
+                  checked={schedPrefs.browserEnabled}
+                  onChange={(event) => void handleBrowserToggle(event.currentTarget.checked)}
+                  aria-label={UI_TEXT.schedulerBrowser}
+                  data-testid="scheduler-browser"
+                />
+              </Group>
+
+              <Title order={6}>{UI_TEXT.schedulerQuietHours}</Title>
+              <Group gap="sm">
+                <TimeInput
+                  label={UI_TEXT.schedulerQuietStart}
+                  value={schedPrefs.quietStart ?? ''}
+                  onChange={(event) => updateScheduler({ quietStart: event.currentTarget.value || null })}
+                  data-testid="scheduler-quiet-start"
+                />
+                <TimeInput
+                  label={UI_TEXT.schedulerQuietEnd}
+                  value={schedPrefs.quietEnd ?? ''}
+                  onChange={(event) => updateScheduler({ quietEnd: event.currentTarget.value || null })}
+                  data-testid="scheduler-quiet-end"
+                />
+              </Group>
+
+              <Button
+                variant="light"
+                onClick={() => scheduleNotifier.fireTest()}
+                data-testid="scheduler-test"
+              >
+                {UI_TEXT.schedulerTest}
+              </Button>
             </Stack>
           ) : null}
 

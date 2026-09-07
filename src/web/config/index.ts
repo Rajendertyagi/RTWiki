@@ -431,6 +431,20 @@ export const UI_TEXT = {
   scheduleNoPresets:
     'No custom presets yet. Save the current timetable as a preset to reuse it.',
   scheduleDeletePreset: 'Delete preset',
+  // Scheduler settings (Slice 2)
+  settingsScheduler: 'Scheduler',
+  schedulerInApp: 'In-app notifications',
+  schedulerInAppHint: 'Show toasts inside RTWiki when a study period or reminder is due.',
+  schedulerBrowser: 'Browser notifications',
+  schedulerBrowserHint: 'Also notify through the operating system when permitted.',
+  schedulerQuietHours: 'Quiet hours',
+  schedulerQuietStart: 'Quiet from',
+  schedulerQuietEnd: 'Quiet to',
+  schedulerTest: 'Send test notification',
+  schedulerBrowserAllowed: 'Browser notifications allowed.',
+  schedulerBrowserBlocked: 'Browser notifications blocked — enable them in your browser settings.',
+  schedulerBrowserDefault: 'Browser notifications not yet allowed.',
+  schedulerBrowserUnsupported: 'Browser notifications are not supported here.',
   saveButton: 'Save'
 } as const
 

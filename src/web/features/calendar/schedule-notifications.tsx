@@ -1,0 +1,32 @@
+import { Notifications } from '@mantine/notifications'
+import { useEffect } from 'react'
+import { scheduleNotifier } from '../../services/schedule-notifier.js'
+import { loadSchedulerPreferences } from '../workspace/scheduler-preferences.js'
+
+/**
+ * Mounts the single Mantine <Notifications/> portal and owns the lifecycle of
+ * the study Scheduler notification engine. Rendered once near the app root
+ * (inside MantineProvider). Starts the engine on mount, refreshes it when the
+ * tab regains focus, and stops it on unmount. Preferences are applied from the
+ * persisted store so the engine respects the user's Scheduler settings.
+ */
+export function ScheduleNotifierHost(): JSX.Element {
+  useEffect(() => {
+    scheduleNotifier.applyPreferences(loadSchedulerPreferences())
+    scheduleNotifier.start()
+
+    const onVisibility = (): void => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        scheduleNotifier.refresh()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      scheduleNotifier.stop()
+    }
+  }, [])
+
+  return <Notifications position="bottom-right" />
+}
