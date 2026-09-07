@@ -1,6 +1,6 @@
 import { ActionIcon, Card, Menu } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
+import { IconCopy, IconDotsVertical, IconTrash } from '@tabler/icons-react'
 import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
@@ -24,7 +24,8 @@ function formatDate(value: string): string {
 }
 
 /**
- * Accessible page card.
+ * Accessible page card, styled after Trilium's note cards: a type-coloured
+ * icon tile, a clear title / preview hierarchy, and a type-accented footer.
  *
  * The open control is a REAL button containing the visible card content
  * (title, preview, meta) as styled spans — phrasing content only, so the
@@ -43,7 +44,7 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
   const isVisual = page.pageType === 'diagram' || page.pageType === 'mindmap'
 
   return (
-    <Card withBorder padding={0} radius="md" className={classes.card}>
+    <Card withBorder padding={0} radius="md" className={classes.card} data-page-type={page.pageType}>
       <button
         type="button"
         className={classes.cardOpen}
@@ -53,9 +54,15 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
         }}
         aria-label={`Open ${displayTitle}`}
       >
-        <span className={classes.cardTitle} title={displayTitle}>
-          {displayTitle}
+        <span className={classes.cardHeader}>
+          <span className={classes.typeTile} aria-hidden="true">
+            <PageTypeIcon pageType={page.pageType} size={14} />
+          </span>
+          <span className={classes.cardTitle} title={displayTitle}>
+            {displayTitle}
+          </span>
         </span>
+
         {preview ? (
           <span className={classes.cardPreview}>{preview}</span>
         ) : isVisual ? (
@@ -66,11 +73,9 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
         ) : (
           <span className={classes.cardPreview}>{UI_TEXT.editorPlaceholderContent}</span>
         )}
+
         <span className={classes.cardMeta}>
-          <span className={`${classes.cardType} ${classes[`type-${page.pageType}`]}`}>
-            <PageTypeIcon pageType={page.pageType} size={13} />
-            {pageTypeLabel(page.pageType)}
-          </span>
+          <span className={classes.cardType}>{pageTypeLabel(page.pageType)}</span>
           <span>{formatDate(page.updatedAt)}</span>
         </span>
       </button>
@@ -80,10 +85,11 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
           <Menu.Target>
             <ActionIcon
               variant="subtle"
+              size={22}
               className={classes.cardMenuButton}
               aria-label={`Actions for ${displayTitle}`}
             >
-              <IconDots size={16} />
+              <IconDotsVertical size={16} />
             </ActionIcon>
           </Menu.Target>
           <Menu.Dropdown>

@@ -2,14 +2,48 @@
   background: var(--rtwiki-surface, var(--mantine-color-body));
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
-  transition: box-shadow 150ms ease;
+  transition: box-shadow 150ms ease, border-color 150ms ease, transform 150ms ease;
   position: relative;
   overflow: hidden;
+  min-height: 210px;
+}
+
+/*
+ * Per-type accent colours, driven by a data attribute so the card can theme
+ * its icon tile, footer chip and hover accent from one place. Values reuse
+ * Mantine's generated colour scales (kept in sync with page-type-badge.tsx).
+ */
+.card[data-page-type='rich'] {
+  --accent: var(--mantine-color-blue-filled);
+  --accent-soft: var(--mantine-color-blue-light);
+  --accent-fg: var(--mantine-color-blue-light-color);
+}
+.card[data-page-type='html'] {
+  --accent: var(--mantine-color-teal-filled);
+  --accent-soft: var(--mantine-color-teal-light);
+  --accent-fg: var(--mantine-color-teal-light-color);
+}
+.card[data-page-type='markdown'] {
+  --accent: var(--mantine-color-cyan-filled);
+  --accent-soft: var(--mantine-color-cyan-light);
+  --accent-fg: var(--mantine-color-cyan-light-color);
+}
+.card[data-page-type='diagram'] {
+  --accent: var(--mantine-color-violet-filled);
+  --accent-soft: var(--mantine-color-violet-light);
+  --accent-fg: var(--mantine-color-violet-light-color);
+}
+.card[data-page-type='mindmap'] {
+  --accent: var(--mantine-color-grape-filled);
+  --accent-soft: var(--mantine-color-grape-light);
+  --accent-fg: var(--mantine-color-grape-light-color);
 }
 
 .card:hover,
 .card:focus-within {
   box-shadow: var(--mantine-shadow-sm);
+  border-color: var(--accent);
+  transform: translateY(-2px);
 }
 
 /*
@@ -19,10 +53,10 @@
 .cardOpen {
   display: flex;
   flex-direction: column;
-  gap: var(--mantine-spacing-xs);
+  gap: var(--mantine-spacing-sm);
   width: 100%;
-  min-height: 128px;
-  padding: var(--mantine-spacing-md);
+  min-height: 210px;
+  padding: var(--mantine-spacing-lg);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -36,25 +70,51 @@
   outline-offset: -2px;
 }
 
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+}
+
+/* Trilium-style type icon tile: small coloured square, height-matched to the
+ * single-line title so icon and file name sit on one aligned row. */
+.typeTile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+
+/* File name on its own single line; icon height equals this line height.
+ * Right padding keeps long titles clear of the 3-dot menu on the same line. */
 .cardTitle {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+  padding-right: 28px;
   font-size: var(--mantine-font-size-lg);
   font-weight: 700;
+  line-height: 22px;
   letter-spacing: -0.01em;
   color: var(--rtwiki-text, var(--mantine-color-text));
 }
 
+/* Larger preview: type + date moved to a corner, so the body gets the room. */
 .cardPreview {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 5;
   overflow: hidden;
-  font-size: var(--mantine-font-size-sm);
-  color: var(--mantine-color-dimmed);
   flex: 1;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.5;
+  color: var(--mantine-color-dimmed);
 }
 
 /*
@@ -73,11 +133,12 @@
   font-size: var(--mantine-font-size-sm);
 }
 
+/* Type + date pinned to the bottom-right corner, out of the preview's way. */
 .cardMeta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--mantine-spacing-xs);
+  justify-content: flex-end;
+  gap: 6px;
   font-size: var(--mantine-font-size-xs);
   color: var(--mantine-color-dimmed);
 }
@@ -85,36 +146,17 @@
 .cardType {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: var(--mantine-radius-sm);
   font-weight: 500;
-}
-
-.type-rich {
-  color: var(--mantine-color-blue-light-color);
-  background: var(--mantine-color-blue-light);
-}
-
-.type-html {
-  color: var(--mantine-color-teal-light-color);
-  background: var(--mantine-color-teal-light);
-}
-
-.type-diagram {
-  color: var(--mantine-color-violet-light-color);
-  background: var(--mantine-color-violet-light);
-}
-
-.type-mindmap {
-  color: var(--mantine-color-grape-light-color);
-  background: var(--mantine-color-grape-light);
+  background: var(--accent-soft);
+  color: var(--accent-fg);
 }
 
 .cardMenuWrapper {
   position: absolute;
-  top: var(--mantine-spacing-xs);
-  right: var(--mantine-spacing-xs);
+  top: var(--mantine-spacing-lg);
+  right: 12px;
   z-index: 2;
 }
 
