@@ -102,6 +102,10 @@ fn restart_flag_path(exe_dir: &Path) -> PathBuf {
   exe_dir.join("data").join("restart-requested")
 }
 
+fn shutdown_flag_path(exe_dir: &Path) -> PathBuf {
+  exe_dir.join("data").join("shutdown-requested")
+}
+
 /// Drops a stale restart flag at boot (e.g. left by a crash mid-restart).
 pub fn clear_restart_request(exe_dir: &Path) {
   let _ = std::fs::remove_file(restart_flag_path(exe_dir));
@@ -110,6 +114,18 @@ pub fn clear_restart_request(exe_dir: &Path) {
 /// Returns true once per recorded restart request; deletes the flag.
 pub fn consume_restart_request(exe_dir: &Path) -> bool {
   std::fs::remove_file(restart_flag_path(exe_dir)).is_ok()
+}
+
+/// Drops a stale shutdown flag at boot (e.g. left by a crash mid-shutdown).
+pub fn clear_shutdown_request(exe_dir: &Path) {
+  let _ = std::fs::remove_file(shutdown_flag_path(exe_dir));
+}
+
+/// Returns true when the server recorded an authorized shutdown before it
+/// exited. The watch thread uses this to tell an intentional exit from a crash:
+/// without it every clean shutdown is immediately undone by a respawn.
+pub fn consume_shutdown_request(exe_dir: &Path) -> bool {
+  std::fs::remove_file(shutdown_flag_path(exe_dir)).is_ok()
 }
 
 /// Minimal blocking HTTP exchange over loopback. Returns the full response

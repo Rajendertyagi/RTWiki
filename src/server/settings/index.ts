@@ -16,7 +16,8 @@ import {
   MAX_USER_PORT,
   MIN_USER_PORT,
   RESTART_REQUEST_FILENAME,
-  SERVER_SETTINGS_FILENAME
+  SERVER_SETTINGS_FILENAME,
+  SHUTDOWN_REQUEST_FILENAME
 } from '@rtwiki/shared/constants'
 import { dirname, joinPaths } from '../config/index.js'
 
@@ -146,6 +147,45 @@ export function clearRestartRequest(dataDir: string): void {
   if (!dataDir) return
   try {
     rmIfExists(joinPaths(dataDir, RESTART_REQUEST_FILENAME))
+  } catch {
+    // A stale flag is harmless; the shell only acts on fresh requests.
+  }
+}
+
+/**
+ * Shutdown handshake with the desktop shell (ADR-011): the server records an
+ * authorized shutdown so the shell's watch thread can tell an intentional exit
+ * from a crash. Without this the shell respawns the sidecar, undoing the
+ * shutdown, and the sidecar never appears to stop.
+ *
+ * Written only after the shutdown token check passes, so an unauthorized
+ * request can never suppress crash recovery.
+ */
+export function requestShutdown(dataDir: string): void {
+  if (!dataDir) return
+  const path = settingsPath(dataDir, SHUTDOWN_REQUEST_FILENAME)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, String(Date.now()), 'utf8')
+}
+
+/** Returns true once per recorded shutdown; deletes the flag. */
+export function consumeShutdownRequest(dataDir: string): boolean {
+  if (!dataDir) return false
+  const path = joinPaths(dataDir, SHUTDOWN_REQUEST_FILENAME)
+  try {
+    if (!existsSync(path)) return false
+    unlinkSync(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Drops a stale flag (e.g. left by a crash mid-shutdown) at boot. */
+export function clearShutdownRequest(dataDir: string): void {
+  if (!dataDir) return
+  try {
+    rmIfExists(joinPaths(dataDir, SHUTDOWN_REQUEST_FILENAME))
   } catch {
     // A stale flag is harmless; the shell only acts on fresh requests.
   }

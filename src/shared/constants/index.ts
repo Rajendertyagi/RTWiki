@@ -123,6 +123,10 @@ export const DESKTOP_SETTINGS_FILENAME = 'desktop.json' as const
 // Flag file the frontend writes (via the server) to request a sidecar
 // restart; the desktop shell consumes and deletes it. Never user-edited.
 export const RESTART_REQUEST_FILENAME = 'restart-requested' as const
+// Flag file the server writes when an authorized shutdown is accepted, so the
+// shell can tell an intentional exit from a crash and leave the sidecar down
+// (tray stays resident). Written only after the shutdown token check passes.
+export const SHUTDOWN_REQUEST_FILENAME = 'shutdown-requested' as const
 
 // Window close behaviors for the desktop shell (ADR-011). Single source of
 // truth shared by the server validator, the Settings UI, and documentation.

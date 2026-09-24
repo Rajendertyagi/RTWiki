@@ -1,12 +1,15 @@
 import { timingSafeEqual } from 'node:crypto'
 import { Hono } from 'hono'
 import { SHUTDOWN_TOKEN_HEADER } from '../../shared/constants/index.js'
+import { requestShutdown } from '../settings/index.js'
 import type { ShutdownCoordinator } from '../shutdown-coordinator.js'
 import { isSameOrigin } from '../utils/request-origin.js'
 
 export interface ShutdownRouteOptions {
   coordinator: ShutdownCoordinator
   token: string
+  /** Data dir for the desktop-shell shutdown handshake; empty in browser-only runs. */
+  dataDir?: string
 }
 
 export function timingSafeEqualStrings(a: string, b: string): boolean {
@@ -33,7 +36,7 @@ export function timingSafeEqualStrings(a: string, b: string): boolean {
  * - Token never logged, never in URL, never in DB
  */
 export function createShutdownRoutes(opts: ShutdownRouteOptions): Hono {
-  const { coordinator, token } = opts
+  const { coordinator, token, dataDir = '' } = opts
   const router = new Hono()
 
   router.get('/token', async (c) => {
@@ -52,6 +55,13 @@ export function createShutdownRoutes(opts: ShutdownRouteOptions): Hono {
     if (!timingSafeEqualStrings(provided ?? '', token)) {
       return c.json({ error: 'Invalid shutdown token' }, 403)
     }
+
+    // Tell the desktop shell this exit is intentional before the process goes
+    // away. The shell's watch thread otherwise reads the exit as a crash and
+    // respawns the sidecar, which silently undoes the shutdown. Written only
+    // here — after the token check — so a rejected request cannot suppress
+    // crash recovery.
+    requestShutdown(dataDir)
 
     // Fire-and-forget: route returns immediately; coordinator handles completion.
     void coordinator.requestShutdown()

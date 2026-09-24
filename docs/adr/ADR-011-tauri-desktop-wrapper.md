@@ -98,6 +98,7 @@ written (AC-058).
 | Managed port | Settings persists `data/server.json`; shell and server both honor it |
 | Close behavior | Settings persists `data/desktop.json` (ask / minimize / quit); shell reads it on every close |
 | Restart handshake | Frontend records `data/restart-requested`, shuts down, shell respawns the sidecar |
+| Shutdown handshake | Server records `data/shutdown-requested` on an authorized shutdown, so the shell does not respawn the sidecar it was told to stop |
 
 ### Dual mode
 
@@ -130,6 +131,22 @@ The loopback port is Settings-managed, not hardcoded:
   of a loop). A stale flag is cleared at boot.
 - In browser mode there is no respawner: saving the port works, but the user
   relaunches manually. The Restart button is therefore desktop-only.
+
+### Shutdown handshake
+
+The watch thread treats every sidecar exit as a crash and respawns. That is
+correct for crashes, but it would silently undo an authorized shutdown: the
+sidecar would stop and immediately reappear, so the shutdown would look like it
+never took effect. The server therefore records the intent before it exits:
+
+- `POST /api/shutdown` writes `data/shutdown-requested` **after** the shutdown
+  token check passes, then starts the graceful stop. A rejected request writes
+  nothing, so an unauthorized caller can never suppress crash recovery.
+- The shell's watch thread consumes the flag when it observes the exit and
+  leaves the sidecar down. The tray stays resident, exactly as after a crash.
+- Both handshake flags are cleared at boot. A flag left behind by a crash is
+  never state to resume.
+- Browser mode has no watcher, so the flag is simply unused there.
 
 ### Close behavior
 

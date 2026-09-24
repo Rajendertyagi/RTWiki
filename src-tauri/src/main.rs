@@ -18,6 +18,12 @@
 //! Closing the window follows data/desktop.json (ask / minimize / quit).
 //! `RTWiki.exe --browser` keeps browser mode: no window, tray stays resident.
 //!
+//! Handshake flags in data/ (mirrored by the server, ADR-011):
+//! - `restart-requested`  — respawn the sidecar with the freshly saved port.
+//! - `shutdown-requested` — the server exited deliberately after an authorized
+//!   shutdown, so the watch thread must NOT respawn it. Both flags are cleared
+//!   at boot; a flag left behind by a crash is never state to resume.
+//!
 //! Custom window chrome: on Windows the native title bar is removed
 //! (`decorations(false)`); the frontend renders its own title bar + tab strip
 //! via `<WindowChrome>` in `src/web/components/window-chrome.tsx`. Close
@@ -245,6 +251,16 @@ fn watch_sidecar(app: AppHandle) {
         None => false,
       }
     };
+
+    // An authorized shutdown already stopped the sidecar deliberately. The
+    // tray stays resident, so keep watching (a later restart request or launch
+    // can still bring it back) but never respawn into a shutdown the user or
+    // the shell already asked for.
+    if crashed && sidecar::consume_shutdown_request(&exe_dir) {
+      log::info!("Sidecar exited after an authorized shutdown; leaving it stopped.");
+      continue;
+    }
+
     if !requested && !crashed { continue; }
     if crashed {
       crash_respawns.retain(|t| t.elapsed() < Duration::from_secs(60));
@@ -297,7 +313,10 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
   if let Some(state) = app.try_state::<ShellState>() {
     if let Ok(mut guard) = state.own_sidecar.lock() { *guard = own_sidecar; }
   }
+  // Both handshake flags are per-launch intent, never state to resume: a flag
+  // left behind by a crash must not suppress this run's recovery.
   sidecar::clear_restart_request(&exe_dir);
+  sidecar::clear_shutdown_request(&exe_dir);
   if own_sidecar { let handle = app.clone(); std::thread::spawn(move || watch_sidecar(handle)); }
   let ui_app = app.clone();
   let _ = app.run_on_main_thread(move || {

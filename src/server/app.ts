@@ -125,7 +125,12 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   app.route('/api/schedule/presets', createSchedulePresetRoutes(deps.getDb))
   app.route(
     '/api/shutdown',
-    createShutdownRoutes({ coordinator: deps.coordinator, token: deps.token })
+    createShutdownRoutes({
+      coordinator: deps.coordinator,
+      token: deps.token,
+      // Lets the shell distinguish an authorized shutdown from a crash.
+      dataDir: deps.dataDir ?? ''
+    })
   )
   app.route(
     '/api/settings',
