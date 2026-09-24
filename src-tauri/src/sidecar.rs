@@ -169,10 +169,6 @@ pub fn boot_timeout() -> Duration {
   BOOT_TIMEOUT
 }
 
-pub fn poll_interval() -> Duration {
-  POLL_INTERVAL
-}
-
 /// Spawns the sidecar with stdio detached. On Windows the child gets no
 /// console window so no terminal flashes on launch.
 pub fn spawn_sidecar(exe_dir: &Path, port: u16) -> std::io::Result<Child> {
