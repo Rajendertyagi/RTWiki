@@ -20,25 +20,58 @@ interface TabStripProps {
  * rail, so no `+` button is rendered here.
  */
 export function TabStrip({ tabs, activePageId, onSelect, onClose }: TabStripProps): JSX.Element {
+  const handleKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    currentIndex: number
+  ): void => {
+    if (tabs.length === 0) return
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      const nextIndex = (currentIndex + 1) % tabs.length
+      const nextTab = tabs[nextIndex]
+      if (nextTab) onSelect(nextTab.pageId)
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
+      const prevTab = tabs[prevIndex]
+      if (prevTab) onSelect(prevTab.pageId)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      const firstTab = tabs[0]
+      if (firstTab) onSelect(firstTab.pageId)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      const lastTab = tabs[tabs.length - 1]
+      if (lastTab) onSelect(lastTab.pageId)
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      const currentTab = tabs[currentIndex]
+      if (currentTab) onSelect(currentTab.pageId)
+    }
+  }
+
   return (
     <div className={classes.strip} role="tablist" aria-label={UI_TEXT.tabStripLabel}>
       <div className={classes.tabScroller}>
-        {tabs.map((tab) => {
+        {tabs.map((tab, index) => {
           const active = tab.pageId === activePageId
           return (
             <div
               key={tab.pageId}
               role="tab"
-              tabIndex={0}
+              tabIndex={active ? 0 : -1}
               aria-selected={active}
               className={active ? `${classes.tab} ${classes.tabActive}` : classes.tab}
               onClick={() => onSelect(tab.pageId)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
+              onAuxClick={(event) => {
+                // Middle click closes tab
+                if (event.button === 1) {
                   event.preventDefault()
-                  onSelect(tab.pageId)
+                  onClose(tab.pageId)
                 }
               }}
+              onKeyDown={(event) => handleKeyDown(event, index)}
             >
               <span className={classes.tabTypeIcon}>
                 <PageTypeIcon pageType={tab.pageType} size={14} />
