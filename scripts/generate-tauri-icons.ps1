@@ -1,14 +1,21 @@
 <#
 .SYNOPSIS
-  Generates the Tauri shell icons (icon.png + multi-size icon.ico).
+  Generates the RTWiki desktop-shell source icon (src-tauri/icons/icon.png).
 
 .DESCRIPTION
   Renders a deterministic RTWiki glyph — a rounded blue tile with a white "R" —
-  using System.Drawing only, so no designer assets or network access are needed.
-  Writes src-tauri/icons/icon.png (512px) and src-tauri/icons/icon.ico
-  (16/24/32/48/64/128/256, PNG-compressed entries).
+  using System.Drawing only, so no designer assets or network access are
+  needed, then delegates every derived size to the official Tauri icon
+  generator (`tauri icon`), which emits the platform-correct icon set.
 
-  Safe to re-run; output is deterministic for a given .NET/System.Drawing version.
+  The derived .ico must come from the Tauri CLI: hand-written ICO writers
+  commonly emit PNG-compressed entries with a non-zero biPlanes field, and
+  Windows RC.EXE then parses the PNG bytes as a DIB and aborts the build with
+  RC2176 ("old DIB"). `tauri icon` writes planes=0 correctly. The result is
+  checked by scripts/validate-ico.ts.
+
+  Safe to re-run; output is deterministic for a given .NET/System.Drawing and
+  Tauri CLI version.
 #>
 [CmdletBinding()]
 param(
@@ -24,6 +31,7 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
   }
   $RepoRoot = Split-Path -Parent $scriptDir
 }
+
 Add-Type -AssemblyName System.Drawing
 
 $iconsDir = Join-Path $RepoRoot 'src-tauri/icons'
@@ -38,9 +46,9 @@ function New-RtwikiTile([int]$size) {
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
     $g.Clear([System.Drawing.Color]::Transparent)
+    $rect = New-Object System.Drawing.RectangleF(0, 0, $size, $size)
     $bg = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(24, 100, 171))
     try {
-      $rect = New-Object System.Drawing.RectangleF(0, 0, $size, $size)
       $radius = [float]($size * 0.22)
       $path = New-Object System.Drawing.Drawing2D.GraphicsPath
       try {
@@ -53,8 +61,7 @@ function New-RtwikiTile([int]$size) {
         $g.FillPath($bg, $path)
       } finally { $path.Dispose() }
     } finally { $bg.Dispose() }
-    $fontSize = [float]($size * 0.58)
-    $font = New-Object System.Drawing.Font('Segoe UI', $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $font = New-Object System.Drawing.Font('Segoe UI', [float]($size * 0.58), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     try {
       $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
       try {
@@ -68,47 +75,30 @@ function New-RtwikiTile([int]$size) {
   return $bmp
 }
 
-function Get-PngBytes([System.Drawing.Bitmap]$bmp) {
-  $ms = New-Object System.IO.MemoryStream
-  try {
-    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-    return $ms.ToArray()
-  } finally { $ms.Dispose() }
-}
-
-# 512px master PNG.
-$master = New-RtwikiTile 512
+# 1024px master: the Tauri icon generator downscales from here, so starting
+# above its 1024 target keeps every derived size crisp.
+$masterPath = Join-Path $iconsDir 'icon.png'
+$master = New-RtwikiTile 1024
 try {
-  $master.Save((Join-Path $iconsDir 'icon.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+  $master.Save($masterPath, [System.Drawing.Imaging.ImageFormat]::Png)
 } finally { $master.Dispose() }
-Write-Host 'Wrote src-tauri/icons/icon.png'
+Write-Host "Wrote $masterPath"
 
-# Multi-size ICO with PNG-compressed entries (supported since Windows Vista).
-$sizes = @(16, 24, 32, 48, 64, 128, 256)
-$images = foreach ($s in $sizes) {
-  $bmp = New-RtwikiTile $s
-  try { Get-PngBytes $bmp } finally { $bmp.Dispose() }
+# Derived sizes via the official generator (authoritative ICO format).
+Push-Location $RepoRoot
+try {
+  & bunx tauri icon $masterPath -o $iconsDir | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "tauri icon failed with exit code $LASTEXITCODE" }
+} finally {
+  Pop-Location
 }
 
-$icoPath = Join-Path $iconsDir 'icon.ico'
-$fs = [System.IO.File]::Create($icoPath)
-try {
-  $w = New-Object System.IO.BinaryWriter($fs)
-  try {
-    $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$sizes.Count)
-    $offset = 6 + (16 * $sizes.Count)
-    for ($i = 0; $i -lt $sizes.Count; $i++) {
-      $s = $sizes[$i]
-      $len = $images[$i].Length
-      $dim = if ($s -ge 256) { 0 } else { $s }
-      $w.Write([byte]$dim)
-      $w.Write([byte]$dim)
-      $w.Write([byte]0); $w.Write([byte]0)
-      $w.Write([uint16]1); $w.Write([uint16]32)
-      $w.Write([uint32]$len); $w.Write([uint32]$offset)
-      $offset += $len
-    }
-    foreach ($img in $images) { $w.Write($img) }
-  } finally { $w.Dispose() }
-} finally { $fs.Dispose() }
-Write-Host 'Wrote src-tauri/icons/icon.ico'
+# Windows-only: drop mobile/macOS outputs the portable artifact never uses.
+foreach ($stale in @('android', 'ios', 'icon.icns', 'StoreLogo.png')) {
+  $p = Join-Path $iconsDir $stale
+  if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+}
+Get-ChildItem $iconsDir -Filter 'Square*Logo.png' | Remove-Item -Force
+Get-ChildItem $iconsDir -Filter 'StoreLogo.png' | Remove-Item -Force -ErrorAction SilentlyContinue
+
+Write-Host 'Wrote src-tauri/icons (Tauri-generated sizes)'

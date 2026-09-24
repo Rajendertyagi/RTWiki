@@ -45,6 +45,11 @@ jobs:
           rustc --version
           cargo --version
 
+      # Fail fast with a readable message if the committed .ico is malformed
+      # (PNG entries must declare planes=0 or RC.EXE aborts with RC2176).
+      - name: Validate shell icon
+        run: bun scripts/validate-ico.ts src-tauri/icons/icon.ico
+
       # --no-bundle: no installer is built; the raw shell binary from
       # src-tauri/target/release is staged by package-desktop.ps1. End users
       # need nothing installed (WebView2 ships with Windows 10 1803+).
