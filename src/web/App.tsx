@@ -224,6 +224,8 @@ export function App(): JSX.Element {
   const [calendarOpen, setCalendarOpen] = useState(false)
   // Trash workspace view (replaces the page/dashboard in the main area).
   const [trashOpen, setTrashOpen] = useState(false)
+  // Favorites workspace view (replaces the page/dashboard in the main area).
+  const [favoritesOpen, setFavoritesOpen] = useState(false)
   // Keyboard shortcut help modal state.
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
@@ -238,6 +240,23 @@ export function App(): JSX.Element {
       setPendingFlushError(null)
     }
     setTrashOpen(true)
+    setFavoritesOpen(false)
+    setSettingsOpen(false)
+    setCalendarOpen(false)
+  }
+
+  // Opens the Favorites view, flushing pending edits first.
+  const handleOpenFavorites = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    setFavoritesOpen(true)
+    setTrashOpen(false)
     setSettingsOpen(false)
     setCalendarOpen(false)
   }
@@ -255,6 +274,7 @@ export function App(): JSX.Element {
     }
     setSettingsOpen(true)
     setTrashOpen(false)
+    setFavoritesOpen(false)
     setCalendarOpen(false)
   }
 
@@ -276,6 +296,7 @@ export function App(): JSX.Element {
     setCalendarOpen(true)
     setSettingsOpen(false)
     setTrashOpen(false)
+    setFavoritesOpen(false)
   }
 
   const handleCloseCalendar = (): void => {
@@ -362,6 +383,10 @@ export function App(): JSX.Element {
       debugLog('navigation', 'nav_active_page_changed', { pageId: id ?? undefined })
       // Any normal navigation lands on the rendered parent view.
       setHtmlSource(null)
+      setSettingsOpen(false)
+      setCalendarOpen(false)
+      setTrashOpen(false)
+      setFavoritesOpen(false)
       syncHistory(id, isPopstateRef.current)
     },
     [controller]
@@ -412,6 +437,10 @@ export function App(): JSX.Element {
       }
       setPendingFlushError(null)
     }
+    setSettingsOpen(false)
+    setCalendarOpen(false)
+    setTrashOpen(false)
+    setFavoritesOpen(false)
     controller.selectPage(null)
   }
 
@@ -723,7 +752,11 @@ export function App(): JSX.Element {
         utilityRail={
           <UtilityRail
             activeHome={
-              controller.selectedPage === null && !settingsOpen && !calendarOpen && !trashOpen
+              controller.selectedPage === null &&
+              !settingsOpen &&
+              !calendarOpen &&
+              !trashOpen &&
+              !favoritesOpen
             }
             onHome={handleHome}
             onSearchFocus={handleSearchFocus}
@@ -733,6 +766,8 @@ export function App(): JSX.Element {
             settingsOpen={settingsOpen}
             onOpenCalendar={() => void handleOpenCalendar()}
             calendarOpen={calendarOpen}
+            onOpenFavorites={() => void handleOpenFavorites()}
+            favoritesOpen={favoritesOpen}
             onOpenTrash={() => void handleOpenTrash()}
             trashOpen={trashOpen}
             onOpenShortcuts={() => setShortcutsOpen(true)}
