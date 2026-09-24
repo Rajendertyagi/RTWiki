@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/remote-schema.json",
+  "identifier": "loopback-remote",
+  "description": "Window controls for the desktop shell's own UI. The webview is pointed at the loopback server (http://127.0.0.1:<port>), which Tauri treats as a remote origin, so these grants must be declared as remote or every window command is denied and the custom chrome renders inert. Navigation away from loopback is refused by the Rust on_navigation handler, so this origin is always RTWiki's own server.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*", "http://127.0.0.1"]
+  },
+  "permissions": [
+    "core:event:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-hide",
+    "core:window:allow-close"
+  ]
+}

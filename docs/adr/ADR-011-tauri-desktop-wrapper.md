@@ -182,6 +182,16 @@ desktop shell additive and prevents a broken IPC bridge from blocking core use.
   enable/disable/query, and notification permissions are granted to the frontend.
   No filesystem, shell-execute, or arbitrary-open permissions are exposed to web
   content.
+- The webview loads the **loopback origin**, which Tauri classifies as *remote*:
+  "by default the API is only accessible to bundled code shipped with the Tauri
+  App". The custom window chrome therefore needs its own remote capability
+  (`capabilities/remote-loopback.json`) or every window command is denied and the
+  chrome renders inert — a failure mode that is invisible until a real Windows
+  build is launched. That capability grants only window controls
+  (drag / minimize / toggle-maximize / is-maximized / hide / close) plus the
+  event listener, scoped to `http://127.0.0.1:*`, and relies on the navigation
+  handler to guarantee that origin is always RTWiki's own server. No filesystem,
+  shell, or network permission is granted to remote content.
 - The sidecar is spawned from Rust with an explicit path and an argument array —
   no shell string interpolation.
 - The desktop window geometry file contains no user content, only integers and a
@@ -223,7 +233,7 @@ desktop shell additive and prevents a broken IPC bridge from blocking core use.
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| The Tauri IPC bootstrap is blocked by the server's Content-Security-Policy | Medium | The frontend bridge degrades gracefully; native notifications fall back to the Web Notification API. Verify on a real Windows build and, if needed, add a desktop-scoped CSP accommodation in a follow-up change. |
+| The Tauri IPC bootstrap is blocked by the server's Content-Security-Policy | Medium | Resolved on a real Windows build: the bridge initialises, because Tauri's IPC falls back to `window.ipc.postMessage` when the custom protocol is unavailable, which the CSP does not block. Notifications use the native path; autostart reports its real state. If a future WebView2 change removes that fallback, revisit. |
 | Windows toast branding for a portable (non-installed) app shows a generic identity | Medium | Accepted with the portable-ZIP distribution decision; native notifications still appear. Revisit if an installer is authorized. |
 | A stale autostart registry entry after the folder is moved | Low | The Settings/tray toggle reads and rewrites the entry; documented as a known limitation. |
 | The sidecar fails to start (missing file, port occupied by another app) | Low | The shell shows a native message dialog with the failure and exits; the server log records the cause. |
@@ -234,8 +244,9 @@ desktop shell additive and prevents a broken IPC bridge from blocking core use.
 
 This decision should be revisited if:
 
-- The IPC bridge proves unusable under the strict CSP and a desktop-scoped CSP
-  accommodation is required (security review needed).
+- The server's CSP ever gains a directive that blocks `window.ipc.postMessage`,
+  which is the transport Tauri's IPC falls back to for the loopback origin.
+- A desktop-scoped CSP accommodation is required for any reason.
 - An installer (MSI/NSIS) is authorized, which would change the portable layout
   and enable proper toast branding and file associations.
 - The two-executable artifact size becomes a problem.

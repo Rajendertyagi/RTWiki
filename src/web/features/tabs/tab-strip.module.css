@@ -5,7 +5,11 @@
   gap: var(--mantine-spacing-xs);
   min-height: var(--rtwiki-tab-height);
   padding: 0 var(--rtwiki-chrome-pad-x);
-  border-bottom: 1px solid var(--rtwiki-chrome-border);
+  /* The desktop chrome band draws the single bottom separator on its own and
+     sets this width to 0. A transparent border would still occupy 1px and
+     clip the strip inside the band, so the width itself is removed. The
+     fallback form keeps browser mode unchanged. */
+  border-bottom: var(--rtwiki-tab-strip-border-width, 1px) solid var(--rtwiki-chrome-border);
   background: var(--rtwiki-chrome-bg);
 }
 

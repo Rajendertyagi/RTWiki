@@ -8,9 +8,10 @@ interface AppShellLayoutProps {
   utilityRail: React.ReactNode
   navbar: React.ReactNode
   /**
-   * Desktop-only chrome band (title bar + tab strip), rendered into
-   * `AppShell.Header`. Supplying it makes AppShell reserve its height, so the
-   * navbar and main start below it and the document never grows past the
+   * Desktop-only chrome band (tab strip + window controls), rendered into
+   * `AppShell.Header`. Supplying it makes AppShell reserve its height and
+   * switch to the `alt` layout, so the launcher rail and page tree run the full
+   * window height beside the band and the document never grows past the
    * viewport. Browser mode omits it and the layout is unchanged.
    */
   chrome?: ReactNode
@@ -65,12 +66,14 @@ export function AppShellLayout({
       }}
       // Global status bar pinned to the viewport bottom, always visible.
       footer={{ height: LAYOUT.statusBarHeight }}
-      // Chrome band (desktop shell only). Mantine derives the navbar's `top`
-      // and Main's `padding-top` from this height, so every region lines up
-      // without hand-computed offsets. `padding: 0` keeps that offset exact —
-      // AppShell's own padding is additive, and a non-zero value would push
-      // main past the viewport.
-      header={chrome ? { height: LAYOUT.tabStripAreaHeight } : undefined}
+      // Chrome band (desktop shell only), with the `alt` layout so the navbar
+      // spans the full window height and the band sits beside it rather than
+      // above it. Mantine derives the band's offset and Main's padding from
+      // this height, so no region is positioned by hand. `padding: 0` keeps
+      // that offset exact — AppShell's padding is additive, and a non-zero
+      // value would push main past the viewport.
+      header={chrome ? { height: LAYOUT.chromeBandHeight } : undefined}
+      layout={chrome ? 'alt' : undefined}
       padding={0}
     >
       {chrome ? <AppShell.Header className={classes.chromeHeader}>{chrome}</AppShell.Header> : null}

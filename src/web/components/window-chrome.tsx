@@ -1,29 +1,28 @@
 /**
  * Desktop window chrome (ADR-011 extended).
  *
- * Renders the Chrome-like band at the top of the Tauri shell: a thin title
- * bar with native-style minimize / maximize / close buttons above the existing
- * tab strip. The component is rendered into `AppShell.Header` so the band is
- * fixed, out of the document flow, and every region below it (navbar, main,
- * footer) is offset by Mantine automatically.
+ * A single band at the top of the Tauri shell: the tab strip with the window
+ * controls overlaid at its right end. The launcher rail and page tree run the
+ * full window height beside the band, so this is the only chrome row.
  *
- * Drag regions are always *siblings behind* the interactive content, never
- * ancestors of it: Tauri's drag region claims mousedown from the region and
- * everything inside it, which would swallow button clicks.
+ * The component renders into `AppShell.Header` with `layout="alt"`, so Mantine
+ * derives the band's height and offsets the content regions from it rather
+ * than this component computing offsets by hand.
  *
- * Close behaviour is read live from the shell via the `get_close_behavior`
- * command so Settings changes apply immediately without a restart.
+ * The drag region is a sibling *behind* the row, never an ancestor of the
+ * controls: Tauri's drag region claims mousedown from the region and everything
+ * inside it, which would swallow the buttons' clicks.
  */
 
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window'
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
-import { LAYOUT, UI_TEXT } from '../config/index.js'
+import { useEffect, useRef, useState } from 'react'
+import { UI_TEXT } from '../config/index.js'
 import { isNativeMode } from '../services/native-bridge.js'
 import classes from './window-chrome.module.css'
 
 interface WindowChromeProps {
-  /** The existing tab strip, rendered under the title bar inside the band. */
+  /** The existing tab strip, rendered across the band. */
   tabStrip?: React.ReactNode
 }
 
@@ -33,6 +32,12 @@ type CloseBehavior = 'minimize' | 'quit' | 'ask'
 async function readCloseBehavior(): Promise<CloseBehavior> {
   const behavior = await invoke<string>('get_close_behavior')
   return behavior === 'quit' || behavior === 'ask' ? behavior : 'minimize'
+}
+
+function reportFailure(action: string): (error: unknown) => void {
+  return (error) => {
+    console.error(`[window-chrome] failed to ${action}:`, error)
+  }
 }
 
 export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElement | null {
@@ -118,66 +123,47 @@ export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElemen
   }
 
   return (
-    <div
-      className={classes.root}
-      data-testid="window-chrome"
-      // Row heights are published from LAYOUT so the CSS carries no second
-      // copy of these numbers.
-      style={
-        {
-          '--rtwiki-title-bar-height': `${LAYOUT.titleBarHeight}px`,
-          '--rtwiki-tab-strip-height': `${LAYOUT.tabStripHeight}px`
-        } as CSSProperties
-      }
-    >
-      <div className={classes.titleBar}>
-        <div className={classes.dragLayer} data-tauri-drag-region />
-        <span className={classes.titleText}>{UI_TEXT.appName}</span>
-        <div className={classes.controls}>
-          <button
-            type="button"
-            className={classes.ctrlBtn}
-            aria-label={UI_TEXT.minimizeWindow}
-            title={UI_TEXT.minimizeWindow}
-            onClick={handleMinimize}
-          >
-            <span className={classes.glyphMinimize} />
-          </button>
-          <button
-            type="button"
-            className={classes.ctrlBtn}
-            aria-label={isMaximized ? UI_TEXT.restoreWindow : UI_TEXT.maximizeWindow}
-            title={isMaximized ? UI_TEXT.restoreWindow : UI_TEXT.maximizeWindow}
-            onClick={handleMaximize}
-          >
-            {isMaximized ? (
-              <span className={classes.glyphRestore} />
-            ) : (
-              <span className={classes.glyphMaximize} />
-            )}
-          </button>
-          <button
-            type="button"
-            className={`${classes.ctrlBtn} ${classes.closeBtn}`}
-            aria-label={UI_TEXT.closeWindow}
-            title={UI_TEXT.closeWindow}
-            onClick={handleClose}
-          >
-            <span className={classes.glyphClose} />
-          </button>
-        </div>
-      </div>
+    <div className={classes.root} data-testid="window-chrome">
+      <div className={classes.dragLayer} data-tauri-drag-region />
 
-      <div className={classes.tabSlot}>
-        <div className={classes.dragLayer} data-tauri-drag-region />
-        <div className={classes.slotInner}>{tabStrip}</div>
+      {/* Non-interactive: clicks fall through to the drag layer beneath. */}
+      <span className={classes.titleText}>{UI_TEXT.appName}</span>
+
+      <div className={classes.tabSlot}>{tabStrip}</div>
+
+      <div className={classes.controls}>
+        <button
+          type="button"
+          className={classes.ctrlBtn}
+          aria-label={UI_TEXT.minimizeWindow}
+          title={UI_TEXT.minimizeWindow}
+          onClick={handleMinimize}
+        >
+          <span className={classes.glyphMinimize} />
+        </button>
+        <button
+          type="button"
+          className={classes.ctrlBtn}
+          aria-label={isMaximized ? UI_TEXT.restoreWindow : UI_TEXT.maximizeWindow}
+          title={isMaximized ? UI_TEXT.restoreWindow : UI_TEXT.maximizeWindow}
+          onClick={handleMaximize}
+        >
+          {isMaximized ? (
+            <span className={classes.glyphRestore} />
+          ) : (
+            <span className={classes.glyphMaximize} />
+          )}
+        </button>
+        <button
+          type="button"
+          className={`${classes.ctrlBtn} ${classes.closeBtn}`}
+          aria-label={UI_TEXT.closeWindow}
+          title={UI_TEXT.closeWindow}
+          onClick={handleClose}
+        >
+          <span className={classes.glyphClose} />
+        </button>
       </div>
     </div>
   )
-}
-
-function reportFailure(action: string): (error: unknown) => void {
-  return (error) => {
-    console.error(`[window-chrome] failed to ${action}:`, error)
-  }
 }

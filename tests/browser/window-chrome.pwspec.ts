@@ -15,9 +15,8 @@ import { expect, type Page, test } from '@playwright/test'
  */
 
 const DESKTOP = { width: 1280, height: 800 }
-const TITLE_BAR_HEIGHT = 28
-const TAB_STRIP_HEIGHT = 40
-const CHROME_HEIGHT = TITLE_BAR_HEIGHT + TAB_STRIP_HEIGHT
+/** LAYOUT.chromeBandHeight — the single band that holds tabs + window controls. */
+const CHROME_BAND_HEIGHT = 40
 
 interface Box {
   x: number
@@ -72,13 +71,21 @@ test.describe('Native window chrome', () => {
 
     const chrome = await box(page, '[data-testid="window-chrome"]')
     expect(chrome.y).toBeLessThanOrEqual(1)
-    expect(Math.round(chrome.height)).toBe(CHROME_HEIGHT)
-    expect(Math.round(chrome.width)).toBe(DESKTOP.width)
+    expect(Math.round(chrome.height)).toBe(CHROME_BAND_HEIGHT)
 
-    // The tab strip lives inside the band, directly under the title bar.
+    // The band is a single row: the tab strip IS the top bar, and the window
+    // controls overlay its right end (reserved, not on a second row).
     const tabs = await box(page, '[role="tablist"]')
-    expect(tabs.y).toBeGreaterThanOrEqual(TITLE_BAR_HEIGHT - 1)
-    expect(tabs.y + tabs.height).toBeLessThanOrEqual(CHROME_HEIGHT + 1)
+    expect(tabs.y).toBeLessThanOrEqual(chrome.y + 1)
+    expect(tabs.y + tabs.height).toBeLessThanOrEqual(chrome.y + chrome.height + 1)
+
+    // Tabs stop before the caption controls instead of running underneath them.
+    const close = await box(page, '[aria-label="Close window"]')
+    expect(tabs.x + tabs.width).toBeLessThanOrEqual(close.x + 1)
+
+    // The band begins beside the tree, not above it.
+    const rail = await box(page, 'nav[aria-label="RTWiki"]')
+    expect(chrome.x).toBeGreaterThanOrEqual(rail.x + rail.width - 1)
   })
 
   test('page never scrolls: the document exactly fits the viewport', async ({ page }) => {
@@ -96,15 +103,37 @@ test.describe('Native window chrome', () => {
     expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight + 1)
   })
 
-  test('launcher rail and tree start below the chrome band', async ({ page }) => {
+  test('launcher rail and page tree run the full window height', async ({ page }) => {
     await installNativeBridge(page)
     await page.setViewportSize(DESKTOP)
     await page.goto('/')
 
-    // Mantine's navbar is fixed at --app-shell-header-offset; without a
-    // header that offset is 0 and the rail renders underneath the title bar.
-    const rail = await box(page, 'nav[aria-label="RTWiki"]')
-    expect(rail.y).toBeGreaterThanOrEqual(CHROME_HEIGHT - 1)
+    // `layout="alt"`: the navbar spans the full viewport height, so the rail and
+    // the tree column beside it reach the very top instead of starting under a
+    // chrome row. The tree *widget* legitimately sits lower — the sidebar owns
+    // a search field above it — so the pane column is what is asserted here.
+    const panes = await page.evaluate(() => {
+      const rail = document.querySelector('nav[aria-label="RTWiki"]') as HTMLElement
+      // nav.rail sits inside the rail column, which is a child of the navbar inner.
+      const railColumn = rail.parentElement as HTMLElement
+      const navbarInner = railColumn.parentElement as HTMLElement
+      const treeColumn = railColumn.nextElementSibling as HTMLElement | null
+      const railRect = rail.getBoundingClientRect()
+      const treeRect = treeColumn?.getBoundingClientRect()
+      return {
+        navbarY: Math.round(navbarInner.getBoundingClientRect().y),
+        railY: Math.round(railRect.y),
+        railBottom: Math.round(railRect.bottom),
+        treeColumnY: treeRect ? Math.round(treeRect.y) : null,
+        treeColumnBottom: treeRect ? Math.round(treeRect.bottom) : null
+      }
+    })
+
+    expect(panes.navbarY).toBeLessThanOrEqual(1)
+    expect(panes.railY).toBeLessThanOrEqual(1)
+    expect(panes.railBottom).toBeGreaterThanOrEqual(DESKTOP.height - 1)
+    expect(panes.treeColumnY).toBeLessThanOrEqual(1)
+    expect(panes.treeColumnBottom).toBeGreaterThanOrEqual(DESKTOP.height - 1)
   })
 
   test('window controls are present and clickable', async ({ page }) => {
@@ -133,10 +162,10 @@ test.describe('Native window chrome', () => {
     )
     expect(nested).toBe(0)
 
-    // ...and drag areas still exist for the empty parts of both rows.
+    // ...and a drag area still exists behind the row for its empty parts.
     expect(
       await page.locator('[data-testid="window-chrome"] [data-tauri-drag-region]').count()
-    ).toBe(2)
+    ).toBe(1)
   })
 
   test('close falls back to the shell when the behaviour read fails', async ({ page }) => {
@@ -153,34 +182,26 @@ test.describe('Native window chrome', () => {
       .toContain('plugin:window|close')
   })
 
-  test('band row heights come from the LAYOUT constants, not duplicated CSS', async ({ page }) => {
+  test('the band has exactly one separator and no doubled border', async ({ page }) => {
     await installNativeBridge(page)
     await page.setViewportSize(DESKTOP)
     await page.goto('/')
 
-    // LAYOUT.titleBarHeight / tabStripHeight are the single source of truth;
-    // the band reads them through custom properties so the two cannot drift.
-    const geometry = await page.evaluate(() => {
-      const chrome = document.querySelector('[data-testid="window-chrome"]') as HTMLElement
-      const titleBar = chrome.children[0] as HTMLElement
-      const tabSlot = chrome.children[1] as HTMLElement
+    // The band owns the single bottom separator; the tab strip inside it must
+    // not add a second one (a transparent border would still cost 1px of the
+    // band's height and clip the strip).
+    const borders = await page.evaluate(() => {
+      const band = document.querySelector('[data-testid="window-chrome"]') as HTMLElement
+      const tablist = band.querySelector('[role="tablist"]')
+      // tablist sits directly inside the strip row.
+      const strip = tablist?.parentElement as HTMLElement | null
       return {
-        titleVar: getComputedStyle(chrome).getPropertyValue('--rtwiki-title-bar-height').trim(),
-        tabVar: getComputedStyle(chrome).getPropertyValue('--rtwiki-tab-strip-height').trim(),
-        inlineStyle: chrome.getAttribute('style') ?? '',
-        titleH: Math.round(titleBar.getBoundingClientRect().height),
-        tabH: Math.round(tabSlot.getBoundingClientRect().height)
+        band: getComputedStyle(band).borderBottomWidth,
+        strip: strip ? getComputedStyle(strip).borderBottomWidth : 'missing'
       }
     })
-
-    expect(geometry.titleVar).toBe('28px')
-    expect(geometry.tabVar).toBe('40px')
-    // The two heights are published inline from LAYOUT, so the stylesheet
-    // cannot hold a second, drifting copy of 28/40.
-    expect(geometry.inlineStyle).toContain('--rtwiki-title-bar-height: 28px')
-    expect(geometry.inlineStyle).toContain('--rtwiki-tab-strip-height: 40px')
-    expect(geometry.titleH).toBe(28)
-    expect(geometry.tabH).toBe(40)
+    expect(borders.band).toBe('1px')
+    expect(borders.strip).toBe('0px')
   })
 })
 
