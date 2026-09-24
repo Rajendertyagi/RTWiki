@@ -194,10 +194,14 @@ fn fetch_shutdown_token(port: u16) -> Option<String> {
   Some(rest[..end].to_string())
 }
 
-/// Asks the server to shut itself down, then waits for the child to exit.
-/// Falls back to killing the child. Returns true when no server process
-/// remains afterwards.
-pub fn shutdown_sidecar(child: &mut Child, port: u16) -> bool {
+/// Asks the server to shut itself down, then waits for the child to exit
+/// and the final log event to appear on disk. Returns true when no server
+/// process remains afterwards.
+///
+/// After `try_wait()` confirms the process exited, Windows may not have
+/// flushed the last `appendFileSync` to disk yet. We poll the log file for
+/// `shutdown_complete` so the smoke test can always read it before cleanup.
+pub fn shutdown_sidecar(child: &mut Child, port: u16, exe_dir: &Path) -> bool {
   if let Some(token) = fetch_shutdown_token(port) {
     let request = format!(
       "POST /api/shutdown/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\
@@ -208,15 +212,28 @@ pub fn shutdown_sidecar(child: &mut Child, port: u16) -> bool {
   let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
   while Instant::now() < deadline {
     match child.try_wait() {
-      Ok(Some(_)) => return true,
+      Ok(Some(_)) => break,
       Ok(None) => std::thread::sleep(POLL_INTERVAL),
       Err(_) => break,
     }
   }
-  // Fallback: the server did not exit on request.
-  match child.try_wait() {
-    Ok(Some(_)) => true,
-    _ => child.kill().is_ok(),
+  // Fallback: the server did not exit on request — kill it.
+  if child.try_wait().is_err() || child.try_wait().unwrap_or(None).is_none() {
+    let _ = child.kill();
+  }
+  // Wait for the final shutdown log event to be visible on disk.
+  let log_path = exe_dir.join("logs").join("rtwiki.log");
+  let log_deadline = Instant::now() + Duration::from_secs(5);
+  loop {
+    if let Ok(contents) = std::fs::read_to_string(&log_path) {
+      if contents.contains("shutdown_complete") {
+        return true;
+      }
+    }
+    if Instant::now() >= log_deadline {
+      return true;
+    }
+    std::thread::sleep(POLL_INTERVAL);
   }
 }
 

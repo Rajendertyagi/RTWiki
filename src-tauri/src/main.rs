@@ -81,7 +81,7 @@ fn quit_app(app: &AppHandle) {
       .try_state::<ShellState>()
       .and_then(|s| s.child.lock().ok().and_then(|mut guard| guard.take()));
     if let Some(mut child) = child {
-      sidecar::shutdown_sidecar(&mut child, port);
+      sidecar::shutdown_sidecar(&mut child, port, &exe_dir);
     }
   }
   app.exit(0);
@@ -210,7 +210,7 @@ fn respawn_sidecar(app: &AppHandle) -> bool {
       .ok()
       .and_then(|mut guard| guard.take());
     if let Some(mut child) = previous {
-      sidecar::shutdown_sidecar(&mut child, old_port);
+      sidecar::shutdown_sidecar(&mut child, old_port, &exe_dir);
     }
   }
 
