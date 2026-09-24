@@ -56,11 +56,6 @@
   --rtwiki-toolbar-height: var(--rtwiki-row-height);
   --rtwiki-header-height: var(--rtwiki-row-height);
   --rtwiki-statusbar-height: 26px;
-  /* Desktop shell chrome band. Mirrors LAYOUT.titleBarHeight /
-     LAYOUT.tabStripHeight in config/index.ts — the TS values drive layout
-     maths (AppShell.Header height), these drive the rows' own box heights. */
-  --rtwiki-title-bar-height: 28px;
-  --rtwiki-tab-strip-height: var(--rtwiki-row-height);
   /* Compact divider between toolbar groups. */
   --rtwiki-chrome-divider: var(--mantine-color-default-border);
   /* Shared selected/active row fill — tree rows and the Home/root nav entry

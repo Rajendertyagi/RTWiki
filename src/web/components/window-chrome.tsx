@@ -17,8 +17,8 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window'
-import { useEffect, useRef, useState } from 'react'
-import { UI_TEXT } from '../config/index.js'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { LAYOUT, UI_TEXT } from '../config/index.js'
 import { isNativeMode } from '../services/native-bridge.js'
 import classes from './window-chrome.module.css'
 
@@ -101,17 +101,35 @@ export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElemen
    * setting itself, shows the native prompt for "ask", and quits cleanly), so
    * the button only has to choose between hiding to the tray and asking the
    * shell to close the window.
+   *
+   * If the behaviour read fails, defer to the shell anyway: it re-reads the
+   * same file, so `close()` is always a valid answer and the control is never
+   * left dead with no visible response.
    */
   const handleClose = (): void => {
     const appWindow = windowRef.current
     if (!appWindow) return
     void readCloseBehavior()
       .then((behavior) => (behavior === 'minimize' ? appWindow.hide() : appWindow.close()))
-      .catch(reportFailure('close'))
+      .catch((error) => {
+        reportFailure('read close behavior')(error)
+        return appWindow.close()
+      })
   }
 
   return (
-    <div className={classes.root} data-testid="window-chrome">
+    <div
+      className={classes.root}
+      data-testid="window-chrome"
+      // Row heights are published from LAYOUT so the CSS carries no second
+      // copy of these numbers.
+      style={
+        {
+          '--rtwiki-title-bar-height': `${LAYOUT.titleBarHeight}px`,
+          '--rtwiki-tab-strip-height': `${LAYOUT.tabStripHeight}px`
+        } as CSSProperties
+      }
+    >
       <div className={classes.titleBar}>
         <div className={classes.dragLayer} data-tauri-drag-region />
         <span className={classes.titleText}>{UI_TEXT.appName}</span>

@@ -34,9 +34,12 @@ async function box(page: Page, selector: string): Promise<Box> {
   return b
 }
 
-async function installNativeBridge(page: Page): Promise<void> {
-  await page.addInitScript(() => {
+async function installNativeBridge(page: Page, options: { closeBehavior?: 'ok' | 'reject' } = {}) {
+  const closeBehavior = options.closeBehavior ?? 'ok'
+  await page.addInitScript((mode) => {
     let callbackId = 0
+    const invoked: string[] = []
+    ;(window as unknown as { __invoked: string[] }).__invoked = invoked
     ;(window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: 'main' } },
       transformCallback: (callback: unknown) => {
@@ -45,15 +48,20 @@ async function installNativeBridge(page: Page): Promise<void> {
         return id
       },
       invoke: (cmd: string) => {
+        invoked.push(cmd)
         if (cmd === 'plugin:window|is_maximized') return Promise.resolve(false)
         if (cmd === 'plugin:event|listen' || cmd === 'plugin:window|listen') {
           return Promise.resolve(callbackId)
         }
-        if (cmd === 'get_close_behavior') return Promise.resolve('minimize')
-        return Promise.reject(new Error(`unexpected command in bridge: ${cmd}`))
+        if (cmd === 'get_close_behavior') {
+          return mode === 'reject'
+            ? Promise.reject(new Error('desktop.json unreadable'))
+            : Promise.resolve('minimize')
+        }
+        return Promise.resolve(undefined)
       }
     }
-  })
+  }, closeBehavior)
 }
 
 test.describe('Native window chrome', () => {
@@ -129,6 +137,50 @@ test.describe('Native window chrome', () => {
     expect(
       await page.locator('[data-testid="window-chrome"] [data-tauri-drag-region]').count()
     ).toBe(2)
+  })
+
+  test('close falls back to the shell when the behaviour read fails', async ({ page }) => {
+    // The setting is read from disk by a Tauri command, so it can fail. The
+    // shell's CloseRequested handler re-reads the same setting, so deferring to
+    // it is always a valid answer — the button must never become a dead control.
+    await installNativeBridge(page, { closeBehavior: 'reject' })
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+
+    await page.getByRole('button', { name: 'Close window' }).click()
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __invoked: string[] }).__invoked))
+      .toContain('plugin:window|close')
+  })
+
+  test('band row heights come from the LAYOUT constants, not duplicated CSS', async ({ page }) => {
+    await installNativeBridge(page)
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+
+    // LAYOUT.titleBarHeight / tabStripHeight are the single source of truth;
+    // the band reads them through custom properties so the two cannot drift.
+    const geometry = await page.evaluate(() => {
+      const chrome = document.querySelector('[data-testid="window-chrome"]') as HTMLElement
+      const titleBar = chrome.children[0] as HTMLElement
+      const tabSlot = chrome.children[1] as HTMLElement
+      return {
+        titleVar: getComputedStyle(chrome).getPropertyValue('--rtwiki-title-bar-height').trim(),
+        tabVar: getComputedStyle(chrome).getPropertyValue('--rtwiki-tab-strip-height').trim(),
+        inlineStyle: chrome.getAttribute('style') ?? '',
+        titleH: Math.round(titleBar.getBoundingClientRect().height),
+        tabH: Math.round(tabSlot.getBoundingClientRect().height)
+      }
+    })
+
+    expect(geometry.titleVar).toBe('28px')
+    expect(geometry.tabVar).toBe('40px')
+    // The two heights are published inline from LAYOUT, so the stylesheet
+    // cannot hold a second, drifting copy of 28/40.
+    expect(geometry.inlineStyle).toContain('--rtwiki-title-bar-height: 28px')
+    expect(geometry.inlineStyle).toContain('--rtwiki-tab-strip-height: 40px')
+    expect(geometry.titleH).toBe(28)
+    expect(geometry.tabH).toBe(40)
   })
 })
 
