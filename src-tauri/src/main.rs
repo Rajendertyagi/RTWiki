@@ -37,7 +37,7 @@ use std::time::{Duration, Instant};
 use std::process::Child;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
@@ -109,7 +109,7 @@ fn try_shutdown_child(child: &mut Child, port: u16, exe_dir: &PathBuf) -> Result
 fn quit_app(app: &AppHandle) {
   // Mark quitting
   if let Some(state) = app.try_state::<ShellState>() {
-    set_quitting(state);
+    set_quitting(&state);
   }
 
   save_geometry(app);
@@ -126,7 +126,7 @@ fn quit_app(app: &AppHandle) {
 
   if own {
     if let Some(state) = app.try_state::<ShellState>() {
-      let child = take_child_from_state(state);
+      let child = take_child_from_state(&state);
       if let Some(mut child) = child {
         if let Err(e) = try_shutdown_child(&mut child, port, &exe_dir) {
           report_error(app, &e);
@@ -142,7 +142,7 @@ fn quit_app(app: &AppHandle) {
 /// Use sparingly; prefer `report_error` so the UI can present actions.
 fn fatal(app: &AppHandle, message: String) -> ! {
   let handle = app.clone();
-  let _ = handle.run_on_main_thread(move || {
+  let _ = handle.clone().run_on_main_thread(move || {
     handle
       .dialog()
       .message(message)
@@ -412,50 +412,49 @@ fn main() {
           let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
           scheme_ok && host_ok
         })
-        // Safety-net close handler: fires whenever win.close() is called
-        // (including from the JS chrome component). Reads fresh behaviour
-        // so Settings changes apply immediately without restart.
-        .on_close_request(move |window| {
-          let app = window.app_handle();
-          let exe_dir = app
-            .try_state::<ShellState>()
-            .map(|s| s.exe_dir.clone())
-            .unwrap_or_default();
-
-          match sidecar::close_behavior(&exe_dir) {
-            sidecar::CloseBehavior::Minimize => {
-              geom::save_current(&exe_dir, window);
-              let _ = window.hide();
-              true // prevent close → window goes to tray
-            }
-            sidecar::CloseBehavior::Quit => {
-              quit_app(app);
-              true // prevent close → quit_app exits the process
-            }
-            sidecar::CloseBehavior::Ask => {
-              let minimize = app
-                .dialog()
-                .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
-                .title("RTWiki")
-                .blocking_show();
-              if minimize {
-                geom::save_current(&exe_dir, window);
-                let _ = window.hide();
-                true // prevent close → window goes to tray
-              } else {
-                // User cancelled — keep window open
-                true // prevent close, do nothing
-              }
-            }
-          }
-        });
-
         // Strip the native title bar on Windows so the frontend renders its
         // own chrome (custom tab strip + window controls in window-chrome.tsx).
         #[cfg(target_os = "windows")]
         let builder = builder.decorations(false);
 
-        let _ = builder.build()?;
+        let window = builder.build()?;
+
+        // Safety-net close handler: fires whenever win.close() is called
+        // (including from the JS chrome component). Reads fresh behaviour
+        // so Settings changes apply immediately without restart.
+        window.on_window_event(move |event| {
+          if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            let app = window.app_handle();
+            let exe_dir = app
+              .try_state::<ShellState>()
+              .map(|s| s.exe_dir.clone())
+              .unwrap_or_default();
+
+            match sidecar::close_behavior(&exe_dir) {
+              sidecar::CloseBehavior::Minimize => {
+                api.prevent_close();
+                geom::save_current(&exe_dir, window);
+                let _ = window.hide();
+              }
+              sidecar::CloseBehavior::Quit => {
+                api.prevent_close();
+                quit_app(app);
+              }
+              sidecar::CloseBehavior::Ask => {
+                api.prevent_close();
+                let minimize = app
+                  .dialog()
+                  .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
+                  .title("RTWiki")
+                  .blocking_show();
+                if minimize {
+                  geom::save_current(&exe_dir, window);
+                  let _ = window.hide();
+                }
+              }
+            }
+          }
+        });
       }
 
       let handle = app.handle().clone();
