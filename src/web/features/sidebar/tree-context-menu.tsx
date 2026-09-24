@@ -1,4 +1,5 @@
 import { Kbd, Menu } from '@mantine/core'
+import type { PageType } from '@rtwiki/shared/contracts/pages'
 import {
   IconArrowDown,
   IconArrowDownLeft,
@@ -19,10 +20,9 @@ import {
 } from '@tabler/icons-react'
 import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
-import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { UI_TEXT } from '../../config/index.js'
-import classes from './page-tree.module.css'
 import type { MoveTarget } from './page-tree.js'
+import classes from './page-tree.module.css'
 
 export type TreeContextMenuState =
   | { kind: 'root'; x: number; y: number }
@@ -56,7 +56,12 @@ const isMac =
 const mod = isMac ? '⌘' : 'Ctrl'
 
 const AFTER_ITEMS: ReadonlyArray<TypeItem> = [
-  { action: 'afterRich', label: UI_TEXT.newAfterRichPage, icon: IconFileText, shortcut: `${mod}+Shift+Enter` },
+  {
+    action: 'afterRich',
+    label: UI_TEXT.newAfterRichPage,
+    icon: IconFileText,
+    shortcut: `${mod}+Shift+Enter`
+  },
   { action: 'afterHtml', label: UI_TEXT.newAfterHtmlPage, icon: IconCode },
   { action: 'afterMarkdown', label: UI_TEXT.newAfterMarkdownPage, icon: IconMarkdown },
   { action: 'afterDiagram', label: UI_TEXT.newAfterDiagramPage, icon: IconChartArea },
@@ -64,7 +69,12 @@ const AFTER_ITEMS: ReadonlyArray<TypeItem> = [
 ]
 
 const CHILD_ITEMS: ReadonlyArray<TypeItem> = [
-  { action: 'childRich', label: UI_TEXT.newChildRichPage, icon: IconFileText, shortcut: `${mod}+Enter` },
+  {
+    action: 'childRich',
+    label: UI_TEXT.newChildRichPage,
+    icon: IconFileText,
+    shortcut: `${mod}+Enter`
+  },
   { action: 'childHtml', label: UI_TEXT.newChildHtmlPage, icon: IconCode },
   { action: 'childMarkdown', label: UI_TEXT.newChildMarkdownPage, icon: IconMarkdown },
   { action: 'childDiagram', label: UI_TEXT.newDiagramPage, icon: IconChartArea },
@@ -141,7 +151,9 @@ export function TreeContextMenu({
   const renderImportSubmenu = (): JSX.Element => (
     <Menu.Sub openDelay={80} closeDelay={120} safeAreaPolygon>
       <Menu.Sub.Target>
-        <Menu.Sub.Item leftSection={<IconFileImport size={16} />}>{UI_TEXT.importSubmenu}</Menu.Sub.Item>
+        <Menu.Sub.Item leftSection={<IconFileImport size={16} />}>
+          {UI_TEXT.importSubmenu}
+        </Menu.Sub.Item>
       </Menu.Sub.Target>
       <Menu.Sub.Dropdown>
         {IMPORT_ITEMS.map((item) => (

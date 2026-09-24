@@ -1,13 +1,4 @@
-import {
-  ActionIcon,
-  Box,
-  Button,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  Tooltip
-} from '@mantine/core'
+import { ActionIcon, Box, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core'
 import { Schedule, type ScheduleEventData, type ScheduleViewLevel } from '@mantine/schedule'
 import {
   DEFAULT_PERIOD_NOTIFICATIONS,
@@ -16,25 +7,25 @@ import {
   SCHEDULE_FIRST_DAY_OF_WEEK
 } from '@rtwiki/shared/constants'
 import type { PresetApplyMode, PresetSource } from '@rtwiki/shared/contracts/schedule'
+import { IconClock, IconPlus, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { useMemo, useState } from 'react'
-import { IconClock, IconPlus, IconX } from '@tabler/icons-react'
 import { UI_TEXT } from '../../config/index.js'
 import { useScheduleController } from '../../hooks/use-schedule-controller.js'
 import type { ReminderPayload, ScheduleEntryPayload } from '../../services/schedule-api.js'
 import classes from './calendar.module.css'
+import { PresetsPanel } from './presets-panel.js'
 import {
   buildScheduleEvents,
   entryToPayload,
   PALETTE_BLOCKS,
+  type PaletteBlock,
   readPaletteDragData,
   reminderToPayload,
-  setPaletteDragData,
-  type PaletteBlock
+  setPaletteDragData
 } from './schedule-events.js'
 import { type FormInitial, ScheduleForm } from './schedule-form.js'
 import { TodayAgenda } from './today-agenda.js'
-import { PresetsPanel } from './presets-panel.js'
 
 function PaletteBox({ block }: { block: PaletteBlock }): JSX.Element {
   return (
@@ -91,9 +82,7 @@ export function Calendar({ pages, onClose }: CalendarProps): JSX.Element {
   }
 
   const openEdit = (event: ScheduleEventData): void => {
-    const payload = event.payload as
-      | { kind?: 'period' | 'reminder'; sourceId?: string }
-      | undefined
+    const payload = event.payload as { kind?: 'period' | 'reminder'; sourceId?: string } | undefined
     const raw = event.recurringInstance?.recurringEventId ?? payload?.sourceId
     if (raw == null) return
     const sourceId = String(raw)
@@ -135,14 +124,8 @@ export function Calendar({ pages, onClose }: CalendarProps): JSX.Element {
     }
   }
 
-  const handleEventMove = (
-    newStart: string,
-    newEnd: string,
-    event: ScheduleEventData
-  ): void => {
-    const payload = event.payload as
-      | { kind?: 'period' | 'reminder'; sourceId?: string }
-      | undefined
+  const handleEventMove = (newStart: string, newEnd: string, event: ScheduleEventData): void => {
+    const payload = event.payload as { kind?: 'period' | 'reminder'; sourceId?: string } | undefined
     const raw = event.recurringInstance?.recurringEventId ?? payload?.sourceId
     if (raw == null) return
     const sourceId = String(raw)
@@ -178,10 +161,7 @@ export function Calendar({ pages, onClose }: CalendarProps): JSX.Element {
     }
   }
 
-  const handleExternalDrop = (
-    dataTransfer: DataTransfer,
-    dropDateTime: string
-  ): void => {
+  const handleExternalDrop = (dataTransfer: DataTransfer, dropDateTime: string): void => {
     const block = readPaletteDragData(dataTransfer)
     if (!block) return
     const start = dayjs(dropDateTime)
@@ -256,11 +236,7 @@ export function Calendar({ pages, onClose }: CalendarProps): JSX.Element {
           >
             {UI_TEXT.scheduleNewReminder}
           </Button>
-          <Button
-            size="compact-sm"
-            variant="outline"
-            onClick={() => setPresetsOpen(true)}
-          >
+          <Button size="compact-sm" variant="outline" onClick={() => setPresetsOpen(true)}>
             {UI_TEXT.schedulePresets}
           </Button>
           <Tooltip label={UI_TEXT.scheduleClose}>

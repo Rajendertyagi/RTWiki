@@ -39,7 +39,7 @@
    NOT as a page selection: a light blue tint with blue text and a thinner
    accent. This keeps it visually separate from the heavier 22%-fill + 3px
    accent used on selected tree rows (audit UI-001). */
-.navItem[data-active='true'] {
+.navItem[data-active="true"] {
   background: color-mix(in srgb, var(--mantine-color-blue-filled) 10%, transparent) !important;
   color: var(--mantine-color-blue-filled);
   box-shadow: inset 2px 0 0 var(--mantine-color-blue-filled) !important;

@@ -5,8 +5,8 @@ import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
-import { pagePreviewText } from '../../util/page-preview-text.js'
 import { formatDate } from '../../util/format-date.js'
+import { pagePreviewText } from '../../util/page-preview-text.js'
 import classes from './page-card.module.css'
 
 interface PageCardProps {
@@ -37,7 +37,13 @@ export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps)
   const isVisual = page.pageType === 'diagram' || page.pageType === 'mindmap'
 
   return (
-    <Card withBorder padding={0} radius="md" className={classes.card} data-page-type={page.pageType}>
+    <Card
+      withBorder
+      padding={0}
+      radius="md"
+      className={classes.card}
+      data-page-type={page.pageType}
+    >
       <button
         type="button"
         className={classes.cardOpen}

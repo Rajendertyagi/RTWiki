@@ -221,9 +221,7 @@ export function ScheduleForm({
                     checked={weekdays.includes(d)}
                     onChange={(e) => {
                       const checked = e.currentTarget.checked
-                      setWeekdays((prev) =>
-                        checked ? [...prev, d] : prev.filter((x) => x !== d)
-                      )
+                      setWeekdays((prev) => (checked ? [...prev, d] : prev.filter((x) => x !== d)))
                     }}
                   />
                 ))}

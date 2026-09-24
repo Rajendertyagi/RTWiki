@@ -11,10 +11,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import {
   clearDebugLogView,
-  subscribeDebugLog,
-  type DebugLogLevel,
   type DebugLogEntry,
-  type DebugLogFields
+  type DebugLogFields,
+  type DebugLogLevel,
+  subscribeDebugLog
 } from '../../diagnostics/debug-log.js'
 import classes from './debug-log-viewer.module.css'
 

@@ -1,20 +1,12 @@
-import {
-  ActionIcon,
-  Button,
-  Group,
-  Popover,
-  Stack,
-  Text,
-  UnstyledButton
-} from '@mantine/core'
+import { ActionIcon, Button, Group, Popover, Stack, Text, UnstyledButton } from '@mantine/core'
+import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconArrowBackUp, IconArrowUpRight, IconHome, IconInfoCircle } from '@tabler/icons-react'
 import type { ReactNode } from 'react'
 import { Fragment, useEffect, useState } from 'react'
-import type { Page } from '@rtwiki/shared/contracts/pages'
+import { UI_TEXT } from '../../config/index.js'
 import { getBacklinks, getOutgoingLinks } from '../../services/pages-api.js'
 import { formatDate, formatRelativeTime } from '../../util/format-date.js'
 import { pagePlainText } from '../../util/page-preview-text.js'
-import { UI_TEXT } from '../../config/index.js'
 import classes from './status-bar.module.css'
 
 export type StatusSaveState = 'clean' | 'saving' | 'saved' | 'error'
@@ -330,9 +322,7 @@ export function StatusBar({
                 {backlinkCount > 0 ? (
                   <InfoRow label={UI_TEXT.statusBacklinksLabel} value={backlinkCount} />
                 ) : null}
-                {pathString ? (
-                  <InfoRow label={UI_TEXT.statusPathLabel} value={pathString} />
-                ) : null}
+                {pathString ? <InfoRow label={UI_TEXT.statusPathLabel} value={pathString} /> : null}
               </Stack>
             </Popover.Dropdown>
           </Popover>

@@ -2,7 +2,10 @@
   background: var(--rtwiki-surface, var(--mantine-color-body));
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
-  transition: box-shadow 150ms ease, border-color 150ms ease, transform 150ms ease;
+  transition:
+    box-shadow 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
   position: relative;
   overflow: hidden;
   min-height: 210px;
@@ -13,27 +16,27 @@
  * its icon tile, footer chip and hover accent from one place. Values reuse
  * Mantine's generated colour scales (kept in sync with page-type-badge.tsx).
  */
-.card[data-page-type='rich'] {
+.card[data-page-type="rich"] {
   --accent: var(--mantine-color-blue-filled);
   --accent-soft: var(--mantine-color-blue-light);
   --accent-fg: var(--mantine-color-blue-light-color);
 }
-.card[data-page-type='html'] {
+.card[data-page-type="html"] {
   --accent: var(--mantine-color-teal-filled);
   --accent-soft: var(--mantine-color-teal-light);
   --accent-fg: var(--mantine-color-teal-light-color);
 }
-.card[data-page-type='markdown'] {
+.card[data-page-type="markdown"] {
   --accent: var(--mantine-color-cyan-filled);
   --accent-soft: var(--mantine-color-cyan-light);
   --accent-fg: var(--mantine-color-cyan-light-color);
 }
-.card[data-page-type='diagram'] {
+.card[data-page-type="diagram"] {
   --accent: var(--mantine-color-violet-filled);
   --accent-soft: var(--mantine-color-violet-light);
   --accent-fg: var(--mantine-color-violet-light-color);
 }
-.card[data-page-type='mindmap'] {
+.card[data-page-type="mindmap"] {
   --accent: var(--mantine-color-grape-filled);
   --accent-soft: var(--mantine-color-grape-light);
   --accent-fg: var(--mantine-color-grape-light-color);

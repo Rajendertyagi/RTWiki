@@ -223,7 +223,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 80ms ease, transform 120ms ease;
+  transition:
+    background-color 80ms ease,
+    transform 120ms ease;
 }
 
 :global(i.wb-expander::before) {

@@ -1,5 +1,5 @@
 import { AppShell, Box, Burger } from '@mantine/core'
-import { useState, type ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../config/index.js'
 import classes from './app-shell.module.css'
 import { PaneDivider } from './pane-divider.js'

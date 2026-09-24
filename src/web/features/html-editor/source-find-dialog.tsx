@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
 import {
   closeSearchPanel,
   findNext,
@@ -12,6 +11,7 @@ import type { EditorView } from '@codemirror/view'
 import { ActionIcon, Box, Button, Checkbox, Group, TextInput, Tooltip } from '@mantine/core'
 import { IconArrowDown, IconArrowUp, IconX } from '@tabler/icons-react'
 import type { JSX } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './source-find-dialog.module.css'
 
@@ -130,7 +130,12 @@ export function SourceFindDialog({ getView, mode, onClose }: SourceFindDialogPro
           }
         />
         <Tooltip label={UI_TEXT.findDialogFindTitle}>
-          <ActionIcon variant="subtle" aria-label="Close" onClick={handleClose} data-testid="find-close">
+          <ActionIcon
+            variant="subtle"
+            aria-label="Close"
+            onClick={handleClose}
+            data-testid="find-close"
+          >
             <IconX size={16} />
           </ActionIcon>
         </Tooltip>
@@ -175,10 +180,20 @@ export function SourceFindDialog({ getView, mode, onClose }: SourceFindDialogPro
         </Button>
         {isReplace ? (
           <>
-            <Button size="xs" variant="light" onClick={handleReplace} data-testid="find-replace-one">
+            <Button
+              size="xs"
+              variant="light"
+              onClick={handleReplace}
+              data-testid="find-replace-one"
+            >
               {UI_TEXT.findDialogReplaceLabel}
             </Button>
-            <Button size="xs" variant="light" onClick={handleReplaceAll} data-testid="find-replace-all">
+            <Button
+              size="xs"
+              variant="light"
+              onClick={handleReplaceAll}
+              data-testid="find-replace-all"
+            >
               {UI_TEXT.findDialogReplaceAllLabel}
             </Button>
           </>

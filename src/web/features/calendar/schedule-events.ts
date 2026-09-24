@@ -1,11 +1,7 @@
 import type { MantineColor } from '@mantine/core'
 import type { ScheduleEventData } from '@mantine/schedule'
 import { DEFAULT_PERIOD_NOTIFICATIONS } from '@rtwiki/shared/constants'
-import type {
-  CalendarEvent,
-  Reminder,
-  ScheduleEntry
-} from '@rtwiki/shared/contracts/schedule'
+import type { CalendarEvent, Reminder, ScheduleEntry } from '@rtwiki/shared/contracts/schedule'
 import { expandForRange } from '@rtwiki/shared/schedule/calendar'
 import type { ReminderPayload, ScheduleEntryPayload } from '../../services/schedule-api.js'
 
@@ -28,21 +24,15 @@ export const PALETTE_BLOCKS: PaletteBlock[] = [
 
 const PALETTE_MIME = 'application/x-rtwiki-block'
 
-export function setPaletteDragData(
-  e: React.DragEvent<HTMLElement>,
-  block: PaletteBlock
-): void {
+export function setPaletteDragData(e: React.DragEvent<HTMLElement>, block: PaletteBlock): void {
   const json = JSON.stringify(block)
   e.dataTransfer.setData(PALETTE_MIME, json)
   e.dataTransfer.setData('text/plain', json)
   e.dataTransfer.effectAllowed = 'copy'
 }
 
-export function readPaletteDragData(
-  dataTransfer: DataTransfer
-): PaletteBlock | null {
-  const raw =
-    dataTransfer.getData(PALETTE_MIME) || dataTransfer.getData('text/plain')
+export function readPaletteDragData(dataTransfer: DataTransfer): PaletteBlock | null {
+  const raw = dataTransfer.getData(PALETTE_MIME) || dataTransfer.getData('text/plain')
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as Partial<PaletteBlock>
