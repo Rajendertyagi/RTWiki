@@ -93,6 +93,17 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     }
   })
 
+  routes.get('/trash', (c) => {
+    try {
+      const db = getDbFn()
+      const result = service.listTrashedPages(db)
+      return c.json(result)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
   routes.get('/:id', (c) => {
     try {
       const db = getDbFn()
@@ -222,17 +233,6 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
         return c.json({ error: 'Page not found' }, 404)
       }
       return c.json({ page }, 201)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
-    }
-  })
-
-  routes.get('/trash', (c) => {
-    try {
-      const db = getDbFn()
-      const result = service.listTrashedPages(db)
-      return c.json(result)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)

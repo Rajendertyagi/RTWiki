@@ -37,6 +37,10 @@ interface UtilityRailProps {
   onOpenCalendar?: () => void
   /** Reflects whether the Calendar view is currently open. */
   calendarOpen?: boolean
+  /** Opens the Favorites view. */
+  onOpenFavorites?: () => void
+  /** Reflects whether the Favorites view is currently open. */
+  favoritesOpen?: boolean
   /** Opens the Trash workspace view. */
   onOpenTrash?: () => void
   /** Reflects whether the Trash view is currently open. */
@@ -59,6 +63,8 @@ export function UtilityRail({
   settingsOpen,
   onOpenCalendar,
   calendarOpen,
+  onOpenFavorites,
+  favoritesOpen,
   onOpenTrash,
   trashOpen,
   onOpenShortcuts,
@@ -145,6 +151,23 @@ export function UtilityRail({
             <IconPlus size={18} />
           </ActionIcon>
         </Tooltip>
+
+        {onOpenFavorites ? (
+          <Tooltip label={UI_TEXT.utilityRailFavorites} position="right">
+            <ActionIcon
+              variant={favoritesOpen ? 'filled' : 'subtle'}
+              color={favoritesOpen ? 'blue' : 'gray'}
+              size="lg"
+              onClick={onOpenFavorites}
+              aria-label={UI_TEXT.utilityRailFavorites}
+              aria-pressed={favoritesOpen}
+              className={classes.action}
+              data-testid="favorites-toggle"
+            >
+              <IconStar size={18} />
+            </ActionIcon>
+          </Tooltip>
+        ) : null}
 
         {onOpenCalendar ? (
           <Tooltip label={UI_TEXT.scheduleOpen} position="right">
