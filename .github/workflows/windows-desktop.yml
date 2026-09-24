@@ -45,7 +45,7 @@ jobs:
           rustc --version
           cargo --version
 
-      # --bundles none: no installer is built; the raw shell binary from
+      # --no-bundle: no installer is built; the raw shell binary from
       # src-tauri/target/release is staged by package-desktop.ps1. End users
       # need nothing installed (WebView2 ships with Windows 10 1803+).
       - name: Build desktop shell (Tauri)

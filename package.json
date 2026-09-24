@@ -9,7 +9,7 @@
     "build": "bun run build:web && bun run build:server",
     "build:web": "vite build",
     "build:server": "bun run scripts/build.ts",
-    "build:desktop": "tauri build --bundles none",
+    "build:desktop": "tauri build --no-bundle",
     "desktop:icons": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-tauri-icons.ps1",
     "start": "bun run src/server/index.ts",
     "typecheck": "tsc --noEmit",
