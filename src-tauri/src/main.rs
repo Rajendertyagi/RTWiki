@@ -23,6 +23,10 @@
 //! via `<WindowChrome>` in `src/web/components/window-chrome.tsx`. Close
 //! behaviour is read fresh from Rust on every click via the
 //! `get_close_behavior` invoke command so Settings changes apply without restart.
+//!
+//! The Rust-side `on_close_request` handler acts as a safety net: it fires
+//! whenever `win.close()` is called (including from the JS chrome), so the
+//! behaviour is always honoured even if the JS component fails to load.
 
 mod geom;
 mod sidecar;
@@ -71,33 +75,22 @@ fn save_geometry(app: &AppHandle) {
 }
 
 /// Safely take the child process out of state (if any) and return it.
-/// This recovers from poisoned locks by taking the inner value.
+/// This recovers from poisoned locks idiomatically.
 fn take_child_from_state(state: &ShellState) -> Option<Child> {
-  match state.child.lock() {
-    Ok(mut guard) => guard.take(),
-    Err(poisoned) => {
-      let mut guard = poisoned.into_inner();
-      guard.take()
-    }
-  }
+  state.child.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
 /// Safely set the quitting flag to true.
 fn set_quitting(state: &ShellState) {
-  match state.quitting.lock() {
-    Ok(mut guard) => *guard = true,
-    Err(mut poisoned) => {
-      let guard = poisoned.get_mut();
-      *guard = true;
-    }
-  }
+  *state.quitting.lock().unwrap_or_else(|e| e.into_inner()) = true;
 }
 
 /// Emit an event to the frontend and log the message.
 /// Frontend should listen for `sidecar:error` to show actionable UI.
 fn report_error(app: &AppHandle, message: &str) {
   log::error!("{}", message);
-  let _ = app.emit_all("sidecar:error", message.to_string());
+  // Tauri 2 uses `emit` instead of the deprecated `emit_all`
+  let _ = app.emit("sidecar:error", message.to_string());
 }
 
 /// Attempt to gracefully shutdown a child process; return Result to caller.
@@ -106,6 +99,7 @@ fn try_shutdown_child(child: &mut Child, port: u16, exe_dir: &PathBuf) -> Result
   match sidecar::shutdown_sidecar(child, port, exe_dir) {
     true => Ok(()),
     false => {
+      log::warn!("Graceful shutdown of sidecar failed; forcing process kill.");
       let _ = child.kill();
       Err("Failed to gracefully shutdown sidecar; killed child.".to_string())
     }
@@ -123,14 +117,8 @@ fn quit_app(app: &AppHandle) {
   // Determine port and whether we own the sidecar, and exe_dir for shutdown.
   let (own, exe_dir, port) = match app.try_state::<ShellState>() {
     Some(state) => {
-      let own = match state.own_sidecar.lock() {
-        Ok(g) => *g,
-        Err(poisoned) => *poisoned.get_mut(),
-      };
-      let port = match state.port.lock() {
-        Ok(g) => *g,
-        Err(poisoned) => *poisoned.get_mut(),
-      };
+      let own = *state.own_sidecar.lock().unwrap_or_else(|e| e.into_inner());
+      let port = *state.port.lock().unwrap_or_else(|e| e.into_inner());
       (own, state.exe_dir.clone(), port)
     }
     None => (false, PathBuf::new(), sidecar::DEFAULT_PORT),
@@ -154,17 +142,17 @@ fn quit_app(app: &AppHandle) {
 /// Use sparingly; prefer `report_error` so the UI can present actions.
 fn fatal(app: &AppHandle, message: String) -> ! {
   let handle = app.clone();
-  let dialog_handle = handle.clone();
   let _ = handle.run_on_main_thread(move || {
-    dialog_handle
+    handle
       .dialog()
       .message(message)
       .title("RTWiki")
       .kind(MessageDialogKind::Error)
       .blocking_show();
-    std::process::exit(1);
+    // Use Tauri's exit for proper cleanup instead of std::process::exit
+    handle.exit(1);
   });
-  // Fallback exit if run_on_main_thread didn't exit for some reason.
+  // Fallback exit if run_on_main_thread didn't execute for some reason.
   std::thread::sleep(Duration::from_secs(2));
   std::process::exit(1);
 }
@@ -200,32 +188,6 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
     "autostart" => toggle_autostart(app),
     "quit" => quit_app(app),
     _ => {},
-  }
-}
-
-fn on_close_requested(app: &AppHandle, window: &WebviewWindow) -> bool {
-  let exe_dir = app.try_state::<ShellState>().map(|s| s.exe_dir.clone()).unwrap_or_default();
-  match sidecar::close_behavior(&exe_dir) {
-    sidecar::CloseBehavior::Minimize => {
-      geom::save_current(&exe_dir, window);
-      let _ = window.hide();
-      true
-    }
-    sidecar::CloseBehavior::Quit => {
-      quit_app(app);
-      true
-    }
-    sidecar::CloseBehavior::Ask => {
-      let minimize = app.dialog()
-        .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
-        .title("RTWiki")
-        .blocking_show();
-      if minimize {
-        geom::save_current(&exe_dir, window);
-        let _ = window.hide();
-      }
-      true
-    }
   }
 }
 
@@ -449,12 +411,51 @@ fn main() {
           let scheme_ok = url.scheme() == "http";
           let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
           scheme_ok && host_ok
+        })
+        // Safety-net close handler: fires whenever win.close() is called
+        // (including from the JS chrome component). Reads fresh behaviour
+        // so Settings changes apply immediately without restart.
+        .on_close_request(move |window| {
+          let app = window.app_handle();
+          let exe_dir = app
+            .try_state::<ShellState>()
+            .map(|s| s.exe_dir.clone())
+            .unwrap_or_default();
+
+          match sidecar::close_behavior(&exe_dir) {
+            sidecar::CloseBehavior::Minimize => {
+              geom::save_current(&exe_dir, window);
+              let _ = window.hide();
+              true // prevent close → window goes to tray
+            }
+            sidecar::CloseBehavior::Quit => {
+              quit_app(app);
+              true // prevent close → quit_app exits the process
+            }
+            sidecar::CloseBehavior::Ask => {
+              let minimize = app
+                .dialog()
+                .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
+                .title("RTWiki")
+                .blocking_show();
+              if minimize {
+                geom::save_current(&exe_dir, window);
+                let _ = window.hide();
+                true // prevent close → window goes to tray
+              } else {
+                // User cancelled — keep window open
+                true // prevent close, do nothing
+              }
+            }
+          }
         });
+
         // Strip the native title bar on Windows so the frontend renders its
         // own chrome (custom tab strip + window controls in window-chrome.tsx).
         #[cfg(target_os = "windows")]
         let builder = builder.decorations(false);
-        let window = builder.build()?;
+
+        let _ = builder.build()?;
       }
 
       let handle = app.handle().clone();
