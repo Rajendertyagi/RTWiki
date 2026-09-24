@@ -411,7 +411,8 @@ fn main() {
           let scheme_ok = url.scheme() == "http";
           let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
           scheme_ok && host_ok
-        })
+        });
+
         // Strip the native title bar on Windows so the frontend renders its
         // own chrome (custom tab strip + window controls in window-chrome.tsx).
         #[cfg(target_os = "windows")]
@@ -422,9 +423,10 @@ fn main() {
         // Safety-net close handler: fires whenever win.close() is called
         // (including from the JS chrome component). Reads fresh behaviour
         // so Settings changes apply immediately without restart.
+        let win = window.clone();
         window.on_window_event(move |event| {
           if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            let app = window.app_handle();
+            let app = win.app_handle();
             let exe_dir = app
               .try_state::<ShellState>()
               .map(|s| s.exe_dir.clone())
@@ -433,8 +435,8 @@ fn main() {
             match sidecar::close_behavior(&exe_dir) {
               sidecar::CloseBehavior::Minimize => {
                 api.prevent_close();
-                geom::save_current(&exe_dir, window);
-                let _ = window.hide();
+                geom::save_current(&exe_dir, &win);
+                let _ = win.hide();
               }
               sidecar::CloseBehavior::Quit => {
                 api.prevent_close();
@@ -448,8 +450,8 @@ fn main() {
                   .title("RTWiki")
                   .blocking_show();
                 if minimize {
-                  geom::save_current(&exe_dir, window);
-                  let _ = window.hide();
+                  geom::save_current(&exe_dir, &win);
+                  let _ = win.hide();
                 }
               }
             }
