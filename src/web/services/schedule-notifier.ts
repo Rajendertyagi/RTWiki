@@ -1,11 +1,11 @@
 import { notifications } from '@mantine/notifications'
 import type { Reminder, ScheduleEntry } from '@rtwiki/shared/contracts/schedule'
-import { listEntries, listReminders } from '../services/schedule-api.js'
-import { showBrowserNotification } from './browser-notify.js'
 import {
   defaultSchedulerPreferences,
   type SchedulerPreferences
 } from '../features/workspace/scheduler-preferences.js'
+import { listEntries, listReminders } from '../services/schedule-api.js'
+import { showOsNotification } from './os-notify.js'
 
 /**
  * Study Scheduler notification engine (Slice 2).
@@ -81,11 +81,7 @@ function isWithinQuiet(now: Date, start: string | null, end: string | null): boo
   return cur >= s || cur < e
 }
 
-function pushPeriodOffsets(
-  out: NotificationMoment[],
-  entry: ScheduleEntry,
-  occ: Date
-): void {
+function pushPeriodOffsets(out: NotificationMoment[], entry: ScheduleEntry, occ: Date): void {
   const prefs = entry.notifications
   const offsets: number[] = []
   if (prefs.start) offsets.push(0)
@@ -104,7 +100,11 @@ function pushPeriodOffsets(
   }
 }
 
-function computeMoments(entries: ScheduleEntry[], reminders: Reminder[], now: Date): NotificationMoment[] {
+function computeMoments(
+  entries: ScheduleEntry[],
+  reminders: Reminder[],
+  now: Date
+): NotificationMoment[] {
   const out: NotificationMoment[] = []
 
   // Weekly occurrences across [yesterday .. +7 days] so this and next week's
@@ -222,7 +222,8 @@ class ScheduleNotifier {
       })
     }
     if (this.prefs.browserEnabled) {
-      showBrowserNotification(title, body || undefined)
+      // Native toast in the desktop shell, Web Notification API otherwise.
+      void showOsNotification(title, body || undefined)
     }
   }
 

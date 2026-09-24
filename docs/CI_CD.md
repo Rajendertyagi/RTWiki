@@ -100,6 +100,15 @@ This document describes the planned GitHub Actions workflow for RTWiki. It speci
 - The executable is a single binary that can run without any installed runtime.
 ```
 
+### Stage 9b: Desktop Shell Compilation (Tauri)
+
+```
+- Runner: windows-latest (requires the Rust toolchain; end users need nothing installed — WebView2 ships with Windows).
+- Run: bun run build:desktop (Tauri CLI bundles RTWiki.exe shell + RTWikiServer.exe sidecar + web/ assets).
+- The TypeScript quality gates above still apply to the web/server code; Rust compilation failures fail this stage.
+- Produces the desktop portable package alongside the browser-first package. See [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
+```
+
 ### Stage 10: Portable Artifact Packaging
 
 ```
@@ -158,6 +167,7 @@ The pipeline fails on any of the following conditions:
 | Frontend build | Stage 7 | `dist/` (intermediate) |
 | Backend build | Stage 8 | `dist-backend/` (intermediate) |
 | Windows executable | Stage 9 | `RTWiki.exe` |
+| Desktop shell + server sidecar | Stage 9b | `RTWiki.exe` + `RTWikiServer.exe` (desktop portable package) |
 | Portable package | Stage 10 | `RTWiki-{version}-windows-x64.zip` |
 | Checksum | Stage 10 | `RTWiki-{version}-windows-x64.zip.sha256` |
 
@@ -178,6 +188,7 @@ If future phases require signing or publishing credentials, they will be added a
 - [ROADMAP.md](ROADMAP.md) — future phases that may add pipeline stages
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
+- [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md) — desktop shell build and packaging
 
 ## 8. Implemented Quality Gates
 

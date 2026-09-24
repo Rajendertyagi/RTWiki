@@ -3,9 +3,12 @@
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  flex-wrap: wrap;
   gap: var(--mantine-spacing-md);
-  height: var(--rtwiki-header-height);
-  padding: 0 var(--rtwiki-chrome-pad-x);
+  /* Auto height so the title + subtitle wrap gracefully at narrow widths
+     instead of being clipped by a fixed 40px bar (audit UI-007). */
+  padding: var(--mantine-spacing-xs) var(--rtwiki-chrome-pad-x);
+  margin-bottom: var(--mantine-spacing-md);
   border-bottom: 1px solid var(--rtwiki-chrome-border);
   background: var(--rtwiki-chrome-bg);
 }

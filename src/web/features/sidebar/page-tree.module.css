@@ -46,7 +46,14 @@
   --wb-hover-border-color: transparent;
   --wb-drop-source-color: transparent;
   --wb-drop-target-color: transparent;
-  --wb-expander-color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+  /* Disclosure chevron must stay legible on both themes (audit UI-004): a
+     mid grey clears the 4.5:1 contrast floor on a light surface, and reads
+     clearly on the dark surface too. */
+  --wb-expander-color: var(--mantine-color-gray-7);
+  /* Crisp disclosure chevron (right-pointing); expanded rotates 90° to point
+     down. A stroked SVG mask — no jagged unicode glyph, theme-aware via the
+     expander colour. */
+  --rtwiki-chevron: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M9%206l6%206-6%206'%20fill='none'%20stroke='%23000'%20stroke-width='2.5'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
   /* Use RTWiki foreground tokens instead of Wunderbaum's default text colour. */
   --wb-node-text-color: var(--rtwiki-text, var(--mantine-color-text));
   --wb-dim-color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
@@ -57,10 +64,10 @@
   --wb-active-color: var(--rtwiki-active-fill);
   --wb-active-color-grayscale: color-mix(
     in srgb,
-    var(--mantine-color-blue-filled) 16%,
+    var(--mantine-color-blue-filled) 22%,
     transparent
   );
-  --wb-active-hover-color: color-mix(in srgb, var(--mantine-color-blue-filled) 24%, transparent);
+  --wb-active-hover-color: color-mix(in srgb, var(--mantine-color-blue-filled) 30%, transparent);
   --wb-active-border-color: transparent;
   --wb-active-border-color-grayscale: transparent;
   --wb-focus-border-color: transparent;
@@ -103,19 +110,46 @@
   background: transparent;
 }
 
-/* Full-width row hit surface. Horizontal padding from the token source. */
-:global(div.wb-row) {
+/* Full-width row hit surface. Horizontal padding from the token source.
+   Reset the library's 1px transparent row border (higher-specificity rule
+   below) so no phantom frame offsets the content box (audit UI-003). */
+:global(div.wunderbaum div.wb-row) {
+  border: 0;
   border-radius: var(--mantine-radius-sm);
   margin-inline: 0;
   box-sizing: border-box;
+  line-height: normal;
   padding-left: var(--rtwiki-tree-row-padding-left);
   padding-right: var(--rtwiki-tree-row-padding-right);
+}
+
+/* The library positions the content column absolutely at 28px inside the 30px
+   row and keeps it inline-block, which leaves the title top-aligned (~5px off
+   center). Fill the row and flex-center so the icon/title sit dead-center
+   (audit UI-003). !important beats the library's equal-specificity rule, which
+   is imported after this module. */
+:global(div.wunderbaum span.wb-col) {
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
 }
 
 /* Hover covers the full row width with a subtle neutral fill. */
 :global(div.wb-row:hover) {
   background: var(--wb-hover-color);
 }
+
+/* Wunderbaum renders a phantom empty row (only an empty wb-col, no node
+   content / role) at the top of the list. It carries no page and must never
+   paint; hide every row that lacks a real node body. Real rows always contain
+   span.wb-node, so this only removes the artifact (safe during edit/active). */
+:global(div.wb-row:not(:has(span.wb-node))) {
+  display: none;
+}
+
+/* Page-type icons inherit currentColor and already render in the tree's accent
+   blue; the neutral row-fill hover (above) is the hover affordance, so no
+   separate icon-colour change is needed. */
 
 /* Selected/active: soft blue fill, bright foreground, transparent border
    (no heavy grey outline), 3px left accent that does not shift content. */
@@ -127,10 +161,21 @@
   box-shadow: inset 3px 0 0 var(--mantine-color-blue-filled);
 }
 
-/* Keyboard focus: visible blue inset ring, independent of hover. */
+/* Keep the blue fill (never the neutral hover tint) when a selected row is
+   hovered again, so the selection stays clearly visible in either theme. */
+:global(div.wb-row.wb-selected:hover),
+:global(div.wb-row.wb-active:hover) {
+  background: var(--wb-active-hover-color);
+}
+
+/* Keyboard focus: clearly visible blue ring, independent of hover (audit
+   UI-002). Inset shadow is used (not outline) so it can never be clipped by
+   the tree's overflow. Uses blue-filled (blue-outline is not a Mantine token,
+   so it previously rendered nothing). !important beats the library's higher-
+   specificity focus rule. */
 :global(div.wb-row.wb-focus) {
   border-color: transparent !important;
-  box-shadow: inset 0 0 0 1px var(--mantine-color-blue-outline);
+  box-shadow: inset 0 0 0 2px var(--mantine-color-blue-filled) !important;
 }
 
 :global(div.wb-row.wb-selected.wb-focus),
@@ -138,7 +183,7 @@
   border-color: transparent !important;
   box-shadow:
     inset 3px 0 0 var(--mantine-color-blue-filled),
-    inset 0 0 0 1px var(--mantine-color-blue-outline);
+    inset 0 0 0 2px var(--mantine-color-blue-filled) !important;
 }
 
 /* Distinct drag/drop states (Feature 1 contract). */
@@ -159,40 +204,43 @@
   background: color-mix(in srgb, var(--mantine-color-blue-filled) 14%, transparent);
 }
 
-/* Expander: disclosure control only. Click target and glyph from tokens. A
-   subtle rounded hover/focus fill signals it is interactive without a heavy
-   outline; the glyph is a solid chevron so it reads clearly in either theme. */
+/* Expander: disclosure control only. A crisp SVG chevron (mask) replaces the
+   jagged unicode glyph. Collapsed points right; expanded rotates 90° to point
+   down. Colour follows the expander token so it adapts to light/dark. */
 :global(i.wb-expander) {
-  color: var(--wb-expander-color);
+  color: transparent;
   cursor: pointer;
   width: var(--rtwiki-tree-expander-size) !important;
   height: var(--rtwiki-tree-expander-size) !important;
   padding: 0;
   margin: 0;
+  border: 0;
   border-radius: var(--mantine-radius-xs);
+  background-color: var(--wb-expander-color);
+  background-image: none;
+  -webkit-mask: var(--rtwiki-chevron) center / 75% no-repeat;
+  mask: var(--rtwiki-chevron) center / 75% no-repeat;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 80ms ease;
+  transition: background-color 80ms ease, transform 120ms ease;
+}
+
+:global(i.wb-expander::before) {
+  content: none;
+}
+
+:global(i.wb-expander.rtw-expanded) {
+  transform: rotate(90deg);
 }
 
 :global(div.wb-row:hover i.wb-expander),
 :global(div.wb-row.wb-focus i.wb-expander) {
-  background: color-mix(
+  background-color: color-mix(
     in srgb,
-    var(--rtwiki-text-muted, var(--mantine-color-dimmed)) 16%,
+    var(--rtwiki-text-muted, var(--mantine-color-dimmed)) 55%,
     transparent
   );
-}
-
-:global(i.rtw-expander::before) {
-  content: "\25B6";
-  font-size: var(--rtwiki-tree-glyph-size);
-  line-height: 1;
-}
-
-:global(i.rtw-expander.rtw-expanded::before) {
-  content: "\25BC";
 }
 
 /* Page-type icon slot filled by the render hook with a Tabler SVG. */
@@ -217,6 +265,8 @@
   width: 100%;
   height: 100%;
   display: block;
+  /* Keep Tabler glyphs crisp at 16px rather than soft/anti-aliased. */
+  shape-rendering: geometricPrecision;
 }
 
 :global(.rtw-type-subfile i.rtw-page-icon) {
@@ -229,10 +279,13 @@
   display: none !important;
 }
 
-/* Node is a flex row so the title fills remaining space and truncates. */
+/* Node is a flex row so the title fills remaining space and truncates. It
+   fills the 28px column height and centers its children vertically, fixing
+   the title/icon being ~5px off-center (audit UI-003). */
 :global(span.wb-node) {
   display: flex;
   align-items: center;
+  height: 100%;
   width: 100%;
   white-space: nowrap;
 }
@@ -293,7 +346,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--rtwiki-surface, var(--mantine-color-body)) 85%, transparent);
+  /* Opaque surface so the glyph stays legible over the blue selection fill
+     (audit UI-005). */
+  background: var(--rtwiki-surface, var(--mantine-color-body));
+  color: var(--rtwiki-text, var(--mantine-color-text));
 }
 
 :global(button.rtw-row-action:hover) {
@@ -311,6 +367,15 @@
   font-size: 12.5px;
   font-style: normal;
   color: color-mix(in srgb, var(--rtwiki-text, var(--mantine-color-text)) 72%, transparent);
+}
+
+/* Subfile rows (HTML / CSS / JS) group under their parent: a left indent
+   guide plus a little breathing room makes the three siblings read as one
+   block beneath the parent note (audit UI-006). */
+:global(div.wb-row.rtw-type-subfile span.wb-node) {
+  border-left: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  padding-left: 6px;
+  margin-left: calc(-1 * var(--rtwiki-tree-indent-step) + 2px);
 }
 
 /*

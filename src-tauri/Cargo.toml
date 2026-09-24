@@ -1,0 +1,24 @@
+# RTWiki desktop shell (Tauri 2 + WebView2).
+#
+# Crate versions are pinned to stable 2.x releases that match the frontend
+# `@tauri-apps/*` npm packages in package.json. The exact resolved versions
+# are recorded in Cargo.lock, which is committed on the first CI build.
+# Keep `version` in sync with package.json and tauri.conf.json.
+
+[package]
+name = "rtwiki"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[dependencies]
+tauri = { version = "2.11.6", features = ["tray-icon"] }
+tauri-plugin-autostart = "2.5.1"
+tauri-plugin-dialog = "2.7.3"
+tauri-plugin-notification = "2.4.0"
+tauri-plugin-single-instance = "2.4.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+opener = "0.8"

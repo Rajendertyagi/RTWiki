@@ -188,3 +188,20 @@ export async function getBacklinks(
   }
   return body.backlinks
 }
+/**
+ * Lists living pages that `pageId` links to (outgoing ID-based relationships
+ * from the maintained page_links index).
+ */
+export async function getOutgoingLinks(
+  pageId: string,
+  signal?: AbortSignal
+): Promise<Array<{ id: string; title: string; snippet: string | null }>> {
+  const res = await fetch(`${API_BASE}/pages/${encodeURIComponent(pageId)}/links`, { signal })
+  if (!res.ok) {
+    throw new Error(`Outgoing links request failed (${res.status})`)
+  }
+  const body = (await res.json()) as {
+    links: Array<{ id: string; title: string; snippet: string | null }>
+  }
+  return body.links
+}

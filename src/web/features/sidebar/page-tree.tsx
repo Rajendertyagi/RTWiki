@@ -1,12 +1,16 @@
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
 import classes from './page-tree.module.css'
 import { isMoveToAction, TreeContextMenu } from './tree-context-menu.js'
 import { buildDescendantChecker } from './wb-adapter.js'
-import { type DropMove, PageTreeHost } from './wb-tree-host.js'
+import {
+  type DropMove,
+  PageTreeHost,
+  type PageTreeHostCallbacks
+} from './wb-tree-host.js'
 
 export interface MoveTarget {
   id: string
@@ -125,6 +129,41 @@ export function PageTree({
     onExpandedChange
   }
 
+  // Builds the host callback bundle from the always-latest refs. Shared by the
+  // mount and reload paths so the two never drift. Memoized with empty deps:
+  // it reads only stable refs and imported helpers, so its identity never
+  // changes and the reload effect below does not re-run on every render.
+  const makeHostCallbacks = useCallback(
+    (): PageTreeHostCallbacks => ({
+    onOpenPage: (pageId) => {
+      debugLog('ui', 'ui_tree_row_open', { pageId })
+      callbacksRef.current.onOpen(pageId)
+    },
+    onOpenSubfile: (pageId, field) => {
+      debugLog('ui', 'ui_subfile_open', { pageId, field })
+      callbacksRef.current.onOpenHtmlSource(pageId, field)
+    },
+    onDropMove: (move: DropMove) => {
+      debugLog('ui', 'ui_drag_drop', {
+        pageId: move.pageId,
+        targetId: move.newParentId ?? undefined,
+        code: move.newPosition === null ? 'append' : String(move.newPosition)
+      })
+      callbacksRef.current.hooks.onDropMove(
+        move.pageId,
+        move.newParentId,
+        move.newPosition ?? Number.MAX_SAFE_INTEGER
+      )
+    },
+    onContextMenu: (payload) => contextMenuRequestRef.current(payload),
+    onRenameCommit: (pageId, title) => {
+      callbacksRef.current.hooks.onRename(pageId, title)
+    },
+    onExpandedChange: (ids) => callbacksRef.current.onExpandedChange?.(ids)
+  }),
+    []
+  )
+
   const isSelfOrDescendantRef = useRef<(a: string, c: string) => boolean>(() => false)
   isSelfOrDescendantRef.current = buildDescendantChecker(pages)
 
@@ -142,33 +181,7 @@ export function PageTree({
       activePageId: callbacksRef.current.activePageId,
       untitledLabel: UI_TEXT.untitledPage,
       isSelfOrDescendant: (a, c) => isSelfOrDescendantRef.current(a, c),
-      callbacks: {
-        onOpenPage: (pageId) => {
-          debugLog('ui', 'ui_tree_row_open', { pageId })
-          callbacksRef.current.onOpen(pageId)
-        },
-        onOpenSubfile: (pageId, field) => {
-          debugLog('ui', 'ui_subfile_open', { pageId, field })
-          callbacksRef.current.onOpenHtmlSource(pageId, field)
-        },
-        onDropMove: (move: DropMove) => {
-          debugLog('ui', 'ui_drag_drop', {
-            pageId: move.pageId,
-            targetId: move.newParentId ?? undefined,
-            code: move.newPosition === null ? 'append' : String(move.newPosition)
-          })
-          callbacksRef.current.hooks.onDropMove(
-            move.pageId,
-            move.newParentId,
-            move.newPosition ?? Number.MAX_SAFE_INTEGER
-          )
-        },
-        onContextMenu: (payload) => contextMenuRequestRef.current(payload),
-        onRenameCommit: (pageId, title) => {
-          callbacksRef.current.hooks.onRename(pageId, title)
-        },
-        onExpandedChange: (ids) => callbacksRef.current.onExpandedChange?.(ids)
-      }
+      callbacks: makeHostCallbacks()
     })
 
     imperativeRef.current = {
@@ -181,12 +194,19 @@ export function PageTree({
       hostRef.current = null
       imperativeRef.current = { expandPage: () => undefined, restoreFocus: () => undefined }
     }
-  }, [])
+  }, [makeHostCallbacks])
 
-  // Reload data in place only when the page collection or selection changes.
+  // Reload data in place ONLY when the page collection changes. A full
+  // Wunderbaum reload discards and rebuilds every row, which resets the
+  // viewport scroll position; running it on every selection change was the
+  // cause of the tree "jumping" when a row in the lower half was clicked.
   // Callbacks are read through callbacksRef (always latest) so identity churn
   // in the inline props (onOpen/hooks are recreated every App render) cannot
-  // retrigger a full Wunderbaum reload — that thrash once blanked the tree.
+  // retrigger a reload — that thrash once blanked the tree.
+  // activePageId is read at reload time but intentionally omitted from the deps:
+  // selection is applied separately (applyActive effect) so clicking a row never
+  // triggers a full reload. Adding it here would reintroduce the scroll jump.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selection applied via the separate applyActive effect to avoid resetting tree scroll on click
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -196,35 +216,20 @@ export function PageTree({
       activePageId,
       untitledLabel: UI_TEXT.untitledPage,
       isSelfOrDescendant: (a, c) => isSelfOrDescendantRef.current(a, c),
-      callbacks: {
-        onOpenPage: (pageId) => {
-          debugLog('ui', 'ui_tree_row_open', { pageId })
-          callbacksRef.current.onOpen(pageId)
-        },
-        onOpenSubfile: (pageId, field) => {
-          debugLog('ui', 'ui_subfile_open', { pageId, field })
-          callbacksRef.current.onOpenHtmlSource(pageId, field)
-        },
-        onDropMove: (move: DropMove) => {
-          debugLog('ui', 'ui_drag_drop', {
-            pageId: move.pageId,
-            targetId: move.newParentId ?? undefined,
-            code: move.newPosition === null ? 'append' : String(move.newPosition)
-          })
-          callbacksRef.current.hooks.onDropMove(
-            move.pageId,
-            move.newParentId,
-            move.newPosition ?? Number.MAX_SAFE_INTEGER
-          )
-        },
-        onContextMenu: (payload) => contextMenuRequestRef.current(payload),
-        onRenameCommit: (pageId, title) => {
-          callbacksRef.current.hooks.onRename(pageId, title)
-        },
-        onExpandedChange: (ids) => callbacksRef.current.onExpandedChange?.(ids)
-      }
+      callbacks: makeHostCallbacks()
     })
-  }, [pages, activePageId])
+  }, [pages, makeHostCallbacks])
+
+  // Apply selection changes WITHOUT reloading data. host.applyActive() keeps
+  // the scroll position when the target row is already visible, so clicking a
+  // row never moves the viewport. This effect intentionally depends only on
+  // activePageId; the reload above already re-applies selection when the data
+  // itself changes.
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    host.applyActive(activePageId)
+  }, [activePageId])
 
   // Apply the session-expansion seed once per distinct identity.
   const seedRef = useRef<ReadonlySet<string> | null>(null)

@@ -2,33 +2,56 @@ import {
   Box,
   Button,
   Group,
+  Radio,
   ScrollArea,
   SegmentedControl,
   Stack,
   Switch,
   Text,
+  TextInput,
   Title,
   useComputedColorScheme,
   useMantineColorScheme
 } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
+import { MAX_USER_PORT, MIN_USER_PORT } from '@rtwiki/shared/constants'
 import { IconX } from '@tabler/icons-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { isDebugLoggingEnabled, setDebugLoggingEnabled } from '../../diagnostics/debug-log.js'
+import {
+  type BrowserPermission,
+  browserNotificationPermission,
+  requestBrowserNotificationPermission
+} from '../../services/browser-notify.js'
+import {
+  type AutostartState,
+  getAutostartState,
+  isNativeMode,
+  setAutostartEnabled
+} from '../../services/native-bridge.js'
+import { scheduleNotifier } from '../../services/schedule-notifier.js'
+import {
+  type DesktopSettings,
+  getDesktopSettings,
+  getServerSettings,
+  restartServerOnPort,
+  type ServerPortSettings,
+  serverBaseUrl,
+  updateCloseBehavior,
+  updateServerPort
+} from '../../services/server-settings-api.js'
 import { setWordWrap, useEditorPreferences } from '../workspace/editor-preferences.js'
+import type { LayoutPreferences } from '../workspace/layout-preferences.js'
 import {
   loadSchedulerPreferences,
-  saveSchedulerPreferences,
-  type SchedulerPreferences
+  type SchedulerPreferences,
+  saveSchedulerPreferences
 } from '../workspace/scheduler-preferences.js'
-import type { LayoutPreferences } from '../workspace/layout-preferences.js'
-import { browserNotificationPermission, requestBrowserNotificationPermission, type BrowserPermission } from '../../services/browser-notify.js'
-import { scheduleNotifier } from '../../services/schedule-notifier.js'
 import { DebugLogViewer } from './debug-log-viewer.js'
 import classes from './settings.module.css'
 
-type Section = 'appearance' | 'layout' | 'editor' | 'debugLogs' | 'scheduler'
+type Section = 'appearance' | 'layout' | 'editor' | 'debugLogs' | 'scheduler' | 'desktop'
 
 interface SettingsWorkspaceProps {
   layoutPrefs: LayoutPreferences
@@ -41,6 +64,7 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: 'layout', label: UI_TEXT.settingsLayout },
   { id: 'editor', label: UI_TEXT.settingsEditor },
   { id: 'scheduler', label: UI_TEXT.settingsScheduler },
+  { id: 'desktop', label: UI_TEXT.settingsDesktop },
   { id: 'debugLogs', label: UI_TEXT.settingsDebugLogs }
 ]
 
@@ -67,8 +91,43 @@ export function SettingsWorkspace({
   const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
   const editorPrefs = useEditorPreferences()
   const [debugEnabled, setDebugEnabled] = useState<boolean>(() => isDebugLoggingEnabled())
-  const [schedPrefs, setSchedPrefs] = useState<SchedulerPreferences>(() => loadSchedulerPreferences())
-  const [browserPerm, setBrowserPerm] = useState<BrowserPermission>(() => browserNotificationPermission())
+  const [schedPrefs, setSchedPrefs] = useState<SchedulerPreferences>(() =>
+    loadSchedulerPreferences()
+  )
+  const [browserPerm, setBrowserPerm] = useState<BrowserPermission>(() =>
+    browserNotificationPermission()
+  )
+  const [nativeMode] = useState<boolean>(() => isNativeMode())
+  const [autostart, setAutostart] = useState<AutostartState>({ available: false, enabled: false })
+  const [serverSettings, setServerSettings] = useState<ServerPortSettings | null>(null)
+  const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null)
+  const [portField, setPortField] = useState<string>('')
+  const [portMessage, setPortMessage] = useState<string | null>(null)
+  const [restarting, setRestarting] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (!nativeMode) return
+    void getAutostartState().then(setAutostart)
+  }, [nativeMode])
+
+  useEffect(() => {
+    let cancelled = false
+    void getServerSettings()
+      .then((s) => {
+        if (cancelled) return
+        setServerSettings(s)
+        setPortField(String(s.configuredPort))
+      })
+      .catch(() => {})
+    void getDesktopSettings()
+      .then((s) => {
+        if (!cancelled) setDesktopSettings(s)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleDebugToggle = (checked: boolean): void => {
     setDebugLoggingEnabled(checked)
@@ -90,6 +149,58 @@ export function SettingsWorkspace({
     const result = await requestBrowserNotificationPermission()
     setBrowserPerm(result)
     updateScheduler({ browserEnabled: result === 'granted' })
+  }
+
+  const handleAutostartToggle = (checked: boolean): void => {
+    void setAutostartEnabled(checked).then((ok) => {
+      if (!ok) return
+      setAutostart((prev) => ({ ...prev, enabled: checked }))
+    })
+  }
+
+  const handlePortSave = (): void => {
+    const parsed = Number(portField.trim())
+    if (!Number.isInteger(parsed) || parsed < MIN_USER_PORT || parsed > MAX_USER_PORT) {
+      setPortMessage(UI_TEXT.desktopPortInvalid)
+      return
+    }
+    void updateServerPort(parsed)
+      .then((s) => {
+        setServerSettings(s)
+        setPortMessage(
+          s.restartRequired ? UI_TEXT.desktopPortRestartNeeded : UI_TEXT.desktopPortSaved
+        )
+      })
+      .catch((err: unknown) => {
+        setPortMessage(err instanceof Error ? err.message : UI_TEXT.desktopPortInvalid)
+      })
+  }
+
+  const handleRestart = (): void => {
+    if (!serverSettings || restarting) return
+    const targetPort = serverSettings.port
+    setRestarting(true)
+    setPortMessage(null)
+    void restartServerOnPort(targetPort)
+      .then((ok) => {
+        if (ok) {
+          window.location.href = serverBaseUrl(targetPort)
+        } else {
+          setRestarting(false)
+          setPortMessage(UI_TEXT.desktopRestartFailed)
+        }
+      })
+      .catch((err: unknown) => {
+        setRestarting(false)
+        setPortMessage(err instanceof Error ? err.message : UI_TEXT.desktopRestartFailed)
+      })
+  }
+
+  const handleCloseBehavior = (value: string): void => {
+    if (value !== 'ask' && value !== 'minimize' && value !== 'quit') return
+    void updateCloseBehavior(value)
+      .then(setDesktopSettings)
+      .catch(() => {})
   }
 
   return (
@@ -213,7 +324,9 @@ export function SettingsWorkspace({
                 </div>
                 <Switch
                   checked={schedPrefs.inAppEnabled}
-                  onChange={(event) => updateScheduler({ inAppEnabled: event.currentTarget.checked })}
+                  onChange={(event) =>
+                    updateScheduler({ inAppEnabled: event.currentTarget.checked })
+                  }
                   aria-label={UI_TEXT.schedulerInApp}
                   data-testid="scheduler-inapp"
                 />
@@ -244,13 +357,17 @@ export function SettingsWorkspace({
                 <TimeInput
                   label={UI_TEXT.schedulerQuietStart}
                   value={schedPrefs.quietStart ?? ''}
-                  onChange={(event) => updateScheduler({ quietStart: event.currentTarget.value || null })}
+                  onChange={(event) =>
+                    updateScheduler({ quietStart: event.currentTarget.value || null })
+                  }
                   data-testid="scheduler-quiet-start"
                 />
                 <TimeInput
                   label={UI_TEXT.schedulerQuietEnd}
                   value={schedPrefs.quietEnd ?? ''}
-                  onChange={(event) => updateScheduler({ quietEnd: event.currentTarget.value || null })}
+                  onChange={(event) =>
+                    updateScheduler({ quietEnd: event.currentTarget.value || null })
+                  }
                   data-testid="scheduler-quiet-end"
                 />
               </Group>
@@ -262,6 +379,99 @@ export function SettingsWorkspace({
               >
                 {UI_TEXT.schedulerTest}
               </Button>
+            </Stack>
+          ) : null}
+
+          {section === 'desktop' ? (
+            <Stack gap="sm" className={classes.section}>
+              <Title order={5}>{UI_TEXT.settingsDesktop}</Title>
+              <Text size="xs" c="dimmed">
+                {nativeMode ? UI_TEXT.desktopModeLabel : UI_TEXT.desktopBrowserModeLabel}
+              </Text>
+              <Group justify="space-between" wrap="nowrap">
+                <div>
+                  <Text size="sm" w={500}>
+                    {UI_TEXT.desktopAutostart}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {autostart.available
+                      ? UI_TEXT.desktopAutostartHint
+                      : UI_TEXT.desktopAutostartUnavailable}
+                  </Text>
+                </div>
+                <Switch
+                  checked={autostart.enabled}
+                  disabled={!autostart.available}
+                  onChange={(event) => handleAutostartToggle(event.currentTarget.checked)}
+                  aria-label={UI_TEXT.desktopAutostart}
+                  data-testid="desktop-autostart"
+                />
+              </Group>
+
+              <Title order={6}>{UI_TEXT.desktopPort}</Title>
+              <Group gap="xs" align="end">
+                <TextInput
+                  label={UI_TEXT.desktopPort}
+                  value={portField}
+                  inputMode="numeric"
+                  disabled={restarting}
+                  onChange={(event) => setPortField(event.currentTarget.value)}
+                  data-testid="desktop-port"
+                />
+                <Button
+                  variant="light"
+                  onClick={handlePortSave}
+                  disabled={restarting}
+                  data-testid="desktop-port-save"
+                >
+                  {UI_TEXT.desktopPortSave}
+                </Button>
+              </Group>
+              <Text size="xs" c="dimmed">
+                {UI_TEXT.desktopPortHint}
+              </Text>
+              {portMessage ? (
+                <Text size="xs" data-testid="desktop-port-message">
+                  {portMessage}
+                </Text>
+              ) : null}
+              {restarting && serverSettings ? (
+                <Text size="xs" data-testid="desktop-restarting">
+                  {UI_TEXT.desktopRestarting.replace('{port}', String(serverSettings.port))}
+                </Text>
+              ) : null}
+              {serverSettings?.restartRequired && !restarting ? (
+                nativeMode ? (
+                  <Button variant="light" onClick={handleRestart} data-testid="desktop-restart">
+                    {UI_TEXT.desktopRestartNow}
+                  </Button>
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    {UI_TEXT.desktopRestartBrowserHint}
+                  </Text>
+                )
+              ) : null}
+
+              <Title order={6}>{UI_TEXT.desktopCloseBehavior}</Title>
+              <Radio.Group
+                value={desktopSettings?.closeBehavior ?? 'ask'}
+                onChange={handleCloseBehavior}
+                aria-label={UI_TEXT.desktopCloseBehavior}
+                data-testid="desktop-close-behavior"
+              >
+                <Stack gap={4}>
+                  <Radio value="ask" label={UI_TEXT.desktopCloseAsk} disabled={!nativeMode} />
+                  <Radio
+                    value="minimize"
+                    label={UI_TEXT.desktopCloseMinimize}
+                    disabled={!nativeMode}
+                  />
+                  <Radio value="quit" label={UI_TEXT.desktopCloseQuit} disabled={!nativeMode} />
+                </Stack>
+              </Radio.Group>
+              <Text size="xs" c="dimmed">
+                {nativeMode ? UI_TEXT.desktopCloseHint : UI_TEXT.desktopCloseUnavailable}
+              </Text>
             </Stack>
           ) : null}
 

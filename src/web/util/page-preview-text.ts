@@ -84,11 +84,15 @@ function markdownToPlainText(md: string): string {
     .trim()
 }
 
-export function pagePreviewText(page: Page, maxChars = 120): string {
+/**
+ * Full plain-text reduction of a page's authored content (no truncation).
+ * Shared by the dashboard preview and the status bar's word/character counts.
+ */
+export function pagePlainText(page: Page): string {
   const raw = page.content ?? ''
   if (!raw) return ''
   // Dedicated Diagram / Mind Map pages: the stored Mermaid source is never
-  // surfaced on cards — the readable type label is the summary.
+  // surfaced as prose — the readable type label is the summary.
   if (page.pageType === 'diagram' || page.pageType === 'mindmap') {
     return ''
   }
@@ -104,9 +108,17 @@ export function pagePreviewText(page: Page, maxChars = 120): string {
       const html = (parsed as { html?: unknown }).html
       if (typeof html === 'string') text = stripTags(html)
     }
-    text = text.replace(/\s+/g, ' ').trim()
-    return text.slice(0, maxChars)
+    return text.replace(/\s+/g, ' ').trim()
   } catch {
     return ''
   }
+}
+
+export function pagePreviewText(page: Page, maxChars = 120): string {
+  // Dedicated Diagram / Mind Map pages: the stored Mermaid source is never
+  // surfaced on cards — the readable type label is the summary.
+  if (page.pageType === 'diagram' || page.pageType === 'mindmap') {
+    return ''
+  }
+  return pagePlainText(page).slice(0, maxChars)
 }

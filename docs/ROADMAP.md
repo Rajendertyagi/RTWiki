@@ -228,17 +228,25 @@ This phase evaluates whether to add output formats for sharing and archiving. Th
 | ODT export evaluation | LibreOffice-compatible export |
 | Print stylesheet | Clean print layout for individual pages |
 
-## Phase 6: Native Desktop Wrapper Evaluation
+## Phase 6: Native Desktop Wrapper (Authorized)
 
-This phase evaluates whether a native desktop wrapper would provide sufficient value to justify the additional build complexity. The browser-first approach remains the default distribution method.
+The owner has authorized a native desktop experience, concluding this
+evaluation: RTWiki ships a **Tauri desktop shell** as the default distribution
+with the browser-first application kept as a secondary mode. See
+[ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
 
-| Consideration | Description |
+| Delivered | Description |
 |---------------|------------|
-| Wrapper evaluation | Assess Electron, Tauri, or similar options against the browser-first approach |
-| System tray integration | Native tray icon, keyboard shortcuts, file associations |
-| Native menus and dialogs | OS-native window chrome and file-picker dialogs |
+| Tauri shell | `RTWiki.exe` hosts the web UI in WebView2 and runs the Bun server as the `RTWikiServer.exe` sidecar |
+| System tray integration | Native tray icon with Open / Open in Browser / Start with Windows / Quit; close-to-tray |
+| Launch at login | Opt-in autostart from Settings and the tray menu |
+| Native notifications and dialogs | OS toasts via the Tauri notification plugin (Web Notification API fallback); OS file picker via WebView2 |
+| Single instance | Second launch focuses the existing window |
+| Managed port | Settings persists `data/server.json`; Restart respawns the sidecar on the new port |
+| Close behavior | Settings-managed ask / minimize-to-tray / quit |
 
-The outcome of this evaluation may result in no wrapper being adopted, a lightweight wrapper being adopted, or further evaluation in a later phase.
+Browser mode is preserved via the tray "Open in Browser" action and
+`RTWiki.exe --browser`.
 
 ## Phase 7: Optional AI Chat and Page Generation
 

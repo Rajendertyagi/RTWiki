@@ -63,7 +63,6 @@ The following capabilities are **explicitly excluded** from the MVP. They may ap
 | Deferred Feature | Reason for Deferral |
 |-----------------|---------------------|
 | React Flow visual mind-map editor | Complex; Mermaid mind maps cover the MVP use case. Evaluated in a later phase. |
-| Native desktop wrapper (Electron, Tauri, Electrobun) | Browser-first approach is simpler and sufficient for MVP. Evaluated in a later phase. |
 | LAN / mobile access | Requires explicit configuration change; out of scope for initial release. Planned for a later phase. |
 | Accounts, profiles, authentication, permissions | Single shared workspace is the MVP model. Not planned. |
 | Real-time collaboration | Multi-user concurrency is a significant engineering effort. Not planned. |
@@ -73,6 +72,11 @@ The following capabilities are **explicitly excluded** from the MVP. They may ap
 | Global JS plugins / marketplace | Per-page sandboxed JS is the MVP boundary; trusted-global customization and a marketplace are future, disabled-by-default capabilities (see [ADR-007](adr/ADR-007-sandboxed-custom-content.md)). |
 | Built-in AI chat (future, optional) | Receiving AI-generated content is in scope; a built-in chat is a future optional phase. Providers (a local model or an explicitly-selected cloud provider) are opt-in; RTWiki core has no AI dependency (see [ROADMAP.md](ROADMAP.md)). |
 | Cloud sync | Not planned. The workspace is a single portable local store. |
+
+> **Note (2026-09-24):** A native desktop wrapper was previously listed here as
+> deferred. The owner has since authorized it — see
+> [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md). The browser-first application
+> remains available as a secondary mode.
 
 ## Cross-References
 

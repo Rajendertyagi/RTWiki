@@ -222,6 +222,16 @@ export function listBacklinks(db: Database, targetId: string): BacklinkEntry[] {
   }))
 }
 
+/** Living pages this page links to (outgoing relationships). */
+export function listOutgoingLinks(db: Database, sourceId: string): BacklinkEntry[] {
+  const rows = repo.listOutgoingLinks(db, sourceId)
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    snippet: null
+  }))
+}
+
 export function listPages(
   db: Database,
   options: { search?: string; limit?: number; offset?: number } = {}

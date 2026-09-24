@@ -1,4 +1,4 @@
-import { APP_NAME, APP_VERSION, HEALTH_PATH } from '@rtwiki/shared/constants'
+import { APP_NAME, APP_VERSION, DEFAULT_PORT, HEALTH_PATH } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { NONCE, type SecureHeadersVariables, secureHeaders } from 'hono/secure-headers'
 import { checkIntegrity, getDb } from './database/index.js'
@@ -8,6 +8,7 @@ import { createClientErrorRoutes } from './routes/client-errors.js'
 import { createPageRoutes } from './routes/pages.js'
 import { createScheduleRoutes } from './routes/schedule.js'
 import { createSchedulePresetRoutes } from './routes/schedule-presets.js'
+import { createSettingsRoutes } from './routes/settings.js'
 import { createShutdownRoutes } from './routes/shutdown.js'
 import type { ShutdownCoordinator } from './shutdown-coordinator.js'
 import { serveStatic } from './static.js'
@@ -54,6 +55,14 @@ export interface AppDependencies {
   getDb: () => ReturnType<typeof getDb>
   logger: Logger
   frontendDistDir: string
+  /**
+   * Runtime data directory backing /api/settings (data/server.json,
+   * data/desktop.json). Empty in the default test instance, where mutations
+   * report unavailability instead of writing.
+   */
+  dataDir?: string
+  /** Currently bound listening port (for settings restart detection). */
+  getCurrentPort?: () => number
   /**
    * Persistence for opt-in client debug events (Debug Mode). Production
    * injects the rotating logs/rtwiki-debug.jsonl sink; tests may collect
@@ -118,6 +127,13 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
     '/api/shutdown',
     createShutdownRoutes({ coordinator: deps.coordinator, token: deps.token })
   )
+  app.route(
+    '/api/settings',
+    createSettingsRoutes({
+      dataDir: deps.dataDir ?? '',
+      getCurrentPort: deps.getCurrentPort ?? (() => DEFAULT_PORT)
+    })
+  )
   // Sanitized frontend-error reports. The shutdown token is scrubbed from any
   // accepted field before the report reaches the log file.
   app.route(
@@ -165,5 +181,7 @@ export const app = createApp({
   getDb: getDb,
   logger: createConsoleLogger(),
   frontendDistDir: '',
+  dataDir: '',
+  getCurrentPort: () => DEFAULT_PORT,
   debugEventSink: { append: () => {} }
 })

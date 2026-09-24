@@ -1,0 +1,103 @@
+name: Build Windows Desktop App
+
+# Desktop shell (Tauri 2 + WebView2) with the Bun server as a sidecar.
+# See ADR-011. Rust compiles only here — the development PC needs no
+# toolchain. Kept independent of every other workflow: no `needs:`, no
+# concurrency group, no auto-cancel of manual runs.
+#
+# NOTE: the first successful run resolves and pins exact Rust dependency
+# versions. Commit the generated src-tauri/Cargo.lock afterwards so later
+# builds are reproducible.
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# Least privilege: read the repo, build the desktop package, upload it.
+permissions:
+  contents: read
+
+jobs:
+  windows-desktop:
+    name: Build portable Windows desktop application
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.0"
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Build web
+        run: bun run build:web
+      - name: Build server (compile portable executable)
+        run: bun run build:server
+
+      # windows-latest images ship rustup with a stable toolchain; no
+      # third-party setup action is needed.
+      - name: Select Rust stable toolchain
+        shell: pwsh
+        run: |
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      # --bundles none: no installer is built; the raw shell binary from
+      # src-tauri/target/release is staged by package-desktop.ps1. End users
+      # need nothing installed (WebView2 ships with Windows 10 1803+).
+      - name: Build desktop shell (Tauri)
+        run: bun run build:desktop
+
+      # Stage the portable desktop package (RTWiki.exe + RTWikiServer.exe + web/).
+      - name: Package portable desktop build
+        shell: pwsh
+        run: >
+          ./scripts/ci/package-desktop.ps1
+          -ShellExe src-tauri/target/release/rtwiki.exe
+          -ServerExe build/server/RTWiki.exe
+          -WebDir build/web
+          -DestDir package/RTWiki-Desktop
+
+      # Launch the packaged desktop app and verify it end to end.
+      - name: Windows desktop smoke test
+        shell: pwsh
+        run: >
+          ./scripts/ci/windows-smoke-desktop.ps1
+          -PackageDir package/RTWiki-Desktop
+          -ShellExe src-tauri/target/release/rtwiki.exe
+          -ServerExe build/server/RTWiki.exe
+          -RunDir "${{ runner.temp }}/rtwiki-desktop-run"
+          -DiagDir "${{ runner.temp }}/rtwiki-desktop-diag"
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rtwiki-desktop-smoke-diagnostics
+          path: ${{ runner.temp }}/rtwiki-desktop-diag/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Report artifact hashes
+        if: success()
+        shell: pwsh
+        run: |
+          $shell = Get-Item "package/RTWiki-Desktop/RTWiki.exe"
+          $sidecar = Get-Item "package/RTWiki-Desktop/RTWikiServer.exe"
+          Write-Host "ARTIFACT_NAME=RTWiki-0.1.0-desktop-windows-x64"
+          Write-Host "SHELL_SIZE_BYTES=$($shell.Length)"
+          Write-Host "SHELL_SHA256=$((Get-FileHash $shell.FullName -Algorithm SHA256).Hash)"
+          Write-Host "SIDECAR_SIZE_BYTES=$($sidecar.Length)"
+          Write-Host "SIDECAR_SHA256=$((Get-FileHash $sidecar.FullName -Algorithm SHA256).Hash)"
+
+      - name: Upload portable desktop package artifact
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: RTWiki-0.1.0-desktop-windows-x64
+          path: package/RTWiki-Desktop/
+          if-no-files-found: error
+          retention-days: 7

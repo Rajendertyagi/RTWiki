@@ -253,6 +253,15 @@ export const UI_TEXT = {
   pageInfoType: 'Type',
   pageInfoCreated: 'Created',
   pageInfoUpdated: 'Modified',
+  // Status bar (Trilium-like metadata row)
+  statusWordChars: '{words} words · {chars} chars',
+  statusWordsLabel: 'Words',
+  statusCharsLabel: 'Characters',
+  statusModifiedLabel: 'Modified',
+  statusBacklinksLabel: 'Backlinks',
+  statusLinksLabel: 'Links',
+  statusNoteInfoLabel: 'Page info',
+  statusPathLabel: 'Path',
   // Visual knowledge blocks
   insertMenuLabel: 'Insert',
   formulaLabel: 'Formula',
@@ -415,7 +424,8 @@ export const UI_TEXT = {
   scheduleNotifyStart: 'At start',
   scheduleNotifyFiveMin: '5 minutes before',
   scheduleNotifyOffsets: 'Custom offsets (minutes)',
-  scheduleNotifyOffsetsHint: 'Comma-separated minutes from the start (e.g. -10, 15). Negative = before.',
+  scheduleNotifyOffsetsHint:
+    'Comma-separated minutes from the start (e.g. -10, 15). Negative = before.',
   scheduleNoLink: 'No linked page',
   scheduleTitleRequired: 'Title is required',
   scheduleWeekdaysRequired: 'Choose at least one weekday',
@@ -429,8 +439,7 @@ export const UI_TEXT = {
   scheduleCustom: 'Custom',
   scheduleApplyReplace: 'Replace',
   scheduleApplyAdd: 'Add',
-  scheduleNoPresets:
-    'No custom presets yet. Save the current timetable as a preset to reuse it.',
+  scheduleNoPresets: 'No custom presets yet. Save the current timetable as a preset to reuse it.',
   scheduleDeletePreset: 'Delete preset',
   // Scheduler settings (Slice 2)
   settingsScheduler: 'Scheduler',
@@ -446,6 +455,33 @@ export const UI_TEXT = {
   schedulerBrowserBlocked: 'Browser notifications blocked — enable them in your browser settings.',
   schedulerBrowserDefault: 'Browser notifications not yet allowed.',
   schedulerBrowserUnsupported: 'Browser notifications are not supported here.',
+  // Desktop app section (Tauri shell, ADR-011). Shown on all hosts; the
+  // autostart control reports unavailability outside the desktop app.
+  settingsDesktop: 'Desktop app',
+  desktopModeLabel: 'Running inside the RTWiki desktop app.',
+  desktopBrowserModeLabel: 'Running in a browser. Desktop-only options are unavailable.',
+  desktopAutostart: 'Start with Windows',
+  desktopAutostartHint: 'Launch RTWiki automatically when you sign in.',
+  desktopAutostartUnavailable: 'Available only in the desktop app.',
+  // Desktop server-port management. The port persists in data/server.json and
+  // takes effect after restart (desktop shell respawns; browser relaunches).
+  desktopPort: 'Server port',
+  desktopPortHint: 'Loopback port for the local server (1024–65535).',
+  desktopPortSave: 'Save port',
+  desktopPortInvalid: 'Enter a port between 1024 and 65535.',
+  desktopPortSaved: 'Port saved.',
+  desktopPortRestartNeeded: 'Restart RTWiki to use the new port.',
+  desktopRestartNow: 'Restart now',
+  desktopRestarting: 'Restarting… waiting for the server on port {port}.',
+  desktopRestartFailed: 'Restart timed out. Quit and relaunch RTWiki manually.',
+  desktopRestartBrowserHint: 'In a browser, relaunch RTWiki to apply the new port.',
+  // Desktop window close behavior (data/desktop.json; read by the shell).
+  desktopCloseBehavior: 'When closing the window',
+  desktopCloseAsk: 'Ask every time',
+  desktopCloseMinimize: 'Minimize to tray',
+  desktopCloseQuit: 'Quit the app',
+  desktopCloseHint: 'Quit is always available from the tray icon.',
+  desktopCloseUnavailable: 'Window close options apply to the desktop app only.',
   saveButton: 'Save'
 } as const
 

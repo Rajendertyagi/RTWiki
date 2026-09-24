@@ -13,18 +13,20 @@
   --rtwiki-tree-row-inner-height: 28px;
   --rtwiki-tree-subfile-row-height: 26px;
   --rtwiki-tree-indent-step: 16px;
-  /* Chevron: 22px click target, ~14px visible glyph, sits close to the icon. */
-  --rtwiki-tree-expander-size: 22px;
-  --rtwiki-tree-glyph-size: 14px;
+  /* Chevron: 14px click target, crisp SVG mask glyph, sits close to the icon. */
+  --rtwiki-tree-expander-size: 18px;
+  --rtwiki-tree-glyph-size: 12px;
   /* Icon slots. */
   --rtwiki-tree-icon-size: 16px;
   --rtwiki-tree-icon-outer-height: 22px;
   --rtwiki-tree-subfile-icon-size: 14px;
-  /* Horizontal rhythm: chevron -> icon 3px (close), icon -> title 6px. */
-  --rtwiki-tree-expander-icon-gap: 3px;
-  --rtwiki-tree-icon-title-gap: 6px;
-  /* Row outer padding. */
-  --rtwiki-tree-row-padding-left: 6px;
+  /* Horizontal rhythm: chevron -> icon 2px (tight), icon -> title 5px. */
+  --rtwiki-tree-expander-icon-gap: 2px;
+  --rtwiki-tree-icon-title-gap: 5px;
+  /* Row outer padding — zero so the root column starts at the indent step
+     (padding + expander + gap == --rtwiki-tree-indent-step), keeping the root
+     lead equal to the per-level indent instead of larger. */
+  --rtwiki-tree-row-padding-left: 0px;
   --rtwiki-tree-row-padding-right: 8px;
   /* Reserved trailing space so the hover action button never overlaps titles. */
   --rtwiki-tree-action-reserve: 24px;
@@ -57,8 +59,9 @@
   /* Compact divider between toolbar groups. */
   --rtwiki-chrome-divider: var(--mantine-color-default-border);
   /* Shared selected/active row fill — tree rows and the Home/root nav entry
-     read this so their selection colour is identical. */
-  --rtwiki-active-fill: color-mix(in srgb, var(--mantine-color-blue-filled) 16%, transparent);
+     read this so their selection colour is identical. Opaque enough to keep
+     light text legible on a dark theme (the 16% tint was too faint there). */
+  --rtwiki-active-fill: color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent);
   --rtwiki-active-accent: var(--mantine-color-blue-filled);
 }
 

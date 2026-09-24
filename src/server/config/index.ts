@@ -4,6 +4,7 @@ import {
   APP_VERSION,
   ATTACHMENTS_DIR,
   BACKUPS_DIR,
+  COMPILED_EXE_BASENAMES,
   DATABASE_FILENAME,
   DEFAULT_HOST,
   DEFAULT_PORT,
@@ -69,7 +70,8 @@ export interface RuntimePaths {
 /**
  * Resolves the executable directory for portable storage.
  *
- * In compiled mode (RTWiki.exe), derives all paths from the executable's directory.
+ * In compiled mode (RTWiki.exe or RTWikiServer.exe), derives all paths from
+ * the executable's directory.
  * In development mode (bun run), derives paths from the repository root so runtime
  * data lives in <repo>/data and <repo>/logs instead of inside the source tree.
  * Never derives from process.cwd().
@@ -101,15 +103,20 @@ export function resolveRuntimePaths(): RuntimePaths {
 /**
  * Returns the base directory and whether RTWiki is running as a compiled
  * executable.
- * - Compiled: directory containing RTWiki.exe (from process.execPath)
+ * - Compiled: directory containing the executable (from process.execPath).
+ *   Recognizes both the browser-first artifact (RTWiki.exe) and the desktop
+ *   sidecar (RTWikiServer.exe); see COMPILED_EXE_BASENAMES and ADR-011.
  * - Development: repository root (from import.meta)
  */
 function getRuntimeBase(): { baseDir: string; compiled: boolean } {
-  // Compiled executable: process.execPath points to RTWiki.exe
+  // Compiled executable: process.execPath points to the portable binary.
   if (typeof process !== 'undefined' && process.execPath) {
     const exePath = process.execPath
     const baseName = exePath.split(/[/\\]/).pop()
-    if (baseName === 'RTWiki.exe' || baseName === 'RTWiki') {
+    if (
+      baseName !== undefined &&
+      (COMPILED_EXE_BASENAMES as readonly string[]).includes(baseName)
+    ) {
       return { baseDir: dirname(exePath), compiled: true }
     }
   }

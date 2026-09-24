@@ -11,6 +11,8 @@ RTWiki follows a **simple modular monolith** pattern. There is a single applicat
 ```mermaid
 graph TD
     B[Browser] -->|REST API / JSON| H[Hono Backend]
+    DS[Desktop Shell<br/>Tauri + WebView2] -->|spawns + loads loopback URL| H
+    DS --> TR[Tray / Autostart / Window State]
     H --> HR[API Routes]
     H --> AS[Application Services]
     H --> SE[Search Engine]
@@ -27,6 +29,7 @@ graph TD
     BK --> FS
     DB --> FS
     style B fill:#e1f5fe
+    style DS fill:#e1f5fe
     style H fill:#fff3e0
     style DB fill:#e8f5e9
     style FS fill:#fce4ec
@@ -222,6 +225,19 @@ Heavy features are lazy-loaded to keep the initial bundle small:
 
 Frontend assets (the built `dist/` folder from Vite) are bundled alongside the backend executable in the final Windows artifact. The user downloads and extracts a single `.zip` and runs the `.exe`. Mutable data (`data/`, `logs/`) lives inside the extracted folder beside the executable. The `data/` and `logs/` directories are absent from the fresh ZIP and are created automatically on first launch. See [ADR-005](adr/ADR-005-portable-data-layout.md) for the data layout decision.
 
+### 6.1 Desktop Shell Package (ADR-011)
+
+The desktop distribution adds a thin Tauri shell (`RTWiki.exe`, Rust +
+WebView2) that spawns the Bun server as a sidecar (`RTWikiServer.exe`) and
+loads the same loopback URL a browser would. The shell owns only native
+concerns — window, tray icon, autostart registration, portable window geometry
+(`data/window-state.json`), sidecar lifecycle, and startup error dialogs. All
+application logic stays in the Hono backend; the frontend reaches native
+features through a single guarded bridge module with browser fallbacks, so no
+native feature is ever required for the app to function. Browser mode remains
+available via the tray menu and `RTWiki.exe --browser`. See
+[ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
+
 ## 7. Cross-References
 
 - [ADR-001](adr/ADR-001-browser-first-local-application.md) — browser-first architecture decision
@@ -232,6 +248,7 @@ Frontend assets (the built `dist/` folder from Vite) are bundled alongside the b
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
 - [ADR-008](adr/ADR-008-page-hierarchy-and-workspace-tree.md) — page hierarchy and the workspace tree
+- [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md) — desktop shell and sidecar process model
 - [DATA_MODEL.md](DATA_MODEL.md) — detailed entity and relationship specification
 - [SECURITY.md](SECURITY.md) — security requirements for each layer
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding rules that govern implementation

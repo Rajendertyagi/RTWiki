@@ -165,6 +165,26 @@ These criteria validate the rich-content model (native blocks, `rt-*` HTML, and 
 | AC-085 | Schema migrations run on startup without data loss. | Pages authored under an older `content_schema_version` migrate automatically and render correctly. |
 | AC-086 | The RTWiki core app has no AI or network dependency at runtime. | All core features work with no external AI service or network; AI-generated content arrives only via local files or the localhost API. A future optional AI chat may add a provider adapter (local model or explicitly-selected cloud provider, opt-in); the core app still works without it. |
 
+## 16. Desktop Shell (Tauri)
+
+These criteria validate the desktop distribution: a Tauri shell hosting the web
+UI in WebView2 with the Bun server as a sidecar, while browser mode remains
+available. See [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
+
+| ID | Criterion | Pass Condition |
+|----|----------|---------------|
+| AC-087 | The desktop app opens a native window showing the workspace. | Launching `RTWiki.exe` opens a native window that loads the loopback server and displays the Home state; no browser is required. |
+| AC-088 | The tray icon hosts Open, Open in Browser, Start with Windows, and Quit. | Right-clicking the tray icon shows all four actions; Open focuses the window and Quit terminates both shell and server. |
+| AC-089 | Closing the window minimizes to the tray instead of quitting. | Clicking the window close button hides the window; the tray icon remains and the server keeps running. |
+| AC-090 | A second launch focuses the existing window. | Starting `RTWiki.exe` while an instance runs brings the existing window forward; no second server starts. |
+| AC-091 | Autostart is opt-in and effective after login. | Enabling Start with Windows (Settings or tray) registers launch-at-login; after reboot and login the app is running without manual start. |
+| AC-092 | Window geometry persists across restarts in the portable folder. | Resizing/moving the window, quitting, and relaunching restores the geometry from `data/window-state.json`; no state is written outside the application folder. |
+| AC-093 | Scheduler notifications surface as OS toasts from the desktop app. | A due study reminder shows a native OS notification while the window is minimized to the tray. |
+| AC-094 | Browser mode still works from the desktop package. | Tray "Open in Browser" and `RTWiki.exe --browser` open the default browser at the running server with full functionality. |
+| AC-095 | A saved port applies after relaunch. | Saving a valid port persists `data/server.json`; after relaunch the server listens on the new port. Invalid ports are rejected with a clear error. |
+| AC-096 | The desktop Restart button respawns the server on the new port. | After saving a port, Restart now shuts the server down, the shell respawns the sidecar, and the window reloads on the new URL. |
+| AC-097 | Window close follows the configured behavior. | `ask` shows a dialog, `minimize` hides to the tray, `quit` exits; a Settings change applies to the next close without restart. |
+
 ## Cross-References
 
 - [MVP_SCOPE.md](MVP_SCOPE.md) — what features these criteria cover

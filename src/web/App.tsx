@@ -9,6 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { pageTypeLabel } from './components/page-type-badge.js'
 import { UI_TEXT } from './config/index.js'
 import { debugLog } from './diagnostics/debug-log.js'
+import { Calendar } from './features/calendar/calendar.js'
+import { ScheduleNotifierHost } from './features/calendar/schedule-notifications.js'
 import { Dashboard } from './features/dashboard/dashboard.js'
 import { QuickFinder } from './features/finder/quick-finder.js'
 import type { EditorStatus } from './features/html-editor/use-codemirror.js'
@@ -19,9 +21,7 @@ import {
   buildTemplateContent,
   type RichTemplateKey
 } from './features/rich-editor/rich-templates.js'
-import { Calendar } from './features/calendar/calendar.js'
 import { SettingsWorkspace } from './features/settings/settings-workspace.js'
-import { ScheduleNotifierHost } from './features/calendar/schedule-notifications.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
@@ -199,18 +199,21 @@ export function App(): JSX.Element {
   }, [controller.selectedPage])
 
   // Display-only parent chain for the open page (Workspace Hierarchy).
-  const breadcrumb = useMemo(() => {
+  // Kept as {id,title} pairs so the status-bar breadcrumb can navigate;
+  // PageWorkspace takes the plain title list derived below.
+  const breadcrumbTrail = useMemo(() => {
     const byId = new Map(controller.pages.map((p) => [p.id, p]))
-    const chain: string[] = []
+    const chain: Array<{ id: string; title: string }> = []
     let cursor = controller.selectedPage?.parentId ?? null
     while (cursor !== null) {
       const parent = byId.get(cursor)
       if (!parent) break
-      chain.unshift(parent.title || UI_TEXT.untitledPage)
+      chain.unshift({ id: parent.id, title: parent.title || UI_TEXT.untitledPage })
       cursor = parent.parentId ?? null
     }
     return chain
   }, [controller.pages, controller.selectedPage])
+  const breadcrumb = breadcrumbTrail.map((b) => b.title)
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [newDialogType, setNewDialogType] = useState<PageType>('rich')
   // Settings workspace view (replaces the page/dashboard in the main area).
@@ -628,11 +631,10 @@ export function App(): JSX.Element {
   const globalStatusBar = controller.selectedPage ? (
     <StatusBar
       pageTypeLabel={pageTypeLabel(controller.selectedPage.pageType)}
-      pagePath={
-        breadcrumb.length > 0
-          ? [...breadcrumb, controller.selectedPage.title || UI_TEXT.untitledPage].join(' / ')
-          : (controller.selectedPage.title || UI_TEXT.untitledPage)
-      }
+      page={controller.selectedPage}
+      breadcrumb={breadcrumbTrail}
+      onHome={() => void handleSelectPage(null)}
+      onOpenPage={(id) => void handleSelectPage(id)}
       saveState={pageSaveState}
       saveError={pageSaveState === 'error' ? pageSaveError : null}
       onRetry={() => void flushQuietly()}

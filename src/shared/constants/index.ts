@@ -9,6 +9,10 @@ export const LOGS_DIR = 'logs' as const
 export const LOG_FILENAME = 'rtwiki.log' as const
 export const DEFAULT_HOST = '127.0.0.1' as const
 export const DEFAULT_PORT = 8080 as const
+// User-configurable ports must stay in the unprivileged range. Port 0 is
+// reserved for test auto-assignment and is never accepted from settings.
+export const MIN_USER_PORT = 1024 as const
+export const MAX_USER_PORT = 65535 as const
 export const MAX_REQUEST_SIZE = 100 * 1024 * 1024
 // Ceiling for page create/update JSON bodies: accommodates the worst-case
 // JSON encoding overhead of a fully populated canonical HTML-page content
@@ -101,3 +105,27 @@ export const SCHEDULE_DAY_END = '22:00:00' as const
 export const SCHEDULE_FIRST_DAY_OF_WEEK = 1 as const
 // Color used for one-off reminders in the calendar grid (distinct from periods).
 export const SCHEDULE_REMINDER_COLOR = 'orange' as const
+
+// Basenames that identify a compiled portable executable (browser-first
+// artifact and desktop sidecar). Single source of truth for compiled-mode
+// detection in server config (ADR-005, ADR-011); never repeat these literals.
+export const COMPILED_EXE_BASENAMES = [
+  'RTWiki.exe',
+  'RTWiki',
+  'RTWikiServer.exe',
+  'RTWikiServer'
+] as const
+
+// Server-managed settings files inside data/ (portable, beside the database).
+// The server owns reads/writes; the desktop shell reads them at boot.
+export const SERVER_SETTINGS_FILENAME = 'server.json' as const
+export const DESKTOP_SETTINGS_FILENAME = 'desktop.json' as const
+// Flag file the frontend writes (via the server) to request a sidecar
+// restart; the desktop shell consumes and deletes it. Never user-edited.
+export const RESTART_REQUEST_FILENAME = 'restart-requested' as const
+
+// Window close behaviors for the desktop shell (ADR-011). Single source of
+// truth shared by the server validator, the Settings UI, and documentation.
+export const CLOSE_BEHAVIORS = ['ask', 'minimize', 'quit'] as const
+
+export type CloseBehavior = (typeof CLOSE_BEHAVIORS)[number]

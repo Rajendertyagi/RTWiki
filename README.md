@@ -75,13 +75,14 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and the ADRs for details.
 ### Architecture Decision Records
 
 - [ADR Index](docs/adr/README.md)
-- [ADR-001: Browser-first Local Application](docs/adr/ADR-001-browser-first-local-application.md) — **Accepted**
+- [ADR-001: Browser-first Local Application](docs/adr/ADR-001-browser-first-local-application.md) — **Accepted** (native-wrapper rejection superseded by ADR-011)
 - [ADR-002: Bun, Hono, and SQLite](docs/adr/ADR-002-bun-hono-sqlite.md) — **Accepted**
 - [ADR-003: React, BlockNote, and Mantine](docs/adr/ADR-003-react-blocknote-mantine.md) — **Accepted**
 - [ADR-004: Canonical BlockNote JSON Format](docs/adr/ADR-004-canonical-block-json-format.md) — **Accepted**
 - [ADR-005: Portable Data Layout Beside the Executable](docs/adr/ADR-005-portable-data-layout.md) — **Accepted**
 - [ADR-006: Rich-Content Model and Note-Package Import Contract](docs/adr/ADR-006-rich-content-and-import-contract.md) — **Accepted**
 - [ADR-007: Sandboxed Custom HTML/CSS/JS](docs/adr/ADR-007-sandboxed-custom-content.md) — **Accepted**
+- [ADR-011: Tauri Desktop Wrapper](docs/adr/ADR-011-tauri-desktop-wrapper.md) — **Accepted**
 
 ## Documentation Verification
 

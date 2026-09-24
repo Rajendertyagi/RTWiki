@@ -47,6 +47,13 @@ data/
 *.nupkg
 release/
 
+# Tauri shell build outputs (Rust target dir, codegen, sidecar staging).
+# Icons, config, and Rust sources are committed; Cargo.lock is committed after
+# the first CI build pins the exact dependency versions.
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/
+
 # Windows-generated files
 Thumbs.db
 desktop.ini

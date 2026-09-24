@@ -459,3 +459,21 @@ export function listBacklinks(
     )
     .all(targetId) as Array<{ id: string; title: string; updatedAt: string }>
 }
+
+/**
+ * Living pages that this page links to (outgoing relationships from the
+ * maintained page_links index). Mirrors listBacklinks but reads the source side.
+ */
+export function listOutgoingLinks(
+  db: Database,
+  sourceId: string
+): Array<{ id: string; title: string; updatedAt: string }> {
+  return db
+    .query(
+      `SELECT p.id, p.title, p.updated_at FROM page_links pl
+       INNER JOIN pages p ON p.id = pl.target_id
+       WHERE pl.source_id = ? AND p.deleted_at IS NULL
+       ORDER BY p.updated_at DESC`
+    )
+    .all(sourceId) as Array<{ id: string; title: string; updatedAt: string }>
+}

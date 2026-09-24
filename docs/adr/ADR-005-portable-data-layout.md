@@ -39,6 +39,34 @@ RTWiki/
     └── rtwiki.log
 ```
 
+### Desktop-Artifact Layout (ADR-011)
+
+The Tauri desktop package keeps the same portable principle with two
+executables side by side. Both resolve `data/` and `logs/` from their own
+executable directory, so they share one workspace:
+
+```text
+RTWiki/
+├── RTWiki.exe            (Tauri shell — what the user runs)
+├── RTWikiServer.exe      (Bun server sidecar)
+├── web/
+│   ├── index.html
+│   └── assets/
+├── data/
+│   ├── rtwiki.sqlite
+│   ├── rtwiki.sqlite-wal
+│   ├── rtwiki.sqlite-shm
+│   ├── attachments/
+│   ├── backups/
+│   └── window-state.json (desktop window geometry; UI-only state, excluded from backups)
+└── logs/
+    └── rtwiki.log
+```
+
+`window-state.json` holds only window geometry (integers and a boolean), never
+user content. No system directory (`%APPDATA%`, registry files) is written for
+workspace state.
+
 ### How Paths Are Determined
 
 At startup, the application resolves the absolute path of its own executable and derives every data path from it:

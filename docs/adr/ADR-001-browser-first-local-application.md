@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | **Accepted** |
+| **Status** | **Accepted** (the native-wrapper rejection is superseded by ADR-011; browser-first remains as a secondary mode) |
 | **Date** | 2026-08-19 |
 | **Deciders** | Project Owner, Lead Developer |
-| **Superseded by** | — |
+| **Superseded by** | [ADR-011](ADR-011-tauri-desktop-wrapper.md) — native-wrapper rejection only |
 
 ## Context
 
@@ -65,3 +65,9 @@ This decision should be revisited if:
 - The user base demands a native desktop experience (system tray icon, native menus, file associations).
 - Performance profiling shows that a native wrapper provides a materially better experience.
 - Browser-based limitations prevent a required feature from being implemented.
+
+**Update (2026-09-24):** The first revisit condition was met. The owner
+authorized a native desktop experience, and [ADR-011](ADR-011-tauri-desktop-wrapper.md)
+introduces a Tauri desktop shell as the default distribution while keeping the
+browser-first application as a secondary mode. The browser-first architecture,
+loopback server, and single-origin model described here remain in force.

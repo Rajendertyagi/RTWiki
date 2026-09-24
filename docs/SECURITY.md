@@ -231,6 +231,34 @@ twiki.3.log`, 1 MB threshold, oldest deleted first).
   cookies, authorization headers.
 - Normal successful HTTP and static-asset requests are not logged.
 
+## 10A. Desktop Shell Trust Boundary (ADR-011)
+
+The Tauri shell extends the trust boundary with native OS capabilities. These
+rules keep the web content untrusted even inside the native window:
+
+- The webview loads **only** the loopback origin (`http://127.0.0.1:<port>/`).
+  A Rust-side navigation handler refuses navigation to any other URL, so web
+  content can never steer the window to an attacker-controlled origin.
+- Tauri capabilities granted to the frontend are least-privilege: `core:default`
+  plus autostart query/enable/disable and notification permission/send only. No
+  filesystem, shell-execute, dialog, or arbitrary window-management permissions
+  are exposed to web content.
+- The sidecar is spawned from Rust with an explicit executable path and an
+  argument array (`RTWikiServer.exe --no-open --port <port>`) — never through a
+  shell string — so no injection is possible through the launch path.
+- The graceful-shutdown token is generated per launch, passed to the sidecar
+  over a local channel (environment), and never logged (see §10).
+- `data/window-state.json` contains only window geometry (integers and a
+  boolean) and is excluded from backups.
+- Autostart registers the current executable path. Moving the application
+  folder after enabling autostart leaves a stale entry until the toggle is
+  reset; the Settings/tray toggle rewrites the entry on change.
+- The strict Content-Security-Policy (§5) applies unchanged in the desktop
+  window. If the Tauri IPC bootstrap ever proves incompatible with it, a
+  desktop-scoped CSP accommodation requires a dedicated security review
+  (ADR-011 revisit condition) — it must never be weakened silently. The
+  frontend bridge degrades to browser APIs in the meantime.
+
 ## 11. Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — where sanitization and validation happen in each layer
@@ -240,3 +268,4 @@ twiki.3.log`, 1 MB threshold, oldest deleted first).
 - [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
+- [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md) — desktop shell trust boundary

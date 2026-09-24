@@ -4,14 +4,15 @@
   justify-content: space-between;
   gap: var(--mantine-spacing-md);
   flex-shrink: 0;
-  height: var(--rtwiki-statusbar-height);
-  padding: 0 var(--rtwiki-chrome-pad-x);
+  min-height: var(--rtwiki-statusbar-height);
+  padding: 0 0.25em;
   border-top: 1px solid var(--rtwiki-chrome-border);
   background: var(--rtwiki-chrome-bg);
   /* One compact line; scroll horizontally on narrow widths instead of wrapping. */
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
+  font-size: 0.85em;
 }
 
 .left {
@@ -22,6 +23,14 @@
   min-width: 0;
 }
 
+/* Trilium's right-side actions row: a tight cluster of transparent icon+text
+   buttons that highlight on hover/focus, exactly like Trilium's .actions-row. */
+.actions {
+  flex-shrink: 0;
+  padding: 0.1em;
+  gap: 0.1em;
+}
+
 .right {
   flex-shrink: 0;
 }
@@ -30,20 +39,139 @@
   flex-shrink: 0;
 }
 
-.pagePath {
+/* Trilium-style clickable breadcrumb: home icon + ancestor links + current
+   title, separated by chevrons. Anchored in the left region like Trilium's. */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.homeButton {
+  flex-shrink: 0;
+}
+
+.crumb {
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-left: var(--mantine-spacing-md);
-  border-left: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  white-space: nowrap;
+  padding: 1px 4px;
+  border-radius: var(--mantine-radius-sm);
+  color: var(--mantine-color-dimmed);
+  font-size: 0.85em;
+}
+
+.crumb:hover {
+  background: var(--mantine-color-default-hover);
+  color: var(--mantine-color-text);
+  text-decoration: underline;
+}
+
+.crumbCurrent {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mantine-color-text);
+  font-size: 0.85em;
+}
+
+.crumbSep {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+  opacity: 0.6;
+}
+
+/* Non-interactive metadata text (word count, modified time). */
+.field {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+}
+
+/* Trilium-style action button: transparent until hovered/focused, icon + text. */
+.actionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 0.4em;
+  border: 0;
+  border-radius: var(--mantine-radius-sm);
+  color: var(--mantine-color-dimmed);
+  background: transparent;
+}
+
+.actionButton:hover,
+.actionButton:focus-visible {
+  background: var(--mantine-color-default-hover);
+  color: var(--mantine-color-text);
+}
+
+.actionText {
+  white-space: nowrap;
+  font-size: 0.95em;
 }
 
 .saveState {
   flex-shrink: 0;
 }
 
-.field {
+/* Backlinks dropdown content. */
+.backlinksDropdown {
+  min-width: 240px;
+  max-width: 360px;
+}
+
+.dropdownHeader {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.backlinksList {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.backlinkItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 6px;
+  border-radius: var(--mantine-radius-sm);
+  color: var(--mantine-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backlinkItem:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+/* Note-info detail popover. */
+.infoDropdown {
+  min-width: 260px;
+}
+
+.infoRow {
+  width: 100%;
+}
+
+.infoLabel {
   flex-shrink: 0;
-  color: var(--mantine-color-dimmed);
+}
+
+.infoValue {
+  flex-shrink: 1;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

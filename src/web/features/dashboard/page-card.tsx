@@ -6,6 +6,7 @@ import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
 import { pagePreviewText } from '../../util/page-preview-text.js'
+import { formatDate } from '../../util/format-date.js'
 import classes from './page-card.module.css'
 
 interface PageCardProps {
@@ -13,14 +14,6 @@ interface PageCardProps {
   onOpen: (id: string) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
-}
-
-function formatDate(value: string): string {
-  try {
-    return new Date(value).toLocaleDateString()
-  } catch {
-    return value
-  }
 }
 
 /**

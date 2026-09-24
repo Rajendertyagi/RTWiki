@@ -20,6 +20,7 @@ import { type Launcher, launchBrowser } from './launcher.js'
 import { createLogger, type Logger } from './logging/index.js'
 import { RotatingJsonlSink } from './logging/rotating-sink.js'
 import { sanitizePathForLog } from './logging/sanitize-path.js'
+import { readServerPort } from './settings/index.js'
 import { ShutdownCoordinator } from './shutdown-coordinator.js'
 
 export interface BootstrapOptions {
@@ -115,11 +116,15 @@ async function probeExistingInstance(
  *     stack is still executing.
  */
 export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime> {
-  const port = options.port ?? 8080
   const paths = resolveRuntimePaths()
 
   // Effective data directory (tests may inject a temporary location).
   const dataDir = options.dataDir ?? paths.dataDir
+
+  // Listening port priority: explicit option (CLI --port, tests) beats the
+  // persisted data/server.json value, which beats the compiled default.
+  const port = options.port ?? readServerPort(dataDir)
+  let boundPort = port
   const attachmentsDir = joinPaths(dataDir, 'attachments')
   const backupsDir = joinPaths(dataDir, 'backups')
 
@@ -248,6 +253,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     getDb: () => db,
     logger,
     frontendDistDir: paths.frontendDistDir,
+    dataDir,
+    getCurrentPort: () => boundPort,
     debugEventSink
   })
 
@@ -257,6 +264,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     port,
     hostname: '127.0.0.1'
   })
+  boundPort = server.port ?? port
 
   // 4. Synchronously attach the real server handle.
   //    No request can arrive between Bun.serve() resolving and this assignment
