@@ -91,8 +91,9 @@ fn quit_app(app: &AppHandle) {
 /// then exit. Runs the dialog on the main thread; never returns.
 fn fatal(app: &AppHandle, message: String) -> ! {
   let handle = app.clone();
+  let dialog_handle = handle.clone();
   let _ = handle.run_on_main_thread(move || {
-    handle
+    dialog_handle
       .dialog()
       .message(message)
       .title("RTWiki")
@@ -376,13 +377,16 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
     std::thread::spawn(move || watch_sidecar(handle));
   }
 
+  // `app` is borrowed by the `ShellState` guards above, so the main-thread
+  // closure takes its own clone rather than moving the original handle.
+  let ui_app = app.clone();
   let _ = app.run_on_main_thread(move || {
     if browser_mode {
-      sidecar::open_in_browser(shell_port(&app));
+      sidecar::open_in_browser(shell_port(&ui_app));
       return;
     }
-    if let Some(window) = app.get_webview_window("main") {
-      if let Some(state) = app.try_state::<ShellState>() {
+    if let Some(window) = ui_app.get_webview_window("main") {
+      if let Some(state) = ui_app.try_state::<ShellState>() {
         if let Some(saved) = geom::load(&state.exe_dir) {
           geom::apply(&window, &saved);
         }
@@ -473,6 +477,13 @@ fn main() {
         .inner_size(1280.0, 860.0)
         .min_inner_size(800.0, 600.0)
         .visible(false)
+        // The webview may only show the loopback app origin; any other
+        // navigation is cancelled so web content cannot steer the window.
+        .on_navigation(|url| {
+          let scheme_ok = url.scheme() == "http";
+          let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
+          scheme_ok && host_ok
+        })
         .build()?;
         let handle = app.handle().clone();
         window.on_window_event(move |event| {
@@ -482,12 +493,6 @@ fn main() {
               on_close_requested(&handle, &w);
             }
           }
-        });
-        // The webview may only show the loopback app origin.
-        window.on_navigation(|url| {
-          let scheme_ok = url.scheme() == "http";
-          let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
-          scheme_ok && host_ok
         });
       }
 
