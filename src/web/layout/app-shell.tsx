@@ -1,8 +1,14 @@
 import { AppShell, Box, Burger } from '@mantine/core'
-import { type ReactNode, useState } from 'react'
+import { type ReactElement, type ReactNode, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../config/index.js'
+import { isNativeMode } from '../services/native-bridge.js'
 import classes from './app-shell.module.css'
 import { PaneDivider } from './pane-divider.js'
+
+// Optimization: Evaluate static environment check once at module level
+// to prevent re-evaluation on every render.
+const isNative = isNativeMode()
+const desktopPadding = isNative ? `${LAYOUT.tabStripAreaHeight}px 0 0` : 0
 
 interface AppShellLayoutProps {
   utilityRail: React.ReactNode
@@ -43,7 +49,7 @@ export function AppShellLayout({
   onTreeWidthCommit,
   statusBar,
   children
-}: AppShellLayoutProps): JSX.Element {
+}: AppShellLayoutProps): ReactElement {
   const [mobileNavOpened, setMobileNavOpened] = useState(false)
 
   return (
@@ -57,9 +63,9 @@ export function AppShellLayout({
       }}
       // Global status bar pinned to the viewport bottom, always visible.
       footer={{ height: LAYOUT.statusBarHeight }}
-      // No shell padding: the tab strip must sit flush at the viewport top;
-      // inner regions manage their own spacing.
-      padding={0}
+      // Reserve space for desktop window chrome (title bar + tab strip).
+      // Collapses to 0 in browser mode so there is no visual change there.
+      padding={desktopPadding}
     >
       <AppShell.Navbar p={0}>
         <div className={classes.navbarInner}>

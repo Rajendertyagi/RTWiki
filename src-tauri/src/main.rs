@@ -17,6 +17,12 @@
 //! ```
 //! Closing the window follows data/desktop.json (ask / minimize / quit).
 //! `RTWiki.exe --browser` keeps browser mode: no window, tray stays resident.
+//!
+//! Custom window chrome: on Windows the native title bar is removed
+//! (`decorations(false)`); the frontend renders its own title bar + tab strip
+//! via `<WindowChrome>` in `src/web/components/window-chrome.tsx`. Close
+//! behaviour is read fresh from Rust on every click via the
+//! `get_close_behavior` invoke command so Settings changes apply without restart.
 
 mod geom;
 mod sidecar;
@@ -24,19 +30,19 @@ mod sidecar;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use std::process::Child;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Manager, WebviewWindow};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-/// Shared shell state. The sidecar child (when owned by this process) lives
-/// here so the Quit path and the watch thread can manage it.
+/// Shared shell state stored in Tauri's managed state.
 struct ShellState {
   exe_dir: PathBuf,
   port: Mutex<u16>,
   own_sidecar: Mutex<bool>,
-  child: Mutex<Option<std::process::Child>>,
+  child: Mutex<Option<Child>>,
   quitting: Mutex<bool>,
 }
 
@@ -64,31 +70,88 @@ fn save_geometry(app: &AppHandle) {
   }
 }
 
+/// Safely take the child process out of state (if any) and return it.
+/// This recovers from poisoned locks by taking the inner value.
+fn take_child_from_state(state: &ShellState) -> Option<Child> {
+  match state.child.lock() {
+    Ok(mut guard) => guard.take(),
+    Err(poisoned) => {
+      let mut guard = poisoned.into_inner();
+      guard.take()
+    }
+  }
+}
+
+/// Safely set the quitting flag to true.
+fn set_quitting(state: &ShellState) {
+  match state.quitting.lock() {
+    Ok(mut guard) => *guard = true,
+    Err(mut poisoned) => {
+      let guard = poisoned.get_mut();
+      *guard = true;
+    }
+  }
+}
+
+/// Emit an event to the frontend and log the message.
+/// Frontend should listen for `sidecar:error` to show actionable UI.
+fn report_error(app: &AppHandle, message: &str) {
+  log::error!("{}", message);
+  let _ = app.emit_all("sidecar:error", message.to_string());
+}
+
+/// Attempt to gracefully shutdown a child process; return Result to caller.
+/// Wraps sidecar::shutdown_sidecar (sync) and falls back to kill on failure.
+fn try_shutdown_child(child: &mut Child, port: u16, exe_dir: &PathBuf) -> Result<(), String> {
+  match sidecar::shutdown_sidecar(child, port, exe_dir) {
+    true => Ok(()),
+    false => {
+      let _ = child.kill();
+      Err("Failed to gracefully shutdown sidecar; killed child.".to_string())
+    }
+  }
+}
+
 fn quit_app(app: &AppHandle) {
+  // Mark quitting
   if let Some(state) = app.try_state::<ShellState>() {
-    if let Ok(mut quitting) = state.quitting.lock() {
-      *quitting = true;
-    }
+    set_quitting(state);
   }
+
   save_geometry(app);
-  let port = shell_port(app);
-  let own = app
-    .try_state::<ShellState>()
-    .and_then(|s| s.own_sidecar.lock().ok().map(|guard| *guard))
-    .unwrap_or(false);
+
+  // Determine port and whether we own the sidecar, and exe_dir for shutdown.
+  let (own, exe_dir, port) = match app.try_state::<ShellState>() {
+    Some(state) => {
+      let own = match state.own_sidecar.lock() {
+        Ok(g) => *g,
+        Err(poisoned) => *poisoned.get_mut(),
+      };
+      let port = match state.port.lock() {
+        Ok(g) => *g,
+        Err(poisoned) => *poisoned.get_mut(),
+      };
+      (own, state.exe_dir.clone(), port)
+    }
+    None => (false, PathBuf::new(), sidecar::DEFAULT_PORT),
+  };
+
   if own {
-    let child = app
-      .try_state::<ShellState>()
-      .and_then(|s| s.child.lock().ok().and_then(|mut guard| guard.take()));
-    if let Some(mut child) = child {
-      sidecar::shutdown_sidecar(&mut child, port, &exe_dir);
+    if let Some(state) = app.try_state::<ShellState>() {
+      let child = take_child_from_state(state);
+      if let Some(mut child) = child {
+        if let Err(e) = try_shutdown_child(&mut child, port, &exe_dir) {
+          report_error(app, &e);
+        }
+      }
     }
   }
+
   app.exit(0);
 }
 
-/// Fatal startup failure: native message dialog (Rust side, always available)
-/// then exit. Runs the dialog on the main thread; never returns.
+/// Show a blocking fatal dialog on the main thread and exit.
+/// Use sparingly; prefer `report_error` so the UI can present actions.
 fn fatal(app: &AppHandle, message: String) -> ! {
   let handle = app.clone();
   let dialog_handle = handle.clone();
@@ -101,7 +164,8 @@ fn fatal(app: &AppHandle, message: String) -> ! {
       .blocking_show();
     std::process::exit(1);
   });
-  std::thread::sleep(Duration::from_secs(10));
+  // Fallback exit if run_on_main_thread didn't exit for some reason.
+  std::thread::sleep(Duration::from_secs(2));
   std::process::exit(1);
 }
 
@@ -112,39 +176,18 @@ fn autostart_enabled(app: &AppHandle) -> bool {
 fn build_tray_menu(app: &AppHandle, autostart_on: bool) -> tauri::Result<Menu<tauri::Wry>> {
   let open = MenuItem::with_id(app, "open", "Open RTWiki", true, None::<&str>)?;
   let browser = MenuItem::with_id(app, "browser", "Open in Browser", true, None::<&str>)?;
-  let auto_label = if autostart_on {
-    "✓ Start with Windows"
-  } else {
-    "Start with Windows"
-  };
+  let auto_label = if autostart_on { "✓ Start with Windows" } else { "Start with Windows" };
   let auto = MenuItem::with_id(app, "autostart", auto_label, true, None::<&str>)?;
   let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-  Menu::with_items(
-    app,
-    &[
-      &open,
-      &browser,
-      &PredefinedMenuItem::separator(app)?,
-      &auto,
-      &PredefinedMenuItem::separator(app)?,
-      &quit,
-    ],
-  )
+  Menu::with_items(app, &[&open, &browser, &PredefinedMenuItem::separator(app)?, &auto, &PredefinedMenuItem::separator(app)?, &quit])
 }
 
 fn toggle_autostart(app: &AppHandle) {
   let launcher = app.autolaunch();
   let currently_on = launcher.is_enabled().unwrap_or(false);
-  let changed = if currently_on {
-    launcher.disable().is_ok()
-  } else {
-    launcher.enable().is_ok()
-  };
+  let changed = if currently_on { launcher.disable().is_ok() } else { launcher.enable().is_ok() };
   if changed {
-    if let (Some(tray), Ok(menu)) = (
-      app.tray_by_id("rtwiki-tray"),
-      build_tray_menu(app, !currently_on),
-    ) {
+    if let (Some(tray), Ok(menu)) = (app.tray_by_id("rtwiki-tray"), build_tray_menu(app, !currently_on)) {
       let _ = tray.set_menu(Some(menu));
     }
   }
@@ -156,19 +199,12 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
     "browser" => sidecar::open_in_browser(shell_port(app)),
     "autostart" => toggle_autostart(app),
     "quit" => quit_app(app),
-    _ => {}
+    _ => {},
   }
 }
 
-/// Handles a window close request per data/desktop.json (read fresh so
-/// Settings changes apply immediately): minimize hides to the tray, quit
-/// exits, ask shows a one-shot dialog (OK minimizes, dismiss keeps open;
-// quit stays on the tray menu).
 fn on_close_requested(app: &AppHandle, window: &WebviewWindow) -> bool {
-  let exe_dir = app
-    .try_state::<ShellState>()
-    .map(|s| s.exe_dir.clone())
-    .unwrap_or_default();
+  let exe_dir = app.try_state::<ShellState>().map(|s| s.exe_dir.clone()).unwrap_or_default();
   match sidecar::close_behavior(&exe_dir) {
     sidecar::CloseBehavior::Minimize => {
       geom::save_current(&exe_dir, window);
@@ -180,8 +216,7 @@ fn on_close_requested(app: &AppHandle, window: &WebviewWindow) -> bool {
       true
     }
     sidecar::CloseBehavior::Ask => {
-      let minimize = app
-        .dialog()
+      let minimize = app.dialog()
         .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
         .title("RTWiki")
         .blocking_show();
@@ -194,8 +229,8 @@ fn on_close_requested(app: &AppHandle, window: &WebviewWindow) -> bool {
   }
 }
 
-/// Stops the previous child (if any) and spawns the sidecar on the freshly
-/// configured port. Returns true when the new server answers /health.
+/// Respawn the sidecar: shutdown previous child if present, spawn a new one,
+/// update state and wait for health. Returns true on success.
 fn respawn_sidecar(app: &AppHandle) -> bool {
   let (exe_dir, old_port) = match app.try_state::<ShellState>() {
     Some(state) => (state.exe_dir.clone(), state.port.lock().ok().map(|g| *g)),
@@ -204,13 +239,10 @@ fn respawn_sidecar(app: &AppHandle) -> bool {
   let old_port = old_port.unwrap_or(sidecar::DEFAULT_PORT);
 
   if let Some(state) = app.try_state::<ShellState>() {
-    let previous = state
-      .child
-      .lock()
-      .ok()
-      .and_then(|mut guard| guard.take());
+    let previous = state.child.lock().ok().and_then(|mut guard| guard.take());
     if let Some(mut child) = previous {
-      sidecar::shutdown_sidecar(&mut child, old_port, &exe_dir);
+      // best-effort shutdown; ignore return value but log if needed
+      let _ = sidecar::shutdown_sidecar(&mut child, old_port, &exe_dir);
     }
   }
 
@@ -218,55 +250,32 @@ fn respawn_sidecar(app: &AppHandle) -> bool {
   match sidecar::spawn_sidecar(&exe_dir, port) {
     Ok(child) => {
       if let Some(state) = app.try_state::<ShellState>() {
-        if let Ok(mut guard) = state.child.lock() {
-          *guard = Some(child);
-        }
-        if let Ok(mut guard) = state.port.lock() {
-          *guard = port;
-        }
-        if let Ok(mut guard) = state.own_sidecar.lock() {
-          *guard = true;
-        }
+        if let Ok(mut guard) = state.child.lock() { *guard = Some(child); }
+        if let Ok(mut guard) = state.port.lock() { *guard = port; }
+        if let Ok(mut guard) = state.own_sidecar.lock() { *guard = true; }
       }
       sidecar::wait_for_healthy(port, sidecar::boot_timeout())
     }
-    Err(_) => false,
+    Err(err) => {
+      report_error(app, &format!("Failed to spawn sidecar: {err}"));
+      false
+    }
   }
 }
 
-/// Watch thread: consumes restart requests (Settings → restart handshake)
-/// and recovers from unexpected sidecar exits. Crash respawns are bounded
-/// (3 per minute) so a permanently broken server surfaces an error dialog
-/// instead of looping forever; explicit restart requests are always honored.
 fn watch_sidecar(app: AppHandle) {
   let mut crash_respawns: Vec<Instant> = Vec::new();
   loop {
     std::thread::sleep(Duration::from_secs(1));
-    let quitting = app
-      .try_state::<ShellState>()
-      .and_then(|s| s.quitting.lock().ok().map(|g| *g))
-      .unwrap_or(true);
-    if quitting {
-      break;
-    }
-    let exe_dir = match app.try_state::<ShellState>() {
-      Some(state) => state.exe_dir.clone(),
-      None => break,
-    };
+    let quitting = app.try_state::<ShellState>().and_then(|s| s.quitting.lock().ok().map(|g| *g)).unwrap_or(true);
+    if quitting { break; }
+    let exe_dir = match app.try_state::<ShellState>() { Some(state) => state.exe_dir.clone(), None => break };
     let requested = sidecar::consume_restart_request(&exe_dir);
-    let crashed = if requested {
-      false
-    } else {
+    let crashed = if requested { false } else {
       match app.try_state::<ShellState>() {
         Some(state) => match state.child.lock() {
           Ok(mut guard) => match guard.as_mut() {
-            Some(child) => match child.try_wait() {
-              Ok(Some(_)) => {
-                guard.take();
-                true
-              }
-              _ => false,
-            },
+            Some(child) => match child.try_wait() { Ok(Some(_)) => { guard.take(); true }, _ => false },
             None => false,
           },
           Err(_) => false,
@@ -274,122 +283,66 @@ fn watch_sidecar(app: AppHandle) {
         None => false,
       }
     };
-    if !requested && !crashed {
-      continue;
-    }
+    if !requested && !crashed { continue; }
     if crashed {
       crash_respawns.retain(|t| t.elapsed() < Duration::from_secs(60));
       if crash_respawns.len() >= 3 {
-        fatal(
-          &app,
-          "The RTWiki server keeps stopping unexpectedly.\n\nCheck logs/rtwiki.log for details, then relaunch RTWiki.".to_string(),
-        );
+        fatal(&app, "The RTWiki server keeps stopping unexpectedly.\n\nCheck logs/rtwiki.log for details, then relaunch RTWiki.".to_string());
       }
       crash_respawns.push(Instant::now());
     }
     if !respawn_sidecar(&app) {
-      fatal(
-        &app,
-        "The RTWiki server did not restart in time.\n\nCheck logs/rtwiki.log for details, then relaunch RTWiki.".to_string(),
-      );
+      fatal(&app, "The RTWiki server did not restart in time.\n\nCheck logs/rtwiki.log for details, then relaunch RTWiki.".to_string());
     }
   }
 }
 
-/// Boots (or attaches to) the server, then reveals the window on the main
-/// thread. Runs on a worker thread so slow boots never freeze the tray.
 fn boot_and_show(app: AppHandle, browser_mode: bool) {
   let (exe_dir, port) = match app.try_state::<ShellState>() {
-    Some(state) => (
-      state.exe_dir.clone(),
-      state.port.lock().ok().map(|g| *g).unwrap_or(sidecar::DEFAULT_PORT),
-    ),
+    Some(state) => (state.exe_dir.clone(), state.port.lock().ok().map(|g| *g).unwrap_or(sidecar::DEFAULT_PORT)),
     None => return,
   };
-
-  // Case 1: a server is already answering (browser-mode instance or another
-  // desktop instance). Attach without spawning a second one.
   let mut own_sidecar = false;
   if !sidecar::health_ok(port) {
     if !exe_dir.join(sidecar::SIDECAR_FILENAME).exists() {
-      fatal(
-        &app,
-        format!(
-          "{} was not found beside the application.\n\nRe-extract the full RTWiki package.",
-          sidecar::SIDECAR_FILENAME
-        ),
-      );
+      fatal(&app, format!("{} was not found beside the application.\n\nRe-extract the full RTWiki package.", sidecar::SIDECAR_FILENAME));
     }
     match sidecar::spawn_sidecar(&exe_dir, port) {
       Ok(child) => {
         if let Some(state) = app.try_state::<ShellState>() {
-          if let Ok(mut guard) = state.child.lock() {
-            *guard = Some(child);
-          }
+          if let Ok(mut guard) = state.child.lock() { *guard = Some(child); }
         }
         if !sidecar::wait_for_healthy(port, sidecar::boot_timeout()) {
-          // The child may have exited early because another instance owns
-          // the port; attach if the server answers anyway.
           if sidecar::health_ok(port) {
             if let Some(state) = app.try_state::<ShellState>() {
-              if let Ok(mut guard) = state.child.lock() {
-                guard.take();
-              }
+              if let Ok(mut guard) = state.child.lock() { guard.take(); }
             }
           } else {
             if let Some(state) = app.try_state::<ShellState>() {
               let child = state.child.lock().ok().and_then(|mut g| g.take());
-              if let Some(mut child) = child {
-                let _ = child.kill();
-              }
+              if let Some(mut child) = child { let _ = child.kill(); }
             }
-            fatal(
-              &app,
-              "The RTWiki server did not start in time.\n\nCheck logs/rtwiki.log for details, then try again.".to_string(),
-            );
+            fatal(&app, "The RTWiki server did not start in time.\n\nCheck logs/rtwiki.log for details, then try again.".to_string());
           }
-        } else {
-          own_sidecar = true;
-        }
+        } else { own_sidecar = true; }
       }
       Err(err) => {
-        // Spawn failed but a server answers: attach to the running instance.
-        if sidecar::health_ok(port) {
-          own_sidecar = false;
-        } else {
-          fatal(
-            &app,
-            format!("Could not start {0}: {err}\n\nRe-extract the full RTWiki package.", sidecar::SIDECAR_FILENAME),
-          );
-        }
+        if sidecar::health_ok(port) { own_sidecar = false; }
+        else { fatal(&app, format!("Could not start {0}: {err}\n\nRe-extract the full RTWiki package.", sidecar::SIDECAR_FILENAME)); }
       }
     }
   }
-
   if let Some(state) = app.try_state::<ShellState>() {
-    if let Ok(mut guard) = state.own_sidecar.lock() {
-      *guard = own_sidecar;
-    }
+    if let Ok(mut guard) = state.own_sidecar.lock() { *guard = own_sidecar; }
   }
   sidecar::clear_restart_request(&exe_dir);
-  if own_sidecar {
-    let handle = app.clone();
-    std::thread::spawn(move || watch_sidecar(handle));
-  }
-
-  // `app` is borrowed by the `ShellState` guards above, so the main-thread
-  // closure takes its own clone rather than moving the original handle.
+  if own_sidecar { let handle = app.clone(); std::thread::spawn(move || watch_sidecar(handle)); }
   let ui_app = app.clone();
   let _ = app.run_on_main_thread(move || {
-    if browser_mode {
-      sidecar::open_in_browser(shell_port(&ui_app));
-      return;
-    }
+    if browser_mode { sidecar::open_in_browser(shell_port(&ui_app)); return; }
     if let Some(window) = ui_app.get_webview_window("main") {
       if let Some(state) = ui_app.try_state::<ShellState>() {
-        if let Some(saved) = geom::load(&state.exe_dir) {
-          geom::apply(&window, &saved);
-        }
+        if let Some(saved) = geom::load(&state.exe_dir) { geom::apply(&window, &saved); }
       }
       let _ = window.show();
       let _ = window.set_focus();
@@ -397,15 +350,23 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
   });
 }
 
+/// Tauri invoke command: read current close behaviour from data/desktop.json.
+/// Called by the JS `<WindowChrome>` component on every close-button press so
+/// the behaviour always reflects the latest Settings selection without restart.
+#[tauri::command]
+fn get_close_behavior(exe_dir: PathBuf) -> String {
+  match sidecar::close_behavior(&exe_dir) {
+    sidecar::CloseBehavior::Minimize => "minimize".to_string(),
+    sidecar::CloseBehavior::Quit    => "quit".to_string(),
+    sidecar::CloseBehavior::Ask     => "ask".to_string(),
+  }
+}
+
 fn main() {
   tauri::Builder::default()
-    // Registered first: a second launch focuses the existing window instead
-    // of starting a second server.
     .plugin(tauri_plugin_single_instance::init(
       |app: &AppHandle, args: Vec<String>, _cwd: String| {
         if args.iter().any(|a| a == "--browser") {
-          // The running instance owns the configured port; read it from the
-          // shared settings file rather than this process's boot state.
           let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(PathBuf::from))
@@ -422,6 +383,11 @@ fn main() {
     .plugin(tauri_plugin_notification::init())
     .plugin(tauri_plugin_dialog::init())
     .on_menu_event(|app, event| on_menu(app, event))
+    // Register the close-behaviour command so the frontend chrome can read
+    // it fresh on every click (no restart needed).
+    .invoke_handler(tauri::generate_handler![
+      get_close_behavior,
+    ])
     .setup(|app| {
       let browser_mode = std::env::args().any(|a| a == "--browser");
       let exe_dir = std::env::current_exe()
@@ -468,7 +434,7 @@ fn main() {
         let url: tauri::Url = sidecar::base_url(port)
           .parse()
           .map_err(|e| format!("Invalid server URL: {e}"))?;
-        let window = tauri::WebviewWindowBuilder::new(
+        let builder = tauri::WebviewWindowBuilder::new(
           app,
           "main",
           tauri::WebviewUrl::External(url),
@@ -483,17 +449,12 @@ fn main() {
           let scheme_ok = url.scheme() == "http";
           let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
           scheme_ok && host_ok
-        })
-        .build()?;
-        let handle = app.handle().clone();
-        window.on_window_event(move |event| {
-          if let WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            if let Some(w) = handle.get_webview_window("main") {
-              on_close_requested(&handle, &w);
-            }
-          }
         });
+        // Strip the native title bar on Windows so the frontend renders its
+        // own chrome (custom tab strip + window controls in window-chrome.tsx).
+        #[cfg(target_os = "windows")]
+        let builder = builder.decorations(false);
+        let window = builder.build()?;
       }
 
       let handle = app.handle().clone();

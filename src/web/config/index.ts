@@ -7,7 +7,17 @@
  * scattered widths in CSS or TSX. Minimums also derive the temporary
  * narrow-window collapse threshold (no fixed breakpoint).
  */
+// Base primitives for derived composite heights
+const TITLE_BAR_HEIGHT = 28
+const TAB_STRIP_HEIGHT = 40
+
 export const LAYOUT = {
+  /** Height of the custom desktop title bar. */
+  titleBarHeight: TITLE_BAR_HEIGHT,
+  /** Height of the tab strip row. */
+  tabStripHeight: TAB_STRIP_HEIGHT,
+  /** Combined height of title bar + tab strip row in desktop shell. */
+  tabStripAreaHeight: TITLE_BAR_HEIGHT + TAB_STRIP_HEIGHT,
   /** Narrow launcher/action rail (outermost full-height column). */
   railWidth: 60,
   /** Mobile drawer width (base breakpoint); decoupled from the desktop tree pane. */

@@ -43,6 +43,7 @@ import {
 } from './features/workspace/workspace-session.js'
 import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
+import { WindowChrome } from './components/window-chrome.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
 import { downloadTextFile, sanitizeFileName } from './util/file-download.js'
@@ -731,7 +732,7 @@ export function App(): JSX.Element {
   )
 
   return (
-    <>
+    <WindowChrome>
       <AppShellLayout
         treeOpen={treeOpen}
         treeWidth={treeWidth}
@@ -944,6 +945,6 @@ export function App(): JSX.Element {
       <ShortcutHelpModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <ScheduleNotifierHost />
-    </>
+    </WindowChrome>
   )
 }
