@@ -210,6 +210,97 @@ export function softDeletePage(db: Database, id: string): boolean {
   return true
 }
 
+/**
+ * Lists all soft-deleted pages ordered by deleted_at descending.
+ */
+export function listTrashedPages(db: Database): { pages: Page[]; total: number } {
+  const pages = db
+    .query(
+      'SELECT id, title, content, page_type, parent_id, position, created_at, updated_at, deleted_at, version FROM pages WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC'
+    )
+    .all()
+    .map((r) => rowToPage(r as Record<string, unknown>))
+
+  return { pages, total: pages.length }
+}
+
+/**
+ * Restores a soft-deleted page by resetting deleted_at to NULL and re-indexing into FTS.
+ * If the original parent is soft-deleted or missing, the page is restored at root level (parent_id = null).
+ */
+export function restorePage(db: Database, id: string): Page | null {
+  const existing = db
+    .query(
+      'SELECT id, title, content, page_type, parent_id, position, created_at, updated_at, deleted_at, version FROM pages WHERE id = ?'
+    )
+    .get(id) as Record<string, unknown> | null
+
+  if (!existing || existing.deleted_at === null) return null
+
+  db.run('BEGIN IMMEDIATE')
+  try {
+    let targetParentId = existing.parent_id as string | null
+    if (targetParentId !== null) {
+      const parentRow = db
+        .query('SELECT deleted_at FROM pages WHERE id = ?')
+        .get(targetParentId) as { deleted_at: string | null } | null
+
+      if (!parentRow || parentRow.deleted_at !== null) {
+        targetParentId = null
+      }
+    }
+
+    // Determine position at target parent level
+    const maxPosRow = db
+      .query(
+        'SELECT MAX(position) as max_pos FROM pages WHERE parent_id IS ? AND deleted_at IS NULL'
+      )
+      .get(targetParentId) as { max_pos: number | null }
+    const nextPos = (maxPosRow.max_pos ?? -1) + 1
+
+    db.run(
+      'UPDATE pages SET deleted_at = NULL, parent_id = ?, position = ?, updated_at = ? WHERE id = ?',
+      [targetParentId, nextPos, new Date().toISOString(), id]
+    )
+
+    // Re-add to FTS search index
+    db.run('INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)', [
+      id,
+      String(existing.title ?? ''),
+      String(existing.content ?? '')
+    ])
+
+    db.run('COMMIT')
+  } catch (err) {
+    db.run('ROLLBACK')
+    throw err
+  }
+
+  return getPage(db, id)
+}
+
+/**
+ * Permanently deletes a soft-deleted page from the database.
+ */
+export function permanentlyDeletePage(db: Database, id: string): boolean {
+  const existing = db.query('SELECT deleted_at FROM pages WHERE id = ?').get(id) as {
+    deleted_at: string | null
+  } | null
+
+  if (!existing || existing.deleted_at === null) return false
+
+  db.run('BEGIN IMMEDIATE')
+  try {
+    db.run('DELETE FROM search_index WHERE page_id = ?', [id])
+    db.run('DELETE FROM pages WHERE id = ?', [id])
+    db.run('COMMIT')
+  } catch (err) {
+    db.run('ROLLBACK')
+    throw err
+  }
+  return true
+}
+
 export function listPages(
   db: Database,
   options: { search?: string; limit?: number; offset?: number } = {}

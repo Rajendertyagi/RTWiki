@@ -1,12 +1,14 @@
 import {
   ActionIcon,
   Stack,
+  Text,
   Tooltip,
   useComputedColorScheme,
   useMantineColorScheme
 } from '@mantine/core'
 import {
   IconCalendar,
+  IconHelp,
   IconHome,
   IconLayoutSidebar,
   IconMoon,
@@ -14,7 +16,9 @@ import {
   IconPower,
   IconSearch,
   IconSettings,
-  IconSun
+  IconStar,
+  IconSun,
+  IconTrash
 } from '@tabler/icons-react'
 import { UI_TEXT } from '../config/index.js'
 import classes from './utility-rail.module.css'
@@ -33,6 +37,12 @@ interface UtilityRailProps {
   onOpenCalendar?: () => void
   /** Reflects whether the Calendar view is currently open. */
   calendarOpen?: boolean
+  /** Opens the Trash workspace view. */
+  onOpenTrash?: () => void
+  /** Reflects whether the Trash view is currently open. */
+  trashOpen?: boolean
+  /** Opens the Keyboard Shortcuts help modal. */
+  onOpenShortcuts?: () => void
   /** Desktop-only tree-pane visibility, mirrored into the toggle state. */
   treeOpen?: boolean
   /** Desktop-only collapse/expand control for the page-tree pane. */
@@ -49,6 +59,9 @@ export function UtilityRail({
   settingsOpen,
   onOpenCalendar,
   calendarOpen,
+  onOpenTrash,
+  trashOpen,
+  onOpenShortcuts,
   treeOpen,
   onToggleTree
 }: UtilityRailProps): JSX.Element {
@@ -64,19 +77,29 @@ export function UtilityRail({
   return (
     <nav className={classes.rail} aria-label={UI_TEXT.appName}>
       <Stack gap="xs" align="center" className={classes.topGroup}>
-        <Tooltip label={UI_TEXT.utilityRailHome} position="right">
-          <ActionIcon
-            variant={activeHome ? 'filled' : 'subtle'}
-            color={activeHome ? 'blue' : 'gray'}
-            size="lg"
-            onClick={onHome}
-            aria-label={UI_TEXT.utilityRailHome}
-            aria-current={activeHome ? 'page' : undefined}
-            className={classes.action}
+        <Stack gap={2} align="center">
+          <Tooltip label={UI_TEXT.utilityRailHome} position="right">
+            <ActionIcon
+              variant={activeHome ? 'filled' : 'subtle'}
+              color={activeHome ? 'blue' : 'gray'}
+              size="lg"
+              onClick={onHome}
+              aria-label={UI_TEXT.utilityRailHome}
+              aria-current={activeHome ? 'page' : undefined}
+              className={classes.action}
+            >
+              <IconHome size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Text
+            size="10px"
+            fw={700}
+            c="dimmed"
+            style={{ letterSpacing: '0.5px', textTransform: 'uppercase' }}
           >
-            <IconHome size={18} />
-          </ActionIcon>
-        </Tooltip>
+            RTWiki
+          </Text>
+        </Stack>
 
         {onToggleTree ? (
           <Tooltip
@@ -136,6 +159,38 @@ export function UtilityRail({
               data-testid="calendar-toggle"
             >
               <IconCalendar size={18} />
+            </ActionIcon>
+          </Tooltip>
+        ) : null}
+
+        {onOpenTrash ? (
+          <Tooltip label={UI_TEXT.utilityRailTrash} position="right">
+            <ActionIcon
+              variant={trashOpen ? 'filled' : 'subtle'}
+              color={trashOpen ? 'blue' : 'gray'}
+              size="lg"
+              onClick={onOpenTrash}
+              aria-label={UI_TEXT.utilityRailTrash}
+              aria-pressed={trashOpen}
+              className={classes.action}
+              data-testid="trash-toggle"
+            >
+              <IconTrash size={18} />
+            </ActionIcon>
+          </Tooltip>
+        ) : null}
+
+        {onOpenShortcuts ? (
+          <Tooltip label={UI_TEXT.utilityRailShortcuts} position="right">
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              onClick={onOpenShortcuts}
+              aria-label={UI_TEXT.utilityRailShortcuts}
+              className={classes.action}
+              data-testid="shortcuts-toggle"
+            >
+              <IconHelp size={18} />
             </ActionIcon>
           </Tooltip>
         ) : null}

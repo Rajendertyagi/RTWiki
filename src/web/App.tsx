@@ -22,10 +22,12 @@ import {
   type RichTemplateKey
 } from './features/rich-editor/rich-templates.js'
 import { SettingsWorkspace } from './features/settings/settings-workspace.js'
+import { ShortcutHelpModal } from './features/shortcuts/shortcut-help.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
 import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
+import { TrashView } from './features/trash/trash-view.js'
 import {
   type LayoutPreferences,
   loadLayoutPreferences,
@@ -220,6 +222,65 @@ export function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Calendar / study timetable view (replaces the page/dashboard in the main area).
   const [calendarOpen, setCalendarOpen] = useState(false)
+  // Trash workspace view (replaces the page/dashboard in the main area).
+  const [trashOpen, setTrashOpen] = useState(false)
+  // Keyboard shortcut help modal state.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+
+  // Opens the Trash view, flushing pending edits first.
+  const handleOpenTrash = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    setTrashOpen(true)
+    setSettingsOpen(false)
+    setCalendarOpen(false)
+  }
+
+  // Opens the Settings workspace, flushing pending edits first so leaving a
+  // page never silently drops unsaved work.
+  const handleOpenSettings = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    setSettingsOpen(true)
+    setTrashOpen(false)
+    setCalendarOpen(false)
+  }
+
+  const handleCloseSettings = (): void => {
+    setSettingsOpen(false)
+  }
+
+  // Opens the Calendar view, flushing pending edits first so leaving a page
+  // never silently drops unsaved work.
+  const handleOpenCalendar = async (): Promise<void> => {
+    if (flushRef.current) {
+      const ok = await flushRef.current()
+      if (!ok) {
+        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
+        return
+      }
+      setPendingFlushError(null)
+    }
+    setCalendarOpen(true)
+    setSettingsOpen(false)
+    setTrashOpen(false)
+  }
+
+  const handleCloseCalendar = (): void => {
+    setCalendarOpen(false)
+  }
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [shutdownToken, setShutdownToken] = useState<string | null>(null)
@@ -354,42 +415,6 @@ export function App(): JSX.Element {
     controller.selectPage(null)
   }
 
-  // Opens the Settings workspace, flushing pending edits first so leaving a
-  // page never silently drops unsaved work.
-  const handleOpenSettings = async (): Promise<void> => {
-    if (flushRef.current) {
-      const ok = await flushRef.current()
-      if (!ok) {
-        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
-        return
-      }
-      setPendingFlushError(null)
-    }
-    setSettingsOpen(true)
-  }
-
-  const handleCloseSettings = (): void => {
-    setSettingsOpen(false)
-  }
-
-  // Opens the Calendar view, flushing pending edits first so leaving a page
-  // never silently drops unsaved work.
-  const handleOpenCalendar = async (): Promise<void> => {
-    if (flushRef.current) {
-      const ok = await flushRef.current()
-      if (!ok) {
-        setPendingFlushError(UI_TEXT.unsavedChangesWarning)
-        return
-      }
-      setPendingFlushError(null)
-    }
-    setCalendarOpen(true)
-  }
-
-  const handleCloseCalendar = (): void => {
-    setCalendarOpen(false)
-  }
-
   // Resets persisted layout preferences and re-applies the defaults live.
   const handleLayoutReset = (): void => {
     const defaults = resetLayoutPreferences()
@@ -411,14 +436,25 @@ export function App(): JSX.Element {
   const [pageSaveError, setPageSaveError] = useState<string | null>(null)
   const [editorStatus, setEditorStatus] = useState<EditorStatus | null>(null)
 
-  // Global Ctrl+K page finder. Safe everywhere: no installed CodeMirror
-  // keymap binds Mod-K, and the finder is a plain Mantine modal.
+  // Global Ctrl+K page finder and ? Keyboard Shortcuts Modal listeners.
   const [finderOpen, setFinderOpen] = useState(false)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setFinderOpen((open) => !open)
+      } else if (event.key === '?' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        const target = event.target as HTMLElement | null
+        const isEditing =
+          target &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable ||
+            target.closest('.bn-editor'))
+        if (!isEditing) {
+          event.preventDefault()
+          setShortcutsOpen((open) => !open)
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -686,7 +722,9 @@ export function App(): JSX.Element {
         }
         utilityRail={
           <UtilityRail
-            activeHome={controller.selectedPage === null}
+            activeHome={
+              controller.selectedPage === null && !settingsOpen && !calendarOpen && !trashOpen
+            }
             onHome={handleHome}
             onSearchFocus={handleSearchFocus}
             onNewPage={handleNewPage}
@@ -695,6 +733,9 @@ export function App(): JSX.Element {
             settingsOpen={settingsOpen}
             onOpenCalendar={() => void handleOpenCalendar()}
             calendarOpen={calendarOpen}
+            onOpenTrash={() => void handleOpenTrash()}
+            trashOpen={trashOpen}
+            onOpenShortcuts={() => setShortcutsOpen(true)}
             treeOpen={treeOpen}
             onToggleTree={handleToggleTree}
           />
@@ -784,6 +825,12 @@ export function App(): JSX.Element {
               pages={controller.pages.map((p) => ({ id: p.id, title: p.title }))}
               onClose={handleCloseCalendar}
             />
+          ) : trashOpen ? (
+            <TrashView
+              onRestorePage={() => {
+                controller.refreshPages()
+              }}
+            />
           ) : controller.selectedPage ? (
             <PageWorkspace
               page={controller.selectedPage}
@@ -858,6 +905,8 @@ export function App(): JSX.Element {
         pages={controller.pages}
         onOpenPage={(id) => void handleSelectPage(id)}
       />
+
+      <ShortcutHelpModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <ScheduleNotifierHost />
     </>

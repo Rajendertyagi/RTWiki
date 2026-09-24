@@ -228,6 +228,47 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     }
   })
 
+  routes.get('/trash', (c) => {
+    try {
+      const db = getDbFn()
+      const result = service.listTrashedPages(db)
+      return c.json(result)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  routes.post('/:id/restore', (c) => {
+    try {
+      const db = getDbFn()
+      const id = c.req.param('id')
+      const page = service.restorePage(db, id)
+      if (!page) {
+        return c.json({ error: 'Page not found in trash' }, 404)
+      }
+      return c.json({ page })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  routes.delete('/:id/permanent', (c) => {
+    try {
+      const db = getDbFn()
+      const id = c.req.param('id')
+      const deleted = service.permanentlyDeletePage(db, id)
+      if (!deleted) {
+        return c.json({ error: 'Page not found in trash' }, 404)
+      }
+      return c.json({ ok: true })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
   routes.delete('/:id', (c) => {
     try {
       const db = getDbFn()

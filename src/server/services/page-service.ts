@@ -238,3 +238,15 @@ export function listPages(
 ): { pages: Page[]; total: number } {
   return repo.listPages(db, options)
 }
+
+export function listTrashedPages(db: Database): { pages: Page[]; total: number } {
+  return repo.listTrashedPages(db)
+}
+
+export function restorePage(db: Database, id: string): Page | null {
+  return repo.restorePage(db, id)
+}
+
+export function permanentlyDeletePage(db: Database, id: string): boolean {
+  return repo.permanentlyDeletePage(db, id)
+}
