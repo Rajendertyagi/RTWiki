@@ -1,153 +1,165 @@
 /**
  * Desktop window chrome (ADR-011 extended).
  *
- * Renders a thin custom title bar with native-style minimize / maximize /
- * close buttons when running inside the Tauri shell. The bar is a drag region
- * so the user can move the window by dragging anywhere on it.
+ * Renders the Chrome-like band at the top of the Tauri shell: a thin title
+ * bar with native-style minimize / maximize / close buttons above the existing
+ * tab strip. The component is rendered into `AppShell.Header` so the band is
+ * fixed, out of the document flow, and every region below it (navbar, main,
+ * footer) is offset by Mantine automatically.
  *
- * Close behaviour is read live from Rust via the `get_close_behavior` invoke
- * command so Settings changes apply immediately without restart.
+ * Drag regions are always *siblings behind* the interactive content, never
+ * ancestors of it: Tauri's drag region claims mousedown from the region and
+ * everything inside it, which would swallow button clicks.
+ *
+ * Close behaviour is read live from the shell via the `get_close_behavior`
+ * command so Settings changes apply immediately without a restart.
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { ActionIcon, Box, Text } from '@mantine/core'
-import { IconChevronDown, IconMaximize, IconMinimize, IconX } from '@tabler/icons-react'
-import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
-import { isNativeMode } from '../services/native-bridge.js'
+import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window'
+import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../config/index.js'
+import { isNativeMode } from '../services/native-bridge.js'
 import classes from './window-chrome.module.css'
 
 interface WindowChromeProps {
-  /** Rendered below the title bar (the existing <TabStrip>). */
+  /** The existing tab strip, rendered under the title bar inside the band. */
   tabStrip?: React.ReactNode
-  /** Main app content rendered below the tab strip. */
-  children?: React.ReactNode
 }
 
-function WindowChromeInner({ tabStrip, children }: WindowChromeProps): JSX.Element {
+type CloseBehavior = 'minimize' | 'quit' | 'ask'
+
+/** Reads the current close behaviour from data/desktop.json, never stale. */
+async function readCloseBehavior(): Promise<CloseBehavior> {
+  const behavior = await invoke<string>('get_close_behavior')
+  return behavior === 'quit' || behavior === 'ask' ? behavior : 'minimize'
+}
+
+export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElement | null {
   const [isMaximized, setIsMaximized] = useState(false)
-  const winRef = useRef<TauriWindow | null>(null)
-  const unlistenRef = useRef<(() => void) | null>(null)
+  const windowRef = useRef<TauriWindow | null>(null)
 
   useEffect(() => {
     if (!isNativeMode()) return
 
-    const win = getCurrentWindow()
-    winRef.current = win
+    let disposed = false
+    let unlistenResize: (() => void) | null = null
+    let resizeFrame: number | null = null
 
-    win.isMaximized().then((m) => {
-      setIsMaximized(m)
-    })
+    const appWindow = getCurrentWindow()
+    windowRef.current = appWindow
 
-    win
-      .onResized(() => {
-        win.isMaximized().then((m) => {
-          setIsMaximized(m)
-        })
+    const syncMaximized = async (): Promise<void> => {
+      try {
+        const maximized = await appWindow.isMaximized()
+        if (!disposed) setIsMaximized(maximized)
+      } catch {
+        // The shell may be unavailable; the restore glyph is the safe default.
+        if (!disposed) setIsMaximized(false)
+      }
+    }
+
+    // Coalesce resize bursts: Windows emits these continuously while dragging.
+    const scheduleSync = (): void => {
+      if (resizeFrame !== null) return
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        void syncMaximized()
       })
+    }
+
+    void syncMaximized()
+    appWindow
+      .onResized(scheduleSync)
       .then((unlisten) => {
-        unlistenRef.current = unlisten
+        if (disposed) unlisten()
+        else unlistenResize = unlisten
+      })
+      .catch(() => {
+        unlistenResize = null
       })
 
     return () => {
-      if (unlistenRef.current) {
-        unlistenRef.current()
-      }
+      disposed = true
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
+      unlistenResize?.()
     }
   }, [])
 
-  const handleMinimize = async () => {
-    const win = winRef.current
-    if (win) await win.minimize()
+  if (!isNativeMode()) return null
+
+  const handleMinimize = (): void => {
+    void windowRef.current?.minimize().catch(reportFailure('minimize'))
   }
 
-  const handleMaximize = async () => {
-    const win = winRef.current
-    if (!win) return
-    if (isMaximized) await win.unmaximize()
-    else await win.maximize()
+  const handleMaximize = (): void => {
+    void windowRef.current?.toggleMaximize().catch(reportFailure('toggle maximize'))
   }
 
-  const handleClose = async () => {
-    const win = winRef.current
-    if (!win) return
-
-    try {
-      const behavior = await invoke<string>('get_close_behavior', { exe_dir: '' })
-
-      if (behavior === 'quit') {
-        await win.close()
-        return
-      }
-      if (behavior === 'minimize') {
-        await win.hide()
-        return
-      }
-
-      // ask: show confirmation dialog
-      const ok = window.confirm(
-        UI_TEXT.desktopCloseHint || 'Minimize RTWiki to the tray instead of quitting?'
-      )
-      if (ok) await win.hide()
-    } catch (error) {
-      console.error('Failed to get close behavior or close window:', error)
-      // Safe fallback: hide the window instead of crashing or forcing quit
-      await win.hide()
-    }
+  /**
+   * The shell's CloseRequested handler owns the decision (it re-reads the
+   * setting itself, shows the native prompt for "ask", and quits cleanly), so
+   * the button only has to choose between hiding to the tray and asking the
+   * shell to close the window.
+   */
+  const handleClose = (): void => {
+    const appWindow = windowRef.current
+    if (!appWindow) return
+    void readCloseBehavior()
+      .then((behavior) => (behavior === 'minimize' ? appWindow.hide() : appWindow.close()))
+      .catch(reportFailure('close'))
   }
 
   return (
-    <>
-      {/* Title bar — drag region for moving the window */}
-      <Box
-        className={classes.titleBar}
-        data-tauri-drag-region
-        aria-label={`${UI_TEXT.appName} window controls`}
-      >
-        <Text span className={classes.titleText}>
-          {UI_TEXT.appName}
-        </Text>
-        <Box className={classes.controls}>
-          <ActionIcon
-            variant="transparent"
-            size="sm"
+    <div className={classes.root} data-testid="window-chrome">
+      <div className={classes.titleBar}>
+        <div className={classes.dragLayer} data-tauri-drag-region />
+        <span className={classes.titleText}>{UI_TEXT.appName}</span>
+        <div className={classes.controls}>
+          <button
+            type="button"
             className={classes.ctrlBtn}
-            aria-label="Minimize"
+            aria-label={UI_TEXT.minimizeWindow}
+            title={UI_TEXT.minimizeWindow}
             onClick={handleMinimize}
           >
-            <IconMinimize size={14} />
-          </ActionIcon>
-          <ActionIcon
-            variant="transparent"
-            size="sm"
+            <span className={classes.glyphMinimize} />
+          </button>
+          <button
+            type="button"
             className={classes.ctrlBtn}
-            aria-label={isMaximized ? 'Restore' : 'Maximize'}
+            aria-label={isMaximized ? UI_TEXT.restoreWindow : UI_TEXT.maximizeWindow}
+            title={isMaximized ? UI_TEXT.restoreWindow : UI_TEXT.maximizeWindow}
             onClick={handleMaximize}
           >
-            {isMaximized ? <IconChevronDown size={14} /> : <IconMaximize size={14} />}
-          </ActionIcon>
-          <ActionIcon
-            variant="transparent"
-            size="sm"
+            {isMaximized ? (
+              <span className={classes.glyphRestore} />
+            ) : (
+              <span className={classes.glyphMaximize} />
+            )}
+          </button>
+          <button
+            type="button"
             className={`${classes.ctrlBtn} ${classes.closeBtn}`}
-            aria-label="Close"
+            aria-label={UI_TEXT.closeWindow}
+            title={UI_TEXT.closeWindow}
             onClick={handleClose}
           >
-            <IconX size={14} />
-          </ActionIcon>
-        </Box>
-      </Box>
-      {/* Tab strip slot */}
-      {tabStrip && <div className={classes.tabStripSlot}>{tabStrip}</div>}
-      {/* Main content */}
-      {children}
-    </>
+            <span className={classes.glyphClose} />
+          </button>
+        </div>
+      </div>
+
+      <div className={classes.tabSlot}>
+        <div className={classes.dragLayer} data-tauri-drag-region />
+        <div className={classes.slotInner}>{tabStrip}</div>
+      </div>
+    </div>
   )
 }
 
-/** Returns null in browser mode so there is no visual change there. */
-export function WindowChrome({ tabStrip, children }: WindowChromeProps): JSX.Element | null {
-  if (!isNativeMode()) return null
-  return <WindowChromeInner tabStrip={tabStrip}>{children}</WindowChromeInner>
+function reportFailure(action: string): (error: unknown) => void {
+  return (error) => {
+    console.error(`[window-chrome] failed to ${action}:`, error)
+  }
 }

@@ -13,6 +13,28 @@
   background: var(--rtwiki-background, var(--mantine-color-body));
 }
 
+/*
+ * Desktop chrome band host (AppShell.Header). Mantine already sizes and
+ * positions the fixed header from the `header` prop; this only neutralises the
+ * header's own padding and border.
+ */
+.chromeHeader {
+  padding: 0;
+  overflow: hidden;
+}
+
+/*
+ * Mantine's `withBorder` bottom border sits *inside* the header's height, so
+ * it would steal a pixel from the tab strip (28 + 40 in a 68px box). The band
+ * supplies its own separator through the tab strip's own bottom border, which
+ * is inside that row's height. Attribute selector, not a bare class: it must
+ * outrank Mantine's `:where([data-with-border])` rule regardless of stylesheet
+ * order.
+ */
+.chromeHeader[data-with-border] {
+  border-bottom: 0;
+}
+
 .mobileBar {
   display: flex;
   align-items: center;

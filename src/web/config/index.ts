@@ -505,6 +505,11 @@ export const UI_TEXT = {
   desktopCloseQuit: 'Quit the app',
   desktopCloseHint: 'Quit is always available from the tray icon.',
   desktopCloseUnavailable: 'Window close options apply to the desktop app only.',
+  // Window-control button labels (desktop shell chrome only).
+  minimizeWindow: 'Minimize window',
+  maximizeWindow: 'Maximize window',
+  restoreWindow: 'Restore window',
+  closeWindow: 'Close window',
   saveButton: 'Save'
 } as const
 

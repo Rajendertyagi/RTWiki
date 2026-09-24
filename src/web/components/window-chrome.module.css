@@ -1,54 +1,190 @@
-/* Desktop window chrome — title bar + tab-strip slot. */
+/*
+ * Desktop window chrome — fixed title bar + tab-strip band.
+ *
+ * Height is `100%` (the AppShell.Header that hosts this component is
+ * `LAYOUT.tabStripAreaHeight` tall) so the band can never disagree with the
+ * offset Mantine applies to the navbar and main.
+ *
+ * Layering contract: a `data-tauri-drag-region` element is a `position:absolute`
+ * backdrop *behind* the row content. It must never be an ancestor of the window
+ * controls, because Tauri's drag region claims mousedown from its descendants
+ * and the native drag swallows their clicks.
+ */
 
-.titleBar {
+.root {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: var(--rtwiki-title-bar-height, 28px);
-  padding: 0 var(--mantine-spacing-xs);
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
   background: var(--rtwiki-chrome-bg);
-  border-bottom: 1px solid var(--rtwiki-chrome-border);
   user-select: none;
   -webkit-user-select: none;
-  flex-shrink: 0;
 }
 
+.dragLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Title bar ---------------------------------------------------------------- */
+
+.titleBar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--rtwiki-title-bar-height);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--rtwiki-chrome-border);
+}
+
+/* Non-interactive: clicks must fall through to the drag layer beneath. */
 .titleText {
+  position: relative;
+  z-index: 1;
+  padding-inline-start: var(--mantine-spacing-xs);
   font-size: var(--mantine-font-size-xs);
   color: var(--mantine-color-text);
   opacity: 0.65;
   pointer-events: none;
-  padding-left: var(--mantine-spacing-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .controls {
+  position: relative;
+  z-index: 1;
   display: flex;
-  align-items: center;
-  gap: 2px;
+  align-items: stretch;
   height: 100%;
+  margin-inline-start: auto;
+  flex-shrink: 0;
 }
 
+/*
+ * Windows caption-button geometry: full row height, 46px wide hit target,
+ * square corners. `unset` removes Mantine's ActionIcon/button chrome so the
+ * control matches the platform rather than the design system.
+ */
 .ctrlBtn {
-  height: 28px;
-  width: 46px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: 0;
   border-radius: 0;
+  background: transparent;
   color: var(--mantine-color-text);
-  transition: background 100ms ease;
+  cursor: default;
+  transition:
+    background-color 75ms linear,
+    color 75ms linear;
 }
 
 .ctrlBtn:hover {
   background: color-mix(in srgb, var(--mantine-color-text) 10%, transparent);
 }
 
-/* Windows-style red on hover for close */
-.closeBtn:hover {
-  background: #e81123 !important;
-  color: #fff !important;
+.ctrlBtn:active {
+  background: color-mix(in srgb, var(--mantine-color-text) 15%, transparent);
 }
 
-.tabStripSlot {
+.ctrlBtn:focus-visible {
+  outline: 1px solid var(--mantine-color-text);
+  outline-offset: -2px;
+}
+
+.closeBtn:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+.closeBtn:active {
+  background: #c50f1f;
+}
+
+/* Caption glyphs — 10px, drawn with borders/background so they stay crisp. */
+
+.glyphMinimize {
+  width: 10px;
+  height: 1px;
+  background: currentColor;
+}
+
+.glyphMaximize {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+}
+
+.glyphRestore {
+  position: relative;
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
+.glyphRestore::before,
+.glyphRestore::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border: 1px solid currentColor;
+}
+
+.glyphRestore::before {
+  inset-block-start: 0;
+  inset-inline-end: 0;
+}
+
+.glyphRestore::after {
+  inset-block-end: 0;
+  inset-inline-start: 0;
+}
+
+.glyphClose {
+  position: relative;
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
+.glyphClose::before,
+.glyphClose::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 0;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+}
+
+.glyphClose::before {
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.glyphClose::after {
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+/*
+ * Tab-strip slot. The row keeps its own 1px bottom border (inside its height)
+ * as the band's separator, so the rows stay exactly 28px + 40px.
+ */
+.tabSlot {
+  position: relative;
+  height: var(--rtwiki-tab-strip-height);
   flex-shrink: 0;
+}
+
+.slotInner {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  min-width: 0;
 }

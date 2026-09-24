@@ -7,6 +7,7 @@ import {
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { pageTypeLabel } from './components/page-type-badge.js'
+import { WindowChrome } from './components/window-chrome.js'
 import { UI_TEXT } from './config/index.js'
 import { debugLog } from './diagnostics/debug-log.js'
 import { Calendar } from './features/calendar/calendar.js'
@@ -43,9 +44,9 @@ import {
 } from './features/workspace/workspace-session.js'
 import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
-import { WindowChrome } from './components/window-chrome.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
+import { isNativeMode } from './services/native-bridge.js'
 import { downloadTextFile, sanitizeFileName } from './util/file-download.js'
 import { pagePreviewText } from './util/page-preview-text.js'
 import { recordRecentPage } from './util/recent-pages.js'
@@ -82,6 +83,13 @@ function syncHistory(id: string | null, isPopstate: boolean): void {
   if (isPopstate) window.history.replaceState({ pageId: id }, '', url)
   else window.history.pushState({ pageId: id }, '', url)
 }
+
+/**
+ * True when the page runs inside the Tauri desktop shell. Constant for the
+ * lifetime of the document: the IPC bridge is injected before the app boots
+ * and never appears or disappears at runtime.
+ */
+const isNative = isNativeMode()
 
 export function App(): JSX.Element {
   const controller = usePagesController()
@@ -731,25 +739,31 @@ export function App(): JSX.Element {
     </StatusBar>
   )
 
+  // The tab strip has one home per runtime: inside the desktop chrome band
+  // (native) or at the top of the workspace (browser). `isNative` is static for
+  // the page lifetime, so the branch is resolved outside the render path.
+  const tabStripNode = (
+    <TabStrip
+      tabs={openTabs}
+      activePageId={controller.selectedPage?.id ?? null}
+      onSelect={(id) => {
+        debugLog('ui', 'ui_tab_select', { tabId: id ?? undefined })
+        void handleSelectPage(id)
+      }}
+      onClose={(id) => void handleTabClose(id)}
+    />
+  )
+
   return (
-    <WindowChrome>
+    <>
       <AppShellLayout
         treeOpen={treeOpen}
         treeWidth={treeWidth}
         onTreeWidthChange={setTreeWidth}
         onTreeWidthCommit={handleTreeWidthCommit}
         statusBar={globalStatusBar}
-        tabStrip={
-          <TabStrip
-            tabs={openTabs}
-            activePageId={controller.selectedPage?.id ?? null}
-            onSelect={(id) => {
-              debugLog('ui', 'ui_tab_select', { tabId: id ?? undefined })
-              void handleSelectPage(id)
-            }}
-            onClose={(id) => void handleTabClose(id)}
-          />
-        }
+        chrome={isNative ? <WindowChrome tabStrip={tabStripNode} /> : undefined}
+        tabStrip={isNative ? undefined : tabStripNode}
         utilityRail={
           <UtilityRail
             activeHome={
@@ -945,6 +959,6 @@ export function App(): JSX.Element {
       <ShortcutHelpModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <ScheduleNotifierHost />
-    </WindowChrome>
+    </>
   )
 }

@@ -1,19 +1,20 @@
 import { AppShell, Box, Burger } from '@mantine/core'
 import { type ReactElement, type ReactNode, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../config/index.js'
-import { isNativeMode } from '../services/native-bridge.js'
 import classes from './app-shell.module.css'
 import { PaneDivider } from './pane-divider.js'
-
-// Optimization: Evaluate static environment check once at module level
-// to prevent re-evaluation on every render.
-const isNative = isNativeMode()
-const desktopPadding = isNative ? `${LAYOUT.tabStripAreaHeight}px 0 0` : 0
 
 interface AppShellLayoutProps {
   utilityRail: React.ReactNode
   navbar: React.ReactNode
-  /** In-session document tabs rendered at the top of the central workspace. */
+  /**
+   * Desktop-only chrome band (title bar + tab strip), rendered into
+   * `AppShell.Header`. Supplying it makes AppShell reserve its height, so the
+   * navbar and main start below it and the document never grows past the
+   * viewport. Browser mode omits it and the layout is unchanged.
+   */
+  chrome?: ReactNode
+  /** In-session document tabs. Browser mode only; native mode tabs go in `chrome`. */
   tabStrip?: React.ReactNode
   /** Desktop-only page-tree visibility; owned by the composition root. */
   treeOpen: boolean
@@ -42,6 +43,7 @@ interface AppShellLayoutProps {
 export function AppShellLayout({
   utilityRail,
   navbar,
+  chrome,
   tabStrip,
   treeOpen,
   treeWidth,
@@ -63,10 +65,16 @@ export function AppShellLayout({
       }}
       // Global status bar pinned to the viewport bottom, always visible.
       footer={{ height: LAYOUT.statusBarHeight }}
-      // Reserve space for desktop window chrome (title bar + tab strip).
-      // Collapses to 0 in browser mode so there is no visual change there.
-      padding={desktopPadding}
+      // Chrome band (desktop shell only). Mantine derives the navbar's `top`
+      // and Main's `padding-top` from this height, so every region lines up
+      // without hand-computed offsets. `padding: 0` keeps that offset exact —
+      // AppShell's own padding is additive, and a non-zero value would push
+      // main past the viewport.
+      header={chrome ? { height: LAYOUT.tabStripAreaHeight } : undefined}
+      padding={0}
     >
+      {chrome ? <AppShell.Header className={classes.chromeHeader}>{chrome}</AppShell.Header> : null}
+
       <AppShell.Navbar p={0}>
         <div className={classes.navbarInner}>
           <div className={classes.railColumn}>{utilityRail}</div>

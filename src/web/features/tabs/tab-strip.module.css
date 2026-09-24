@@ -17,7 +17,14 @@
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
+  /* Tabs scroll by wheel/drag; a permanent scrollbar would read as a defect
+     on the chrome row. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tabScroller::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
