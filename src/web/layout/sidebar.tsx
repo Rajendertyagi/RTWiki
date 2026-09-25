@@ -126,7 +126,7 @@ export function Sidebar({
             {error}
           </Alert>
         ) : (
-          <Stack gap={2} className={classes.treeStack}>
+          <Stack gap={0} className={classes.treeStack}>
             {/* Home / Dashboard entry - always visible, outside role=tree.
                 Styled as a tree row rather than a Mantine NavLink so its
                 height, padding, icon size and selected/hover treatment are

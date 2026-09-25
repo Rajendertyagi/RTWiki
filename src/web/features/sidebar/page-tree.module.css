@@ -16,6 +16,26 @@
   min-width: 0;
 }
 
+/*
+ * Host-specific overrides. The selector doubles the host's own class to
+ * outrank the library: `wunderbaum.css` is imported *after* this module, so an
+ * equal-specificity rule loses the tie and the 2px container border, the 6px
+ * padding and the row borders all came back.
+ */
+:global(div.wunderbaum.wunderbaum) {
+  /* The library draws a 2px border and paints it blue on :focus. Only making
+     the *colour* transparent leaves the 2px box occupying space, so the tree
+     came out 4px narrower than the Home row and the search field, and the
+     selected fill changed width depending on what was selected. The box is
+     removed outright so every row shares one width. */
+  border: 0;
+  /* No padding: the horizontal inset comes from the pane, so rows, the Home row
+     and the search field share one width. The previous 6px top padding sat on
+     top of the Stack gap and left a 10px hole under the Home row while the
+     rows below it stayed flush. */
+  padding: 0;
+}
+
 :global(div.wunderbaum) {
   /* Bridge Wunderbaum's custom properties to the single named RTWiki tree
    * token source (customization.css). Every number here references a token;
@@ -86,8 +106,18 @@
   background: transparent;
   color: var(--rtwiki-text, var(--mantine-color-text));
   outline: none;
-  /* Tree top/bottom internal padding. */
-  padding: 6px 0 !important;
+  /* The library draws a 2px border and paints it blue on :focus. Previously
+     only the *colour* was made transparent, so the 2px box still occupied
+     space: the tree came out 4px narrower than the Home row and the search
+     field, so the selected fill changed width depending on what was selected.
+     The border is removed outright so every row shares one width. */
+  border: 0;
+  /* No padding at all. The horizontal inset comes from the pane, so rows, the
+     Home row and the search field share one width. The previous 6px top
+     padding sat on top of the Stack gap and left a 10px hole under the Home
+     row while the rows below it stayed flush - the spacing changed for no
+     visible reason. */
+  padding: 0 !important;
   /* Titles truncate; never allow a horizontal scrollbar. */
   overflow-x: hidden !important;
   scrollbar-width: thin;
@@ -129,16 +159,24 @@
 /* Selector specificity is raised one level over the library's own rules rather
    than using `!important`: the bundled stylesheet is imported after this
    module, so an equal-specificity rule loses the tie regardless of order. */
-:global(div.wunderbaum div.wb-row) {
+:global(div.wunderbaum div.wb-list-container div.wb-row) {
   display: flex;
   align-items: center;
+  /* Higher specificity than the library's own `div.wunderbaum div.wb-row`
+     border, which is imported after this module and wins an equal-specificity
+     tie - leaving a 1px box on every row, and rows 2px narrower than the Home
+     row they are meant to line up with. No `box-shadow` reset here: the selected
+     row's accent bar *is* an inset shadow, and at this specificity a blanket
+     reset would silently erase it. */
   border: 0;
   border-radius: var(--mantine-radius-sm);
   margin-inline: 0;
   box-sizing: border-box;
   line-height: normal;
   padding-left: var(--rtwiki-tree-row-padding-left);
-  padding-right: var(--rtwiki-tree-row-padding-right);
+  /* The pane already insets the row, so a second right padding would make the
+     selected fill narrower than the Home row's. */
+  padding-right: 0;
 }
 
 /* The library renders ONE span per row carrying both `wb-node` and `wb-col`, so
@@ -329,8 +367,15 @@
 }
 
 /* Title: 14px, one line, ellipsis. Matches the body reading size rather than
-   the smaller label size, so the tree is read rather than scanned. */
-:global(span.wb-title) {
+   the smaller label size, so the tree is read rather than scanned.
+
+   Scoped to match the library's own selector and then some, so this outranks its
+   `min-width: 1em` on the same element. The library stylesheet is imported after
+   this module, and its selector is one level deeper
+   (`div.wunderbaum span.wb-node span.wb-title`), so an unscoped `span.wb-title`
+   rule loses outright - which is why the readability floor below was still being
+   reported as 14px after the rule looked correct. */
+:global(div.wunderbaum.wunderbaum span.wb-node span.wb-title) {
   flex: 1 1 auto;
   min-width: 0;
   cursor: pointer;
@@ -384,9 +429,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* Opaque surface so the glyph stays legible over the blue selection fill
-     (audit UI-005). */
-  background: var(--rtwiki-pane, var(--mantine-color-body));
+  /* Transparent rather than an opaque pane fill. An opaque surface kept the
+     glyph legible over the blue selection, but on a *selected* row it painted a
+     near-white square on top of the blue - hovering the item you had chosen
+     showed a white blot where the action button appeared. The glyph is now kept
+     legible by the row's own colour instead. */
+  background: transparent;
   color: var(--rtwiki-text, var(--mantine-color-text));
 }
 

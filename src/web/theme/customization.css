@@ -13,6 +13,11 @@
   --rtwiki-tree-row-inner-height: 30px;
   --rtwiki-tree-subfile-row-height: 28px;
   --rtwiki-tree-title-size: 14px;
+  /* One horizontal inset for the whole pane. The search field, the Home row and
+     every page row must start and end on the same line; they previously used
+     three different widths (265px, 281px and 276px inside a 281px pane), so the
+     selected fill changed width depending on what was selected. */
+  --rtwiki-tree-pane-inset: 8px;
   /* Nesting step. MUST stay equal to the library's internal ICON_WIDTH (20px):
      it is what --wb-icon-outer-width renders, and the library lays out one cell
      per level at that width. Pinned here so the value has one home; the tree

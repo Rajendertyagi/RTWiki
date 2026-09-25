@@ -1041,6 +1041,113 @@ Previously reported as 26-vs-28 drift. That was the same committed-vs-working-tr
 
 With `prefers-color-scheme: dark` the app still rendered `data-mantine-color-scheme="light"`; the theme only changed via the rail's Theme control. Once dark, contrast is healthy (tree rows and title text both **10.26:1**), so this is an expectation gap, not a legibility defect.
 
+### F10 — Three different widths in one pane — **RESOLVED** ✅
+
+**Reported as:** "root selected colour width is much wider than the search box, make them equal", and separately "root select width is bigger than file selected width".
+
+Measured in a 281px pane at 1280px viewport:
+
+| Element | Left | Width |
+|---|---|---|
+| Search field | 56 | 265 |
+| Home ("Root") row | 48 | 281 |
+| A page row | 50 | 276 |
+
+Three different widths and three different left edges, so the selected fill changed
+width depending on what was selected. Two independent causes:
+
+1. **Three separate paddings.** `.searchSection` had `var(--mantine-spacing-xs)`,
+   the Mantine `Stack` had none, and the Wunderbaum host had `6px 0`. They had
+   drifted apart over successive changes.
+2. **The library's 2px border box.** `wunderbaum.css` sets
+   `div.wunderbaum { border: 2px solid var(--wb-border-color) }`. The app had
+   already made that border *transparent* on focus — and its own comment recorded
+   that "the 2px box is preserved, only its colour" changes. Making a border
+   invisible does not remove the space it occupies, so the tree stayed 4px
+   narrower than the rows it was meant to line up with.
+
+**Fix:** one token, `--rtwiki-tree-pane-inset: 8px`, applied once on
+`.sidebarRoot`, with the per-section paddings removed. The 2px box is removed
+outright rather than made transparent.
+
+### F11 — Two things said "you are here" at once on Home — **RESOLVED** ✅
+
+**Reported as:** "select root and any file from tree shows 2 selected items".
+
+Scanning the document for every element that reads as selected (blue fill, inset
+blue accent, `aria-current`, `data-active`) found **two** on Home, in two
+different colours:
+
+- the **utility rail's** Home button — Mantine filled blue, `aria-current="page"`
+- the **tree's** Root row — an 18% tint plus a 3px inset accent
+
+With a page selected the tree showed exactly one, so the duplication was specific
+to Home. The rail keeps its filled state; the tree's Root row no longer claims a
+second "here" marker of its own, so the two panes now agree.
+
+### F12 — A 10px hole under Home, 0px between page rows — **RESOLVED** ✅
+
+**Reported as:** "space between root and files is not equal as between space in
+files name".
+
+Measured: 10px from the Home row to the first page row, against 0px between page
+rows. Three contributors: the host's `6px` top padding, the Mantine `Stack`'s
+`gap={2}`, and one more pixel. The Home row is now flush with the first page row
+(`Stack gap={0}`, host padding removed), matching the rows below it.
+
+### F13 — A near-white blot on the row you had selected — **RESOLVED** ✅
+
+**Reported as:** "when you select an item in tree pane, the selected item on hover
+shows white".
+
+The hover background was **not** white — it measured
+`color(srgb 0.109804 0.439216 1 / 0.26)`, the correct selection-hover tint. The
+white was the **row-action button**, which carried an opaque
+`background: var(--rtwiki-pane)` so its glyph would stay legible over the blue
+fill. In light mode the pane is near-white, so hovering the row you had chosen
+painted a near-white square on top of the blue. The background is now transparent
+and the glyph is kept legible by the row's own colour.
+
+This is the third instance of the lesson already recorded in the corrections log:
+a computed-style assertion passes while the thing is unusable. The colour was
+right; the thing was still broken.
+
+### F14 — The active tab had nothing to merge into on the dashboard — **RESOLVED** ✅
+
+**Reported as:** "home page still showing flat tab bar".
+
+Correct in mechanism, wrong in effect. The active tab merges into whatever sits
+directly beneath it by taking the panel tone — which works on a page, where the
+toolbar is panel-toned. The dashboard's own header was **canvas**-toned with a
+1px rule under it, so the tab met a hard line instead. The header is now
+panel-toned with no rule, and the surface step against the canvas below is what
+separates it — the same reason the toolbar has no bottom border.
+
+Note the tab strip is still present on Home whenever a tab is open, because the
+tab *is* still open. That is correct; only the treatment was wrong.
+
+### F15 — Markdown and diagram pages have no toolbar — **OPEN** 🟡
+
+**Reported as:** "md and diagram file don't have any toolbar, add them".
+
+Confirmed by measurement: for a Markdown page and a Diagram page,
+`hasToolbarRow: false` and `toolbarCount: 0`, against a toolbar for Rich Note and
+HTML Page. `page-workspace.tsx` renders the toolbar row only for
+`pageType === 'rich' || pageType === 'html'`. This is a **missing feature, not a
+styling defect**, and it has not been started. It needs a decision on what the
+controls should be before any code is written — see §8.
+
+### F16 — Settings and the other utilities open as blocking overlays — **OPEN** 🟡
+
+**Reported as:** "open setting page as tab, otherwise it blocks all other pages on
+top of them".
+
+`settingsOpen`, `calendarOpen`, `trashOpen` and `favoritesOpen` each render a
+Modal over the workspace. The request is to make them ordinary tabs. This is an
+architectural change, not a styling one: it needs a new pseudo-page kind in the
+tab model and a decision about whether these views can be pinned alongside a note
+or replace it. Not started.
+
 ### F8 — Development database polluted with test pages — **RESOLVED** ✅
 
 The sidebar held 364 live pages, 360 of them automated-test artefacts. They were
@@ -1072,8 +1179,10 @@ The agreed sequence, with reasoning for the order:
 | 3 | **Mobile toolbar** — re-measure, then decide between scroll and an overflow menu | F2's recorded numbers predate the current stylesheet and must not drive a fix. The upstream pattern collapses overflow into a menu rather than relying on scroll alone |
 | 4 | **Application shell** — honour `prefers-color-scheme` (F7); decide the rail's height | F3's rail-width residual is done. The rail stops at the status bar rather than running the full viewport, and "full height" is a stated requirement — so that is a decision, not a bug to guess at |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Tab work would otherwise be re-verified after the shell's geometry settles in item 4. Shell precedes tabs to avoid re-work |
-| 6 | **Cosmetic polish** - F6 (toolbar grouping/labels), F4 (stale test) | F8 is done: 360 test pages removed, 4 unidentified pages left for an owner decision. The rest is independent or low-risk |
-| 7 | **Theme picker UI** — the control that writes `rtwiki-theme-id`, plus Catppuccin and Nord from their official palettes | Held until a second theme exists; a one-option picker is noise. Verify the provider identity-swap risk here (Decision 6) |
+| 6 | **Markdown and diagram toolbars** (F15) | A **missing feature**, not styling. Needs an owner decision on which controls each type gets before any code is written — a toolbar is a product choice, and guessing would be re-work |
+| 7 | **Utilities as tabs** (F16) | Also a feature, and a larger one: a new pseudo-page kind in the tab model. F15 and F16 share a prerequisite — a decision about how non-note views join the tab strip — so they are ordered together |
+| 8 | **Cosmetic polish** - F6 (toolbar grouping/labels), F4 (stale test) | F8 is done: 360 test pages removed, 4 unidentified pages left for an owner decision. The rest is independent or low-risk |
+| 9 | **Theme picker UI** — the control that writes `rtwiki-theme-id`, plus Catppuccin and Nord from their official palettes | Held until a second theme exists; a one-option picker is noise. Verify the provider identity-swap risk here (Decision 6) |
 
 ### Out of scope for this cycle
 
@@ -1093,6 +1202,8 @@ Findings that were raised and then withdrawn after being checked. This exists so
 | F1 ("canvas fills only 15% of its region") | Compared the **content** height (123px, a short note) against the **container** height (832px). The editor wrapper already filled its region at 752px. The fill ratio was never the defect; the framed-card treatment was. | 2026-09-25 |
 | F2 ("cannot scroll", `overflow-x: visible`) | The measurement predates the stylesheet it describes. `rich-toolbar.module.css` has set `overflow-x: auto` and `flex-wrap: nowrap` since `d14aec1`, so the bar could scroll and could not wrap. The recorded mechanism and counts are unreliable. | 2026-09-25 |
 | HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored record directly showed the CSS field saved correctly. Two separate things were mistaken for one: blank CSS on a new page is simply an empty field, and the HTML source view never shows a "Saved" indicator, so a successful save looks like a failure. The indicator is a real, still-open defect. | 2026-09-25 |
+| "Two stability-regressions tests are new failures caused by this change" | They failed on the **previous commit too**, verified by stashing the work and re-running against the baseline build. | Not a regression. The recorded baseline of 4 failures in that file was **incomplete** — it is 6. This is the second time a baseline was trusted without re-measuring it (see F3/F5 above). Re-derive a baseline by running the code you are about to change, not by remembering an earlier count. | 2026-09-26 |
+| "The 72px title floor is not being applied" | The computed value read 14px, and the rule plainly declared `min-width: 72px`. | The rule was being **outranked**, not ignored: `wunderbaum.css` sets `min-width: 1em` on `div.wunderbaum span.wb-node span.wb-title`, and 1em at 14px is exactly the 14px that was measured. The library stylesheet is imported *after* the CSS module, so an unscoped `span.wb-title` rule loses outright. A number that looks like a default is often another rule's value. | 2026-09-26 |
 
 ## 10. Coverage and known gaps
 
@@ -1117,7 +1228,6 @@ in a browser. The items below are the ones verified by actually running the app.
 - Dark mode contrast (10.26:1 on tree rows and title text) — measured
 - Mantine version (9.6.2) — confirmed via `bun.lock` and `node_modules/@mantine/core`
 - `bun run typecheck` — 0 errors
-- `bun test` — 469 pass / 0 fail
 - `bun run format:check` — 0 errors
 - `tests/browser/rich-workspace.pwspec.ts` "Rich document surface" — 3/3 pass
 - `tests/browser/window-chrome.pwspec.ts` — 8/8 pass
@@ -1125,6 +1235,13 @@ in a browser. The items below are the ones verified by actually running the app.
 - A pending HTML/CSS/JavaScript edit reports "Unsaved changes" rather than "Saved" before the debounce elapses — asserted in both light and dark
 - CSS typed into a child file reaches the stored record and applies in the rendered preview (verified `color: rgb(1, 2, 3)`, `font-size: 40px` inside the frame) — measured
 - The rendered preview does not rebuild on its own while idle (0 `srcdoc` mutations over 3s) — measured, ruling out a rebuild loop
+- **Search field, Home row and page row share one width and one left edge** (265/265/264 in a 281px pane) — measured, and asserted against the library's 2px box being `0px/0px` rather than merely transparent
+- **The step from Home to the first page equals the step between pages** (both 0px) — measured
+- **The selected row's hover fill is a tint, not an opaque panel** — measured; the action button's background must not be an opaque `rgb()`
+- **`span.wb-title` carries a 72px readability floor** — measured as a computed `min-width` on a title inside a tree row, after the library's `1em` was outranked
+- **Markdown and Diagram pages render no toolbar** (`hasToolbarRow: false`, `toolbarCount: 0`) — measured, confirming F15 as a real gap rather than a report in error
+- **On Home, two elements claimed "you are here" simultaneously** — measured by scanning the document for blue fills, inset blue accents, `aria-current` and `data-active`
+- `bun test` — **482 pass / 0 fail**
 
 **Read from source but not re-measured in a browser:** the §3.2 tree metrics, the §3.3
 type scale, the §3.4 radii distribution, and the §3.6 motion inventory. These are
@@ -1144,6 +1261,9 @@ way the F1 and F2 entries were.
 | Contrast for every element (tab, tree row, title row, toolbar sampled only) | Only toolbar and tree rows were sampled |
 | Pane drag-resize, collapse persistence, keyboard shortcuts | Runtime behaviours not studied |
 | Tab overflow scrolling, command palette, contextual toolbar conditional groups | Not driven |
+| Markdown and Diagram workspaces | Only their **absence** of a toolbar was measured (F15). Their editors were not driven |
+| Settings, Calendar, Trash, Favorites views | Only that they open as blocking overlays was confirmed by reading the state wiring (F16). The views themselves were not driven |
+| The **full** browser suite | Never run to completion. Specs are run individually and their failures compared against a re-measured baseline |
 
 ## 11. Verification commands
 

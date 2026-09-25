@@ -258,8 +258,10 @@ an oversight to correct.
 | 3 | **Re-measure and fix the mobile toolbar** | The recorded numbers (F2) predate the current stylesheet and must not drive a fix. Re-measure first, then decide between scroll and an overflow menu. |
 | 4 | **Application shell polish** - honour `prefers-color-scheme` (F7), and decide whether the left rail should run the full height or stop at the status bar | The rail is now exactly the right width and no longer casts a shadow. The open question is height, not width |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Shell geometry must settle first (item 4) so tab work is not re-verified. |
-| 6 | **Cosmetic polish** - toolbar grouping and labels (F6), fix the stale test (F4) | The database is clean: 360 test pages removed, 4 pages left alone because they could not be identified as test rubbish. The rest is independent or low-risk. |
-| 7 | **Theme picker UI** — plus Catppuccin and Nord from their official palettes | A one-option picker is noise. Held until a second theme exists. |
+| 6 | **Toolbars for Markdown and Diagram pages** | Rich Note and HTML Page have a toolbar; these two have none at all. This is a missing feature, not a styling fault, so it needs your decision on what the buttons should be before any code is written. |
+| 7 | **Settings, Calendar, Trash and Favorites as tabs** | They open as a panel that covers the pages underneath. Making them ordinary tabs is a bigger change than it looks, and it shares a starting question with item 6: how should a view that is not a note take part in the tab strip? |
+| 8 | **Cosmetic polish** - toolbar grouping and labels (F6), fix the stale test (F4) | The database is clean: 360 test pages removed, 4 pages left alone because they could not be identified as test rubbish. The rest is independent or low-risk. |
+| 9 | **Theme picker UI** — plus Catppuccin and Nord from their official palettes | A one-option picker is noise. Held until a second theme exists. |
 
 **Out of scope for this cycle:** building the two extra colour themes, giving the
 diagram renderer or the text editor their own per-theme work, any change to the tab
@@ -281,6 +283,9 @@ These findings were recorded as fact and later proved wrong. The reason is noted
 | The preview background was going to break | Switching the palette to a perceptual colour format would leave HTML previews with no background, because the safety check only understood three older colour formats. | Caught before it shipped by reading the check while changing the palette. The check now understands the new format and has its own test. The lesson: a value that passes through a validator must be read when the value changes shape. |
 | Ten failing tests were "flaky" | Ten tests failing in the rich-note area were treated as an unstable test environment and put aside. | They all shared one cause: creating a page was silently doing nothing. The test suite had been reporting a real, total failure in the most-used action in the app, and it was read as noise. **When every test in a group fails the same way, that is one fault, not many.** |
 | The rebuilt tree was reported working | A row was changed so it became a flex container, and the automated checks all passed. | The change removed the row's only child from the page layout, leaving the row with **no clickable area at all**. It still drew correctly and still passed every colour and spacing check, so only using it revealed that dragging had stopped working. **A check that can pass while the thing is unusable is not a check.** Five problems were reported in one go; all are now covered by tests. |
+| Two failing tests were blamed on this change | Two tests in the stability group started failing after the sidebar work, and looked like damage from it. | The work was put aside and the tests were run again **against the previous commit**. They failed there too. Nothing had been broken. What had actually happened is that the recorded "4 failures" baseline was incomplete — it is 6. **A remembered failure count is not a baseline; re-run the code you are about to change.** |
+| "The 72px name floor is not being applied" | A measurement read 14px while the stylesheet plainly said 72px, which looked like the rule was being ignored. | It was being **outranked**. The tree library sets a minimum width of one character on the same element, and one character at that font size is exactly 14px. The library's stylesheet is loaded after ours, so our rule lost. **A number that looks like a default is often simply another rule's value.** |
+| "The selected row turns white on hover" | The report was that hovering the item you had chosen showed a white colour. | The row's hover colour was measured and was correct. The white was the little action button on the row, which carried an opaque pale background so its icon would stay readable over the blue selection — and in a light theme that background is nearly white. **Right colour, still broken.** The same trap as the row that had no clickable area. |
 
 ---
 
@@ -300,6 +305,9 @@ These items have never been checked or verified in this environment:
 | **Retry after a failed save** | **Works.** A failed save shows **Save failed** with a Retry button in the bottom bar; pressing it sends the pending content. A check that had been failing was clicking a button that does not exist, so the feature looked broken when it was not. |
 | **Pane drag-resize, collapse persistence, keyboard shortcuts** | Runtime behaviours not studied. |
 | **Tab overflow scrolling, command palette, contextual toolbar conditional groups** | Not driven during the audit. |
+| **Markdown and Diagram workspaces** | Only the *absence* of a toolbar was measured. The editors themselves were not driven. |
+| **Settings, Calendar, Trash, Favorites** | Only that they open as a panel covering the pages underneath. The views themselves were not driven. |
+| **The full set of browser checks** | Never run start to finish. They are run in groups, and each group's failures are compared against a freshly measured baseline rather than a remembered one. |
 
 The authoritative reference document for all measurements and source locations is **[rtwiki-uiux.md](rtwiki-uiux.md)**.
 
@@ -337,6 +345,10 @@ Newest first.
 
 | When | What changed | Why |
 |---|---|---|
+| 2026-09-26 | The side panel now lines up on one edge | The search box, the "Root" row and the page rows were three different widths with three different left edges, so the highlight changed width depending on what you clicked. There is now one measurement that all three use |
+| 2026-09-26 | "Root" sits flush with the first page, and the home page's tab no longer looks flat | There was a 10-pixel gap under "Root" and none at all between the pages below it, so the spacing changed for no visible reason. On the home page the open tab met a hard line instead of joining the row beneath it, because the home page's heading was the wrong shade |
+| 2026-09-26 | Only one thing says "you are here" on the home page | The left strip and the page tree were both marking the home page as current, in two different colours |
+| 2026-09-26 | Hovering the page you have selected no longer shows a white patch | The little action button on the row had a pale background so its icon would stay readable over the blue highlight — which meant hovering the row you had chosen painted a near-white square on it |
 | 2026-09-25 | The empty bar above the dashboard is gone, and the information bar now shows where you are | On the home page there were no tabs, so a 40-pixel empty strip sat above your content for no reason, and the bar along the bottom lost its "you are here" information |
 | 2026-09-25 | The open tab now joins up with the row below it | The active tab was floating above the toolbar as a rounded shape rather than connecting to the page beneath it, which read as an outline rather than a tab |
 | 2026-09-25 | The search box in the side panel is wide again, with a proper outline | A previous attempt made it run edge to edge with no corners, and its border turned out to be so faint the box was nearly invisible |

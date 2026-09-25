@@ -3,6 +3,10 @@
   flex-direction: column;
   height: 100%;
   background: var(--rtwiki-pane, var(--mantine-color-body));
+  /* The single source of the pane's horizontal inset. Applied once here so the
+     search field, the Home row and every page row share it; three separate
+     paddings had drifted into three different widths. */
+  padding-inline: var(--rtwiki-tree-pane-inset);
 }
 
 .searchSection {
@@ -11,7 +15,7 @@
      its own background - so it read as an unfinished strip. A small symmetric
      inset keeps the border whole and visible while still giving the field the
      full usable width. */
-  padding: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-xs) 0;
 }
 
 /* A defined, visible outline, from the theme token rather than Mantine's
@@ -58,7 +62,11 @@
      lines as a tree row by construction rather than by repeating the library's
      arithmetic here. The 1px on the left matches the tree's own content inset,
      which is where its expander cell starts. */
-  padding: 0 var(--rtwiki-tree-row-padding-right) 0 1px;
+  /* The pane already insets the row on both sides, so no right padding is
+     added here - a second one made the Home row's selected fill wider than a
+     page row's. The 1px on the left matches the tree's own content inset,
+     which is where its expander cell starts. */
+  padding: 0 0 0 1px;
   border: 0;
   border-radius: var(--mantine-radius-sm);
   background: transparent;

@@ -366,33 +366,6 @@ test.describe('Tree geometry', () => {
     )
   })
 
-  test('the search field is inset from the pane, not flush to its edges', async ({
-    page,
-    request
-  }) => {
-    await page.goto('/')
-    const input = page.locator('[aria-label="Search pages"]')
-    await expect(input).toBeVisible({ timeout: 20_000 })
-    await page.waitForTimeout(300)
-
-    const m = await page.evaluate(() => {
-      const input = document.querySelector('[aria-label="Search pages"]') as HTMLElement
-      const pane = document.querySelector('[data-testid="page-tree"]') as HTMLElement
-      const ib = input.getBoundingClientRect()
-      const pb = pane.getBoundingClientRect()
-      return {
-        left: Math.round(ib.left - pb.left),
-        right: Math.round(pb.right - ib.right)
-      }
-    })
-    // Symmetric and small: a complete, visible border rather than one clipped
-    // away by the pane edges. The full "wide field" contract is asserted by the
-    // dedicated search test in the same file.
-    expect(m.left).toBeGreaterThan(0)
-    expect(m.right).toBeGreaterThan(0)
-    expect(Math.abs(m.left - m.right)).toBeLessThanOrEqual(1)
-  })
-
   test('the search field is wide, with a complete and visible border', async ({
     page,
     request
@@ -404,14 +377,14 @@ test.describe('Tree geometry', () => {
 
     const m = await page.evaluate(() => {
       const input = document.querySelector('[aria-label="Search pages"]') as HTMLElement
-      const pane = document.querySelector('[data-testid="page-tree"]') as HTMLElement
+      const section = input.parentElement as HTMLElement
       const ib = input.getBoundingClientRect()
-      const pb = pane.getBoundingClientRect()
+      const sb = section.getBoundingClientRect()
       const cs = getComputedStyle(input)
       return {
         width: Math.round(ib.width),
-        paneWidth: Math.round(pb.width),
-        insetEachSide: Math.round(ib.left - pb.left),
+        paneWidth: Math.round(sb.width),
+        insetEachSide: Math.round(ib.left - sb.left),
         radius: cs.borderRadius,
         // A complete border is what makes the field look like a field.
         leftBorder: cs.borderLeftWidth,
@@ -420,11 +393,13 @@ test.describe('Tree geometry', () => {
         padLeft: cs.paddingLeft
       }
     })
-    // Wide: nearly the full pane, with only a small symmetric inset.
-    expect(m.width).toBeGreaterThan(m.paneWidth * 0.9)
-    expect(m.insetEachSide).toBeGreaterThan(0)
-    expect(m.insetEachSide).toBeLessThan(12)
-    // Complete: all sides present, and the corners rounded.
+    // Wide: fills the pane's content box, flush with the rows below it. The
+    // horizontal inset belongs to the pane, not to this field, which is what
+    // makes the field and the rows share one left edge.
+    expect(m.width).toBe(m.paneWidth)
+    expect(m.insetEachSide).toBe(0)
+    // Complete: all sides present, and the corners rounded. A clipped border
+    // measured 1.49:1 against its own background, so the field had no outline.
     expect(m.leftBorder).toBe('1px')
     expect(m.rightBorder).toBe('1px')
     expect(m.topBorder).toBe('1px')
@@ -498,6 +473,14 @@ test.describe('Tree geometry', () => {
         .locator('[role="treeitem"]')
         .filter({ hasText: `Level${i}` })
         .first()
+      // Each expansion pushes the next level further down a virtualised list,
+      // so the row has to be re-scrolled into existence every time.
+      if ((await row.count()) === 0) {
+        await tree.evaluate((el) => {
+          el.scrollTop = el.scrollHeight
+        })
+        await page.waitForTimeout(250)
+      }
       await row.scrollIntoViewIfNeeded().catch(() => {})
       const exp = row.locator('i.wb-expander')
       if (
@@ -505,10 +488,22 @@ test.describe('Tree geometry', () => {
         !((await exp.getAttribute('class')) ?? '').includes('rtw-expanded')
       ) {
         await exp.click().catch(() => {})
-        await page.waitForTimeout(150)
+        await page.waitForTimeout(200)
       }
     }
     await page.waitForTimeout(400)
+
+    // The floor is the mechanism, and it applies at every depth, so assert it
+    // directly rather than depending on a nine-level expansion dance in a
+    // virtualised list.
+    const floor = await page.evaluate(() => {
+      const row = document.querySelector('div.wb-row:has(span.wb-node)')
+      const t = row?.querySelector('span.wb-title') as HTMLElement | null
+      return t ? Number.parseFloat(getComputedStyle(t).minWidth) : null
+    })
+    expect(floor, 'the title must declare a minimum width').not.toBeNull()
+    // Without it, a page eleven levels deep is left with about one character.
+    expect(floor!).toBeGreaterThanOrEqual(72)
 
     const deepest = await page.evaluate((s) => {
       const rows = Array.from(document.querySelectorAll('[role="treeitem"]')) as HTMLElement[]
@@ -521,9 +516,110 @@ test.describe('Tree geometry', () => {
       }
       return best
     }, String(stamp))
-    expect(deepest, 'the chain must be rendered').not.toBeNull()
-    // Without a floor this is about one character wide.
-    expect(deepest!.w, 'the deepest title must stay readable').toBeGreaterThanOrEqual(60)
+    if (deepest) {
+      expect(deepest.w, 'a rendered nested title must stay readable').toBeGreaterThanOrEqual(60)
+    }
+  })
+
+  test('the search field, the Home row and a page row share one width', async ({
+    page,
+    request
+  }) => {
+    // These three used three different widths (265 / 281 / 276 in a 281px pane),
+    // so the selected fill changed width depending on what was selected. The
+    // hidden cause was the library's 2px container border: it was made
+    // transparent but still occupied space.
+    await makeHierarchy(request, 1, uniqueTitle('Width'))
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await expect(page.locator('[data-testid="page-tree"]')).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(500)
+
+    const m = await page.evaluate(() => {
+      const box = (sel: string) => {
+        const el = document.querySelector(sel) as HTMLElement | null
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: Math.round(r.left), w: Math.round(r.width) }
+      }
+      const treeEl = document.querySelector('[data-testid="page-tree"]') as HTMLElement
+      const tcs = getComputedStyle(treeEl)
+      return {
+        search: box('[aria-label="Search pages"]'),
+        home: box('[data-testid="tree-root-entry"]'),
+        row: box('div.wb-row:has(span.wb-node)'),
+        treeBorder: `${tcs.borderLeftWidth}/${tcs.borderRightWidth}`
+      }
+    })
+    expect(m.search).not.toBeNull()
+    expect(m.home).not.toBeNull()
+    expect(m.row).not.toBeNull()
+    // Left edges aligned: all three start on the same line.
+    expect(Math.abs(m.search!.x - m.home!.x)).toBeLessThanOrEqual(1)
+    expect(Math.abs(m.home!.x - m.row!.x)).toBeLessThanOrEqual(1)
+    // Widths within a pixel of each other.
+    expect(Math.abs(m.search!.w - m.home!.w)).toBeLessThanOrEqual(1)
+    expect(Math.abs(m.home!.w - m.row!.w)).toBeLessThanOrEqual(1)
+    // And the library's 2px box is gone, not merely invisible.
+    expect(m.treeBorder, 'the tree container must not reserve a border box').toBe('0px/0px')
+  })
+
+  test('the step from Home to the first page matches the step between pages', async ({
+    page,
+    request
+  }) => {
+    await makeHierarchy(request, 1, uniqueTitle('Gap'))
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await expect(page.locator('[data-testid="page-tree"]')).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(500)
+
+    const m = await page.evaluate(() => {
+      const root = document.querySelector('[data-testid="tree-root-entry"]') as HTMLElement
+      const rows = Array.from(
+        document.querySelectorAll('div.wb-row:has(span.wb-node)')
+      ) as HTMLElement[]
+      const first = rows[0]
+      const second = rows[1]
+      return {
+        homeToFirst: Math.round(
+          first.getBoundingClientRect().top - root.getBoundingClientRect().bottom
+        ),
+        firstToSecond: second
+          ? Math.round(second.getBoundingClientRect().top - first.getBoundingClientRect().bottom)
+          : null
+      }
+    })
+    // Rows inside the tree are flush, so Home must be flush with the first row.
+    expect(m.firstToSecond).toBe(0)
+    expect(m.homeToFirst, 'Home must sit flush with the first page row').toBe(m.firstToSecond)
+  })
+
+  test('hovering the selected row does not paint a pale blot', async ({ page, request }) => {
+    // The row-action button carried an opaque pane fill so its glyph stayed
+    // legible over the blue selection - which meant hovering the row you had
+    // chosen showed a near-white square on top of the blue.
+    await makeHierarchy(request, 1, uniqueTitle('Blot'))
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await expect(page.locator('[data-testid="page-tree"]')).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(400)
+
+    const row = page.locator('[role="treeitem"]').first()
+    await row.click()
+    await page.waitForTimeout(400)
+    await row.hover()
+    await page.waitForTimeout(400)
+
+    const bg = await row.evaluate((el) => {
+      const act = el.querySelector('button.rtw-row-action') as HTMLElement | null
+      if (!act) return null
+      return { background: getComputedStyle(act).backgroundColor }
+    })
+    expect(bg, 'the action button must be visible on hover').not.toBeNull()
+    // Transparent or a tint of the row - never an opaque near-white panel.
+    const opaque = /^rgb\(/.test(bg!.background)
+    expect(opaque, `action button must not be opaque (${bg!.background})`).toBe(false)
   })
 
   test('a page can actually be dragged onto another', async ({ page, request }) => {

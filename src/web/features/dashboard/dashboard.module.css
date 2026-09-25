@@ -6,11 +6,17 @@
   flex-wrap: wrap;
   gap: var(--mantine-spacing-md);
   /* Auto height so the title + subtitle wrap gracefully at narrow widths
-     instead of being clipped by a fixed 40px bar (audit UI-007). */
+     instead of being clipped by a fixed 40px bar (audit UI-007).
+
+     Panel-toned with no bottom rule, for the same reason the toolbar is: the
+     active tab merges into whatever sits directly beneath it by taking the
+     panel tone. A canvas-toned header with a rule under it left the tab
+     meeting a hard line instead - the "flat tab bar" look. The surface step
+     against the canvas below is what separates the header now. */
   padding: var(--mantine-spacing-xs) var(--rtwiki-chrome-pad-x);
   margin-bottom: var(--mantine-spacing-md);
-  border-bottom: 1px solid var(--rtwiki-chrome-border);
-  background: var(--rtwiki-chrome-bg);
+  border-bottom: none;
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 /* Dashboard scroll owner (Slice 1: scroll ownership). The only vertically
