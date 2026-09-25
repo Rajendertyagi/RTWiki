@@ -186,8 +186,24 @@ export function usePagesController(): PagesController {
         setSelectedPage(null)
         return
       }
-      const page = pages.find((p) => p.id === id) ?? null
-      setSelectedPage(page)
+      // Resolved through an updater rather than looked up and assigned as a
+      // plain value, because a plain value clobbers any selection still queued
+      // ahead of it.
+      //
+      // Creating a page queues `setSelectedPage(newPage)` and then immediately
+      // re-selects the same id, because navigation also has to run. The lookup
+      // below is against a `pages` snapshot taken *before* the insert was
+      // committed, so it missed the page and produced `null` - silently undoing
+      // the selection that had just been made. The result was that creating a
+      // page appeared to do nothing at all: no tab, no editor, no tree row.
+      //
+      // An updater sees the pending state, so the already-correct selection is
+      // kept. A genuinely different id still resolves from the list, and an id
+      // that exists in neither still clears as before.
+      setSelectedPage((prev) => {
+        if (prev !== null && prev.id === id) return prev
+        return pages.find((p) => p.id === id) ?? null
+      })
     },
     [pages]
   )

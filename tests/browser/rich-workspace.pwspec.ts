@@ -166,7 +166,10 @@ test.describe('Working rich-note workspace', () => {
     const title = uniqueTitle('CardOpen')
     await page.goto('/')
     await createNoteViaDialog(page, title)
-    await page.getByRole('button', { name: 'Home' }).click()
+    // Scoped to the utility rail: the status bar also carries a Home button,
+    // so a bare role/name lookup matches two elements and Playwright refuses to
+    // guess which one navigates Home.
+    await page.getByRole('navigation', { name: 'RTWiki' }).getByLabel('Home').click()
     // The whole card body is an accessible open button (ghost overlay).
     await page.getByRole('button', { name: `Open ${title}` }).click()
     await expect(page.locator(editorRoot)).toBeVisible()

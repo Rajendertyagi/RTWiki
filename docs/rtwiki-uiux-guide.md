@@ -276,6 +276,7 @@ These findings were recorded as fact and later proved wrong. The reason is noted
 | F5 (status bar) | A 2-pixel disagreement about the status bar height between two places that define it. | The same mistake as F3: the comparison was made against the committed version of the settings rather than the current one. Once compared correctly, the two agreed. No defect. |
 | HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored page directly showed the CSS was saved, and the rule applied inside the preview. Two separate things had been mistaken for one: a new page starts with empty CSS, and the status bar reported "Saved" for work that had not been written yet. |
 | The preview background was going to break | Switching the palette to a perceptual colour format would leave HTML previews with no background, because the safety check only understood three older colour formats. | Caught before it shipped by reading the check while changing the palette. The check now understands the new format and has its own test. The lesson: a value that passes through a validator must be read when the value changes shape. |
+| Ten failing tests were "flaky" | Ten tests failing in the rich-note area were treated as an unstable test environment and put aside. | They all shared one cause: creating a page was silently doing nothing. The test suite had been reporting a real, total failure in the most-used action in the app, and it was read as noise. **When every test in a group fails the same way, that is one fault, not many.** |
 
 ---
 
@@ -332,6 +333,7 @@ Newest first.
 
 | When | What changed | Why |
 |---|---|---|
+| 2026-09-25 | Creating a new page now actually opens it | It had been silently doing nothing: the page was saved, but no tab opened, nothing appeared in the tree, and the editor never loaded. You were told it worked while the screen said "Saved" |
 | 2026-09-25 | The left navigation strip was widened from 40 to 48 pixels | At 40 the icons exactly filled it with no breathing room, so they touched both edges. It now looks centred and has room to grow |
 | 2026-09-25 | The four surface shades are now spaced by an exact, measured amount | They had been picked by eye and were nearly equal, so two of them read as the same colour. A refinement, not a visible jump |
 | 2026-09-25 | All sizing and shape moved out of the individual screens into the stylesheet | Fifteen one-off size instructions were scattered across the app. Now there is one place for each, and nothing hardcodes a size inline |

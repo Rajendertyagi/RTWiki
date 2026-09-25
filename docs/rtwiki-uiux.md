@@ -817,6 +817,38 @@ The first is a genuine open question rather than a test artefact — "full heigh
 stated requirement for the tree pane, and the rail currently stops at the status bar
 rather than running the full viewport.
 
+### F9 — Creating a page appeared to do nothing — **RESOLVED** ✅
+
+This was mis-filed for a long time as "10 flaky tests about dialog autofocus". It was
+never a focus problem and never flaky. Creating a page from the New Page dialog produced
+**no tab, no tree row, and no editor at all** — the page was created (the API returned
+`201`) and the app stayed on the dashboard reporting "Saved".
+
+**Mechanism.** `createPage` queues `setSelectedPage(newPage)` to select the page it just
+made. Navigation then immediately re-selects the same id, because opening a page also has
+to run flush / recents / URL-sync side effects. That second call resolved the id against
+a `pages` snapshot taken *before* the insert had been committed, missed, produced
+`null`, and wrote it as a **plain value** — which clobbers a selection still queued ahead
+of it. The create was silently undone by its own navigation.
+
+Why existing-page navigation always worked: by the time you click a page the list
+snapshot is already current, so the lookup succeeds. Only the create path raced itself.
+
+**Fix.** `selectPage` now resolves through an updater function, so it sees the pending
+state and keeps an already-correct selection. A different id still resolves from the
+list; an id in neither still clears, exactly as before.
+
+The 10 failing tests all funnel through one create helper, which is why every one of them
+reported the same symptom. That suite is now 15/15.
+
+This also silently affected **markdown import** (`handleImportMarkdown` uses the same
+create-then-re-select pattern), so importing a `.md` file did not open the page either.
+
+**Lesson recorded:** ten failures sharing one symptom was treated as a flaky suite rather
+than a single fault. They had one cause, and it sat in the most-used action in the app.
+When every failure in a group fails the same way, that is a signal to find the shared
+helper, not to assume the environment.
+
 ### F4 — A shipped test asserts an element that does not exist — **OPEN** 🟡
 
 `tests/browser/shell-layout.pwspec.ts:132` waits for `input[aria-label="Title"]`. With a rich page open that element count is **0** — the page title is edited as the document's own H1 (the single `[contenteditable="true"]` is the BlockNote editor). There is no separate title input, so this test cannot pass on any machine. It is a stale assertion, not an environment flake.
