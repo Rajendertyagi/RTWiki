@@ -390,6 +390,35 @@ panel tone. A text-entry surface has a real usability argument for staying disti
 from the rendered result, so this is a design decision and is excluded from the
 document-surface test.
 
+### The save status indicator lied about pending work
+
+The status bar mapped every state that was not actively saving or failing to
+**"Saved"**. Because autosave is debounced by 2000ms, there is a window in which an
+edit exists only in memory — and for that entire window the bar announced "Saved".
+
+The cause was in `html-editor.tsx`: the autosave status `'dirty'` fell through to
+`'clean'`, and the bar rendered `'clean'` as "Saved". The code comment even recorded
+the compromise — *"a dirty page simply hasn't started saving yet, so it presents as
+clean there while isDirty carries the real signal"* — but the status bar never received
+`isDirty`, so the real signal was discarded.
+
+`StatusSaveState` now has a distinct **`'pending'`** value, rendered as **"Unsaved
+changes"**. The union was previously redeclared as a string literal in four places
+(`html-editor.tsx`, three times in `page-workspace.tsx`, and `App.tsx`); all four now
+import `StatusSaveState` so the states cannot drift apart again.
+
+### Three of the five HTML-editor failures were stale test selectors
+
+Only one of the five pre-existing failures was a product defect. The breakdown:
+
+| Failure | Actual cause |
+|---|---|
+| 3 × "Saved" not visible | One product defect (above) plus a wrong selector: the tests looked for `p[aria-live="polite"]`, but `aria-live` sits on the status region's container, not on the `<p>` holding the text |
+| "switching pages flushes pending edits" | **Test bug.** `locator('[aria-label="Home"]')` became ambiguous when the status bar added its own Home button. Now scoped to the rail's navigation landmark |
+| "failed saves surface Retry and recover" | **Still failing.** After a save fails and Retry is pressed, no second PATCH is sent. Genuine open defect in autosave failure handling |
+
+Result: 9 passing / 5 failing → **14 passing / 1 failing**.
+
 ### The sandboxed preview and the browser's base background
 
 The HTML preview renders inside a sandboxed iframe with no same-origin access, so it
@@ -624,6 +653,10 @@ in a browser. The items below are the ones verified by actually running the app.
 - `bun run format:check` — 0 errors
 - `tests/browser/rich-workspace.pwspec.ts` "Rich document surface" — 3/3 pass
 - `tests/browser/window-chrome.pwspec.ts` — 8/8 pass
+- `tests/browser/html-editor.pwspec.ts` — **14 pass / 1 fail** (was 9 / 5; the remaining failure is the open autosave-retry defect)
+- A pending HTML/CSS/JavaScript edit reports "Unsaved changes" rather than "Saved" before the debounce elapses — asserted in both light and dark
+- CSS typed into a child file reaches the stored record and applies in the rendered preview (verified `color: rgb(1, 2, 3)`, `font-size: 40px` inside the frame) — measured
+- The rendered preview does not rebuild on its own while idle (0 `srcdoc` mutations over 3s) — measured, ruling out a rebuild loop
 
 **Read from source but not re-measured in a browser:** the §3.2 tree metrics, the §3.3
 type scale, the §3.4 radii distribution, and the §3.6 motion inventory. These are

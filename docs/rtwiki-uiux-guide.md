@@ -93,7 +93,7 @@ The type scale is small and deliberate:
 | **Selecting a tree row** | A shared highlight colour marks the row, and the Home entry uses the same one. | In the document area — selection there is handled by the editor, not by the tree. |
 | **Window becomes narrow** | The left tree collapses into a drawer. The toolbar scrolls sideways rather than wrapping. **The right sidebar does not yet collapse properly — it shrinks to a sliver, which is a known defect.** | When the window is wider than the workspace minimum (480px) — the layout should not collapse. |
 | **Dragging a divider** | Pane dividers are 6px wide (1px visible, 5px invisible pointer tolerance). Keyboard step is 20px. Bounds: tree 220–520px, right sidebar 220–420px. | When the divider is already at its minimum — dragging further should do nothing, not snap back. |
-| **Save indicator** | Autosave is debounced at 2000ms. A visible indicator shows save status. | When the user has not made any changes — no indicator should appear. |
+| **Save indicator** | The bar along the bottom always tells you the truth about saving: **Unsaved changes** while an edit is waiting, **Saving...** while it writes, **Saved** once it is on disk, **Save failed** with a Retry button if it did not work. | Let it say "Saved" while the edit is still only in memory. That is the one thing a save indicator must never do — it is what makes an autosave trustworthy. |
 | **Theme toggle** | The rail button flips between light and dark. It does **not** follow the OS preference (a known gap, F7). | When the user expects the app to respect `prefers-color-scheme` on first load — it does not yet. |
 | **Scrolling** | The rich note is the **only** element that scrolls vertically on its route. The pane dividers, tabs, and chrome rows are fixed. | In the tree or sidebar — those scroll horizontally (overflow) or not at all; they do not participate in the vertical scroll of the document. |
 
@@ -181,7 +181,8 @@ These items have never been checked or verified in this environment:
 | **Empty, loading, and error states** | Not driven during the audit. |
 | **Keyboard navigation and focus order** | Not tested. |
 | **Contrast for every element** | Only the toolbar and the page tree rows were checked. Both were comfortable at about 10:1. Tabs, the title row, and the rest of the interface have not been measured. |
-| **"Saved" confirmation in the HTML source view** | Typing in an HTML, CSS or JavaScript child file saves correctly, but the view never shows a "Saved" message. Five existing checks fail on this. A successful save therefore looks like a failure. Not fixed. |
+| **"Saved" confirmation in the HTML source view** | **FIXED.** The bar said "Saved" for the whole two-second window before an autosave even ran, because a pending edit was reported as "clean". There is now a distinct **Unsaved changes** state. Five checks that had been failing now pass. |
+| **Retry after a failed save** | One check still fails: after a save fails and Retry is pressed, no second save is sent. Autosave failure handling is not yet correct. |
 | **Pane drag-resize, collapse persistence, keyboard shortcuts** | Runtime behaviours not studied. |
 | **Tab overflow scrolling, command palette, contextual toolbar conditional groups** | Not driven during the audit. |
 
@@ -222,6 +223,7 @@ Newest first.
 | When | What changed | Why |
 |---|---|---|
 | 2026-09-25 | This guide was written, alongside a companion reference document | The existing reference was written for engineers and was not usable for making design decisions |
+| 2026-09-25 | The save indicator was made truthful | It reported "Saved" for work that had not been written yet, so a pending edit looked saved |
 | 2026-09-25 | The HTML and Markdown rendered views stopped being cards | They were framed and painted a different shade from the page, so in dark mode the content looked like a hole. Only the typing view keeps a frame, on purpose |
 | 2026-09-25 | The theme foundation was completed | Colour rules now have one source and a test that protects them |
 | 2026-09-25 | Two earlier findings were withdrawn | Their measurements could not have been true of the code they described |

@@ -7,6 +7,7 @@ import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-bounda
 import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import { RichToolbar } from '../rich-editor/rich-toolbar.js'
 import type { AnyRichEditor } from '../rich-editor/schema.js'
+import type { StatusSaveState } from '../workspace/status-bar.js'
 import { EditorHeader } from './editor-header.js'
 import classes from './page-workspace.module.css'
 
@@ -43,7 +44,7 @@ interface PageWorkspaceProps {
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange: (state: {
     isDirty: boolean
-    saveState: 'clean' | 'saving' | 'saved' | 'error'
+    saveState: StatusSaveState
     error?: string | null
   }) => void
   /** Active HTML source subfile for this page; null = rendered preview. */
@@ -176,10 +177,7 @@ function PageEditors({
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
-  onSaveStateChange: (state: {
-    isDirty: boolean
-    saveState: 'clean' | 'saving' | 'saved' | 'error'
-  }) => void
+  onSaveStateChange: (state: { isDirty: boolean; saveState: StatusSaveState }) => void
   onRichEditorReady: (editor: AnyRichEditor | null) => void
   onToolbarReady?: (node: ReactNode | null) => void
 }): JSX.Element | null {
@@ -286,10 +284,7 @@ function HtmlEditorSurface({
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
   onFlushRef: (fn: (() => Promise<boolean>) | null) => void
-  onSaveStateChange: (state: {
-    isDirty: boolean
-    saveState: 'clean' | 'saving' | 'saved' | 'error'
-  }) => void
+  onSaveStateChange: (state: { isDirty: boolean; saveState: StatusSaveState }) => void
   onToolbarReady?: (node: ReactNode | null) => void
 }): JSX.Element {
   const parsed = parseHtmlContent(page.content)

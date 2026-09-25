@@ -9,7 +9,7 @@ import { formatDate, formatRelativeTime } from '../../util/format-date.js'
 import { pagePlainText } from '../../util/page-preview-text.js'
 import classes from './status-bar.module.css'
 
-export type StatusSaveState = 'clean' | 'saving' | 'saved' | 'error'
+export type StatusSaveState = 'clean' | 'pending' | 'saving' | 'saved' | 'error'
 
 interface StatusBarProps {
   /** Compact page-type label shown on the left (e.g. "Rich Note"). */
@@ -77,12 +77,18 @@ export function StatusBar({
   onOpenPage,
   children
 }: StatusBarProps): JSX.Element {
+  // 'pending' is deliberately distinct from 'clean'. Autosave is debounced, so
+  // there is a window in which an edit exists but no save has run yet. Folding
+  // that window into 'clean' made the bar announce "Saved" for work that was
+  // still only in memory, which is the one thing a save indicator must never do.
   const saveLabel =
     saveState === 'saving'
       ? UI_TEXT.saveStatusSaving
       : saveState === 'error'
         ? UI_TEXT.saveStatusError
-        : UI_TEXT.saveStatusSaved
+        : saveState === 'pending'
+          ? UI_TEXT.saveStatusPending
+          : UI_TEXT.saveStatusSaved
 
   const text = page ? pagePlainText(page) : ''
   const showWordCount =

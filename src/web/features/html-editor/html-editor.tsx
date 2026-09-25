@@ -17,6 +17,7 @@ import {
   setWordWrap as setWordWrapPref,
   useEditorPreferences
 } from '../workspace/editor-preferences.js'
+import type { StatusSaveState } from '../workspace/status-bar.js'
 // NOTE: StatusBar is now rendered once, globally, in the app-shell footer
 // (see App.tsx). It is no longer mounted per HTML source view.
 import { CodeEditor } from './code-editor.js'
@@ -47,7 +48,8 @@ export interface HtmlEditorWorkspaceProps {
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
     isDirty: boolean
-    saveState: 'clean' | 'saving' | 'saved' | 'error'
+    /** Reused from the status bar so the two cannot drift apart. */
+    saveState: StatusSaveState
     error?: string | null
   }) => void
   /** Lifts caret/selection + format-error up to the global status bar. */
@@ -142,9 +144,11 @@ export default function HtmlEditorWorkspace({
 
   useEffect(() => {
     if (onSaveStateChange) {
-      // Map the autosave lifecycle onto the header's display states: a dirty
-      // page simply hasn't started saving yet, so it presents as clean there
-      // while isDirty carries the real signal.
+      // Map the autosave lifecycle onto the display states. 'dirty' is its own
+      // state rather than being folded into 'clean': autosave is debounced, so
+      // between an edit and the save there is a window where the work exists
+      // only in memory. Reporting that as clean made the status bar claim
+      // "Saved" for unsaved work.
       const saveState =
         status === 'saving'
           ? ('saving' as const)
@@ -152,7 +156,9 @@ export default function HtmlEditorWorkspace({
             ? ('saved' as const)
             : status === 'error'
               ? ('error' as const)
-              : ('clean' as const)
+              : status === 'dirty'
+                ? ('pending' as const)
+                : ('clean' as const)
       onSaveStateChange({
         isDirty: status !== 'idle' && status !== 'saved',
         saveState,

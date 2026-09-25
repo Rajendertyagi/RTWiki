@@ -110,6 +110,7 @@ export const UI_TEXT = {
   createButton: 'Create',
   cancelButton: 'Cancel',
   saveStatusSaving: 'Saving...',
+  saveStatusPending: 'Unsaved changes',
   saveStatusSaved: 'Saved',
   saveStatusError: 'Save failed',
   saveStatusRetry: 'Retry',

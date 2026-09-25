@@ -81,10 +81,12 @@ async function typeIntoEditor(page: Page, text: string): Promise<void> {
 
 async function expectSaved(page: Page): Promise<void> {
   // The header also relabels its Save button to "Saved" once clean, so the
-  // assertion must target the aria-live status paragraph specifically.
-  await expect(page.locator('p[aria-live="polite"]').filter({ hasText: 'Saved' })).toBeVisible({
-    timeout: 10_000
-  })
+  // assertion must target the status region specifically. That region is the
+  // element carrying role="status" / aria-live="polite"; the "Saved" text sits
+  // in a Text component inside it, which does not itself carry aria-live.
+  await expect(
+    page.locator('[data-testid="workspace-status-bar"]').filter({ hasText: 'Saved' })
+  ).toBeVisible({ timeout: 10_000 })
 }
 
 /**
@@ -210,6 +212,30 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await expect(frame.locator('#typed-marker')).toHaveText('typed body')
   })
 
+  test('the status bar admits a pending edit instead of claiming Saved', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('Pending Indicator')
+    await seedHtmlPage(request, title, {
+      content: '{"version":2,"html":"","css":"","javascript":"","jsEnabled":false}'
+    })
+    await openSource(page, title, 'css')
+
+    const statusBar = page.locator('[data-testid="workspace-status-bar"]')
+    await expect(statusBar).toBeVisible()
+    await expect(statusBar).toContainText('Saved')
+
+    await typeIntoEditor(page, '.pending-probe { color: red; }')
+    // Autosave is debounced, so an edit is pending for a window. During that
+    // window the status bar must not claim the work is already saved.
+    await expect(statusBar).not.toContainText('Saved')
+    await expect(statusBar).toContainText('Unsaved')
+
+    // ...and it settles on Saved once the save completes.
+    await expectSaved(page)
+  })
+
   test('autosave reaches Saved and a reload shows the persisted edit', async ({
     page,
     request
@@ -295,7 +321,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
     await typeIntoEditor(page, '<p id="flush-marker">flushed</p>')
     // Leave immediately — before the autosave debounce fires.
-    await page.locator('[aria-label="Home"]').click()
+    await page.getByRole('navigation', { name: 'RTWiki' }).getByLabel('Home').click()
     await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
 
     await openSource(page, title, 'html')
@@ -382,7 +408,7 @@ test.describe('HTML editor workspace (real Chromium)', () => {
     await openSource(page, title, 'javascript')
     await expect(page.locator(JS_TOGGLE)).toBeChecked()
 
-    await page.locator('[aria-label="Home"]').click()
+    await page.getByRole('navigation', { name: 'RTWiki' }).getByLabel('Home').click()
     await openPreview(page, title)
     await openSource(page, title, 'javascript')
     await expect(page.locator(JS_TOGGLE)).toBeChecked()

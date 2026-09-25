@@ -35,7 +35,7 @@ import {
   resetLayoutPreferences,
   saveLayoutPreferences
 } from './features/workspace/layout-preferences.js'
-import { StatusBar } from './features/workspace/status-bar.js'
+import { StatusBar, type StatusSaveState } from './features/workspace/status-bar.js'
 import {
   loadWorkspaceSession,
   resolveRestorableWorkspace,
@@ -468,9 +468,7 @@ export function App(): JSX.Element {
   } | null>(null)
 
   // Lifted editor status for the global application status bar.
-  const [pageSaveState, setPageSaveState] = useState<'clean' | 'saving' | 'saved' | 'error'>(
-    'saved'
-  )
+  const [pageSaveState, setPageSaveState] = useState<StatusSaveState>('saved')
   const [pageSaveError, setPageSaveError] = useState<string | null>(null)
   const [editorStatus, setEditorStatus] = useState<EditorStatus | null>(null)
 
