@@ -89,7 +89,13 @@ cannot express depth, only separation, and they do not adapt to a dark theme.
   border.
 - The lines between the stacked rows at the top are now barely there, so the top of
   the window reads as one light block rather than a set of bands.
-- Everything that genuinely floats — menus, pop-ups, dialogs, tooltips, and the
+- The open tab now merges with the page below it, the way a browser tab does,
+  instead of sitting on a shadow.
+- The right-hand details panel is now a proper panel shade, rather than the same
+  shade as the page with a hard line down its edge.
+- The notification's blue bar is now a thin line along the bottom. It still shows
+  how long you have before it closes, but it no longer shouts.
+- Everything that genuinely floats - menus, pop-ups, dialogs, tooltips, and the
   notification toast — now shares one soft layered shadow with a faint light edge, so
   it visibly lifts off the page instead of sitting on it.
 
@@ -209,7 +215,7 @@ an oversight to correct.
 | 3 | **Re-measure and fix the mobile toolbar** | The recorded numbers (F2) predate the current stylesheet and must not drive a fix. Re-measure first, then decide between scroll and an overflow menu. |
 | 4 | **Application shell polish** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small items that use the declared tokens rather than hardcoded values. |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Shell geometry must settle first (item 4) so tab work is not re-verified. |
-| 6 | **Cosmetic polish** — toolbar grouping and labels (F6), fix the stale test (F4), clean the dev database (F8) | Everything else is independent or low-risk. |
+| 6 | **Cosmetic polish** - toolbar grouping and labels (F6), fix the stale test (F4) | The database is clean: 360 test pages removed, 4 pages left alone because they could not be identified as test rubbish. The rest is independent or low-risk. |
 | 7 | **Theme picker UI** — plus Catppuccin and Nord from their official palettes | A one-option picker is noise. Held until a second theme exists. |
 
 **Out of scope for this cycle:** building the two extra colour themes, giving the

@@ -9,6 +9,13 @@ import { createTheme, Menu, Modal, Popover, Tooltip } from '@mantine/core'
 export const FLOATING = 'rtwiki-floating'
 
 /**
+ * The notification toast carries the floating recipe plus its own class, because
+ * its auto-close countdown has to be repositioned and that must not leak onto
+ * every other floating surface.
+ */
+export const NOTIFICATION = 'rtwiki-notification'
+
+/**
  * RTWiki theme registry.
  *
  * Every surface colour in the application is declared here, once, as data. A

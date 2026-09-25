@@ -4,8 +4,11 @@
   width: 260px;
   flex: 0 0 260px;
   min-height: 0;
-  border-left: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
+  /* A panel, so it takes the panel tone. It was painted with Mantine's body
+   * colour - the same tone as the document beside it - which is why it needed a
+   * full-strength border just to be visible at all. Colour is the separator
+   * here; the border was redundant, and the reason the rule existed. */
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 .header {
@@ -13,7 +16,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  /* Within one surface there is no colour step to read, so a hairline is the
+   * honest separator. Faint, because this is a header edge and not a rule the
+   * eye should land on. */
+  border-bottom: 1px solid var(--rtwiki-chrome-hairline, var(--mantine-color-default-border));
 }
 
 .scrollArea {

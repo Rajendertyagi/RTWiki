@@ -120,6 +120,30 @@
 }
 
 /*
+ * The toast's auto-close countdown.
+ *
+ * It is drawn as a pseudo-element, and by default it is a 6px block of fully
+ * saturated colour running down the left edge of the toast - inset 4px from the
+ * side and 8px from the top and bottom, with an 8px radius. Against a dark,
+ * quiet surface that reads as a loud accent bar rather than a progress hint,
+ * which is the opposite of how a notification should present itself.
+ *
+ * Re-laid as a 2px line along the bottom edge: the same information, in the
+ * conventional place, at a weight that does not compete with the message. The
+ * countdown stays functional; it is simply no longer the loudest thing in the
+ * corner of the screen.
+ */
+.rtwiki-notification::before {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 2px;
+  border-radius: 0;
+}
+
+/*
  * Application height-chain root (Slice 1: scroll ownership). The shell
  * (.main in app-shell.module.css) is the single definite-height flex column
  * (100dvh); every region below it binds through flex with min-height: 0.

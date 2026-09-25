@@ -1,7 +1,7 @@
 import { Notifications } from '@mantine/notifications'
 import { useEffect } from 'react'
 import { scheduleNotifier } from '../../services/schedule-notifier.js'
-import { FLOATING } from '../../theme/registry.js'
+import { FLOATING, NOTIFICATION } from '../../theme/registry.js'
 import { loadSchedulerPreferences } from '../workspace/scheduler-preferences.js'
 
 /**
@@ -30,6 +30,13 @@ export function ScheduleNotifierHost(): JSX.Element {
   }, [])
 
   // The toast floats like any other layer, so it takes the same shared recipe
-  // rather than a library default.
-  return <Notifications position="bottom-right" classNames={{ notification: FLOATING }} />
+  // rather than a library default. It gets its own class as well because its
+  // auto-close countdown needs to be repositioned, and that must not be
+  // applied to every floating surface.
+  return (
+    <Notifications
+      position="bottom-right"
+      classNames={{ notification: `${FLOATING} ${NOTIFICATION}` }}
+    />
+  )
 }

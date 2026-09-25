@@ -515,6 +515,46 @@ changes"**. The union was previously redeclared as a string literal in four plac
 (`html-editor.tsx`, three times in `page-workspace.tsx`, and `App.tsx`); all four now
 import `StatusSaveState` so the states cannot drift apart again.
 
+### Three "heavy" surfaces, corrected
+
+Each of these looked heavier in review than the agreed rule allows, and each turned
+out to have a different cause.
+
+**The active tab was distinguished only by a shadow.** It carried
+`background: var(--rtwiki-canvas)` plus a hard-coded
+`box-shadow: 2px 2px 6px rgba(0,0,0,0.15)`. Because the band behind it is *also*
+canvas, the background made no difference at all and the directional drop was the
+only thing marking the tab — a raised card sitting on the row. It now takes the
+**panel** tone, which is what the toolbar beneath it uses, so the active tab merges
+with the content below it. That is the browser idiom, and it is carried entirely by
+the surface step. Measured: background `rgb(25, 25, 25)`, shadow `none`.
+
+**The right sidebar was not a panel.** `.panel` used `background: var(--mantine-color-body)`
+— the *same tone as the document* — with `border-left: 1px solid` to make it visible
+at all. It now takes the panel token, and the border is gone, because colour is the
+separator and the border was redundant. This was the one place the "panel is
+recessed" rule was actually being violated. Its header keeps a hairline, since within
+one surface there is no colour step to read.
+
+**The toast's blue bar was an auto-close countdown, not decoration.** It is a
+pseudo-element; measured geometry was `position: absolute`, inset `8px` top and
+bottom, `4px` from the left, `6px` wide, `rgb(28, 112, 255)`, `radius 8px` — a
+saturated block down the left edge. It is functional, so it was not removed; it was
+re-laid as a `2px` line along the bottom edge, which is the conventional place for it
+and no longer the loudest thing in the corner of the screen. It is scoped to its own
+class so the repositioning cannot leak onto other floating surfaces.
+
+Verified: `height: 2px`, `width: 440px` (full width), pinned to `bottom: 0`.
+
+### `format:check` no longer scans ignored files
+
+The gate ran Biome over the whole tree, including gitignored paths. Playwright's
+`test-results/.last-run.json` therefore failed `format:check` after every browser
+test run, and the same for scratch scripts. That produced a recurring false failure
+that looked like a real formatting problem and cost several confused debugging
+cycles. Biome now uses the repository's ignore file, so the gate reports on tracked
+source only.
+
 ### Four of the five HTML-editor failures were stale test selectors
 
 Only one of the five pre-existing failures was a product defect. The breakdown:
@@ -704,9 +744,25 @@ Previously reported as 26-vs-28 drift. That was the same committed-vs-working-tr
 
 With `prefers-color-scheme: dark` the app still rendered `data-mantine-color-scheme="light"`; the theme only changed via the rail's Theme control. Once dark, contrast is healthy (tree rows and title text both **10.26:1**), so this is an expectation gap, not a legibility defect.
 
-### F8 — Development database polluted with test pages — **APPROVED FOR CLEANUP** 🟢
+### F8 — Development database polluted with test pages — **RESOLVED** ✅
 
-The sidebar lists `ShellA…ShellE`, `Runtime Error …`, `Broken note`, `Flush/Save/Reload probe`, `Overnight …`, `ZZProbeCanary`, `Audit Rich Sample`. The majority were created by automated test runs writing into the developer database.
+The sidebar held 364 live pages, 360 of them automated-test artefacts. They were
+removed through the HTTP API rather than SQL, so the app's own delete path ran and the
+children, attachments and search index were maintained. The endpoint is a **soft**
+delete, so everything is in Trash and recoverable.
+
+Only pages carrying the test marker were touched: `uniqueTitle()` in the browser specs
+builds titles as `<base> <Date.now()>-<seq>`, so a 13-digit millisecond timestamp
+followed by a sequence is unambiguous. Also removed: the `- Copy` duplicates left by
+duplicate tests, `ZZProbeCanary` and `Renamed Target`.
+
+**Four pages were deliberately left alone** because they carry no test marker and
+could not be identified as test artefacts: `Audit Rich Sample`, `fdsfsd`, `fsdsd` and
+`rr`. They await an owner decision.
+
+This also means every screenshot taken after this point shows the real app rather than
+forty pages of test noise, which had been making visual judgements harder than
+necessary.
 
 ## 8. Ordered work plan
 
@@ -719,7 +775,7 @@ The agreed sequence, with reasoning for the order:
 | 3 | **Mobile toolbar** — re-measure, then decide between scroll and an overflow menu | F2's recorded numbers predate the current stylesheet and must not drive a fix. The upstream pattern collapses overflow into a menu rather than relying on scroll alone |
 | 4 | **Application shell** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small polish items that use the declared tokens rather than hardcoded values |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Tab work would otherwise be re-verified after the shell's geometry settles in item 4. Shell precedes tabs to avoid re-work |
-| 6 | **Cosmetic polish** — F6 (toolbar grouping/labels), F4 (stale test), F8 (dev database cleanup) | Everything else is independent or low-risk |
+| 6 | **Cosmetic polish** - F6 (toolbar grouping/labels), F4 (stale test) | F8 is done: 360 test pages removed, 4 unidentified pages left for an owner decision. The rest is independent or low-risk |
 | 7 | **Theme picker UI** — the control that writes `rtwiki-theme-id`, plus Catppuccin and Nord from their official palettes | Held until a second theme exists; a one-option picker is noise. Verify the provider identity-swap risk here (Decision 6) |
 
 ### Out of scope for this cycle

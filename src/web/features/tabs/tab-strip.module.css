@@ -50,9 +50,21 @@
   background: var(--rtwiki-elevated, var(--mantine-color-default-hover));
 }
 
+/*
+ * The active tab is distinguished by colour, not by shadow.
+ *
+ * It used to carry a hard-coded `2px 2px 6px rgba(0,0,0,0.15)` and a canvas
+ * background. Because the band behind it is *also* canvas, the background made
+ * no difference and the shadow was the only thing marking the tab at all -
+ * a directional drop that read as a raised card sitting on the row.
+ *
+ * The browser idiom is the reverse: the active tab merges with the content
+ * below it. The toolbar underneath is panel-toned, so the tab takes the panel
+ * tone and the band reads as the inactive background. No shadow, no border, and
+ * the separation is carried entirely by the surface step.
+ */
 .tabActive {
-  background: var(--rtwiki-canvas, var(--mantine-color-body));
-  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 .tab:focus-visible {
