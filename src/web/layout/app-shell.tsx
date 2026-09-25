@@ -80,7 +80,14 @@ export function AppShellLayout({
 
       <AppShell.Navbar p={0}>
         <div className={classes.navbarInner}>
-          <div className={classes.railColumn}>{utilityRail}</div>
+          {/* Width comes from LAYOUT, the single source. The navbar is only
+              sized from railWidth while the tree is collapsed; with the tree
+              open this column sits inside a wider navbar and would otherwise
+              take whatever width its content needed, which is how the rail came
+              to render 2px wider than the configured value. */}
+          <div className={classes.railColumn} style={{ width: LAYOUT.railWidth, flexShrink: 0 }}>
+            {utilityRail}
+          </div>
           <div
             className={
               treeOpen

@@ -2,10 +2,19 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: var(--mantine-spacing-xs) 4px;
+  width: 100%;
+  /* 3px, not 4px. The rail is 40px and its action icons are 34px, so 4px of
+     padding on each side left only 32px and pushed the buttons 2px past the
+     edge - the rail rendered 42px inside a 40px column. 3px leaves exactly the
+     34px the icons need. */
+  padding: var(--mantine-spacing-xs) 3px;
   border-right: none;
   background: var(--rtwiki-rail, var(--rtwiki-elevated, var(--mantine-color-default)));
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  /* No shadow. The rail is a structural column, not a surface floating above
+     the page, and its separation from the tree is already a step in surface
+     tone. The hard-coded directional drop here was the same heavy pattern
+     removed from the active tab. */
+  box-shadow: none;
 }
 
 /* Debug-active status dot. Static presentational rule extracted from TSX

@@ -34,6 +34,51 @@ function uniqueTitle(base: string): string {
   return `${base} ${Date.now()}-${Math.floor(Math.random() * 10_000)}`
 }
 
+test.describe('Utility rail geometry', () => {
+  /** Measured in-page: the rail is a flex child, and its rendered width is the
+   *  contract under test, not a Playwright bounding box. */
+  async function measureRail(page: Page): Promise<{ width: number; shadow: string }> {
+    return page.evaluate(() => {
+      const rail = document.querySelector('nav[aria-label="RTWiki"]') as HTMLElement | null
+      if (!rail) throw new Error('utility rail not found')
+      return {
+        width: Math.round(rail.getBoundingClientRect().width * 100) / 100,
+        shadow: getComputedStyle(rail).boxShadow
+      }
+    })
+  }
+
+  test('the rail is exactly the configured width', async ({ page }) => {
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+    await expect(page.getByRole('button', { name: /theme/i }).first()).toBeVisible({
+      timeout: 20_000
+    })
+    await page.waitForTimeout(400)
+
+    // LAYOUT.railWidth. The navbar is sized from it only while the tree is
+    // collapsed; with the tree open the rail sits inside a wider navbar and was
+    // previously free to take whatever width its content happened to need.
+    const rail = await measureRail(page)
+    expect(rail.width, 'rail must be the configured width, not its content width').toBe(40)
+  })
+
+  test('the rail casts no shadow of its own', async ({ page }) => {
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+    await expect(page.getByRole('button', { name: /theme/i }).first()).toBeVisible({
+      timeout: 20_000
+    })
+    await page.waitForTimeout(400)
+
+    // The rail is a structural column, not something floating above the page.
+    // Its separation from the tree is a surface step, so a directional drop is
+    // both redundant and the heavy pattern removed from the active tab.
+    const rail = await measureRail(page)
+    expect(rail.shadow, 'structural rail should not cast a shadow').toBe('none')
+  })
+})
+
 /** The CI server keeps state across tests, so rows are targeted by unique title. */
 async function openRowByTitle(page: Page, title: string): Promise<void> {
   // Find the page ID via API, then wait for the row to materialize.

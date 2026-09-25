@@ -722,11 +722,45 @@ horizontal scroll is also a weaker answer than the upstream pattern — the refe
 collapses overflow into a menu (upstream §8) rather than relying on scroll alone,
 because scrolling hides the existence of the overflow.
 
-### F3 — Rail width inconsistency — **CORRECTED** ✅
+### F3 residual — the rail rendered 2px wider than its slot — **RESOLVED** ✅
 
-An earlier version of the audit reported three conflicting rail values (60 / 40 / 42). That was wrong: it compared rendered values against the committed config while the working tree already set `railWidth: 40`. With that in place the navbar and the config agree.
+The rail measured **42px** inside a 40px column. The cause was arithmetic, not the
+width setting: the rail is 40px, its horizontal padding was `4px` on each side,
+leaving **32px** of content space, while its action icons are **34px**. The buttons
+did not fit their own padding, so the rail took its content width.
 
-**Residual, minor:** the rail element still measures 42px inside a 40px navbar (padding `var(--mantine-spacing-xs) 4px` plus content), so it overflows by 2px. Worth tightening; not a visible defect.
+Compounding it, the rail's width was never actually enforced when the tree was
+open. `LAYOUT.railWidth` sizes the *navbar*, but only in the collapsed case — with
+the tree open the rail sits inside a wider navbar and had no width of its own.
+
+Fixed by giving the column its width from `LAYOUT.railWidth` (one source, not a CSS
+literal) and reducing horizontal padding to `3px`, which leaves exactly the 34px the
+icons need.
+
+The hard-coded `box-shadow: 2px 0 8px rgba(0,0,0,0.15)` on the rail is also gone.
+It is a structural column, not a floating surface, and its separation from the tree is
+already a step in surface tone — the same heavy directional drop that was removed
+from the active tab.
+
+Verified: rail width **40px**, box-shadow **none**, in both the collapsed and
+expanded tree states. Two new tests in `tests/browser/shell-layout.pwspec.ts` assert
+both, measured in-page rather than through a bounding box.
+
+### Three shell-layout checks were already failing
+
+`tests/browser/shell-layout.pwspec.ts` fails 3 of its 5 region checks. Confirmed
+**pre-existing** by stashing this change and re-running: identical 3 failures, same
+test names.
+
+| Failure | Cause |
+|---|---|
+| "rail spans the full viewport height" | The rail stops at 772px in an 800px viewport — exactly the 28px status bar. The navbar ends above the footer, so the rail does not run beside it |
+| "central order is tabs, toolbar, title, document" | **F4.** Waits for `input[aria-label="Title"]`, which does not exist: the title is the document's own H1 |
+| "HTML pages keep their own header flow" | Not yet diagnosed |
+
+The first is a genuine open question rather than a test artefact — "full height" is a
+stated requirement for the tree pane, and the rail currently stops at the status bar
+rather than running the full viewport.
 
 ### F4 — A shipped test asserts an element that does not exist — **OPEN** 🟡
 
@@ -773,7 +807,7 @@ The agreed sequence, with reasoning for the order:
 | ~~1~~ | ~~**Theme token foundation** — registry engine, Default theme only~~ | **DONE.** Registry, per-region tokens across 14 stylesheets, editor bound to the canvas token, labels corrected. Guarded by `tests/theme-registry.test.ts` and the sentinel browser test |
 | ~~2~~ | ~~**Remaining document frames** — drop the card frame from the HTML editor and markdown editor views~~ | **Done.** Both rendered views are frameless and on the canvas. The HTML page had a frame inside a frame. The Markdown typing view keeps its frame by decision, not oversight |
 | 3 | **Mobile toolbar** — re-measure, then decide between scroll and an overflow menu | F2's recorded numbers predate the current stylesheet and must not drive a fix. The upstream pattern collapses overflow into a menu rather than relying on scroll alone |
-| 4 | **Application shell** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small polish items that use the declared tokens rather than hardcoded values |
+| 4 | **Application shell** — honour `prefers-color-scheme` (F7); decide the rail's height | F3's rail-width residual is done. The rail stops at the status bar rather than running the full viewport, and "full height" is a stated requirement — so that is a decision, not a bug to guess at |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Tab work would otherwise be re-verified after the shell's geometry settles in item 4. Shell precedes tabs to avoid re-work |
 | 6 | **Cosmetic polish** - F6 (toolbar grouping/labels), F4 (stale test) | F8 is done: 360 test pages removed, 4 unidentified pages left for an owner decision. The rest is independent or low-risk |
 | 7 | **Theme picker UI** — the control that writes `rtwiki-theme-id`, plus Catppuccin and Nord from their official palettes | Held until a second theme exists; a one-option picker is noise. Verify the provider identity-swap risk here (Decision 6) |

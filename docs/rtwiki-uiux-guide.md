@@ -213,7 +213,7 @@ an oversight to correct.
 | ~~1~~ | ~~**Theme token foundation** — registry engine, per-region tokens, editor bound to canvas~~ | **DONE.** Registry, Default theme, and editor binding are live. Guarded by tests. |
 | ~~2~~ | ~~**Remove card frames from HTML and markdown editors**~~ | **DONE.** Both rendered views are now one continuous canvas. The Markdown typing view keeps its frame on purpose — see section 7. |
 | 3 | **Re-measure and fix the mobile toolbar** | The recorded numbers (F2) predate the current stylesheet and must not drive a fix. Re-measure first, then decide between scroll and an overflow menu. |
-| 4 | **Application shell polish** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small items that use the declared tokens rather than hardcoded values. |
+| 4 | **Application shell polish** - honour `prefers-color-scheme` (F7), and decide whether the left rail should run the full height or stop at the status bar | The rail is now exactly the right width and no longer casts a shadow. The open question is height, not width |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Shell geometry must settle first (item 4) so tab work is not re-verified. |
 | 6 | **Cosmetic polish** - toolbar grouping and labels (F6), fix the stale test (F4) | The database is clean: 360 test pages removed, 4 pages left alone because they could not be identified as test rubbish. The rest is independent or low-risk. |
 | 7 | **Theme picker UI** — plus Catppuccin and Nord from their official palettes | A one-option picker is noise. Held until a second theme exists. |
