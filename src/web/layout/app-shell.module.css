@@ -10,7 +10,7 @@
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
-  background: var(--rtwiki-background, var(--mantine-color-body));
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
 }
 
 /*
@@ -47,7 +47,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 .railColumn {

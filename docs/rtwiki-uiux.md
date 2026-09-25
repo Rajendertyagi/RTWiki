@@ -38,7 +38,7 @@ The following rules were extracted from the TriliumNext study ([trilium-uiux-ref
 | # | Principle | Grounded in | RTWiki consequence |
 |---|---|---|---|
 | 1 | **One number per dimension** | §2 of the Trilium reference | `LAYOUT` in `src/web/config/index.ts` is the single source; no parallel token set. The rail, tab strip, and band all read from the same `40px` value. |
-| 2 | **Per-region surface tokens** | §9 and §12 | `--rtwiki-background` is the document canvas; `--rtwiki-surface` is panel chrome. The pane is always recessed relative to the document in both colour schemes. |
+| 2 | **Per-region surface tokens** | §9 and §12 | Tokens are named by region (`--rtwiki-canvas`, `--rtwiki-pane`, `--rtwiki-rail`, `--rtwiki-elevated`), never by a generic "surface". The pane is always recessed relative to the document in both colour schemes. |
 | 3 | **Borders as focus indicators, not frames** | §4 | The note canvas border is transparent by default; it appears only when a split is active in a multi-split view. |
 | 4 | **Radii are conditional on layout context** | §4 | Top radius drops when a toolbar spans above; bottom radius drops when the status bar panel is open. |
 | 5 | **Drag regions via a filler element** | §3 | *Adopted target, not yet built.* The band currently uses an absolutely positioned `.dragLayer` backdrop carrying `data-tauri-drag-region`. Replacing it with a filler element removes the overlap and the z-index ordering. Tracked as work-plan item 5. |
@@ -120,61 +120,113 @@ In browser mode there is **no visual change** to the chrome. The AppShell render
 
 ### Current tokens
 
-Defined in `src/web/theme/index.ts` inside `rtwikiCssVariablesResolver`:
+Declared once as data in `src/web/theme/registry.ts`, mapped to custom properties by
+`buildVariantVariables`, and applied per scheme by `createThemeCssVariablesResolver`
+in `src/web/theme/index.ts`. Every value is required — a theme with a missing token
+is a compile error, and a test asserts completeness.
 
 | Token | Light value | Dark value | Region |
 |---|---|---|---|
-| `--rtwiki-rail-bg` | `#e8e8e8` | `#1a1a1a` | Utility rail |
-| `--rtwiki-background` | `#ffffff` | `#1f1f1f` | **Document canvas** |
-| `--rtwiki-surface` | `#f2f2f2` | `#242424` | Panels (tree, right sidebar, settings) |
-| `--rtwiki-surface-raised` | `#ffffff` | `#262626` | Raised panels (dialogs, popovers) |
+| `--rtwiki-canvas` | `#ffffff` | `#242424` | **Document canvas** |
+| `--rtwiki-pane` | `#f2f2f2` | `#1f1f1f` | Panels (tree, right sidebar, settings) |
+| `--rtwiki-rail` | `#e8e8e8` | `#1a1a1a` | Utility rail |
+| `--rtwiki-elevated` | `#ffffff` | `#262626` | Raised surfaces (hover fills, selected rows) |
 | `--rtwiki-border` | `#dbdbdb` | `#454545` | Separators |
 | `--rtwiki-text` | `#383838` | `#cccccc` | Primary text |
 | `--rtwiki-text-muted` | `#666666` | `#bbbbbb` | Muted / secondary text |
+| `--rtwiki-hover` | `rgba(0, 0, 0, 0.032)` | `#ffffff0d` | Hover fills |
+| `--rtwiki-selected` | `#ffffff` | `#ffffff25` | Selected tree rows |
+
+The previous ambiguous pair — one token for the document and another for panels,
+which converged on the same tone in dark — has been **deleted, not aliased**. An
+alias would have preserved the ambiguity. A test asserts the old names appear
+nowhere in `src/web`.
 
 ### Origin of the values
 
-These are TriliumNext's token values transcribed to RTWiki names ([trilium-uiux-reference.md](trilium-uiux-reference.md), §12):
+TriliumNext's palette, transcribed to RTWiki's region names
+([trilium-uiux-reference.md](trilium-uiux-reference.md), §9 and §12):
 
 | RTWiki token | Trilium origin |
 |---|---|
-| `--rtwiki-background #ffffff` (light) | `--main-background-color: white` |
-| `--rtwiki-background #1f1f1f` (dark) | `--left-pane-background-color: #1f1f1f` ⚠ |
-| `--rtwiki-surface #f2f2f2` (light) | `--left-pane-background-color: #f2f2f2` |
-| `--rtwiki-surface #242424` (dark) | `--main-background-color: #242424` ⚠ |
+| `--rtwiki-canvas` (light `#ffffff`, dark `#242424`) | `--main-background-color` |
+| `--rtwiki-pane` (light `#f2f2f2`, dark `#1f1f1f`) | `--left-pane-background-color` |
+| `--rtwiki-rail` (light `#e8e8e8`) | `--launcher-pane-vert-background-color` |
+| `--rtwiki-selected` (light `#ffffff`) | `--left-pane-item-selected-background` |
+| `--rtwiki-hover` (light `rgba(0,0,0,0.032)`) | `--left-pane-item-hover-background` |
 
-> **⚠ Inversion in dark mode — now SUPERSEDED.** The dark values are swapped relative to their Trilium origins: `--rtwiki-background` (canvas) is `#1f1f1f` (Trilium's *pane* colour) and `--rtwiki-surface` (panel) is `#242424` (Trilium's *canvas* colour). This was deliberate when made, to avoid a tone seam against BlockNote's own `#1f1f1f` editor. **The multi-theme decision reverses it** (§6): the dark canvas returns to Trilium's `#242424` and the editor is forced to match the declared token instead. Do not preserve the inversion.
+The dark scale is no longer inverted relative to these origins. The earlier
+inversion existed because the canvas colour had to be inherited from the editor;
+that dependency has been inverted (§6), so the tokens now map straight through.
 
 ### The relationship that must hold
 
-In **both** colour schemes the following ordering must be maintained:
+In **both** colour schemes the pane is recessed and the document canvas is the
+brightest surface:
 
 ```
-light:  rail (#e8e8e8) < surface (#f2f2f2) < canvas (#ffffff)
-dark:   rail (#1a1a1a) < canvas (#1f1f1f) < surface (#242424)
+light:  rail (#e8e8e8) < pane (#f2f2f2) < canvas (#ffffff)
+dark:   rail (#1a1a1a) < pane (#1f1f1f) < canvas (#242424) < elevated (#262626)
 ```
 
-The pane is always recessed; the document canvas is always the brightest surface (light) or the darkest-but-not-deepest surface (dark). This relationship was the root cause of **F1** when it was violated: the old palette used a single `--rtwiki-surface` token for both regions, which made the canvas match the sidebar tone and produced a grey frame around a white card.
+This relationship was the root cause of **F1** when it was violated. It is now
+asserted for **every theme and every variant** in `tests/theme-registry.test.ts`
+(`canvas !== pane` and `rail !== pane`), so adding a theme cannot silently
+reintroduce the defect.
 
-### Why the dark-mode values were inverted, and why that is changing
+### Why the dark-mode values used to be inverted
 
-BlockNote paints its own dark editor background at `#1f1f1f`, and it only understands a binary light/dark scheme. The original fix therefore set the canvas to `#1f1f1f` so the editor read as one continuous surface, accepting that the canvas then matched Trilium's *pane* colour rather than its canvas colour.
+BlockNote paints its own dark editor background at `#1f1f1f`, and it only understands a binary light/dark scheme. The first fix therefore set the canvas to `#1f1f1f` so the editor read as one continuous surface, accepting that the canvas then matched Trilium's *pane* colour rather than its canvas colour.
 
-That was a reasonable trade for two schemes, but it cannot scale: under a third theme the document would keep painting a fixed grey, because its colour was **derived from the editor** rather than **declared**. The multi-theme decision (§6) reverses the direction of dependency — the canvas becomes a declared token and the editor surface is forced to it. The dark canvas therefore returns to Trilium's `#242424` and the pane to `#1f1f1f`, restoring Trilium's relationship: pane recessed, canvas brighter.
+That was a reasonable trade for two schemes, but it could not scale: under a third theme the document would have kept painting a fixed grey, because its colour was **derived from the editor** rather than **declared**. The dependency is now inverted — the canvas is a declared token and the editor surface is forced to it — so the tokens map straight through to Trilium's origins.
 
-**Status: decided, not yet implemented.** The token names in the table above are also due to be replaced by per-region names (`--rtwiki-canvas`, `--rtwiki-pane`, `--rtwiki-rail`, `--rtwiki-elevated`) as part of the same work.
+**Status: implemented.** The per-region tokens are live and the editor binding is
+verified by test.
+
+### How the editor surface is bound to the canvas
+
+`.bn-editor` and `.bn-container` are forced to `var(--rtwiki-canvas)` in
+`rich-editor.module.css`. Without this the editor would keep painting its own
+`#1f1f1f` regardless of the active theme, and the document would ignore every theme
+but the default.
+
+The binding is proven by a test that **injects a sentinel canvas value**
+(`rgb(1, 2, 3)`) and asserts the editor and the scroll owner both compute to it, in
+both schemes. Asserting only that the editor matches the current token would also
+pass when the two merely happen to be equal — which is precisely the condition that
+hid the original defect. See "the document surface follows the canvas token, not the
+editor library" in `tests/browser/rich-workspace.pwspec.ts`.
 
 ### Root cause of the document-surface defect (F1, now resolved)
 
-Commit `3232ab6` (fix(ui): make the document one continuous canvas, not a card in a panel) fixed F1 by splitting the single ambiguous `--rtwiki-surface` token into two distinct tokens (`--rtwiki-background` for the canvas, `--rtwiki-surface` for panels) and assigning values that preserve the correct light/dark ordering. The fix was verified by measurement: the canvas now fills its region with no dead-space gutter.
+Commit `3232ab6` removed the card frame so the document became one continuous canvas.
+The **token** half of the defect was closed later: the ambiguous pair was replaced by
+region-named tokens, and the `canvas !== pane` invariant is now asserted for every
+theme and variant rather than checked by eye.
 
 ### Verification requirement
 
 Every theme change must be verified in **both** colour schemes. A light-only check previously hid a regression where the dark-mode canvas and panel tones were inverted. The rule is now: **always toggle both schemes before declaring a palette change correct.**
 
-## 6. Multi-theme architecture — DECIDED, not yet built
+## 6. Multi-theme architecture — engine built, one theme registered
 
-This section records the decisions that shape the next phase of work. Nothing here is implemented yet; the current app has only light/dark.
+The engine is implemented and the Default theme is registered. Catppuccin and Nord
+are intentionally absent (Decision 5). The light/dark variant continues to be owned
+and persisted by Mantine's own `data-mantine-color-scheme`; only the theme identity
+is RTWiki's to store, under the `rtwiki-theme-id` key.
+
+| Piece | Location | State |
+|---|---|---|
+| Token data, theme registry, `getTheme` | `src/web/theme/registry.ts` | Built |
+| Per-scheme resolver, theme selection | `src/web/theme/index.ts` | Built |
+| Provider wiring | `src/web/main.tsx` | Built |
+| Region-named tokens across 14 stylesheets | `src/web/**/*.module.css` | Built |
+| Editor surface bound to the canvas token | `rich-editor.module.css` | Built |
+| Theme picker UI | — | **Not built.** One registered theme would make a picker a single-option control |
+| Catppuccin, Nord | — | **Not built**, by decision |
+
+Adding a theme is therefore a data entry in `APP_THEMES` plus a picker option — no
+component, stylesheet or resolver change.
 
 ### Decision 1: Surfaces follow the active theme through declared CSS custom properties
 
@@ -182,49 +234,40 @@ Each theme will supply its own set of `--rtwiki-*` custom properties, keyed by *
 
 ### Decision 2: BlockNote and Mermaid keep operating on Mantine's binary scheme
 
-The editor library (BlockNote) and Mermaid diagram rendering will **not** be given per-theme work. They continue to use `useComputedColorScheme('light')` (or the equivalent) and switch between Mantine's built-in light and dark schemes. This is intentional: these libraries have their own internal theming that would require a separate migration per theme. The decision is to scope the first slice narrowly and leave them untouched.
+The editor library (BlockNote) and Mermaid diagram rendering are **not** given per-theme work. They continue to use `useComputedColorScheme('light')` and switch between Mantine's built-in light and dark schemes. This is intentional: each has its own internal theming that would require separate migration per theme, and neither needs it — both already read the binary scheme that the variant selector drives.
 
-**Risk:** this means BlockNote's dark background (`#1f1f1f`) will persist regardless of which theme is active, and Mermaid will always use either `default` (light) or `dark`. The canvas token workaround (see §5) masks this for BlockNote; Mermaid may show a slight tone mismatch at diagram boundaries in non-default themes. This is an accepted limitation of the first slice.
+**Consequence, accepted:** BlockNote's own `#1f1f1f` dark background is overridden by the canvas binding (§5), so it no longer leaks. Mermaid still picks only `default` or `dark`, so diagram backgrounds may not match a non-default theme exactly. Recorded as a known limitation, not an oversight.
 
 ### Decision 3: Themes are data in a registry
 
-Each theme entry supplies:
-- A Mantine theme override (colours, radii, shadows)
-- A light variant (CSS custom property map)
-- A dark variant (CSS custom property map)
-
-Adding a theme is a **data entry** — a new registry object — not a refactor. The composition root wires the registry into the theme provider.
+Each theme entry supplies a Mantine theme override plus a light and a dark variant. Adding a theme is a **data entry** in `APP_THEMES`, not a refactor. Implemented in `src/web/theme/registry.ts`.
 
 ### Decision 4: Selection is a (theme, variant) pair
 
-The user's selection is a tuple: `(themeName, variant)`. The `auto` option resolves `variant` by reading `prefers-color-scheme` from the operating system for the selected theme. The current UI has only a binary light/dark toggle; the variant selector and `auto` option are not yet present.
+The tuple is `(themeId, variant)`. The **variant** is owned and persisted by Mantine via `data-mantine-color-scheme`; RTWiki stores only the **themeId**, under `rtwiki-theme-id`, falling back to the default when unset, unknown, or unreadable. An `auto` variant resolves by operating system for the selected theme — that arrives with the picker, not before.
 
 ### Decision 5: Approved scope for the first slice
 
-**Build the engine and register the Default theme only.** Catppuccin and Nord are later additions that must be sourced from their official palettes, not invented. This is a scope decision, not an oversight.
+**Engine plus the Default theme only.** Catppuccin and Nord are later additions that must be sourced from their official palettes, not invented. This is a scope decision, not an oversight.
 
-The engine consists of:
-- A theme registry module
-- A theme provider that reads the (theme, variant) pair and applies the corresponding Mantine override + CSS variable map
-- The Default theme entry (based on the current light/dark tokens in `src/web/theme/index.ts`)
+Delivered: the registry module, the per-scheme resolver, provider wiring, the Default theme entry, and the UI labels corrected to plain `Light` / `Dark`.
 
-### Decision 6: Known risk — provider theme identity swap
+### Decision 6: Provider theme identity swap — no longer a live risk
 
-Swapping the provider's theme identity may cause a remount or a flash of unstyled content (FOUC). This needs to be verified empirically. If it occurs, the fix is to batch the theme change (apply CSS variables and Mantine override in a single transaction) rather than letting React reconcile them separately.
+The original concern was that swapping the provider's theme identity might remount the tree or flash unstyled content. With a single registered theme the identity never changes, so the risk cannot be observed yet. It returns as a real question **when the picker is added**, and should be verified then with a theme switch, not assumed either way.
 
 ### Current reality check
 
-The UI text dictionary in `src/web/config/index.ts` contains labels for themes that do not exist:
+The UI text dictionary no longer names themes that do not exist:
 
 | Key | Value | Referenced by any component? |
 |---|---|---|
-| `appearanceThemeDark` | `'Dark (Catppuccin)'` | Yes — `settings-workspace.tsx:252` |
-| `appearanceThemeNord` | `'Nord Dark'` | **No** — no component reads this key |
 | `appearanceThemeLight` | `'Light'` | Yes — `settings-workspace.tsx:251` |
+| `appearanceThemeDark` | `'Dark'` | Yes — `settings-workspace.tsx:252` |
 
-The `appearanceThemeNord` label is **ahead of reality**: it exists in the dictionary but is never surfaced in the UI. This is not a bug (the label costs nothing), but it is worth noting so a future agent does not assume Nord is implemented.
+The `appearanceThemeDark: 'Dark (Catppuccin)'` label and the unreferenced `appearanceThemeNord` key were both removed, because a label naming an unbuilt theme is a claim the code does not support.
 
-The default `themePreset` in `layout-preferences.ts` is `'catppuccin'`, but no Catppuccin theme exists. On a fresh install this default is silently accepted by the preferences parser (it is a valid `ThemePreset` value) but has no effect because the theme registry only knows about Default.
+**Still ahead of reality:** the default `themePreset` in `layout-preferences.ts` is `'catppuccin'`, and the `ThemePreset` type still admits `'catppuccin'` and `'nord'`. Nothing reads `themePreset` for theming — the engine reads `rtwiki-theme-id` — so it has no effect, but it is misleading persisted state and should be reconciled when the picker lands. Left alone here to keep this change to one thing.
 
 ## 7. Open defects and their confirmed mechanisms
 
@@ -282,12 +325,13 @@ The agreed sequence, with reasoning for the order:
 
 | # | Item | Rationale for position |
 |---|---|---|
-| 1 | **Theme token foundation** — build the theme registry engine, register the Default theme only | This is the dependency for everything else. Colours flow from it; without it the remaining work has no stable surface to build on. |
-| 2 | **Remaining document frames** — drop the card frame from the HTML editor and markdown editor views | F1 is resolved; the remaining editors still frame their content as cards. This is a direct continuation of the canvas work and depends on the token foundation (each theme must declare its own canvas tone). |
-| 3 | **Mobile toolbar** — add overflow affordance; hide right sidebar below `sm` | F2 is the highest-traffic remaining defect. Does not depend on themes. |
-| 4 | **Application shell** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small polish items that benefit from the token foundation being in place (so they use declared tokens rather than hardcoded values). |
-| 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Tab work would otherwise be re-verified after the shell's geometry settles in item 4. Shell precedes tabs to avoid re-work. |
-| 6 | **Cosmetic polish** — F6 (toolbar grouping/labels), F4 (stale test), F8 (dev database cleanup) | Everything else is independent or low-risk. |
+| ~~1~~ | ~~**Theme token foundation** — registry engine, Default theme only~~ | **DONE.** Registry, per-region tokens across 14 stylesheets, editor bound to the canvas token, labels corrected. Guarded by `tests/theme-registry.test.ts` and the sentinel browser test |
+| 2 | **Remaining document frames** — drop the card frame from the HTML editor and markdown editor views | F1 is resolved; the remaining editors still frame their content as cards. Now unblocked: each theme declares its own canvas tone, so the frame can be removed against a stable token |
+| 3 | **Mobile toolbar** — add overflow affordance; hide right sidebar below `sm` | F2 is the highest-traffic remaining defect. Does not depend on themes |
+| 4 | **Application shell** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small polish items that use the declared tokens rather than hardcoded values |
+| 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Tab work would otherwise be re-verified after the shell's geometry settles in item 4. Shell precedes tabs to avoid re-work |
+| 6 | **Cosmetic polish** — F6 (toolbar grouping/labels), F4 (stale test), F8 (dev database cleanup) | Everything else is independent or low-risk |
+| 7 | **Theme picker UI** — the control that writes `rtwiki-theme-id`, plus Catppuccin and Nord from their official palettes | Held until a second theme exists; a one-option picker is noise. Verify the provider identity-swap risk here (Decision 6) |
 
 ### Out of scope for this cycle
 
@@ -314,12 +358,17 @@ Findings that were raised and then withdrawn after being checked. This exists so
 - Tab strip, toolbar, and title row heights (all 40px) — measured
 - Rail width (40px in config, 42px rendered due to padding overflow) — measured
 - Document surface after the F1 fix — border and radius both `0px`, and the canvas tone equals the editor content tone in both schemes — measured
+- **Editor surface follows the declared canvas token** — a sentinel `rgb(1, 2, 3)` injected on `--rtwiki-canvas` is adopted by both `.bn-editor` and the scroll owner, in light and dark — measured
+- No reference to the superseded surface token names remains anywhere in `src/web` — asserted by test
+- `canvas !== pane` and `rail !== pane` hold for every registered theme and variant — asserted by test
 - Status bar rendered height (28px) — measured
 - Dark mode contrast (10.26:1 on tree rows and title text) — measured
 - Mobile toolbar reachability at 390px (11 of 35 controls reachable) — measured
 - Mantine version (9.6.2) — confirmed via `bun.lock` and `node_modules/@mantine/core`
 - `bun run typecheck` — 0 errors
-- `bun test` — 460 pass / 0 fail
+- `bun test` — 469 pass / 0 fail
+- `bun run format:check` — 0 errors
+- `tests/browser/rich-workspace.pwspec.ts` "Rich document surface" — 3/3 pass
 - `tests/browser/window-chrome.pwspec.ts` — 8/8 pass
 
 ### What has not been verified in this environment

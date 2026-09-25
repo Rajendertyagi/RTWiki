@@ -4,7 +4,7 @@
   height: 100%;
   padding: var(--mantine-spacing-xs) 4px;
   border-right: none;
-  background: var(--rtwiki-rail-bg, var(--rtwiki-surface-raised, var(--mantine-color-default)));
+  background: var(--rtwiki-rail, var(--rtwiki-elevated, var(--mantine-color-default)));
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
 }
 

@@ -352,6 +352,14 @@ which is Trilium's *pane* colour, not its canvas (`#242424`). So either the docu
 token follows BlockNote (current RTWiki fix) or BlockNote's background is overridden to
 match Trilium's canvas. Worth an explicit decision; both are defensible.
 
+> **RESOLVED.** The second option was chosen, and the structural fix above is done.
+> RTWiki now declares per-region tokens (`--rtwiki-canvas`, `--rtwiki-pane`,
+> `--rtwiki-rail`, `--rtwiki-elevated`), maps them straight through to the Trilium
+> origins in this table, and forces the editor surface to the declared canvas token.
+> The dark scale is therefore no longer inverted: the canvas is `#242424` and the pane
+> is `#1f1f1f`, matching the relationship in §9. See
+> [rtwiki-uiux.md](rtwiki-uiux.md) §5 and §6 for the built result and the reasoning.
+
 ---
 
 ## 13. Behaviours worth adopting
@@ -405,8 +413,8 @@ tab overflow scrolling, command palette, the contextual toolbar's conditional gr
 
 | # | Action | Grounded in | Note |
 |---|---|---|---|
-| 1 | Split `--rtwiki-surface` into per-region tokens; assign Trilium's values per region | §9, §12 | Structural fix for F1's root cause. Palette already correct |
-| 2 | Decide the dark document tone vs BlockNote's `#1f1f1f` | §12 | Explicit decision, not incidental |
+| ~~1~~ | ~~Split `--rtwiki-surface` into per-region tokens; assign Trilium's values per region~~ | §9, §12 | **Done.** Region-named tokens live in a registry; the ambiguous names are deleted, not aliased |
+| ~~2~~ | ~~Decide the dark document tone vs BlockNote's `#1f1f1f`~~ | §12 | **Done.** The editor surface is bound to the declared canvas token, so the tone is declared rather than inherited |
 | 3 | Drop the remaining document frames (HTML editor, markdown still framed) | §4 | Border transparent by default; radius conditional |
 | 4 | Filler-based drag region for the band; make the tab strip a drag surface | §3 | Replaces the stacked backdrop |
 | 5 | Toolbar to container queries + an overflow affordance | §8 | F2: 24 of 35 controls unreachable at 390px |

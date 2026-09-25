@@ -43,7 +43,7 @@
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   overflow: hidden;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 .editorPaneSingle {
@@ -64,7 +64,7 @@
   position: fixed;
   inset: 0;
   z-index: var(--rtwiki-overlay-z-index, 1000);
-  background: var(--rtwiki-background, var(--mantine-color-body));
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
   padding: var(--mantine-spacing-md);
 }
 

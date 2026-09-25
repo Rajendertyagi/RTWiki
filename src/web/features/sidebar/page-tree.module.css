@@ -40,7 +40,7 @@
   --wb-header-background: transparent;
   --wb-header-border-color: transparent;
   --wb-toolbar-background: transparent;
-  --wb-background-color: var(--rtwiki-surface, var(--mantine-color-body));
+  --wb-background-color: var(--rtwiki-pane, var(--mantine-color-body));
   --wb-alternate-row-color: transparent;
   --wb-alternate-row-color-hover: transparent;
   --wb-hover-border-color: transparent;
@@ -60,7 +60,7 @@
 
   /* State colours driven by RTWiki tokens so light/dark stay consistent and
      the selected row reads as a soft blue fill (no heavy grey outline). */
-  --wb-hover-color: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+  --wb-hover-color: var(--rtwiki-elevated, var(--mantine-color-default-hover));
   --wb-active-color: var(--rtwiki-active-fill);
   --wb-active-color-grayscale: color-mix(
     in srgb,
@@ -350,7 +350,7 @@
   justify-content: center;
   /* Opaque surface so the glyph stays legible over the blue selection fill
      (audit UI-005). */
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
   color: var(--rtwiki-text, var(--mantine-color-text));
 }
 

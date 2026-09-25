@@ -20,7 +20,7 @@
   overflow-y: auto;
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-sm);
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
   padding: var(--mantine-spacing-xs);
   scrollbar-width: thin;
   scrollbar-color: var(--rtwiki-border, var(--mantine-color-default-border)) transparent;
@@ -54,7 +54,7 @@
 }
 
 .rowHeader:hover {
-  background: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+  background: var(--rtwiki-elevated, var(--mantine-color-default-hover));
 }
 
 .rowChevron {

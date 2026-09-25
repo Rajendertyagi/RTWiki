@@ -312,6 +312,34 @@ test.describe('Rich document surface', () => {
     }
   })
 
+  test('the document surface follows the canvas token, not the editor library', async ({
+    page,
+    request
+  }) => {
+    await openRichPage(page, uniqueTitle('CanvasToken'), request)
+
+    // A sentinel value proves the binding exists. Asserting only that the
+    // editor matches the current token would also pass when the editor happens
+    // to paint the same colour by coincidence — which is exactly the situation
+    // that hid the earlier defect. The sentinel makes the dependency explicit:
+    // the editor follows the token, not BlockNote's own background.
+    const SENTINEL = 'rgb(1, 2, 3)'
+
+    for (const scheme of ['light', 'dark'] as const) {
+      await setScheme(page, scheme)
+      const surfaces = await page.evaluate((sentinel) => {
+        document.documentElement.style.setProperty('--rtwiki-canvas', sentinel)
+        const content = document.querySelector('.bn-editor') as HTMLElement
+        const scrollOwner = content?.closest('[class*="blockNoteWrapper"]') as HTMLElement | null
+        const bg = (el: HTMLElement | null) => (el ? getComputedStyle(el).backgroundColor : null)
+        return { contentBg: bg(content), scrollOwnerBg: bg(scrollOwner) }
+      }, SENTINEL)
+
+      expect(surfaces.contentBg, `editor follows canvas in ${scheme}`).toBe(SENTINEL)
+      expect(surfaces.scrollOwnerBg, `document follows canvas in ${scheme}`).toBe(SENTINEL)
+    }
+  })
+
   test('the document is visually distinct from the surrounding panel', async ({
     page,
     request

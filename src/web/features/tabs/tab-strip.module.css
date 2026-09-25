@@ -47,11 +47,11 @@
 }
 
 .tab:hover {
-  background: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+  background: var(--rtwiki-elevated, var(--mantine-color-default-hover));
 }
 
 .tabActive {
-  background: var(--rtwiki-background, var(--mantine-color-body));
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
   box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
 }
 

@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 .searchSection {
@@ -17,7 +17,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 /* Tree column. Static presentational rule extracted from TSX (inventory
@@ -32,7 +32,7 @@
 }
 
 .navItem:hover {
-  background: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+  background: var(--rtwiki-elevated, var(--mantine-color-default-hover));
 }
 
 /* Active (selected) Home/root entry reads as a distinct "you are here" state,
@@ -56,5 +56,5 @@
 .hierarchyNote {
   padding: var(--mantine-spacing-sm);
   border-top: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }

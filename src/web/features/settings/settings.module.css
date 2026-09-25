@@ -2,7 +2,7 @@
   display: flex;
   height: 100%;
   min-height: 0;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 .nav {
@@ -30,7 +30,7 @@
 }
 
 .navItem:hover {
-  background: var(--rtwiki-surface-raised, var(--mantine-color-default-hover));
+  background: var(--rtwiki-elevated, var(--mantine-color-default-hover));
 }
 
 .navItemActive {

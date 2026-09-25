@@ -20,7 +20,7 @@
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   overflow: hidden;
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
 .previewPane {
@@ -30,7 +30,7 @@
   padding: var(--mantine-spacing-md);
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
   /* Rendered Markdown: readable line length, native block styling. */
   line-height: 1.6;
   font-size: var(--mantine-font-size-sm);

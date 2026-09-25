@@ -11,7 +11,7 @@ import { App } from './App.js'
 import { AppErrorBoundary } from './diagnostics/app-error-boundary.js'
 import { configureDebugLoggingFromStorage } from './diagnostics/debug-log.js'
 import { installGlobalErrorReporting } from './diagnostics/error-reporter.js'
-import { rtwikiCssVariablesResolver, theme } from './theme/index.js'
+import { createThemeCssVariablesResolver, resolveActiveTheme } from './theme/index.js'
 // Centralized customization entry: loaded last so hierarchy/layout variables
 // can override defaults without touching component CSS modules.
 import './theme/customization.css'
@@ -30,9 +30,17 @@ if (!rootElement) {
   throw new Error('RTWiki: root element #root not found in index.html')
 }
 
+// The active theme supplies both the Mantine override and the region-named
+// surface variables. The light/dark variant is selected by Mantine's own
+// `data-mantine-color-scheme` attribute.
+const activeTheme = resolveActiveTheme()
+
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <MantineProvider theme={theme} cssVariablesResolver={rtwikiCssVariablesResolver}>
+    <MantineProvider
+      theme={activeTheme.mantine}
+      cssVariablesResolver={createThemeCssVariablesResolver(activeTheme)}
+    >
       <AppErrorBoundary>
         <App />
       </AppErrorBoundary>

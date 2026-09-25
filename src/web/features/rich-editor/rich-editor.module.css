@@ -16,7 +16,7 @@
 }
 
 .toolbarArea {
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-pane, var(--mantine-color-body));
   border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
 }
@@ -35,7 +35,26 @@
    * a widget embedded in a page and matched the sidebar tone exactly. Border
    * and radius are absent for that same reason. */
   padding: var(--mantine-spacing-sm);
-  background: var(--rtwiki-background, var(--mantine-color-body));
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
+}
+
+/* Bind the editor's own surface to the declared canvas token.
+ *
+ * BlockNote paints its background from a binary light/dark scheme
+ * (`#ffffff` / `#1f1f1f`) and knows nothing about the active RTWiki theme. If
+ * the document colour is left to be inherited from the editor, a third theme
+ * cannot change it. Forcing the surface to the token inverts that dependency:
+ * the document follows the theme, and the editor follows the document.
+ *
+ * Verified by injecting a sentinel canvas value and asserting the editor
+ * follows it — see the "document surface follows the canvas token" test in
+ * tests/browser/rich-workspace.pwspec.ts. */
+.blockNoteWrapper :global(.bn-editor) {
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
+}
+
+.blockNoteWrapper :global(.bn-container) {
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
 }
 
 /* Display formulas must never overflow a narrow document; scroll the block
