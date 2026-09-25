@@ -446,6 +446,55 @@ explicitly removes CKEditor's toolbar border (`FormattingToolbar.css:9-11`) and 
 a tint. A hairline survives only on the chevrons' inner edges, where it separates a
 control from what it scrolls, and above the status bar.
 
+### The tree pane: stop fighting the library, configure it
+
+The page tree is a **Wunderbaum 0.14.1** treegrid. RTWiki wants a tree. That mismatch
+was being paid for in `!important`: eight overrides existed purely to defeat the
+library's table-cell model, plus a hand-rolled expander mask, a hand-rolled leaf indent
+spacer, and a container focus border disabled by force.
+
+**The structural fix.** Wunderbaum wraps every row's content in `span.wb-col`, styled as
+an absolutely-positioned table cell with a fixed inner height. Two declarations
+neutralise it:
+
+```css
+div.wunderbaum div.wb-row { display: flex; align-items: center; }
+div.wunderbaum div.wb-row span.wb-col { position: static; display: contents; }
+```
+
+`wb-node` becomes a direct flex child of the row, so vertical centring is ordinary
+flexbox and the fixed 28px arithmetic disappears. Selector specificity is raised one level
+over the library's own rules rather than using `!important`, because the bundled
+stylesheet is imported *after* the module and wins an equal-specificity tie.
+
+**The geometry bug underneath it.** The library hard-codes `ICON_WIDTH = 20` in
+JavaScript, adds 20px per nesting level, and **sizes the title's ellipsis against that
+figure**. The app was rendering the indent cell at 16px via `--wb-icon-outer-width`. So
+every level drifted 4px and the truncation width was computed against the wrong number —
+which is why long titles cut off so early. `--wb-icon-outer-width` is now 20px.
+
+Three variables the app had been setting **do not exist in the library** and were read by
+nothing: `--wb-node-indent`, `--wb-line-height`, `--wb-indent-guide-color`. Removed. The
+stylesheet comment claiming *"padding + expander + gap == indent step"* described a scheme
+that was never in effect.
+
+**A second duplication.** `ROW_HEIGHT_PX = 32` in TypeScript mirrors
+`--rtwiki-tree-row-height`, because the library needs the number in JS for its viewport
+maths and cannot read CSS. A comment asked people to change both together; a test now
+asserts the rendered row height, so a mismatch surfaces as a failure rather than as rows
+that quietly overlap.
+
+**One plan item was wrong and was dropped.** `wb-fade-expander` was going to be adopted to
+reclaim the expander column on leaf rows. Reading the library's stylesheet showed it only
+fades the chevron's *colour* to transparent until hover — it would have made the arrows
+invisible when the brief was to make them *more* visible. The leaf spacer is now
+`margin-left: var(--wb-icon-outer-width)`, one token shared with the cell.
+
+**Type text removed.** `wb-tree-host.ts` painted `<title> <Type>` into the visible title so
+a test regex could match `<title> Rich Note`. That cost ~60px of every row while the type
+icon already said the same thing. The type is still in the row's accessible name. The one
+regex that depended on it now anchors on the title alone.
+
 ### The palette is authored in Oklab, not hex
 
 Every surface and text token is now an `oklch()` value. The reason is the ladder:

@@ -89,8 +89,12 @@ export interface PageTreeHostOptions {
  * (customization.css): Wunderbaum needs the number for its viewport layout
  * math and cannot read it from the stylesheet, so this constant mirrors the
  * token by hand. Change both together; never change density here alone.
+ *
+ * `tests/browser/tree-geometry.pwspec.ts` renders a row and compares its
+ * measured height against this value, so the two cannot drift apart silently -
+ * a mismatch shows up as overlapping or gapped rows rather than as a clean list.
  */
-const ROW_HEIGHT_PX = 30
+const ROW_HEIGHT_PX = 32
 
 /**
  * RTWiki page-type → Tabler icon. Real pages share a 16px visual weight; the
@@ -593,14 +597,15 @@ export class PageTreeHost {
           row.setAttribute('title', node.title)
         }
         const titleSpan = nodeElem.querySelector('span.wb-title')
-        // Page rows carry a type label so consumers can target
-        // "<title> Rich Note" / "<title> HTML Page" (matches the row-text
-        // contract the browser specs assert). Subfile rows keep their bare
+        // The visible title is the title alone. The page type is already shown
+        // as an icon on the row, and it is still carried in the row's
+        // accessible name below, so painting the words out as well duplicated
+        // the same information and consumed ~60px of every row - which is most
+        // of the reason long titles truncated. Subfile rows keep their bare
         // field label (HTML / CSS / JavaScript). Set on every render because
         // Wunderbaum may reset the title element on re-render.
         if (titleSpan && subfile === null) {
-          const label = pageTypeLabel(nodePageType(node) ?? 'rich')
-          titleSpan.textContent = `${node.title} ${label}`
+          titleSpan.textContent = node.title
         }
         if (e.isNew) {
           const icon = document.createElement('i')

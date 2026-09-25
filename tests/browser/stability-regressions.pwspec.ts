@@ -102,7 +102,10 @@ function escapeRegExp(value: string): string {
 }
 
 function pageRow(page: Page, title: string) {
-  const pattern = new RegExp(`^${escapeRegExp(title)}\\s*(Rich Note|HTML Page)`)
+  // Anchored to the title alone. The row's visible text is the title only; the
+  // page type is carried by the row icon and by the accessible name, so
+  // matching "<title> Rich Note" no longer describes anything on screen.
+  const pattern = new RegExp(`^${escapeRegExp(title)}`)
   return page.locator('[role="treeitem"]').filter({ hasText: pattern }).first()
 }
 

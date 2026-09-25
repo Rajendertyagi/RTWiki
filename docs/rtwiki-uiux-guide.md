@@ -243,6 +243,8 @@ an oversight to correct.
 | **Choosing a shade** | Change the single lightness number, and keep the steps equal. | Pick a grey by trying it and seeing whether it looks right. | An equal step is provably visible; a picked step is not. The check can verify one and not the other. |
 | **Sizing anything** | Put the size in the stylesheet or a shared setting. | Write the size into an individual screen. | A size written twice drifts, and the app slowly becomes heavier as styling accumulates in the code. |
 | **Fitting things in a fixed strip** | Leave visible breathing room on both sides. | Make the container exactly as wide as its contents. | An exact fit passes a "does it fit" check while looking cramped, and leaves no room for anything larger later. |
+| **Showing the same thing twice** | Show it once. | Print the page type as words when there is already a type icon. | It cost 60 pixels of title on every row, so long names were cut off. |
+| **Making a list line up** | Measure the real positions and check them. | Trust that the numbers in the settings look right. | The indent was calculated at 20px but drawn at 16px, so every level drifted 4px and the cutoff point for long names was worked out from the wrong number. |
 | **Running out of room in a bar** | Move what does not fit into a single **more** button, and say so. | Let the row scroll sideways, or slice the last control. | A row that scrolls with no visible scrollbar looks broken, not scrollable. A sliced button looks like a rendering fault. |
 
 ---
@@ -334,6 +336,9 @@ Newest first.
 
 | When | What changed | Why |
 |---|---|---|
+| 2026-09-25 | The page tree was rebuilt so the rows line up properly | Nested pages were drifting sideways by a few pixels per level, and long titles were being cut off using the wrong measurement. The rows now sit on an exact grid |
+| 2026-09-25 | The tree is easier to read: bigger icons, larger text, visible arrows, and each page's name is no longer repeated after its type | Every line was showing its type twice — once as an icon, once as words. Removing the words gave each title about 60 pixels back |
+| 2026-09-25 | The "Root" row now matches the other rows, and the search box spans the full width of the pane | Both were slightly different sizes from the rows below them, which is what made the spacing look uneven |
 | 2026-09-25 | The top bars now shrink gracefully when the window is narrow | When the window was narrow, the formatting toolbar was sliced through the middle of a button with nothing to say there was more. Now the buttons that do not fit move into one "more" button, and tabs that no longer fit get small left and right arrows |
 | 2026-09-25 | The line between the tab bar and the toolbar was removed | The two rows are now told apart by their shade rather than by a rule, so the top of the window no longer reads as a stack of bands |
 | 2026-09-25 | Creating a new page now actually opens it | It had been silently doing nothing: the page was saved, but no tab opened, nothing appeared in the tree, and the editor never loaded. You were told it worked while the screen said "Saved" |

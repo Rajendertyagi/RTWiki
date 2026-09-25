@@ -9,22 +9,30 @@
 :root {
   /* Row geometry — tight but comfortable: 30px rows keep a full click target
      and visible focus ring while reading denser than the former 32px. */
-  --rtwiki-tree-row-height: 30px;
-  --rtwiki-tree-row-inner-height: 28px;
-  --rtwiki-tree-subfile-row-height: 26px;
-  --rtwiki-tree-indent-step: 16px;
-  /* Chevron: 14px click target, crisp SVG mask glyph, sits close to the icon. */
-  --rtwiki-tree-expander-size: 18px;
+  --rtwiki-tree-row-height: 32px;
+  --rtwiki-tree-row-inner-height: 30px;
+  --rtwiki-tree-subfile-row-height: 28px;
+  --rtwiki-tree-title-size: 14px;
+  /* Nesting step. MUST stay equal to the library's internal ICON_WIDTH (20px):
+     it is what --wb-icon-outer-width renders, and the library lays out one cell
+     per level at that width. Pinned here so the value has one home; the tree
+     stylesheet asserts it. */
+  --rtwiki-tree-indent-step: 20px;
+  /* Chevron. The cell is the library's own --wb-icon-outer-width (20px); only
+     the glyph inside it is sized here. 80% reads as a confident 16px chevron.
+     The previous 75% of an 18px box was ~13.5px and read as decoration rather
+     than as a disclosure control. */
+  --rtwiki-tree-expander-glyph: 80%;
   --rtwiki-tree-glyph-size: 12px;
   /* Icon slots. */
-  --rtwiki-tree-icon-size: 16px;
+  --rtwiki-tree-icon-size: 18px;
   --rtwiki-tree-icon-outer-height: 22px;
   --rtwiki-tree-subfile-icon-size: 14px;
   /* Horizontal rhythm: chevron -> icon 2px (tight), icon -> title 5px. */
   --rtwiki-tree-expander-icon-gap: 2px;
   --rtwiki-tree-icon-title-gap: 5px;
-  /* Row outer padding — zero so the root column starts at the indent step
-     (padding + expander + gap == --rtwiki-tree-indent-step), keeping the root
+  /* Row outer padding - zero so the root column starts at the indent step
+     (the expander cell IS the indent step), keeping the root
      lead equal to the per-level indent instead of larger. */
   --rtwiki-tree-row-padding-left: 0px;
   --rtwiki-tree-row-padding-right: 8px;

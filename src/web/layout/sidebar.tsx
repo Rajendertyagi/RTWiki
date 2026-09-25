@@ -127,15 +127,24 @@ export function Sidebar({
           </Alert>
         ) : (
           <Stack gap={2} className={classes.treeStack}>
-            {/* Home / Dashboard entry — always visible, outside role=tree */}
-            <NavLink
-              label={UI_TEXT.rootEntryLabel}
-              leftSection={<IconHome size={16} />}
-              active={selectedId === null}
-              onClick={() => onSelect(null)}
+            {/* Home / Dashboard entry - always visible, outside role=tree.
+                Styled as a tree row rather than a Mantine NavLink so its
+                height, padding, icon size and selected/hover treatment are
+                identical to the rows below it. Two components with two sets of
+                metrics is what made the gap above the first page look wrong. */}
+            <button
+              type="button"
               className={classes.navItem}
-              aria-label={UI_TEXT.rootEntryLabel}
-            />
+              data-active={selectedId === null}
+              aria-current={selectedId === null ? 'page' : undefined}
+              onClick={() => onSelect(null)}
+              data-testid="tree-root-entry"
+            >
+              <span className={classes.navIcon} aria-hidden="true">
+                <IconHome size={18} />
+              </span>
+              <span className={classes.navLabel}>{UI_TEXT.rootEntryLabel}</span>
+            </button>
 
             {loading ? null : pages.length === 0 && !loading ? (
               <Text size="sm" c="dimmed" ta="center" className={classes.listEmpty}>

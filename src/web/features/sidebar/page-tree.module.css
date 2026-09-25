@@ -25,10 +25,13 @@
   --wb-row-outer-height: var(--rtwiki-tree-row-height);
   --wb-row-inner-height: var(--rtwiki-tree-row-inner-height);
   --wb-header-height: var(--rtwiki-tree-row-height);
-  --wb-node-indent: var(--rtwiki-tree-indent-step);
-  --wb-indent-guide-color: transparent;
-  --wb-line-height: var(--rtwiki-tree-row-height);
-  --wb-icon-outer-width: var(--rtwiki-tree-icon-size);
+  /* The library computes each level's title offset in JavaScript from a
+     hard-coded `ICON_WIDTH = 20`, then sizes the ellipsis against it. The
+     rendered indent cell MUST be the same width or every level drifts and the
+     title is truncated against the wrong figure. This is a library constant,
+     not a preference: changing it here without changing the library would
+     reintroduce that drift. */
+  --wb-icon-outer-width: 20px;
   --wb-icon-outer-height: var(--rtwiki-tree-icon-outer-height);
   --wb-icon-width: var(--rtwiki-tree-icon-size);
   --wb-icon-height: var(--rtwiki-tree-icon-size);
@@ -49,7 +52,7 @@
   /* Disclosure chevron must stay legible on both themes (audit UI-004): a
      mid grey clears the 4.5:1 contrast floor on a light surface, and reads
      clearly on the dark surface too. */
-  --wb-expander-color: var(--mantine-color-gray-7);
+  --wb-expander-color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   /* Crisp disclosure chevron (right-pointing); expanded rotates 90° to point
      down. A stroked SVG mask — no jagged unicode glyph, theme-aware via the
      expander colour. */
@@ -61,13 +64,9 @@
   /* State colours driven by RTWiki tokens so light/dark stay consistent and
      the selected row reads as a soft blue fill (no heavy grey outline). */
   --wb-hover-color: var(--rtwiki-elevated, var(--mantine-color-default-hover));
-  --wb-active-color: var(--rtwiki-active-fill);
-  --wb-active-color-grayscale: color-mix(
-    in srgb,
-    var(--mantine-color-blue-filled) 22%,
-    transparent
-  );
-  --wb-active-hover-color: color-mix(in srgb, var(--mantine-color-blue-filled) 30%, transparent);
+  --wb-active-color: var(--rtwiki-selected);
+  --wb-active-color-grayscale: var(--rtwiki-selected);
+  --wb-active-hover-color: var(--rtwiki-hover);
   --wb-active-border-color: transparent;
   --wb-active-border-color-grayscale: transparent;
   --wb-focus-border-color: transparent;
@@ -110,10 +109,19 @@
   background: transparent;
 }
 
-/* Full-width row hit surface. Horizontal padding from the token source.
-   Reset the library's 1px transparent row border (higher-specificity rule
-   below) so no phantom frame offsets the content box (audit UI-003). */
+/* Full-width row hit surface, and the flex container for the row's content.
+   The library is a treegrid: it wraps every row's content in `span.wb-col`
+   styled as a table cell (`position: absolute`, fixed inner height, inline
+   block), which left the title ~5px off-centre and required a cluster of
+   `!important` overrides to fight. Making the ROW the flex container and
+   dropping the cell wrapper out of layout lets `wb-node` be a direct child,
+   so vertical centring is ordinary flexbox and no override is needed. */
+/* Selector specificity is raised one level over the library's own rules rather
+   than using `!important`: the bundled stylesheet is imported after this
+   module, so an equal-specificity rule loses the tie regardless of order. */
 :global(div.wunderbaum div.wb-row) {
+  display: flex;
+  align-items: center;
   border: 0;
   border-radius: var(--mantine-radius-sm);
   margin-inline: 0;
@@ -123,15 +131,11 @@
   padding-right: var(--rtwiki-tree-row-padding-right);
 }
 
-/* The library positions the content column absolutely at 28px inside the 30px
-   row and keeps it inline-block, which leaves the title top-aligned (~5px off
-   center). Fill the row and flex-center so the icon/title sit dead-center
-   (audit UI-003). !important beats the library's equal-specificity rule, which
-   is imported after this module. */
-:global(div.wunderbaum span.wb-col) {
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
+/* Neutralise the table-cell wrapper without styling it. `display: contents`
+   removes the box entirely, so the row's own centring governs. */
+:global(div.wunderbaum div.wb-row span.wb-col) {
+  position: static;
+  display: contents;
 }
 
 /* Hover covers the full row width with a subtle neutral fill. */
@@ -151,21 +155,23 @@
    blue; the neutral row-fill hover (above) is the hover affordance, so no
    separate icon-colour change is needed. */
 
-/* Selected/active: soft blue fill, bright foreground, transparent border
-   (no heavy grey outline), 3px left accent that does not shift content. */
+/* Selected/active: a quiet fill plus a 3px left accent. The accent carries the
+   "you are here" signal precisely; the fill only supports it. The previous
+   22%-blue fill plus accent made the selected row the loudest thing in the
+   pane, which competed with the document itself. */
 :global(div.wb-row.wb-selected),
 :global(div.wb-row.wb-active) {
   color: var(--rtwiki-text, var(--mantine-color-text));
   border-color: transparent !important;
-  background: var(--wb-active-color);
+  background: var(--rtwiki-selected);
   box-shadow: inset 3px 0 0 var(--mantine-color-blue-filled);
 }
 
-/* Keep the blue fill (never the neutral hover tint) when a selected row is
-   hovered again, so the selection stays clearly visible in either theme. */
+/* Keep the selected fill (never the neutral hover tint) when a selected row is
+   hovered again, so the selection stays visible in either theme. */
 :global(div.wb-row.wb-selected:hover),
 :global(div.wb-row.wb-active:hover) {
-  background: var(--wb-active-hover-color);
+  background: var(--rtwiki-selected);
 }
 
 /* Keyboard focus: clearly visible blue ring, independent of hover (audit
@@ -207,19 +213,21 @@
 /* Expander: disclosure control only. A crisp SVG chevron (mask) replaces the
    jagged unicode glyph. Collapsed points right; expanded rotates 90° to point
    down. Colour follows the expander token so it adapts to light/dark. */
+/* The expander occupies the same cell as one nesting level, so its box comes
+   from the library's own `--wb-icon-outer-width` and needs no override. Only
+   the glyph inside is sized here, and it now reads at 16px rather than 13.5px
+   so the disclosure control is visible without hovering. */
 :global(i.wb-expander) {
   color: transparent;
   cursor: pointer;
-  width: var(--rtwiki-tree-expander-size) !important;
-  height: var(--rtwiki-tree-expander-size) !important;
   padding: 0;
   margin: 0;
   border: 0;
   border-radius: var(--mantine-radius-xs);
   background-color: var(--wb-expander-color);
   background-image: none;
-  -webkit-mask: var(--rtwiki-chevron) center / 75% no-repeat;
-  mask: var(--rtwiki-chevron) center / 75% no-repeat;
+  -webkit-mask: var(--rtwiki-chevron) center / var(--rtwiki-tree-expander-glyph) no-repeat;
+  mask: var(--rtwiki-chevron) center / var(--rtwiki-tree-expander-glyph) no-repeat;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -256,11 +264,11 @@
   flex: 0 0 auto;
 }
 
-/* Leaf and subfile rows render no expander, so reserve its width before the
-   icon. Without this the icon floats left of the parent's icon column and
-   looks stranded; the spacer keeps every type's icon on one vertical line. */
+/* Leaf and subfile rows render no expander, so their icon would sit one cell to
+   the left of every parent row's icon. Reserve exactly one expander cell,
+   expressed in the same token the cell itself uses, so the two cannot drift. */
 :global(span.wb-node:not(:has(i.wb-expander)) i.rtw-page-icon) {
-  margin-left: calc(var(--rtwiki-tree-expander-size) + var(--rtwiki-tree-expander-icon-gap));
+  margin-left: var(--wb-icon-outer-width);
 }
 
 :global(i.rtw-page-icon svg) {
@@ -299,13 +307,14 @@
   flex: 0 0 auto;
 }
 
-/* Title: 13px / 18px, one line, ellipsis. */
+/* Title: 14px, one line, ellipsis. Matches the body reading size rather than
+   the smaller label size, so the tree is read rather than scanned. */
 :global(span.wb-title) {
   flex: 1 1 auto;
   min-width: 0;
   cursor: pointer;
-  font-size: 13px;
-  line-height: 18px;
+  font-size: var(--rtwiki-tree-title-size);
+  line-height: 1.25;
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;

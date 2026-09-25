@@ -6,9 +6,11 @@
 }
 
 .searchSection {
-  /* Sits at the very top of the pane with only minor top padding; no separator
-   * below it so the search box and the file list read as one continuous pane. */
-  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  /* Full-bleed: the section no longer insets the field, so the search box spans
+   * the pane edge to edge. The breathing room moves inside the field, which
+   * keeps text off the border without narrowing the control. No separator below
+   * it, so the field and the file list read as one continuous pane. */
+  padding: var(--mantine-spacing-xs) 0;
 }
 
 .listSection {
@@ -27,8 +29,47 @@
   height: 100%;
 }
 
+/*
+ * The Home entry is a tree row, not a separate kind of control. It shares the
+ * tree's row height, its icon size and its selected treatment, so the step from
+ * this row to the first page is the same step as between any two pages. It was
+ * a Mantine NavLink with its own metrics, which is why the gap above the first
+ * page read as different.
+ */
 .navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--rtwiki-tree-icon-title-gap);
+  flex: 0 0 auto;
+  width: 100%;
+  height: var(--rtwiki-tree-row-height);
+  /* Aligns with the tree's first icon column: one expander cell plus the gap. */
+  padding: 0 var(--rtwiki-tree-row-padding-right) 0
+    calc(var(--wb-icon-outer-width, 20px) + var(--rtwiki-tree-expander-icon-gap));
+  border: 0;
+  border-radius: var(--mantine-radius-sm);
+  background: transparent;
   color: var(--rtwiki-text, var(--mantine-color-text));
+  font-size: var(--rtwiki-tree-title-size);
+  text-align: left;
+  cursor: pointer;
+}
+
+.navIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--rtwiki-tree-icon-size);
+  height: var(--rtwiki-tree-icon-size);
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+}
+
+.navLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .navItem:hover {
@@ -40,9 +81,18 @@
    accent. This keeps it visually separate from the heavier 22%-fill + 3px
    accent used on selected tree rows (audit UI-001). */
 .navItem[data-active="true"] {
-  background: color-mix(in srgb, var(--mantine-color-blue-filled) 10%, transparent) !important;
-  color: var(--mantine-color-blue-filled);
-  box-shadow: inset 2px 0 0 var(--mantine-color-blue-filled) !important;
+  background: var(--rtwiki-active-fill);
+  color: var(--rtwiki-text, var(--mantine-color-text));
+  box-shadow: inset 3px 0 0 var(--mantine-color-blue-filled);
+}
+
+.navItem[data-active="true"] .navIcon {
+  color: currentColor;
+}
+
+.navItem:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-filled);
+  outline-offset: -2px;
 }
 
 .listEmpty {
