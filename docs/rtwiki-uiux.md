@@ -1037,9 +1037,20 @@ Previously reported as 26-vs-28 drift. That was the same committed-vs-working-tr
 
 35 icon-only controls in one 40px row across the full content width, with no labels and no clear grouping. Scanning cost is high; the active control is distinguished only by a filled background. Compounds F2 at narrow widths.
 
-### F7 — Dark mode ignores the OS preference — **LOW** 🟢
+### F7 — Dark mode ignores the OS preference — **RESOLVED** ✅
 
-With `prefers-color-scheme: dark` the app still rendered `data-mantine-color-scheme="light"`; the theme only changed via the rail's Theme control. Once dark, contrast is healthy (tree rows and title text both **10.26:1**), so this is an expectation gap, not a legibility defect.
+`MantineProvider` was given no `defaultColorScheme`, and its default is `light`,
+so a machine set to dark still rendered light. `defaultColorScheme="auto"` makes
+the OS preference the starting point; because that is only the *initial* value,
+an explicit choice in Settings still wins and is persisted by Mantine.
+
+The appearance control also gained a **System** choice, which it previously could
+not express. Two reasons: without it, following the OS is something that happens
+to you with no way back; and the control now edits the user's *choice* rather
+than the *computed* scheme, so "System" can be shown as chosen instead of being
+flattened into whichever side the OS currently sits on. Covered by
+`tests/browser/color-scheme.pwspec.ts` (5 tests), all using `emulateMedia`
+rather than assuming — the whole defect was an unexamined default.
 
 ### F10 — Three different widths in one pane — **RESOLVED** ✅
 
@@ -1232,6 +1243,103 @@ Trilium's tab row is three features and a different architecture. Only the first
 - **The window-drag filler.** `.tab-row-filler` carries `-webkit-app-region: drag` and drags the **Electron window**, not a tab. Our work plan has carried a "filler-based drag region" item since the beginning on the strength of a comment; in a browser-first app (ADR-001) it means nothing. **That plan item should be struck rather than implemented.**
 - **Shrinking tab sizes** (`is-small`/`is-smaller`/`is-mini` at 84/60/48px) — a real, cheap feature we do not have. Left for later, pending a decision.
 
+## 7b. Four defects found by measuring instead of reading — **RESOLVED** ✅
+
+All four had been carried as "pre-existing failures" across several sessions. None
+had been diagnosed. Each turned out to be a real defect, and three of them were
+user-visible data or behaviour loss rather than cosmetics.
+
+### F18 — The status bar reported unsaved work as saved
+
+`AutosaveStatus` is `'idle' | 'dirty' | 'saving' | 'saved' | 'error'`.
+`StatusSaveState` is `'clean' | 'pending' | 'saving' | 'saved' | 'error'`. The
+translation between them existed in **three copies**, and two were wrong:
+
+| Editor | How it mapped | Result |
+|---|---|---|
+| `rich-editor.tsx` | **cast** `AutosaveStatus` to `StatusSaveState` | `'dirty'` reached the bar as a value it does not recognise, and fell through to "Saved" |
+| `markdown-workspace.tsx` | its own `mapStatus`, folding `'dirty'` into `'clean'` | "Saved" |
+| `html-editor.tsx` | mapped correctly | correct |
+
+The cast is what hid it: the type checker was told the mapping was fine. The
+prop types were narrowed the same way — `'clean' | 'saving' | 'saved' | 'error'`,
+with `pending` absent — so the bug was expressed in the type system too.
+
+Measured by sampling the bar every 250 ms across the debounce window. Before:
+`Saved` at every sample. After: `Unsaved changes` for the whole 2 s, then
+`Saved`. The status bar's own comment already warned that folding the debounce
+window into `clean` "is the one thing a save indicator must never do"; the rich
+editor and markdown simply were not doing what the comment described.
+
+Fixed by defining the mapping once in `src/web/features/workspace/save-state.ts`
+and routing all three editors through it. The HTML editor was the only correct
+copy, and the tests asserted against it — which is exactly why the other two
+went unnoticed.
+
+### F19 — The keyboard context menu never opened
+
+Right-click produced a menu with 11 items. The **ContextMenu key and Shift+F10
+produced nothing at all.** A genuine accessibility gap: the tree advertises a
+tree pattern, so every row action must be reachable without a mouse.
+
+A single `toBeVisible()` after a wait reports "never opened" for something that
+did open. A MutationObserver plus listeners for the native `contextmenu` event
+and for focus changes gave the timeline: menu present at **21 ms**, removed at
+**27 ms**, native contextmenu at **28 ms**. Instrumenting Mantine's `onChange`
+then named the mechanism — it fired with `opened=false` from inside Mantine's own
+close handler.
+
+The ContextMenu key and Shift+F10 both fire a native `contextmenu` immediately
+after the keydown. The existing `suppressNextContextMenuUntil` guard calls
+`preventDefault()`, which stops the **browser's** menu but cannot reach
+Mantine's, which dismisses itself from its own document-level listeners. The
+guard suppressed *our* handler; it never suppressed Mantine's. Opening the menu
+on the next task instead of synchronously leaves the native event nothing to
+dismiss.
+
+### F20 — A reload discarded every open tab but one
+
+Open two pages, reload, and one was gone — every time.
+
+| | `openPageIds` | tabs |
+|---|---|---|
+| before reload | `[rich, html]` | 2 |
+| after reload | `[html]` | 1 |
+
+The app writes `?page=<id>` into its own URL on every navigation. On reload the
+`?page=` deep-link branch ran first and `return`ed **before the session was read
+at all** — so the parameter the app had written itself replaced the workspace
+with one page, and the subsequent session write persisted that single tab, making
+the loss permanent. A page was only ever lost if it was not the active one, which
+is why this read as a flaky restore rather than a rule.
+
+The deep link is now additive: the session restores, then the linked page is
+ensured open and made active. An id that resolves to nothing falls through to the
+session rather than to nothing.
+
+### F21 — Disabled toolbar controls looked enabled
+
+Every disabled control on the 28-control bar computed **`opacity: 1`**, identical
+to every enabled one. In a row of icon-only buttons that leaves no way to tell
+that clicking one will do nothing, so an inactive command reads as a broken
+button. Disabled controls now sit at 0.35 with no hover affordance.
+
+## 7c. F6 corrected — the toolbar claim was stale
+
+F6 read: *"35 icon-only controls in one 40px row, with no labels and no clear
+grouping."* Measured on the current build, **two of the three claims are no longer
+true**:
+
+| Claim | Measured |
+|---|---|
+| one undifferentiated run | **6 separators making 7 groups** of 2/4/8/3/5/4/1 |
+| no labels | **all 28 controls carry `aria-label`** |
+| icon-only | still true, and correct for a 40px band |
+
+Bar height is 36px (Trilium's is 39px). F21 above came out of this measurement.
+**The grouping and labelling were added in an earlier cycle and F6 was never
+re-measured** — a recorded finding going stale, the same failure mode as F2.
+
 ## 8. Ordered work plan
 
 The agreed sequence, with reasoning for the order:
@@ -1272,6 +1380,9 @@ Findings that were raised and then withdrawn after being checked. This exists so
 | "Draggabilly is the right choice — it is small" | Recommended over `@dnd-kit` partly on dependency weight, and the plan was built around it. | Draggabilly `3.0.0` was published **2021-12-29** and the package has not been touched since **2022-06-15**. It is abandoned, and its imperative DOM model is the specific thing that makes drag expensive in React. `motion@13.4.4` shipped the day before this was checked. The size argument was real but the maintenance fact, which I had not looked up, was decisive. | 2026-09-26 |
 | "The spike proved `motion` could not reorder" | The first spike run showed the tab order unchanged after a full pointer drag, which reads as a hard blocker on the library. | The spike's drag handle was an **empty `div` in normal flow** — zero height — so pointer hit-testing never reached it. The library was fine. A red result from a harness you built yourself is a fact about the harness; the drag was only proven after the handle was given real dimensions, at which point `a,b,c,d` → `b,c,d,a`. | 2026-09-26 |
 | "The editor's focus-reclaim effect is unrelated to tab work" | Treated as out of scope while reordering was being debugged. | It is the direct cause. `rich-editor.tsx` reclaims focus for 1.2s after a page opens and its whitelist omitted `role="tab"`, so every keyboard reorder ended with the caret jumping into the document. Pre-existing, and unreachable until something moved focus to a tab. **A symptom in a neighbouring module is evidence about that module, not noise.** | 2026-09-26 |
+| "The pre-existing test failures are just stale selectors" | The 24 failures across five specs were grouped as test maintenance and worked through as such. | Four were **real product defects**: the save indicator lying on two of three page types, the keyboard context menu never opening, a reload discarding open tabs, and disabled toolbar controls rendering identically to enabled ones. Only some were stale selectors. **A red test has a cause; "pre-existing" describes when it appeared, never what it is.** | 2026-09-26 |
+| "A background suite run proves the other specs are fine" | Twelve specs were run in the background while work continued, and its 103-pass result was read as a regression check. | The results are **invalid**. `build/web` was rebuilt several times during the run to pick up the toolbar, settings and theme changes, so the bundle under test changed underneath it. Both its passes and its failures are unreliable. Re-run against one fixed build before drawing any conclusion — an interrupted or concurrently-rebuilt run is not a measurement. | 2026-09-26 |
+| "F6 says the toolbar has no grouping and no labels" | Carried forward from the original audit and never re-measured. | Stale. The current bar has 6 separators making 7 groups, and all 28 controls carry accessible names — both added in an earlier cycle. **A recorded finding expires; re-measure before acting on it.** This is the same failure mode as F2, and it is now the second time. | 2026-09-26 |
 
 ## 10. Coverage and known gaps
 
