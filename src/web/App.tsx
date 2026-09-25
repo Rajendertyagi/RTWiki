@@ -145,31 +145,67 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (controller.loading || sessionReadyRef.current) return
     sessionReadyRef.current = true
-    // Deep-link: a ?page=<id> URL opens that page directly (Issue 5), taking
-    // precedence over the saved session.
+    // A `?page=<id>` URL names the page to open, but it must not *replace* the
+    // workspace.
+    //
+    // This branch used to `return` before the session was read, so any reload
+    // with the parameter present opened that one page and dropped every other
+    // open tab - and then rewrote the session with just that page, making the
+    // loss permanent. The app writes `?page=` into the URL itself on every
+    // navigation, so this was not an edge case: open two pages, reload, and one
+    // of them was gone. The deep link is now additive - the session restores,
+    // and the linked page is ensured open and made active.
     const deepLinkId = new URLSearchParams(window.location.search).get('page')
-    if (deepLinkId) {
-      const target = controller.pages.find((p) => p.id === deepLinkId)
-      if (target) {
-        controller.selectPage(deepLinkId)
-        const params = new URLSearchParams(window.location.search)
-        params.set('page', deepLinkId)
-        window.history.replaceState(
-          { pageId: deepLinkId },
-          '',
-          `${window.location.pathname}?${params.toString()}`
-        )
-        debugLog('navigation', 'nav_active_page_changed', { pageId: deepLinkId })
-        return
-      }
-    }
+    const deepLinkPage = deepLinkId ? controller.pages.find((p) => p.id === deepLinkId) : undefined
     const storage = workspaceStorageRef.current
     if (!storage) return
     const session = loadWorkspaceSession(storage)
-    if (!session) return
+    if (!session && !deepLinkPage) return
     debugLog('ui', 'ui_browser_reload_restore', {})
-    const resolved = resolveRestorableWorkspace(session, controller.pages)
-    if (!resolved) {
+
+    let activePageId: string | null = null
+    let tabs: OpenTab[] = []
+    let restoredField: 'preview' | 'html' | 'css' | 'javascript' = 'preview'
+    if (session) {
+      const resolved = resolveRestorableWorkspace(session, controller.pages)
+      if (resolved) {
+        tabs = resolved.tabs
+        activePageId = resolved.activePageId
+        if (resolved.htmlSource) {
+          restoredField = resolved.htmlSource.field
+          setHtmlSource(resolved.htmlSource)
+        }
+        if (resolved.expandedTreeIds.length > 0) {
+          const seed = new Set(resolved.expandedTreeIds)
+          expandedIdsRef.current = seed
+          setSeedExpandedIds(seed)
+        }
+      }
+    }
+
+    // The linked page joins the restored set rather than replacing it.
+    if (deepLinkPage && !tabs.some((tab) => tab.pageId === deepLinkPage.id)) {
+      tabs = [
+        ...tabs,
+        {
+          pageId: deepLinkPage.id,
+          title: deepLinkPage.title || UI_TEXT.untitledPage,
+          pageType: deepLinkPage.pageType
+        }
+      ]
+    }
+    if (deepLinkPage) {
+      activePageId = deepLinkPage.id
+      const params = new URLSearchParams(window.location.search)
+      params.set('page', deepLinkPage.id)
+      window.history.replaceState(
+        { pageId: deepLinkPage.id },
+        '',
+        `${window.location.pathname}?${params.toString()}`
+      )
+    }
+
+    if (tabs.length === 0) {
       debugLog('navigation', 'nav_session_invalid_discarded', { code: 'no_valid_pages' })
       saveWorkspaceSession(storage, {
         version: 1,
@@ -180,19 +216,11 @@ export function App(): JSX.Element {
       })
       return
     }
-    setOpenTabs(resolved.tabs)
-    controller.selectPage(resolved.activePageId)
-    if (resolved.htmlSource) {
-      setHtmlSource(resolved.htmlSource)
-    }
-    if (resolved.expandedTreeIds.length > 0) {
-      const seed = new Set(resolved.expandedTreeIds)
-      expandedIdsRef.current = seed
-      setSeedExpandedIds(seed)
-    }
+    setOpenTabs(tabs)
+    controller.selectPage(activePageId)
     debugLog('navigation', 'nav_session_restored', {
-      pageId: resolved.activePageId ?? undefined,
-      field: resolved.htmlSource?.field ?? 'preview'
+      pageId: activePageId ?? undefined,
+      field: restoredField
     })
   }, [controller.loading, controller.pages])
 

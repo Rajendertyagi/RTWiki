@@ -2,6 +2,7 @@ import { type APIRequestContext, expect, type Page, test } from '@playwright/tes
 import { UI_TEXT } from '../../src/web/config/index.js'
 import { purgeUntitledPages } from './utils/cleanup.js'
 import { waitForRow } from './utils/row-visibility.js'
+import { railHome } from './utils/shell.js'
 
 async function listPages(
   request: APIRequestContext
@@ -244,9 +245,11 @@ test.describe('stability regressions', () => {
       await pageRow(page, from).click({ button: 'right' })
       const menu = page.getByTestId('tree-context-menu')
       await menu.waitFor()
-      // exact:true — substring matching would also hit "Move to parent
-      // page: <Renamed…>" targets.
-      await menu.getByRole('menuitem', { name: 'Rename', exact: true }).click()
+      // Anchored, and tolerant of the shortcut badge: the item's accessible
+      // name is "Rename F2" because it carries a Kbd right-section, so a plain
+      // exact 'Rename' matches nothing. The anchors keep substring matching from
+      // also hitting the "Move to parent page: <Renamed…>" targets.
+      await menu.getByRole('menuitem', { name: /^Rename\s*(F2)?$/ }).click()
       // Wunderbaum's inline title editor uses .wb-input-edit, not a data-testid.
       const editor = page.locator('input.wb-input-edit')
       await expect(editor).toBeVisible()
@@ -275,9 +278,12 @@ test.describe('stability regressions', () => {
       // Row text includes type label suffix, so match by prefix.
       await expect(row).toContainText(title)
 
-      // Opening the renamed page asserts the header input and tab label.
+      // Opening the renamed page asserts the header title and the tab label.
+      // The header title is a <button data-testid="editor-title"> carrying the
+      // title as text until it is double-clicked into an input, so this reads
+      // text rather than an input value.
       await row.click()
-      await expect(page.locator('input[aria-label="Title"]')).toHaveValue(title)
+      await expect(page.getByTestId('editor-title')).toHaveText(title)
       await expect(
         page.locator('[aria-label="Open pages"]').getByRole('tab', { name: new RegExp(title) })
       ).toBeVisible()
@@ -360,7 +366,7 @@ test.describe('stability regressions', () => {
       await pageRow(page, original).click({ button: 'right' })
       const menu = page.getByTestId('tree-context-menu')
       await menu.waitFor()
-      await menu.getByRole('menuitem', { name: 'Rename', exact: true }).click()
+      await menu.getByRole('menuitem', { name: /^Rename\s*(F2)?$/ }).click()
       const editor = page.locator('input.wb-input-edit')
       await expect(editor).toBeVisible()
       await editor.fill('This must never persist')
@@ -491,9 +497,14 @@ test.describe('stability regressions', () => {
       expect(result.payload).toContain(marker)
 
       await page.reload()
-      // Deterministic re-entry: wait for the dashboard, reopen the page,
+      // Deterministic re-entry. The app deliberately restores the last workspace
+      // on reload, so the dashboard is NOT what is showing here - waiting for it
+      // could never succeed, and the wait is what this test used to fail on. Go
+      // Home explicitly through the rail (always available), reopen the page,
       // confirm the rendered parent view, then open the JavaScript subfile.
-      await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
+      await expect(page.getByTestId('workspace-status-bar')).toBeVisible()
+      await railHome(page).click()
+      await expect(page.getByText('Pages', { exact: true }).first()).toBeVisible()
       await openPageByRow(page, title)
       await expect(page.locator('[data-testid="html-preview-view"]')).toBeVisible()
       await openSubfile(page, p.id, 'javascript')
