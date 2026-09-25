@@ -95,6 +95,7 @@ export function EditorHeader({
             }}
             title={UI_TEXT.renameHint}
             aria-label={UI_TEXT.titleLabel}
+            data-testid="editor-title"
           >
             {title || UI_TEXT.untitledPage}
           </button>

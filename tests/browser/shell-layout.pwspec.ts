@@ -242,28 +242,28 @@ test.describe('Shell layout regions', () => {
 
     const tabs = await box(page, '[role="tablist"]')
     const toolbarRow = await box(page, '[data-testid="rich-toolbar-row"]')
-    const titleBox = await box(page, 'input[aria-label="Title"]')
+    // The title is a button that becomes an input only while renaming, so the
+    // old `input[aria-label="Title"]` could never match a page at rest.
+    const titleBox = await box(page, '[data-testid="editor-title"]')
     const doc = await box(page, '.bn-editor')
 
     expect(tabs.y + tabs.height).toBeLessThanOrEqual(toolbarRow.y + 1)
     expect(toolbarRow.y + toolbarRow.height).toBeLessThanOrEqual(titleBox.y + 1)
     expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(doc.y + 1)
 
-    // The toolbar slot has a fixed reserved height (no post-init shift).
-    expect(Math.round(toolbarRow.height)).toBe(42)
+    // The toolbar slot has a fixed reserved height (no post-init shift). This
+    // was asserted as 42, which no longer matches anything: the row is sized by
+    // --rtwiki-toolbar-height, which is --rtwiki-row-height, currently 40px and
+    // shared with the tab strip. The 1px bottom border sits inside that height.
+    expect(Math.round(toolbarRow.height)).toBe(40)
 
     // Real controls eventually occupy the stable slot.
     await expect(page.locator('[data-testid="rich-toolbar-row"] button').first()).toBeVisible()
   })
 
-  test('HTML pages keep their own header flow without a rich toolbar', async ({
-    page,
-    request
-  }) => {
+  test('HTML pages expose their own toolbar in the same slot', async ({ page, request }) => {
     await page.setViewportSize(DESKTOP)
     const title = uniqueTitle('ShellE')
-    // Empty content is schema-valid; the workspace shows its placeholder,
-    // which is enough to assert the shell regions around it.
     const res = await request.post('/api/pages', {
       data: { title, pageType: 'html', content: '' }
     })
@@ -271,9 +271,20 @@ test.describe('Shell layout regions', () => {
     await page.goto('/')
     await openRowByTitle(page, title)
 
-    await expect(page.getByTestId('rich-toolbar-row')).toHaveCount(0)
+    // This assertion used to be `toHaveCount(0)` on the premise that an HTML
+    // page has no toolbar. It does: HTML pages publish their own toolbar into
+    // the same reserved slot, precisely so the title and document below it do
+    // not shift when the workspace changes page type. What must NOT be present
+    // is the *rich* toolbar's controls.
+    const row = page.getByTestId('rich-toolbar-row')
+    await expect(row).toHaveCount(1)
+    await expect(row.locator('[aria-label="Bold"]')).toHaveCount(0)
+
+    // Order still holds: tabs, then the toolbar slot, then the title.
     const tabs = await box(page, '[role="tablist"]')
-    const titleBox = await box(page, 'input[aria-label="Title"]')
-    expect(tabs.y + tabs.height).toBeLessThanOrEqual(titleBox.y + 1)
+    const toolbarRow = await box(page, '[data-testid="rich-toolbar-row"]')
+    const titleBox = await box(page, '[data-testid="editor-title"]')
+    expect(tabs.y + tabs.height).toBeLessThanOrEqual(toolbarRow.y + 1)
+    expect(toolbarRow.y + toolbarRow.height).toBeLessThanOrEqual(titleBox.y + 1)
   })
 })
