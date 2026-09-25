@@ -11,7 +11,14 @@
   flex: 1;
   min-height: 0;
   width: 100%;
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-sm);
-  background: var(--mantine-color-body);
+  /* The frame continues the page rather than sitting on it. This used to be a
+   * second bordered, rounded box *inside* the container's own frame - a card
+   * within a card. The sandboxed document is the content, so it takes the
+   * canvas token and has no outline of its own.
+   *
+   * `border: 0` is explicit and load-bearing. Deleting the old border
+   * declaration is not enough: the user-agent stylesheet gives every iframe a
+   * 2px inset border, so removing the rule silently restores a frame. */
+  border: 0;
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
 }

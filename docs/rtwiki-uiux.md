@@ -373,6 +373,48 @@ The **token** half of the defect was closed later: the ambiguous pair was replac
 region-named tokens, and the `canvas !== pane` invariant is now asserted for every
 theme and variant rather than checked by eye.
 
+The same class of defect remained in two other page types and was fixed separately:
+
+| Surface | Was | Now |
+|---|---|---|
+| `html-editor.module.css` `.previewPaneFull` | 1px border, 8px radius, panel tone | canvas tone, no frame |
+| `html-preview.module.css` `.frame` (the iframe) | 1px border, 6px radius, Mantine body tone | canvas tone, `border: 0` |
+| `markdown-workspace.module.css` `.previewPane` | 1px border, 8px radius, panel tone | canvas tone, no frame |
+
+So the HTML page had been a **frame inside a frame**, and both the Markdown boxes were
+painted with the panel tone — meaning that in dark mode the content was *darker* than
+the page around it and read as a hole rather than as content.
+
+`markdown-workspace.module.css` `.editorPane` deliberately **keeps** its frame and the
+panel tone. A text-entry surface has a real usability argument for staying distinct
+from the rendered result, so this is a design decision and is excluded from the
+document-surface test.
+
+### The sandboxed preview and the browser's base background
+
+The HTML preview renders inside a sandboxed iframe with no same-origin access, so it
+cannot read the app's theme. Two browser behaviours had to be handled, and neither was
+visible from computed styles alone — only a screenshot showed them:
+
+1. A browser gives an iframe document an **opaque base background** when the document
+   declares none, and that base background paints *over* the iframe element's own
+   colour. The shell's canvas was therefore hidden behind a light rectangle.
+2. Declaring the document `background: transparent` is **not** sufficient. A transparent
+   root canvas lets the same base background through from underneath. Verified: with
+   the iframe element correctly reporting `rgb(36, 36, 36)` in dark mode and the
+   srcdoc correctly declaring transparency, the area still rendered light.
+
+The fix is therefore to state the colour explicitly. `PreviewFrame` resolves the canvas
+colour from the active theme registry and passes it to `buildPreviewDocument`, which
+emits it as the document's base background. The value is **allowlisted**, not escaped —
+it is interpolated into a CSS declaration, so a value that is not recognisably a colour
+is discarded and the document falls back to transparent. The block is emitted before
+the page's own head and CSS, so a page may still choose its own background.
+
+Note that `border: 0` on the iframe is load-bearing. Deleting the old `border`
+declaration is not enough: the user-agent stylesheet gives every iframe a 2px inset
+border, so removing the rule silently restores a frame. The browser test caught this.
+
 ### Verification requirement
 
 Every theme change must be verified in **both** colour schemes. A light-only check previously hid a regression where the dark-mode canvas and panel tones were inverted. The rule is now: **always toggle both schemes before declaring a palette change correct.**
@@ -514,7 +556,7 @@ The agreed sequence, with reasoning for the order:
 | # | Item | Rationale for position |
 |---|---|---|
 | ~~1~~ | ~~**Theme token foundation** — registry engine, Default theme only~~ | **DONE.** Registry, per-region tokens across 14 stylesheets, editor bound to the canvas token, labels corrected. Guarded by `tests/theme-registry.test.ts` and the sentinel browser test |
-| 2 | **Remaining document frames** — drop the card frame from the HTML editor and markdown editor views | F1 is resolved; the remaining editors still frame their content as cards. Now unblocked: each theme declares its own canvas tone, so the frame can be removed against a stable token |
+| ~~2~~ | ~~**Remaining document frames** — drop the card frame from the HTML editor and markdown editor views~~ | **Done.** Both rendered views are frameless and on the canvas. The HTML page had a frame inside a frame. The Markdown typing view keeps its frame by decision, not oversight |
 | 3 | **Mobile toolbar** — re-measure, then decide between scroll and an overflow menu | F2's recorded numbers predate the current stylesheet and must not drive a fix. The upstream pattern collapses overflow into a menu rather than relying on scroll alone |
 | 4 | **Application shell** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small polish items that use the declared tokens rather than hardcoded values |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Tab work would otherwise be re-verified after the shell's geometry settles in item 4. Shell precedes tabs to avoid re-work |
@@ -551,6 +593,9 @@ in a browser. The items below are the ones verified by actually running the app.
 - Rail width (40px in config, 42px rendered due to padding overflow) — measured
 - Document surface after the F1 fix — border and radius both `0px`, and the canvas tone equals the editor content tone in both schemes — measured
 - **Editor surface follows the declared canvas token** — a sentinel `rgb(1, 2, 3)` injected on `--rtwiki-canvas` is adopted by both `.bn-editor` and the scroll owner, in light and dark — measured
+- **HTML and Markdown rendered surfaces are frameless and on the canvas** — asserted in both schemes, including the nested iframe frame — measured
+- **The sandboxed HTML preview paints the resolved canvas colour** — unit-asserted on the generated document; confirmed visually in both schemes
+- Markdown dark rendering inspected by screenshot: continuous canvas, themed text, no frame — measured
 - No reference to the superseded surface token names remains anywhere in `src/web` — asserted by test
 - `canvas !== pane` and `rail !== pane` hold for every registered theme and variant — asserted by test
 - Status bar rendered height (28px) — measured

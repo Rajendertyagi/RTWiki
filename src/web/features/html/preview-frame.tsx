@@ -1,10 +1,11 @@
-import { Alert, Box, Button, Stack, Text } from '@mantine/core'
+import { Alert, Box, Button, Stack, Text, useComputedColorScheme } from '@mantine/core'
 import type { HtmlPageContentV2 } from '@rtwiki/shared/schemas/html-content'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
+import { resolveActiveTheme } from '../../theme/index.js'
 import classes from './html-preview.module.css'
 import { normalizePreviewHtml } from './normalize-html.js'
 import { buildPreviewDocument, generateChannelId } from './preview-document.js'
@@ -63,6 +64,12 @@ export function PreviewFrame({
   // Monotonic render generation: incremented on every srcdoc rebuild so
   // Debug Mode can correlate ready/runtime messages with a specific build.
   const generationRef = useRef(0)
+  // The sandboxed document cannot read the app's theme, so the shell resolves
+  // the document canvas colour from the active theme registry and states it in
+  // the generated document. Reading it from the registry rather than measuring
+  // the DOM keeps one source of truth for every surface colour.
+  const colorScheme = useComputedColorScheme('light')
+  const canvasColor = resolveActiveTheme().variants[colorScheme].canvas
   // Builds (or rebuilds) the srcdoc document. Every call regenerates the
   // channel ID so stale messages from a previous preview can never be
   // accepted by the listener; failures are reported and rendered as a
@@ -94,7 +101,8 @@ export function PreviewFrame({
           javascript: content.javascript,
           jsEnabled: content.jsEnabled,
           nonce,
-          channelId: channelIdRef.current
+          channelId: channelIdRef.current,
+          documentBackground: canvasColor
         })
       }
     } catch (error) {
@@ -105,7 +113,7 @@ export function PreviewFrame({
       })
       return { error: UI_TEXT.htmlPreviewBuildFailed }
     }
-  }, [content, nonce])
+  }, [content, nonce, canvasColor])
 
   const [result, setResult] = useState<BuildResult>(() => buildPreview())
 

@@ -25,6 +25,45 @@ function build(overrides: Partial<Parameters<typeof buildPreviewDocument>[0]> = 
 }
 
 describe('preview document construction', () => {
+  it('makes the document canvas transparent so the shell surface shows through', () => {
+    // Without this the browser paints its own opaque base background inside
+    // the iframe, which sits on top of the shell's canvas colour. The symptom
+    // is a large light rectangle in the middle of a dark document area. The
+    // computed background of the iframe element is correct either way, so this
+    // can only be caught by inspecting the generated document.
+    const doc = build()
+    expect(doc).toContain('background: transparent')
+  })
+
+  it('paints the document canvas with the supplied surface colour', () => {
+    // A transparent root canvas is not sufficient: the browser substitutes its
+    // own opaque base background underneath it. The sandboxed document has no
+    // same-origin access and cannot read the active theme, so the resolved
+    // canvas colour is passed in and declared explicitly.
+    const doc = build({ documentBackground: 'rgb(1, 2, 3)' })
+    expect(doc).toContain('background: rgb(1, 2, 3)')
+    expect(doc).not.toContain('background: transparent')
+  })
+
+  it('rejects a surface colour that is not a plain colour value', () => {
+    // Allowlist, not escaping. The value is interpolated into a CSS
+    // declaration, so anything that is not recognisably a colour is discarded
+    // and the document falls back to transparent rather than being escaped and
+    // hoped for.
+    const doc = build({ documentBackground: 'red; } body { display: none' })
+    expect(doc).toContain('background: transparent')
+    expect(doc).not.toContain('display: none')
+    expect([...doc.matchAll(/<style>/g)]).toHaveLength(1)
+  })
+
+  it('places the transparent-canvas reset before user CSS so a page can override it', () => {
+    const doc = build({ css: 'body { background: rebeccapurple; }' })
+    const resetIndex = doc.indexOf('background: transparent')
+    const userCssIndex = doc.indexOf('rebeccapurple')
+    expect(resetIndex).toBeGreaterThan(-1)
+    expect(userCssIndex).toBeGreaterThan(resetIndex)
+  })
+
   it('places the CSP meta before all user content', () => {
     const doc = build({
       normalizedHead: '<title>User Title</title>',
@@ -110,19 +149,28 @@ describe('preview document construction', () => {
     expect(escapeStyleContent('</STYLE>')).toBe('<\\/STYLE>')
     const css = 'a::after { content: "</style><script>alert(1)</script>"; }'
     const doc = build({ css })
-    // Exactly one style element: the injected closing sequence could not
-    // split it into pieces.
-    expect([...doc.matchAll(/<style>/g)]).toHaveLength(1)
-    // The real closing tag appears only after the complete CSS rule.
-    const styleEnd = doc.indexOf('</style>')
+    // Exactly two style elements: the shell's transparent-canvas reset and
+    // the page's own CSS. A third would mean the injected closing sequence
+    // split the page's block - which is what this test guards against.
+    expect([...doc.matchAll(/<style>/g)]).toHaveLength(2)
+    // The real closing tag appears only after the complete CSS rule. The page's
+    // CSS is the last style element in the document, so its closing tag is the
+    // last one - the shell's reset has a closing tag of its own ahead of it.
+    const styleEnd = doc.lastIndexOf('</style>')
     expect(styleEnd).toBeGreaterThan(doc.indexOf('"; }'))
     // Both dangerous properties are prevented: the injected closing style
     // sequence is escaped, and the raw `</script>` text inside the style
     // block stays inert (a style element is parsed as raw text until its
     // own — single, real — closing tag, proven by the assertions above).
-    const headSection = doc.slice(0, styleEnd)
-    expect(headSection).toContain('<\\/style>')
-    expect(headSection).not.toContain('</style>')
+    //
+    // Scoped to the page's own style block. The shell's reset sits earlier in
+    // the head and closes with a legitimate, developer-authored `</style>`, so
+    // scanning the whole head would flag a tag that is not an injection. The
+    // property being guarded is narrower and stronger: inside the page's CSS,
+    // a closing style sequence can only ever appear escaped.
+    const pageStyleBlock = doc.slice(doc.lastIndexOf('<style>'), styleEnd)
+    expect(pageStyleBlock).toContain('<\\/style>')
+    expect(pageStyleBlock).not.toContain('</style>')
   })
 
   it('omits the JavaScript pane entirely when jsEnabled is false', () => {
@@ -144,7 +192,12 @@ describe('preview document construction', () => {
 
   it('omits empty CSS and JavaScript blocks entirely', () => {
     const doc = build({ css: '   ', javascript: '' })
-    expect(doc).not.toContain('<style>')
+    // The shell always emits its transparent-canvas reset, so a bare "no
+    // <style> anywhere" assertion no longer describes the contract. What must
+    // be absent is the page's own empty CSS block: the only style element
+    // present is the reset.
+    expect([...doc.matchAll(/<style>/g)]).toHaveLength(1)
+    expect(doc).toContain('background: transparent')
     // Only the ever-present bootstrap script remains — no JS-pane script.
     const scripts = [...doc.matchAll(/<script nonce="([^"]+)">/g)]
     expect(scripts.length).toBe(1)

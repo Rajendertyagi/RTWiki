@@ -32,6 +32,14 @@ export interface PreviewDocumentInput {
   nonce: string
   /** Per-preview channel ID (32 hex chars). */
   channelId: string
+  /**
+   * Resolved document-canvas colour for the active theme, e.g. `#242424`.
+   *
+   * The sandboxed document has no same-origin access and cannot observe the
+   * app's theme, so the shell resolves the colour and states it here. Anything
+   * that is not recognisably a colour is discarded.
+   */
+  documentBackground?: string
 }
 
 function escapeHtmlAttribute(value: string): string {
@@ -41,6 +49,18 @@ function escapeHtmlAttribute(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+/**
+ * Accepts only values that are recognisably a single CSS colour: a hex triplet
+ * or quad, or an rgb/rgba/hsl/hsla function with numeric arguments. The value
+ * is interpolated into a CSS declaration inside a sandboxed document, so this
+ * is an allowlist - there is no escaping path, because a rejected value simply
+ * falls back to the transparent default.
+ */
+function isPlainCssColor(value: string | undefined): value is string {
+  if (!value) return false
+  return /^(#[0-9a-fA-F]{3,8}|rgba?\(\s*[\d.\s,%/]+\)|hsla?\(\s*[\d.\s,%/deg]+\))$/.test(value)
 }
 
 /**
@@ -157,6 +177,30 @@ export function buildPreviewDocument(input: PreviewDocumentInput): string {
   const styleBlock =
     input.css.trim().length > 0 ? `<style>\n${escapeStyleContent(input.css)}\n</style>` : ''
 
+  /*
+   * The sandboxed document must not paint the browser's own canvas. Two things
+   * force this:
+   *
+   *  1. A browser gives an iframe document an opaque base background when the
+   *     document declares none, and that base background paints *over* the
+   *     iframe element's own colour. Leaving it alone put a light rectangle in
+   *     the middle of a dark document area.
+   *  2. Declaring the document `transparent` is not enough on its own - a
+   *     transparent root canvas lets the same base background through from
+   *     underneath. The colour therefore has to be stated explicitly.
+   *
+   * The colour is allowlisted rather than escaped, because it is interpolated
+   * into a CSS declaration: a value that is not recognisably a colour is
+   * discarded and the document falls back to transparent.
+   *
+   * Emitted before the page's own head and CSS on purpose: a page is still
+   * allowed to choose its own background, and its declaration should win.
+   */
+  const documentBackground = isPlainCssColor(input.documentBackground)
+    ? input.documentBackground
+    : 'transparent'
+  const transparentCanvasBlock = `<style>\nhtml,\nbody {\n  background: ${documentBackground};\n}\n</style>`
+
   const scriptBlock =
     input.jsEnabled && input.javascript.trim().length > 0
       ? `<script nonce="${escapeHtmlAttribute(nonce)}">\n${escapeScriptContent(
@@ -170,6 +214,7 @@ export function buildPreviewDocument(input: PreviewDocumentInput): string {
     '<head>',
     '<meta charset="utf-8">',
     `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(csp)}">`,
+    transparentCanvasBlock,
     input.normalizedHead,
     styleBlock,
     '</head>',

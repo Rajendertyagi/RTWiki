@@ -12,6 +12,12 @@
   padding: 0 var(--rtwiki-chrome-pad-x);
 }
 
+/* The editing pane deliberately KEEPS its frame and the panel tone, unlike the
+ * rendered preview beside it. A text-entry surface has a real argument for
+ * staying visually distinct from the result it produces, so you can tell at a
+ * glance which one the cursor is in. That is a design decision rather than a
+ * defect, and it is not covered by the document-surface test. Revisit it only
+ * with the owner's intent in hand - do not remove this frame as cleanup. */
 .editorPane {
   flex: 1;
   min-height: 0;
@@ -28,9 +34,11 @@
   min-height: 0;
   overflow: auto;
   padding: var(--mantine-spacing-md);
-  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  border-radius: var(--mantine-radius-md);
-  background: var(--rtwiki-pane, var(--mantine-color-body));
+  /* Rendered Markdown is the document, exactly like the Rich Note: it takes the
+   * canvas tone and carries no frame. It was previously bordered, rounded and
+   * painted with the panel tone, so in dark mode the rendered page was darker
+   * than its surroundings and read as a hole. */
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
   /* Rendered Markdown: readable line length, native block styling. */
   line-height: 1.6;
   font-size: var(--mantine-font-size-sm);

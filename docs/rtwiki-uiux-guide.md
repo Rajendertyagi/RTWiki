@@ -103,14 +103,20 @@ The type scale is small and deliberate:
 
 | Page type | What the surface should look like |
 |---|---|
-| **Rich Note** | One continuous canvas. No border, no radius, no card frame. The document fills the content area from edge to edge. |
-| **HTML page** | Currently frames its content as a card (8px radius). This is a known gap — the card frame should be removed once the theme foundation is stable. |
-| **Code page** | Editor surface bound to the canvas token. No separate card framing. |
-| **Markdown page** | Currently frames its content as a card (8px radius). Same gap as HTML — will be fixed in the next work item. |
+| **Rich Note** | One continuous canvas. No border, no rounded corners, no card frame. The document fills the content area from edge to edge. |
+| **HTML page** | One continuous canvas now, as above. The content is shown inside a locked-down sandbox so its own scripts cannot reach the app. The background follows the app's theme; the text colours are the page's own business, exactly as with any note. |
+| **Code page** | Editor surface bound to the document canvas. No separate card framing. |
+| **Markdown page** | The rendered view is one continuous canvas, as above. The typing view deliberately keeps its frame — see the note below. |
 | **Dashboard** | Uses separate cards with gently rounded corners. Cards are appropriate here because the dashboard is a collection of items, not a single document. |
 | **Settings** | A panel with small rounded rows. Matches the right sidebar, because settings is a panel-type view rather than a document. |
 
-**Honest note:** the HTML and markdown editors still frame their content as a card. This is visible and known. It is not fixed yet.
+**Why the Markdown typing view keeps its frame.** The rendered view and the typing
+view are not the same thing. One is your document; the other is a box you type into.
+Keeping the typing view visually distinct is a deliberate choice, so you can tell at a
+glance which one your cursor is in. It is a decision rather than an unfinished job, so
+it should not be "cleaned up" by someone assuming consistency. If you decide you would
+rather it match the document exactly, that is a small change — but it is your call, not
+an oversight to correct.
 
 ---
 
@@ -136,7 +142,7 @@ The type scale is small and deliberate:
 | # | Item | Reason for position |
 |---|---|---|
 | ~~1~~ | ~~**Theme token foundation** — registry engine, per-region tokens, editor bound to canvas~~ | **DONE.** Registry, Default theme, and editor binding are live. Guarded by tests. |
-| 2 | **Remove card frames from HTML and markdown editors** | F1 is resolved for rich notes; the remaining two editors still frame their content as cards. Now unblocked: each theme declares its own canvas tone, so the frame can be removed safely. |
+| ~~2~~ | ~~**Remove card frames from HTML and markdown editors**~~ | **DONE.** Both rendered views are now one continuous canvas. The Markdown typing view keeps its frame on purpose — see section 7. |
 | 3 | **Re-measure and fix the mobile toolbar** | The recorded numbers (F2) predate the current stylesheet and must not drive a fix. Re-measure first, then decide between scroll and an overflow menu. |
 | 4 | **Application shell polish** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small items that use the declared tokens rather than hardcoded values. |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Shell geometry must settle first (item 4) so tab work is not re-verified. |
@@ -214,5 +220,6 @@ Newest first.
 | When | What changed | Why |
 |---|---|---|
 | 2026-09-25 | This guide was written, alongside a companion reference document | The existing reference was written for engineers and was not usable for making design decisions |
+| 2026-09-25 | The HTML and Markdown rendered views stopped being cards | They were framed and painted a different shade from the page, so in dark mode the content looked like a hole. Only the typing view keeps a frame, on purpose |
 | 2026-09-25 | The theme foundation was completed | Colour rules now have one source and a test that protects them |
 | 2026-09-25 | Two earlier findings were withdrawn | Their measurements could not have been true of the code they described |

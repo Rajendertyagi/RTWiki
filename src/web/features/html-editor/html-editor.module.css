@@ -40,10 +40,13 @@
    * flex:1 on .frame would do nothing. */
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  border-radius: var(--mantine-radius-md);
   overflow: hidden;
-  background: var(--rtwiki-pane, var(--mantine-color-body));
+  /* The rendered HTML page is the document, so it takes the canvas tone and
+     carries no frame. A border and radius here made the page read as a card
+     inside a panel - the same defect the Rich Note already had fixed. It was
+     also painted with the panel tone, so in dark mode the content was darker
+     than the page around it and read as a hole rather than as content. */
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
 }
 
 .editorPaneSingle {
