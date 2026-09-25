@@ -3,11 +3,11 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  /* 3px, not 4px. The rail is 40px and its action icons are 34px, so 4px of
-     padding on each side left only 32px and pushed the buttons 2px past the
-     edge - the rail rendered 42px inside a 40px column. 3px leaves exactly the
-     34px the icons need. */
-  padding: var(--mantine-spacing-xs) 3px;
+  /* 7px, not 4px. The rail is 48px and its action icons are 34px, so the
+     horizontal padding is what centres them: (48 - 34) / 2 = 7px on each side.
+     The flex default would otherwise left-align a fixed-width button and leave
+     11px of dead space on the right, which reads as an off-centre icon. */
+  padding: var(--mantine-spacing-xs) 7px;
   border-right: none;
   background: var(--rtwiki-rail, var(--rtwiki-elevated, var(--mantine-color-default)));
   /* No shadow. The rail is a structural column, not a surface floating above

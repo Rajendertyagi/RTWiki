@@ -24,7 +24,7 @@ export const LAYOUT = {
    */
   chromeBandHeight: TAB_STRIP_HEIGHT,
   /** Narrow launcher/action rail (outermost full-height column). Ultra-compact 40px. */
-  railWidth: 40,
+  railWidth: 48,
   /** Mobile drawer width (base breakpoint); decoupled from the desktop tree pane. */
   mobileDrawerWidth: 280,
   /** Page-tree pane width when expanded (user default; persisted). */

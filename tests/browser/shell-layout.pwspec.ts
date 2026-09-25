@@ -48,7 +48,7 @@ test.describe('Utility rail geometry', () => {
     })
   }
 
-  test('the rail is exactly the configured width', async ({ page }) => {
+  test('the rail is exactly the configured width, tree open', async ({ page }) => {
     await page.setViewportSize(DESKTOP)
     await page.goto('/')
     await expect(page.getByRole('button', { name: /theme/i }).first()).toBeVisible({
@@ -60,7 +60,61 @@ test.describe('Utility rail geometry', () => {
     // collapsed; with the tree open the rail sits inside a wider navbar and was
     // previously free to take whatever width its content happened to need.
     const rail = await measureRail(page)
-    expect(rail.width, 'rail must be the configured width, not its content width').toBe(40)
+    expect(rail.width, 'rail must be the configured width, not its content width').toBe(48)
+  })
+
+  test('the rail is the same width with the tree collapsed', async ({ page }) => {
+    // The collapsed and expanded states used to disagree, because the width was
+    // only pinned by the one state the old test happened to measure. Both are
+    // asserted from a settled layout, never against a live transition.
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+    const toggle = page.locator('[data-testid="tree-toggle"]')
+    await expect(toggle).toBeVisible({ timeout: 20_000 })
+
+    // Start from a known state. "Collapse page tree" means the tree is
+    // currently expanded, so that is the state we click out of.
+    if ((await toggle.getAttribute('aria-label')) === 'Collapse page tree') {
+      await toggle.click()
+    }
+    await expect(toggle).toHaveAttribute('aria-label', 'Expand page tree')
+    await page.waitForTimeout(400)
+
+    const rail = await measureRail(page)
+    expect(rail.width, 'collapsed rail must match the expanded rail exactly').toBe(48)
+  })
+
+  test('the rail gives its buttons breathing room on both sides', async ({ page }) => {
+    // A rail exactly as wide as its buttons has no slack, so the icons sit hard
+    // against both edges. This asserts the gap is symmetric and non-zero, which
+    // is what regressed when the rail was narrower than its buttons.
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+    const button = page.locator('nav[aria-label="RTWiki"] button[aria-label="Home"]')
+    await expect(button).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(400)
+
+    const { railWidth, buttonLeft, buttonWidth } = await page.evaluate(() => {
+      const rail = document.querySelector('nav[aria-label="RTWiki"]') as HTMLElement
+      const btn = rail.querySelector('button[aria-label="Home"]') as HTMLElement
+      const railBox = rail.getBoundingClientRect()
+      const btnBox = btn.getBoundingClientRect()
+      return {
+        railWidth: railBox.width,
+        buttonLeft: btnBox.left - railBox.left,
+        buttonWidth: btnBox.width
+      }
+    })
+
+    const rightGap = railWidth - buttonLeft - buttonWidth
+    // A deliberate floor, not just "greater than zero". The rail was once
+    // exactly as wide as its buttons, which left 3px of slack and read as
+    // cramped; anything under 5px looks hard against the rail edge.
+    const MIN_EDGE_GAP = 5
+    expect(buttonLeft, 'button must have room on its left').toBeGreaterThanOrEqual(MIN_EDGE_GAP)
+    expect(rightGap, 'button must have room on its right').toBeGreaterThanOrEqual(MIN_EDGE_GAP)
+    // Symmetric: an off-centre icon is as visible as a cramped one.
+    expect(Math.abs(buttonLeft - rightGap)).toBeLessThanOrEqual(1)
   })
 
   test('the rail casts no shadow of its own', async ({ page }) => {

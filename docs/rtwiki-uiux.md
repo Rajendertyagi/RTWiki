@@ -68,7 +68,7 @@ All shell dimensions are defined in `src/web/config/index.ts` inside the `LAYOUT
 | Element | Value | Source | Note |
 |---|---|---|---|
 | Tab strip / chrome band height | **40px** | `LAYOUT.tabStripHeight`, `LAYOUT.chromeBandHeight` (§15, `src/web/config/index.ts:15–25`) | The band and the tab row share one value because they are the same DOM row. A taller band (e.g. 50px) left 9–10px of dead space above the tab row. |
-| Utility rail width | **40px** | `LAYOUT.railWidth` (§27) | Ultra-compact; holds the home/search/favorites/themes/stop buttons. |
+| Utility rail width | **48px** | `LAYOUT.railWidth` (§27) | Compact; holds the home/search/favorites/themes/stop buttons. Icons are 34px, so 7px of padding on each side centres them. |
 | Page tree pane width (default) | **336px** | `LAYOUT.treePaneWidth` (§31) | User-resizable; min 220px, max 520px. |
 | Right sidebar width (default) | **260px** | `LAYOUT.rightSidebarWidth` (§38) | User-resizable; min 220px, max 420px. |
 | Status bar height | **28px** | `LAYOUT.statusBarHeight` (§55) | Matches Trilium's StatusBar. Verified by measurement: the rendered footer host is 28px. |
@@ -771,8 +771,26 @@ open. `LAYOUT.railWidth` sizes the *navbar*, but only in the collapsed case — 
 the tree open the rail sits inside a wider navbar and had no width of its own.
 
 Fixed by giving the column its width from `LAYOUT.railWidth` (one source, not a CSS
-literal) and reducing horizontal padding to `3px`, which leaves exactly the 34px the
-icons need.
+literal).
+
+### F3 follow-up - the rail was exactly as wide as its buttons - **RESOLVED** ✅
+
+That first fix made the arithmetic work by dropping padding to `3px`, which left
+**zero slack**: `3 + 34 + 3 = 40`. The icons sat hard against both rail edges, and any
+future button larger than 34px had nowhere to go. The width was also only ever asserted
+in one state — the test measured whatever loaded by default and never toggled the tree,
+so a collapsed/expanded regression would have been invisible.
+
+**Widened to 48px** with `7px` of padding on each side. 7px is what centres a 34px icon
+in a 48px rail; the flex default would otherwise left-align the fixed-width button and
+leave 11px of dead space on the right, which reads as an off-centre icon. 48px is also
+the conventional icon-rail width, so the rail is no longer a number that only makes
+sense internally.
+
+Three tests now cover it: the configured width **with the tree open**, the configured
+width **with the tree collapsed**, and a **symmetric edge gap of at least 5px**. The
+last one matters because a rail exactly as wide as its buttons passes a naive "does it
+fit" check while still looking cramped.
 
 The hard-coded `box-shadow: 2px 0 8px rgba(0,0,0,0.15)` on the rail is also gone.
 It is a structural column, not a floating surface, and its separation from the tree is

@@ -242,6 +242,7 @@ an oversight to correct.
 | **New themes** | Add theme data to the registry; do not invent colours. | Guess palette values for Catppuccin or Nord. | These themes must come from their official palettes, not from memory or approximation. |
 | **Choosing a shade** | Change the single lightness number, and keep the steps equal. | Pick a grey by trying it and seeing whether it looks right. | An equal step is provably visible; a picked step is not. The check can verify one and not the other. |
 | **Sizing anything** | Put the size in the stylesheet or a shared setting. | Write the size into an individual screen. | A size written twice drifts, and the app slowly becomes heavier as styling accumulates in the code. |
+| **Fitting things in a fixed strip** | Leave visible breathing room on both sides. | Make the container exactly as wide as its contents. | An exact fit passes a "does it fit" check while looking cramped, and leaves no room for anything larger later. |
 
 ---
 
@@ -331,6 +332,7 @@ Newest first.
 
 | When | What changed | Why |
 |---|---|---|
+| 2026-09-25 | The left navigation strip was widened from 40 to 48 pixels | At 40 the icons exactly filled it with no breathing room, so they touched both edges. It now looks centred and has room to grow |
 | 2026-09-25 | The four surface shades are now spaced by an exact, measured amount | They had been picked by eye and were nearly equal, so two of them read as the same colour. A refinement, not a visible jump |
 | 2026-09-25 | All sizing and shape moved out of the individual screens into the stylesheet | Fifteen one-off size instructions were scattered across the app. Now there is one place for each, and nothing hardcodes a size inline |
 | 2026-09-25 | This guide was written, alongside a companion reference document | The existing reference was written for engineers and was not usable for making design decisions |
