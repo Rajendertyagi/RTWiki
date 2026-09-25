@@ -1,5 +1,5 @@
 import { useEditorState } from '@blocknote/react'
-import { ActionIcon, Button, Popover, TextInput, Tooltip } from '@mantine/core'
+import { ActionIcon, Button, Menu, Popover, TextInput, Tooltip } from '@mantine/core'
 import {
   IconAlertOctagon,
   IconAlertTriangle,
@@ -13,6 +13,7 @@ import {
   IconChevronDown,
   IconClearFormatting,
   IconCode,
+  IconDotsVertical,
   IconH1,
   IconH2,
   IconH3,
@@ -33,8 +34,8 @@ import {
   IconTable,
   IconUnderline
 } from '@tabler/icons-react'
-import type { JSX } from 'react'
-import { useState } from 'react'
+import type { JSX, ReactNode } from 'react'
+import { Children, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import type { CSSVars } from '../../style-props.js'
 import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
@@ -59,6 +60,124 @@ const INSERT_ICONS = {
   calloutWarning: IconAlertTriangle,
   calloutDanger: IconAlertOctagon
 } as const
+
+/** Width reserved for the trailing "more" button when deciding the split. */
+const MORE_BUTTON_WIDTH = 28
+
+function isDivider(node: ReactNode): boolean {
+  return (
+    isValidElement(node) && (node.props as { className?: string }).className === classes.divider
+  )
+}
+
+/**
+ * Separators are dropped from the overflowed run entirely. They are rules
+ * between groups on the bar; inside a single-column menu they render as stray
+ * marks with nothing to divide, and a leading one would dangle at the top.
+ */
+function withoutDividers(nodes: ReactNode[]): ReactNode[] {
+  return nodes.filter((node) => !isDivider(node))
+}
+
+/**
+ * Decides how many toolbar controls fit on one row, and reports the rest.
+ *
+ * Measured, not breakpoint-driven, so the split happens at the width the
+ * controls actually need. The controls themselves are never re-implemented or
+ * duplicated: the caller simply renders the tail somewhere else, which keeps
+ * popover-backed and stateful controls working identically.
+ *
+ * `split === null` means everything fits and no "more" button is needed.
+ */
+function useToolbarOverflow(items: ReactNode[]): {
+  split: number | null
+  barRef: React.RefObject<HTMLDivElement | null>
+  slotProps: (index: number) => { ref: (node: HTMLSpanElement | null) => void }
+} {
+  const barRef = useRef<HTMLDivElement | null>(null)
+  const slots = useRef<Map<number, HTMLSpanElement>>(new Map())
+  const widths = useRef<Map<number, number>>(new Map())
+  // `items` is rebuilt on every render, so it is read through a ref rather than
+  // captured: depending on it directly would give `measure` a new identity each
+  // render and re-run the observer on every pass.
+  const itemsRef = useRef<ReactNode[]>(items)
+  itemsRef.current = items
+  const [split, setSplit] = useState<number | null>(null)
+
+  const measure = useCallback(() => {
+    const bar = barRef.current
+    if (!bar) return
+    const total = itemsRef.current.length
+    if (total === 0) return
+
+    // Cache the natural width of every control that is currently rendered.
+    // Widths are cached rather than read live because once a split is applied
+    // the tail is no longer in the bar: measuring only what is visible would
+    // report "it fits", clear the split, re-overflow, and loop forever.
+    for (const [index, node] of slots.current) {
+      widths.current.set(index, node.offsetWidth)
+    }
+    const list: number[] = []
+    for (let i = 0; i < total; i += 1) {
+      const w = widths.current.get(i)
+      // Not every control has been seen at a real width yet; wait rather than
+      // guess, or the first pass would strand the row.
+      if (w === undefined) return
+      list.push(w)
+    }
+
+    const cs = getComputedStyle(bar)
+    const gap = Number.parseFloat(cs.columnGap || cs.gap || '0') || 0
+    const padding =
+      (Number.parseFloat(cs.paddingLeft) || 0) + (Number.parseFloat(cs.paddingRight) || 0)
+    const available = bar.clientWidth - padding
+    // Not laid out yet. Measuring against zero would move everything out.
+    if (available <= 0) return
+
+    let used = 0
+    for (const w of list) used += (used === 0 ? 0 : gap) + w
+    if (used <= available) {
+      setSplit(null)
+      return
+    }
+
+    // Recompute with room left for the button that will replace the tail.
+    const budget = available - MORE_BUTTON_WIDTH - gap
+    let fit = 0
+    let running = 0
+    for (let i = 0; i < list.length; i += 1) {
+      const next = running + (running === 0 ? 0 : gap) + list[i]
+      if (next > budget) break
+      running = next
+      fit = i + 1
+    }
+    // Never strand the row with a lone separator at the split.
+    while (fit > 0 && isDivider(itemsRef.current[fit - 1])) fit -= 1
+    setSplit(fit >= list.length ? null : Math.max(fit, 0))
+  }, [])
+
+  useEffect(() => {
+    const bar = barRef.current
+    if (!bar) return
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(bar)
+    for (const node of slots.current.values()) observer.observe(node)
+    return () => observer.disconnect()
+  }, [measure, split])
+
+  const slotProps = useCallback(
+    (index: number) => ({
+      ref: (node: HTMLSpanElement | null) => {
+        if (node) slots.current.set(index, node)
+        else slots.current.delete(node ? index : index)
+      }
+    }),
+    []
+  )
+
+  return { split, barRef, slotProps }
+}
 
 function InsertEntryIcon({ entry }: { entry: InsertEntry }): JSX.Element {
   const Icon = INSERT_ICONS[entry.icon]
@@ -202,8 +321,8 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
   const toggleStyle = (name: string) =>
     withEditor(() => editor.toggleStyles({ [name]: !styleActive(name) } as never))
 
-  return (
-    <div className={classes.bar} role="toolbar" aria-label={UI_TEXT.richToolbarLabel}>
+  const controls = (
+    <>
       <Tooltip label={UI_TEXT.undoLabel} position="bottom">
         <ActionIcon
           variant="subtle"
@@ -534,6 +653,48 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
           <IconClearFormatting size={16} />
         </ActionIcon>
       </Tooltip>
+    </>
+  )
+
+  // `Children.toArray` treats a Fragment as one opaque child, so it is handed
+  // the fragment's children to get a flat list of individual controls.
+  const items = Children.toArray(
+    isValidElement<{ children?: ReactNode }>(controls) ? controls.props.children : null
+  )
+  const { split, barRef, slotProps } = useToolbarOverflow(items)
+  const visible = split === null ? items : items.slice(0, split)
+  const overflowed = split === null ? [] : withoutDividers(items.slice(split))
+
+  return (
+    <div className={classes.bar} role="toolbar" aria-label={UI_TEXT.richToolbarLabel} ref={barRef}>
+      {visible.map((item, index) => (
+        <span className={classes.slot} key={index} {...slotProps(index)}>
+          {item}
+        </span>
+      ))}
+      {overflowed.length > 0 ? (
+        <Menu position="bottom-end" withinPortal>
+          <Menu.Target>
+            <ActionIcon
+              variant="subtle"
+              className={classes.moreButton}
+              data-testid="toolbar-more"
+              aria-label={UI_TEXT.toolbarMoreLabel}
+            >
+              <IconDotsVertical size={16} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown className={classes.moreMenu}>
+            {/* The same controls, moved whole. Nothing is re-implemented, so a
+                popover-backed or stateful control behaves identically here. */}
+            {overflowed.map((item, index) => (
+              <span className={classes.moreItem} key={index}>
+                {item}
+              </span>
+            ))}
+          </Menu.Dropdown>
+        </Menu>
+      ) : null}
     </div>
   )
 }

@@ -195,7 +195,7 @@ The type scale is small and deliberate:
 |---|---|---|
 | **Hover** | Subtle background-fill transition (150ms). Tabs, tree rows, page cards all use it. | On the document canvas itself — the canvas has no hover fill; it is not a button. |
 | **Selecting a tree row** | A shared highlight colour marks the row, and the Home entry uses the same one. | In the document area — selection there is handled by the editor, not by the tree. |
-| **Window becomes narrow** | The left tree collapses into a drawer. The toolbar scrolls sideways rather than wrapping. **The right sidebar does not yet collapse properly — it shrinks to a sliver, which is a known defect.** | When the window is wider than the workspace minimum (480px) — the layout should not collapse. |
+| **Window becomes narrow** | The left tree collapses into a drawer. The toolbar and tab bar now give way instead of being cut off: buttons that do not fit move into a single **more** button, and tabs that do not fit get small **left/right arrows** to scroll them. **The right sidebar does not yet collapse properly — it shrinks to a sliver, which is a known defect.** | When the window is wider than the workspace minimum (480px) — the layout should not collapse. |
 | **Dragging a divider** | Pane dividers are 6px wide (1px visible, 5px invisible pointer tolerance). Keyboard step is 20px. Bounds: tree 220–520px, right sidebar 220–420px. | When the divider is already at its minimum — dragging further should do nothing, not snap back. |
 | **Save indicator** | The bar along the bottom always tells you the truth about saving: **Unsaved changes** while an edit is waiting, **Saving...** while it writes, **Saved** once it is on disk, **Save failed** with a Retry button if it did not work. | Let it say "Saved" while the edit is still only in memory. That is the one thing a save indicator must never do — it is what makes an autosave trustworthy. |
 | **Theme toggle** | The rail button flips between light and dark. It does **not** follow the OS preference (a known gap, F7). | When the user expects the app to respect `prefers-color-scheme` on first load — it does not yet. |
@@ -243,6 +243,7 @@ an oversight to correct.
 | **Choosing a shade** | Change the single lightness number, and keep the steps equal. | Pick a grey by trying it and seeing whether it looks right. | An equal step is provably visible; a picked step is not. The check can verify one and not the other. |
 | **Sizing anything** | Put the size in the stylesheet or a shared setting. | Write the size into an individual screen. | A size written twice drifts, and the app slowly becomes heavier as styling accumulates in the code. |
 | **Fitting things in a fixed strip** | Leave visible breathing room on both sides. | Make the container exactly as wide as its contents. | An exact fit passes a "does it fit" check while looking cramped, and leaves no room for anything larger later. |
+| **Running out of room in a bar** | Move what does not fit into a single **more** button, and say so. | Let the row scroll sideways, or slice the last control. | A row that scrolls with no visible scrollbar looks broken, not scrollable. A sliced button looks like a rendering fault. |
 
 ---
 
@@ -333,6 +334,8 @@ Newest first.
 
 | When | What changed | Why |
 |---|---|---|
+| 2026-09-25 | The top bars now shrink gracefully when the window is narrow | When the window was narrow, the formatting toolbar was sliced through the middle of a button with nothing to say there was more. Now the buttons that do not fit move into one "more" button, and tabs that no longer fit get small left and right arrows |
+| 2026-09-25 | The line between the tab bar and the toolbar was removed | The two rows are now told apart by their shade rather than by a rule, so the top of the window no longer reads as a stack of bands |
 | 2026-09-25 | Creating a new page now actually opens it | It had been silently doing nothing: the page was saved, but no tab opened, nothing appeared in the tree, and the editor never loaded. You were told it worked while the screen said "Saved" |
 | 2026-09-25 | The left navigation strip was widened from 40 to 48 pixels | At 40 the icons exactly filled it with no breathing room, so they touched both edges. It now looks centred and has room to grow |
 | 2026-09-25 | The four surface shades are now spaced by an exact, measured amount | They had been picked by eye and were nearly equal, so two of them read as the same colour. A refinement, not a visible jump |

@@ -5,12 +5,41 @@
   gap: var(--mantine-spacing-xs);
   min-height: var(--rtwiki-tab-height);
   padding: 0 var(--rtwiki-chrome-pad-x);
-  /* The desktop chrome band draws the single bottom separator on its own and
-     sets this width to 0. A transparent border would still occupy 1px and
-     clip the strip inside the band, so the width itself is removed. The
-     fallback form keeps browser mode unchanged. */
-  border-bottom: var(--rtwiki-tab-strip-border-width, 1px) solid var(--rtwiki-chrome-border);
+  /* No line under the tab bar. The toolbar below it is a different tone, so
+     colour separates the two rows; a hairline here would turn the stacked rows
+     into visible bands, which is the heavy treatment this chrome avoids.
+     Trilium removes the editor toolbar's own border in exactly this position
+     and relies on the tint instead. */
+  border-bottom: none;
   background: var(--rtwiki-chrome-bg);
+}
+
+/*
+ * Chevron affordance for an overflowing tab row. Only rendered when the row is
+ * actually wider than its window; the disabled state comes from the measured
+ * scroll edges, so it greys out once there is nothing further to reveal.
+ *
+ * The hairline on the inner edge is the one place a line earns its keep: it
+ * separates the control from the tab it scrolls, and it is a single 1px rule
+ * rather than a band.
+ */
+.scrollButton {
+  flex: 0 0 auto;
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+}
+
+.scrollButton[data-direction="prev"] {
+  box-shadow: inset -1px 0 0 0 var(--rtwiki-chrome-border);
+}
+
+.scrollButton[data-direction="next"] {
+  box-shadow: inset 1px 0 0 0 var(--rtwiki-chrome-border);
+}
+
+.scrollButton:disabled {
+  color: var(--mantine-color-dimmed);
+  opacity: 0.4;
+  box-shadow: none;
 }
 
 .tabScroller {
@@ -36,7 +65,11 @@
   align-items: center;
   gap: var(--mantine-spacing-xs);
   max-width: 180px;
-  min-width: 0;
+  /* A floor, so a crowded row degrades into scrolling rather than into
+     unreadable slivers. Without it tabs shrink to nothing, the row never
+     overflows, and the chevrons have nothing to reveal. Matches Trilium's
+     100px tab minimum; only bites when there are genuinely too many tabs. */
+  min-width: 100px;
   height: calc(var(--rtwiki-tab-height) - 6px);
   padding: 0 8px;
   border-radius: var(--mantine-radius-sm) var(--mantine-radius-sm) 0 0;

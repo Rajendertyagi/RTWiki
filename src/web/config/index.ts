@@ -238,6 +238,9 @@ export const UI_TEXT = {
   // Workspace tabs
   tabStripLabel: 'Open pages',
   tabCloseLabel: 'Close tab',
+  toolbarMoreLabel: 'More formatting options',
+  tabsScrollBackLabel: 'Scroll tabs left',
+  tabsScrollForwardLabel: 'Scroll tabs right',
   // Shell navigation
   toggleNavigation: 'Toggle navigation',
   collapseTreeLabel: 'Collapse page tree',

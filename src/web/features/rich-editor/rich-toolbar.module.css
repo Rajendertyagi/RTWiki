@@ -51,11 +51,48 @@
   outline-offset: 1px;
 }
 
-/* Narrow screens scroll the single row; never wrap into multiple rows. */
+/*
+ * One row, always. The row used to scroll sideways on narrow windows, which
+ * sliced the last button mid-icon with nothing to indicate there was more.
+ * Controls that do not fit now move into a trailing "more" menu instead, so
+ * this element is never allowed to overflow or wrap.
+ */
 .bar {
-  overflow-x: auto;
-  overflow-y: hidden;
   flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* Measurement wrapper. It must be a real box: `display: contents` has no
+   layout box of its own, so offsetWidth would read 0 and every control would
+   measure as zero-width. Sized by its content, with no padding, and the row's
+   gap is accounted for separately when the split is computed. */
+.slot {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.moreButton {
+  flex: 0 0 auto;
+}
+
+/* Overflowed controls keep their own identity and handlers - they are moved,
+   not reimplemented - so the menu shows the same icon buttons, each still
+   labelled for assistive technology. Laid out as a wrapping grid rather than
+   one tall column: at the narrowest window there can be twenty of them, and a
+   single column would run off the bottom of the screen. */
+.moreMenu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: var(--mantine-spacing-xs);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.moreItem {
+  display: inline-flex;
 }
 
 .insertMenu {

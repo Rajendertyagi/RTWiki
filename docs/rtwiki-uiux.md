@@ -69,6 +69,8 @@ All shell dimensions are defined in `src/web/config/index.ts` inside the `LAYOUT
 |---|---|---|---|
 | Tab strip / chrome band height | **40px** | `LAYOUT.tabStripHeight`, `LAYOUT.chromeBandHeight` (§15, `src/web/config/index.ts:15–25`) | The band and the tab row share one value because they are the same DOM row. A taller band (e.g. 50px) left 9–10px of dead space above the tab row. |
 | Utility rail width | **48px** | `LAYOUT.railWidth` (§27) | Compact; holds the home/search/favorites/themes/stop buttons. Icons are 34px, so 7px of padding on each side centres them. |
+| Rich editor toolbar height | **40px** | `--rtwiki-toolbar-height` → `--rtwiki-row-height` | Shares one equal row height with the tab strip, so the two rows read as one stacked band. |
+| Status bar height | **28px** | `LAYOUT.statusBarHeight` | **Deliberately left at 28px, not raised to 40px.** It matches Trilium's StatusBar exactly, and a 12px-taller footer costs document height on every window. Measured 28px. |
 | Page tree pane width (default) | **336px** | `LAYOUT.treePaneWidth` (§31) | User-resizable; min 220px, max 520px. |
 | Right sidebar width (default) | **260px** | `LAYOUT.rightSidebarWidth` (§38) | User-resizable; min 220px, max 420px. |
 | Status bar height | **28px** | `LAYOUT.statusBarHeight` (§55) | Matches Trilium's StatusBar. Verified by measurement: the rendered footer host is 28px. |
@@ -396,6 +398,53 @@ This relationship was the root cause of **F1** when it was violated. It is now
 asserted for **every theme and every variant** in `tests/theme-registry.test.ts`
 (`canvas !== pane` and `rail !== pane`), so adding a theme cannot silently
 reintroduce the defect.
+
+### Chrome row overflow: measure, then hand the tail over
+
+Neither chrome row used to say anything when it ran out of room. At 560px the toolbar
+was **sliced mid-button** — no scrollbar, no fade, no menu — and the tab row had a
+scrollbar it hid, so extra tabs were simply invisible. Trilium's source was read for
+both (`tab_row.ts`, and CKEditor's toolbar inside `FormattingToolbar.tsx`) and the two
+rows turned out to use *different* solutions, which is what is implemented here.
+
+**Toolbar — a trailing "more" menu.** Controls that do not fit move into one button.
+Matches CKEditor's default inside Trilium, and the owner guide records the same intent
+("show what fits, drop the rest in").
+
+The split is **measured, not breakpoint-driven**: a `ResizeObserver` sums each control's
+natural width and finds where the row runs out. The controls are never reimplemented or
+duplicated — the tail is rendered into the menu *whole*, so popover-backed and stateful
+controls (the colour and highlight pickers, the link popover) behave identically there.
+
+Three things this cost in debugging, recorded because each is a silent trap:
+
+- `display: contents` on the measurement wrapper gives it **no layout box**, so
+  `offsetWidth` reads 0 and every control measures as zero-width — the row always
+  "fits" and the button never appears.
+- Once a split is applied the tail is no longer in the row, so measuring only what is
+  *visible* reports "it fits", clears the split, re-overflows, and loops forever
+  (React error #185, maximum update depth). Widths are therefore **cached** from the
+  first full render and the decision is made against the complete set.
+- `React.Children.toArray` treats a Fragment as a **single opaque child**, so hoisting
+  the JSX into a fragment and flattening it produced a one-element list. The fragment's
+  `props.children` must be passed instead.
+
+**Tab bar — chevron arrows, not a menu.** Trilium scrolls the row, hides the scrollbar,
+and shows 36px chevrons at each edge; there is no overflow menu anywhere in its 1173-line
+tab file. Adopted, with the same rationale: tabs stay glanceable, and you do not have to
+open a menu to find an open page. Each chevron greys out at the scroll edge, derived from
+measured `scrollLeft` rather than assumed.
+
+This only works because tabs also got a **100px minimum width**, matching
+`TAB_CONTAINER_MIN_WIDTH`. They previously had `min-width: 0` and simply shrank to
+unreadable slivers, so the row never overflowed and the chevrons would have been dead
+code. The floor only bites when there are genuinely too many tabs.
+
+**Separators — tint, not a line.** The tab bar's bottom border is gone; the toolbar's
+different background tone separates the two rows. Trilium does exactly this: it
+explicitly removes CKEditor's toolbar border (`FormattingToolbar.css:9-11`) and relies on
+a tint. A hairline survives only on the chevrons' inner edges, where it separates a
+control from what it scrolls, and above the status bar.
 
 ### The palette is authored in Oklab, not hex
 
