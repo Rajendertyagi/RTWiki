@@ -46,7 +46,13 @@ The following rules were extracted from the TriliumNext study ([trilium-uiux-ref
 | 7 | **Caption buttons aligned by explicit centre-line calculation** | §13.8 | *Adopted target, not yet built.* Today the buttons are 46px wide and full band height (40px) inside an `align-items: stretch` row, so no centre-line calculation is needed. The pattern matters only if button and band heights ever diverge. |
 | 8 | **Keep tab strip unmodified** | Task constraint | `TabStrip` is not to be changed during this phase of work. |
 
-## 3. Layout and geometry as built
+## 3. Dimensions, shape, motion and behaviour
+
+Every number in this section is read from source, with a file and line reference.
+Nothing here is estimated. Where a value is contested or stale it is flagged
+inline rather than smoothed over.
+
+### 3.1 Shell geometry
 
 All shell dimensions are defined in `src/web/config/index.ts` inside the `LAYOUT` constant. Every component reads from this single object. No CSS module repeats these values.
 
@@ -64,9 +70,15 @@ All shell dimensions are defined in `src/web/config/index.ts` inside the `LAYOUT
 | Block size clamps (min W × H) | **240 × 120** | `LAYOUT.blockMinWidth`, `blockMinHeight` (§57–58) | — |
 | Block size clamps (max W × H) | **1600 × 2000** | `LAYOUT.blockMaxWidth`, `blockMaxHeight` (§59–60) | — |
 
-### CSS variable complement
+### 3.2 Centralized token blocks
 
-`src/web/theme/customization.css` defines the chrome row heights that individual components read:
+`src/web/theme/customization.css` is the second single-source block. It carries two
+groups: chrome row heights, and tree metrics. The tree metrics are consumed by the
+Wunderbaum bridge in `page-tree.module.css` through its `--wb-*` variables, and
+`wb-tree-host.ts` keeps its `ROW_HEIGHT_PX` in sync with `--rtwiki-tree-row-height`.
+The file's own instruction is explicit: *do not restate these numbers elsewhere*.
+
+**Chrome rows**
 
 | Token | Value | Source | Consumers |
 |---|---|---|---|
@@ -74,9 +86,157 @@ All shell dimensions are defined in `src/web/config/index.ts` inside the `LAYOUT
 | `--rtwiki-tab-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:55` | Tab strip |
 | `--rtwiki-toolbar-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:56` | Rich editor toolbar |
 | `--rtwiki-header-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:57` | Page title row |
-| `--rtwiki-statusbar-height` | **26px** | `customization.css:58` | ⚠ Discrepancy: `LAYOUT.statusBarHeight` is 28px; the CSS variable is 26px. The rendered footer host measures 28px, so the CSS variable does not drive the final height. This is a stale value that should be reconciled. |
+| `--rtwiki-statusbar-height` | **26px** | `customization.css:58` | ⚠ Stale. `LAYOUT.statusBarHeight` is 28px; the rendered footer host measures 28px, so this variable does not drive the final height. Reconcile before anything starts reading it |
+| `--rtwiki-chrome-pad-x` | `var(--mantine-spacing-sm)` | `customization.css:51` | Shared left/right padding of every chrome row |
+| `--rtwiki-active-fill` | `color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)` | `customization.css:64` | Tree rows and the Home/root nav entry, so their selection fill is identical |
+| `--rtwiki-chrome-divider` | `var(--mantine-color-default-border)` | `customization.css:60` | Compact divider between toolbar groups |
 
-> **Rule enforced by audit (F5):** there must never be two conflicting numbers for the same dimension. The `statusBarHeight` in `LAYOUT` (28) and the CSS variable (26) are a known mismatch. The rendered output is correct (28px); the CSS variable is stale.
+> **Rule (F5):** there must never be two conflicting numbers for the same dimension.
+> The `statusBarHeight` in `LAYOUT` (28) and the CSS variable (26) are a known
+> mismatch. The rendered output is correct; the CSS variable is stale. This is the
+> one surviving violation of the define-once rule.
+
+**Tree metrics**
+
+| Token | Value | Source | Note |
+|---|---|---|---|
+| `--rtwiki-tree-row-height` | `30px` | `customization.css:12` | A full click target and a visible focus ring, denser than the former 32px |
+| `--rtwiki-tree-row-inner-height` | `28px` | `customization.css:13` | — |
+| `--rtwiki-tree-subfile-row-height` | `26px` | `customization.css:14` | Sub-items step down one step |
+| `--rtwiki-tree-indent-step` | `16px` | `customization.css:15` | Per-level indent |
+| `--rtwiki-tree-expander-size` | `18px` | `customization.css:17` | Chevron click target |
+| `--rtwiki-tree-glyph-size` | `12px` | `customization.css:18` | SVG mask glyph inside the target |
+| `--rtwiki-tree-icon-size` | `16px` | `customization.css:20` | Standard icon slot |
+| `--rtwiki-tree-subfile-icon-size` | `14px` | `customization.css:22` | Sub-items step down one step |
+| `--rtwiki-tree-icon-outer-height` | `22px` | `customization.css:21` | — |
+| `--rtwiki-tree-expander-icon-gap` | `2px` | `customization.css:24` | Tight by design |
+| `--rtwiki-tree-icon-title-gap` | `5px` | `customization.css:25` | — |
+| `--rtwiki-tree-row-padding-left` | `0px` | `customization.css:29` | Zero so `padding + expander + gap == --rtwiki-tree-indent-step`, keeping the root lead equal to the per-level indent rather than larger |
+| `--rtwiki-tree-row-padding-right` | `8px` | `customization.css:30` | — |
+| `--rtwiki-tree-action-reserve` | `24px` | `customization.css:32` | Reserved trailing space so the hover action button never overlaps a title |
+| `--rtwiki-tree-menu-width` | `240px` | `customization.css:34` | Fixed and compact, independent of title length |
+| `--rtwiki-drop-target-border` | `var(--mantine-color-blue-6)` | `customization.css:35` | Drop-target affordance |
+
+### 3.3 Typography
+
+The type scale is Mantine's, overridden once in the Default theme
+(`src/web/theme/registry.ts`).
+
+| Concern | Value | Source |
+|---|---|---|
+| Font family | `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | registry.ts, `mantine.fontFamily` |
+| `xs` | `0.75rem` (12px) | registry.ts, `mantine.fontSizes` |
+| `sm` | `0.8125rem` (13px) | registry.ts |
+| `md` | `0.875rem` (14px) | registry.ts — the base body size |
+| `lg` | `1rem` (16px) | registry.ts |
+| `xl` | `1.125rem` (18px) | registry.ts |
+
+Local treatments, where a component needs to differ from the scale:
+
+| Treatment | Value | Source |
+|---|---|---|
+| Page title row | `md` / weight 600 / line-height equal to the 40px row | `editor-header.module.css:30-32` |
+| Page card title | `lg` / weight 700 / line-height 22px | `page-card.module.css:104-106` |
+| Page card body | `sm` / line-height 1.5 | `page-card.module.css:118-119` |
+| Page card footer label | `xs` / weight 500 | `page-card.module.css:145,154` |
+| Status bar | `0.85em`, with `0.95em` for the emphasised value | `status-bar.module.css:15,66,82,118` |
+| Tab label | `sm` | `tab-strip.module.css:67` |
+| Right sidebar heading | `sm` | `right-sidebar.module.css:45` |
+| Quick finder | `sm` | `quick-finder.module.css:22` |
+| Markdown body | `sm` / line-height 1.6; heading 1.25 | `markdown-workspace.module.css:35-36,43` |
+| HTML source toolbar badge | `10px` / weight 700 | `source-toolbar.module.css:22-23` |
+| Window chrome drag hint | `xs` | `window-chrome.module.css:47` |
+
+**There is no text-measure constraint.** The document spans its pane. This is a
+deliberate canvas-style choice, consistent with the upstream reference (§10 there).
+
+### 3.4 Shape and radii
+
+Radii come from the Mantine scale in the Default theme — `xs 4px`, `sm 6px`,
+`md 8px`, `lg 12px`, `xl 16px` — and components reference the token rather than a
+literal. The distribution is consistent: **cards and framed regions use `md`,
+controls and rows use `sm`, small chips and badges use `xs`.**
+
+| Element | Radius | Source |
+|---|---|---|
+| Page card, calendar day, mermaid container, markdown surface, HTML editor surface, mermaid block, source-find dialog | `md` (8px) | `page-card.module.css:4`, `calendar.module.css:39`, `mermaid-workspace.module.css:48,66`, `markdown-workspace.module.css:21,32`, `html-editor.module.css:44`, `mermaid-block.module.css:5,148`, `source-find-dialog.module.css:11` |
+| Tab (top corners only) | `sm sm 0 0` | `tab-strip.module.css:42` |
+| Status bar rows, right sidebar row, editor header, tree row, toolbar control, code editor, debug log row, settings row, HTML preview, mermaid inner block | `sm` (6px) | `status-bar.module.css:64,105,146`, `right-sidebar.module.css:43`, `page-workspace.module.css:38`, `page-tree.module.css:118`, `rich-toolbar.module.css:38`, `code-editor.module.css:6`, `debug-log-viewer.module.css:22`, `settings.module.css:23`, `html-preview.module.css:15`, `mermaid-block.module.css:16,73` |
+| Quick finder, tree badges, rich-editor small controls, mermaid block corner | `xs` (4px) | `quick-finder.module.css:18`, `page-tree.module.css:218,332`, `rich-editor.module.css:121`, `mermaid-block.module.css:95` |
+| Tree drag handle | `6px` literal | `page-tree.module.css:106` — ⚠ the one hardcoded radius; it matches the `sm` token today but will not follow a theme change |
+| Utility rail debug status dot | `50%` on an 8 × 8px box | `utility-rail.module.css:13-17` — a circle, so the radius is a literal |
+| Caption buttons | `0` | `window-chrome.module.css:86` — square, Windows convention |
+
+**The document surface carries no radius and no border at all**
+(`rich-editor.module.css:37-39`). The upstream reference is explicit that a
+transparent 2px border and a 10px radius exist only as *focus and context
+indicators* — a note is framed when it is the active split, and the radius drops
+when a toolbar spans above it. RTWiki has no multi-split, so the frame is simply
+absent.
+
+### 3.5 Elevation and shadows
+
+Three shadows in the Default theme, used sparingly:
+
+| Token | Value | Typical use |
+|---|---|---|
+| `xs` | `0 1px 2px rgba(0,0,0,0.05)` | Hairline lift |
+| `sm` | `0 2px 8px rgba(0,0,0,0.08)` | Menus, popovers |
+| `md` | `0 4px 16px rgba(0,0,0,0.12)` | Modals |
+
+The focus ring is Mantine's `auto`, so it adapts to the surface behind it. The
+toolbar's active swatch uses an explicit `outline: 2px solid` with a 1px offset
+(`rich-toolbar.module.css:48-49`) because it sits on a user-chosen colour where the
+automatic ring cannot be trusted.
+
+### 3.6 Motion
+
+Motion is minimal and consistent — there are exactly **three** transitions in the
+entire stylesheet set, all short and all on `background-color` or `transform`:
+
+| Where | Transition | Source |
+|---|---|---|
+| Pane divider | `background-color 120ms ease` | `pane-divider.module.css:25` |
+| Tab strip | `background-color 150ms ease` | `tab-strip.module.css:46` |
+| Debug log viewer | `transform 120ms ease` | `debug-log-viewer.module.css:62` |
+
+Page cards also transition `box-shadow`, `border-color` and `transform` at 150ms
+(`page-card.module.css:5-8`). There are no entrance animations, no slide or scale
+transitions, and no motion on the document canvas. This matches the upstream
+principle that motion is for state, not decoration.
+
+### 3.7 Spacing
+
+The Mantine spacing scale in the Default theme: `xs 8px`, `sm 12px`, `md 16px`,
+`lg 20px`, `xl 24px`. Component CSS references these tokens rather than literals.
+The literal exceptions found are all small and local: colour swatch grid gap,
+insert-menu item padding `6px 10px`, and the tree metrics in §3.2, which are named
+tokens rather than literals.
+
+### 3.8 Layering
+
+`--rtwiki-overlay-z-index: 1000` is exported from the theme resolver and is the
+single stacking level for every floating layer: menus, popovers, portals, and
+full-screen workspaces. It exists specifically so a collision-shifted dropdown near
+the left edge can never paint behind the sidebar. Within the band, the window
+chrome sets its own local contract (`window-chrome.module.css:11`): the
+`data-tauri-drag-region` backdrop is absolutely positioned and every interactive
+control inside it opts out.
+
+### 3.9 Interaction behaviours
+
+| Behaviour | Rule | Source / note |
+|---|---|---|
+| Theme toggle | Rail button flips Mantine's binary scheme; it does **not** follow `prefers-color-scheme` (F7) | `utility-rail.tsx:79-81` |
+| Pane resize | Pointer hit area 6px, keyboard step 20px; bounds 220–520px tree, 220–420px right sidebar | `LAYOUT.dividerHitWidth`, `dividerStepWidth` |
+| Tree row selection | Selection fill is shared with the Home/root nav entry so the two are identical | `--rtwiki-active-fill` |
+| Tree hover action | Reserved 24px trailing space so the button never overlaps a title | `--rtwiki-tree-action-reserve` |
+| Drag and drop | Drop targets are outlined with `--rtwiki-drop-target-border` | `customization.css:35` |
+| Autosave | Debounced 2000ms with a visible save-status indicator | Provisional centralized default; see AGENTS.md §8 |
+| Scroll ownership | `.main` is the single definite-height flex column at `100dvh`; every region below binds through flex with `min-height: 0`. The rich note is the only vertically scrolling element on its route | `app-shell.module.css`, `customization.css:68-79` |
+| Rich toolbar at narrow widths | `overflow-x: auto`, `overflow-y: hidden`, `flex-wrap: nowrap` — one row that scrolls, never wraps | `rich-toolbar.module.css:52-57` — see F2, whose recorded measurement predates this |
+| Caption buttons | `align-items: stretch`, each button `height: 100%` at 46px wide | `window-chrome.module.css:65-84` |
+| Window dragging | An absolutely positioned backdrop carries `data-tauri-drag-region`; controls opt out | `window-chrome.tsx:127` — the upstream filler-element pattern is still planned |
 
 ## 4. Window chrome (desktop mode)
 
@@ -279,7 +439,18 @@ The real defect was **not** a fill-ratio problem. The document was painted as a 
 
 > The defect register [ui-ux-audit-findings.md](ui-ux-audit-findings.md) still titles F1 as the 15% fill-ratio problem. That title is stale and should be corrected to match this section.
 
-### F2 — Mobile loses 24 of 35 toolbar controls at 390px — **OPEN** 🔴
+### F2 — Mobile toolbar at 390px — **RECORDED MEASUREMENT IS STALE** 🟡
+
+> **Re-measurement required before acting on this.** The numbers below were
+> recorded against an older stylesheet. The current
+> `rich-toolbar.module.css:52-57` sets `overflow-x: auto`, `overflow-y: hidden` and
+> `flex-wrap: nowrap`, with the comment *"Narrow screens scroll the single row;
+> never wrap into multiple rows."* That behaviour has been in the tree since
+> `d14aec1`, which predates the audit. A bar with `overflow-x: auto` can scroll, so
+> `scrollWidth === clientWidth` and `overflow-x: visible` cannot both be true of the
+> current code. **Do not implement a fix against these numbers** — re-measure first.
+
+Original audit measurement, retained for reference only:
 
 | Measurement | Value |
 |---|---|
@@ -287,11 +458,19 @@ The real defect was **not** a fill-ratio problem. The document was painted as a 
 | Reachable (fully inside the toolbar box) | 11 |
 | Unreachable | 24 |
 | `overflow-x` | `visible` |
-| `scrollWidth` vs `clientWidth` | 390 vs 390 — **cannot scroll** |
+| `scrollWidth` vs `clientWidth` | 390 vs 390 — could not scroll |
 
-**Confirmed by measurement.** The toolbar does not scroll and offers no overflow menu, so the clipped controls cannot be reached at all. The right "Page details" sidebar is also still rendered as a ~50px sliver with a toggle at this width, rather than being hidden or becoming a drawer.
+What is still true and worth checking on re-measurement: the right "Page details"
+sidebar was rendered as a ~50px sliver with a toggle at this width, rather than
+being hidden or becoming a drawer.
 
-**Unverified hypothesis:** container queries on the toolbar parent would reflow the controls into a second line before viewport-based media queries, because the toolbar's own width shrinks independently of the viewport (the tree pane can absorb space). This has not been tested in the current environment. Do not present this as a finding.
+**Still unverified, and unchanged:** the original hypothesis was that the controls
+were *wrapping* below a fixed-height row and being clipped vertically, rather than
+being clipped horizontally. That hypothesis was never empirically confirmed, and
+the current `flex-wrap: nowrap` contradicts it. Treat the mechanism as unknown. A
+horizontal scroll is also a weaker answer than the upstream pattern — the reference
+collapses overflow into a menu (upstream §8) rather than relying on scroll alone,
+because scrolling hides the existence of the overflow.
 
 ### F3 — Rail width inconsistency — **CORRECTED** ✅
 
@@ -327,7 +506,7 @@ The agreed sequence, with reasoning for the order:
 |---|---|---|
 | ~~1~~ | ~~**Theme token foundation** — registry engine, Default theme only~~ | **DONE.** Registry, per-region tokens across 14 stylesheets, editor bound to the canvas token, labels corrected. Guarded by `tests/theme-registry.test.ts` and the sentinel browser test |
 | 2 | **Remaining document frames** — drop the card frame from the HTML editor and markdown editor views | F1 is resolved; the remaining editors still frame their content as cards. Now unblocked: each theme declares its own canvas tone, so the frame can be removed against a stable token |
-| 3 | **Mobile toolbar** — add overflow affordance; hide right sidebar below `sm` | F2 is the highest-traffic remaining defect. Does not depend on themes |
+| 3 | **Mobile toolbar** — re-measure, then decide between scroll and an overflow menu | F2's recorded numbers predate the current stylesheet and must not drive a fix. The upstream pattern collapses overflow into a menu rather than relying on scroll alone |
 | 4 | **Application shell** — tighten rail overflow (F3 residual), honour `prefers-color-scheme` (F7) | Small polish items that use the declared tokens rather than hardcoded values |
 | 5 | **Tabs** — tab seam into the active tab, filler-based drag region | Tab work would otherwise be re-verified after the shell's geometry settles in item 4. Shell precedes tabs to avoid re-work |
 | 6 | **Cosmetic polish** — F6 (toolbar grouping/labels), F4 (stale test), F8 (dev database cleanup) | Everything else is independent or low-risk |
@@ -349,10 +528,14 @@ Findings that were raised and then withdrawn after being checked. This exists so
 | F3 (rail width drift) | Compared rendered values against the **committed** config while the working tree already set `railWidth: 40`. The config and render agreed once the correct baseline was used. | 2026-09-25 |
 | F5 (status bar 26-vs-28 drift) | Same committed-vs-working-tree error as F3. The working tree sets `statusBarHeight: 28`, which matches the rendered footer host. **No defect.** | 2026-09-25 |
 | F1 ("canvas fills only 15% of its region") | Compared the **content** height (123px, a short note) against the **container** height (832px). The editor wrapper already filled its region at 752px. The fill ratio was never the defect; the framed-card treatment was. | 2026-09-25 |
+| F2 ("cannot scroll", `overflow-x: visible`) | The measurement predates the stylesheet it describes. `rich-toolbar.module.css` has set `overflow-x: auto` and `flex-wrap: nowrap` since `d14aec1`, so the bar could scroll and could not wrap. The recorded mechanism and counts are unreliable. | 2026-09-25 |
 
 ## 10. Coverage and known gaps
 
 ### What has been measured or verified
+
+Every claim in §3 is **read from source** with a file and line reference, not measured
+in a browser. The items below are the ones verified by actually running the app.
 
 - Chrome band geometry (40px) — measured from DOM, confirmed consistent across light/dark
 - Tab strip, toolbar, and title row heights (all 40px) — measured
@@ -363,13 +546,18 @@ Findings that were raised and then withdrawn after being checked. This exists so
 - `canvas !== pane` and `rail !== pane` hold for every registered theme and variant — asserted by test
 - Status bar rendered height (28px) — measured
 - Dark mode contrast (10.26:1 on tree rows and title text) — measured
-- Mobile toolbar reachability at 390px (11 of 35 controls reachable) — measured
 - Mantine version (9.6.2) — confirmed via `bun.lock` and `node_modules/@mantine/core`
 - `bun run typecheck` — 0 errors
 - `bun test` — 469 pass / 0 fail
 - `bun run format:check` — 0 errors
 - `tests/browser/rich-workspace.pwspec.ts` "Rich document surface" — 3/3 pass
 - `tests/browser/window-chrome.pwspec.ts` — 8/8 pass
+
+**Read from source but not re-measured in a browser:** the §3.2 tree metrics, the §3.3
+type scale, the §3.4 radii distribution, and the §3.6 motion inventory. These are
+transcribed from the stylesheets, so they record intent rather than rendered output.
+Anything in §3 that later proves wrong in a browser should be corrected here the same
+way the F1 and F2 entries were.
 
 ### What has not been verified in this environment
 
