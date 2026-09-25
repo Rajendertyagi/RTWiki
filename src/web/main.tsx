@@ -40,6 +40,14 @@ ReactDOM.createRoot(rootElement).render(
     <MantineProvider
       theme={activeTheme.mantine}
       cssVariablesResolver={createThemeCssVariablesResolver(activeTheme)}
+      // Follow the operating system until the user says otherwise.
+      //
+      // Without this, MantineProvider defaults to 'light' and the app rendered a
+      // light interface on a machine set to dark, however the OS was configured.
+      // 'auto' is only the *initial* value: once the user picks Light or Dark in
+      // Settings, Mantine persists that choice and it wins from then on, which
+      // is why no separate stored-preference lookup is needed here.
+      defaultColorScheme="auto"
     >
       <AppErrorBoundary>
         <App />

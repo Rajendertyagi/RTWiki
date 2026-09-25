@@ -116,8 +116,11 @@ export function SettingsWorkspace({
     if (q.length === 0) return SECTIONS
     return SECTIONS.filter((s) => s.label.toLowerCase().includes(q))
   }, [query])
-  const { setColorScheme } = useMantineColorScheme()
-  const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
+  // `colorScheme` is the user's *choice* and may be 'auto'; `computedColorScheme`
+  // is what is actually rendering. The control edits the choice, so "System"
+  // can be selected and shown as chosen rather than being flattened into whichever
+  // side of it the OS currently happens to be on.
+  const { colorScheme, setColorScheme } = useMantineColorScheme()
   const editorPrefs = useEditorPreferences()
   const [debugEnabled, setDebugEnabled] = useState<boolean>(() => isDebugLoggingEnabled())
   const [schedPrefs, setSchedPrefs] = useState<SchedulerPreferences>(() =>
@@ -293,13 +296,14 @@ export function SettingsWorkspace({
                   {UI_TEXT.appearanceThemeLabel}
                 </Text>
                 <SegmentedControl
-                  value={computedColorScheme}
-                  onChange={(value) => setColorScheme(value as 'light' | 'dark')}
+                  value={colorScheme ?? 'auto'}
+                  data-testid="appearance-control"
+                  onChange={(value) => setColorScheme(value as 'auto' | 'light' | 'dark')}
                   data={[
+                    { value: 'auto', label: UI_TEXT.appearanceThemeAuto },
                     { value: 'light', label: UI_TEXT.appearanceThemeLight },
                     { value: 'dark', label: UI_TEXT.appearanceThemeDark }
                   ]}
-                  data-testid="settings-theme-control"
                 />
               </Group>
             </Stack>

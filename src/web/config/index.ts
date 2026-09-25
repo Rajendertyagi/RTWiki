@@ -392,6 +392,7 @@ export const UI_TEXT = {
   settingsEditor: 'Editor',
   settingsDebugLogs: 'Debug Logs',
   appearanceThemeLabel: 'Theme',
+  appearanceThemeAuto: 'System',
   appearanceThemeLight: 'Light',
   appearanceThemeDark: 'Dark',
   appearanceThemeHint: 'Choose how RTWiki looks on this device.',
