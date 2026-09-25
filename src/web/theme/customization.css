@@ -80,6 +80,17 @@
      read this so their selection colour is identical. Opaque enough to keep
      light text legible on a dark theme (the 16% tint was too faint there). */
   --rtwiki-active-fill: color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent);
+  /* Tree selection. Deliberately NOT --rtwiki-selected: that token is white in
+     the light scheme, so a selected row became indistinguishable from an
+     unselected one and from the hover fill. Selection is an accent tint, and
+     hover is a neutral fill, so the two can never be confused. */
+  --rtwiki-tree-selected: color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent);
+  --rtwiki-tree-selected-hover: color-mix(
+    in srgb,
+    var(--mantine-color-blue-filled) 26%,
+    transparent
+  );
+  --rtwiki-tree-hover: var(--rtwiki-hover, var(--mantine-color-default-hover));
   --rtwiki-active-accent: var(--mantine-color-blue-filled);
 }
 

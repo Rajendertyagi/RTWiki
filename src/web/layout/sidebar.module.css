@@ -6,11 +6,22 @@
 }
 
 .searchSection {
-  /* Full-bleed: the section no longer insets the field, so the search box spans
-   * the pane edge to edge. The breathing room moves inside the field, which
-   * keeps text off the border without narrowing the control. No separator below
-   * it, so the field and the file list read as one continuous pane. */
+  /* The field spans the pane edge to edge, so the horizontal breathing room
+     moves *inside* the input rather than living on the section. Padding the
+     section instead left the box touching both pane edges with a square
+     border; padding the input keeps the field full width while its text and
+     border still sit clear of the edge. */
   padding: var(--mantine-spacing-xs) 0;
+}
+
+/* Full-bleed field: the border reaches both pane edges with square corners, so
+   the pane reads as one continuous surface. The horizontal inset is left to the
+   input's own padding - overriding it here collides with the reserved section
+   for the search icon and clips the placeholder. */
+.searchSection :global(.mantine-TextInput-input) {
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
 }
 
 .listSection {
@@ -39,13 +50,16 @@
 .navItem {
   display: flex;
   align-items: center;
-  gap: var(--rtwiki-tree-icon-title-gap);
+  gap: 0;
   flex: 0 0 auto;
   width: 100%;
   height: var(--rtwiki-tree-row-height);
-  /* Aligns with the tree's first icon column: one expander cell plus the gap. */
-  padding: 0 var(--rtwiki-tree-row-padding-right) 0
-    calc(var(--wb-icon-outer-width, 20px) + var(--rtwiki-tree-expander-icon-gap));
+  /* Horizontal padding is 0 on the right only: the row carries its own
+     expander-sized spacer, so the icon and label land on the same vertical
+     lines as a tree row by construction rather than by repeating the library's
+     arithmetic here. The 1px on the left matches the tree's own content inset,
+     which is where its expander cell starts. */
+  padding: 0 var(--rtwiki-tree-row-padding-right) 0 1px;
   border: 0;
   border-radius: var(--mantine-radius-sm);
   background: transparent;
@@ -55,6 +69,15 @@
   cursor: pointer;
 }
 
+/* Occupies the same cell a tree row's expander does, so the Home icon starts
+   on the same vertical line as every page icon. Structural alignment, not
+   arithmetic that has to be kept in step with the library. */
+.navExpander {
+  flex: 0 0 auto;
+  width: var(--wb-icon-outer-width, 20px);
+  margin-right: var(--rtwiki-tree-expander-icon-gap);
+}
+
 .navIcon {
   display: inline-flex;
   align-items: center;
@@ -62,6 +85,7 @@
   flex: 0 0 auto;
   width: var(--rtwiki-tree-icon-size);
   height: var(--rtwiki-tree-icon-size);
+  margin-right: var(--rtwiki-tree-icon-title-gap);
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
 }
 
@@ -73,7 +97,7 @@
 }
 
 .navItem:hover {
-  background: var(--rtwiki-elevated, var(--mantine-color-default-hover));
+  background: var(--rtwiki-tree-hover);
 }
 
 /* Active (selected) Home/root entry reads as a distinct "you are here" state,
@@ -81,9 +105,13 @@
    accent. This keeps it visually separate from the heavier 22%-fill + 3px
    accent used on selected tree rows (audit UI-001). */
 .navItem[data-active="true"] {
-  background: var(--rtwiki-active-fill);
+  background: var(--rtwiki-tree-selected);
   color: var(--rtwiki-text, var(--mantine-color-text));
   box-shadow: inset 3px 0 0 var(--mantine-color-blue-filled);
+}
+
+.navItem[data-active="true"]:hover {
+  background: var(--rtwiki-tree-selected-hover);
 }
 
 .navItem[data-active="true"] .navIcon {

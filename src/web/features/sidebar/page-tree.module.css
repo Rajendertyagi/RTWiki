@@ -64,9 +64,9 @@
   /* State colours driven by RTWiki tokens so light/dark stay consistent and
      the selected row reads as a soft blue fill (no heavy grey outline). */
   --wb-hover-color: var(--rtwiki-elevated, var(--mantine-color-default-hover));
-  --wb-active-color: var(--rtwiki-selected);
-  --wb-active-color-grayscale: var(--rtwiki-selected);
-  --wb-active-hover-color: var(--rtwiki-hover);
+  --wb-active-color: var(--rtwiki-tree-selected);
+  --wb-active-color-grayscale: var(--rtwiki-tree-selected);
+  --wb-active-hover-color: var(--rtwiki-tree-selected-hover);
   --wb-active-border-color: transparent;
   --wb-active-border-color-grayscale: transparent;
   --wb-focus-border-color: transparent;
@@ -131,11 +131,22 @@
   padding-right: var(--rtwiki-tree-row-padding-right);
 }
 
-/* Neutralise the table-cell wrapper without styling it. `display: contents`
-   removes the box entirely, so the row's own centring governs. */
-:global(div.wunderbaum div.wb-row span.wb-col) {
+/* The library renders ONE span per row carrying both `wb-node` and `wb-col`, so
+   it is the content wrapper and the table cell at once. It must keep a real box:
+   `display: contents` here collapses the row's only child to zero width, leaving
+   the row with no hit area, which silently breaks drag-and-drop. It becomes a
+   normal flex item that fills the row instead, and the `wb-node` rule further
+   down lays out the icon and title inside it. */
+:global(div.wunderbaum div.wb-row span.wb-node) {
   position: static;
-  display: contents;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  line-height: normal;
+  overflow: hidden;
 }
 
 /* Hover covers the full row width with a subtle neutral fill. */
@@ -155,23 +166,23 @@
    blue; the neutral row-fill hover (above) is the hover affordance, so no
    separate icon-colour change is needed. */
 
-/* Selected/active: a quiet fill plus a 3px left accent. The accent carries the
-   "you are here" signal precisely; the fill only supports it. The previous
-   22%-blue fill plus accent made the selected row the loudest thing in the
-   pane, which competed with the document itself. */
+/* Selected/active: an accent tint plus a 3px left accent bar. The bar carries
+   the "you are here" signal precisely; the tint supports it. It must stay
+   clearly distinct from the neutral hover fill, and the Home row reads the same
+   two tokens so the two never drift apart. */
 :global(div.wb-row.wb-selected),
 :global(div.wb-row.wb-active) {
   color: var(--rtwiki-text, var(--mantine-color-text));
   border-color: transparent !important;
-  background: var(--rtwiki-selected);
+  background: var(--rtwiki-tree-selected);
   box-shadow: inset 3px 0 0 var(--mantine-color-blue-filled);
 }
 
-/* Keep the selected fill (never the neutral hover tint) when a selected row is
-   hovered again, so the selection stays visible in either theme. */
+/* Selected + hovered: a stronger version of the same accent, never the neutral
+   hover tint, so a selected row stays identifiable under the pointer. */
 :global(div.wb-row.wb-selected:hover),
 :global(div.wb-row.wb-active:hover) {
-  background: var(--rtwiki-selected);
+  background: var(--rtwiki-tree-selected-hover);
 }
 
 /* Keyboard focus: clearly visible blue ring, independent of hover (audit

@@ -140,6 +140,7 @@ export function Sidebar({
               onClick={() => onSelect(null)}
               data-testid="tree-root-entry"
             >
+              <span className={classes.navExpander} aria-hidden="true" />
               <span className={classes.navIcon} aria-hidden="true">
                 <IconHome size={18} />
               </span>

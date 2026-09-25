@@ -495,6 +495,43 @@ a test regex could match `<title> Rich Note`. That cost ~60px of every row while
 icon already said the same thing. The type is still in the row's accessible name. The one
 regex that depended on it now anchors on the title alone.
 
+**Five defects introduced by that work, and their causes.** All were reported from using
+the app, and each had a distinct cause:
+
+1. **Drag and drop stopped working.** The library renders *one* span per row carrying
+   both `wb-node` and `wb-col`, so `display: contents` on it collapsed the row's only
+   child to **zero width**. The row still rendered and still passed a colour check, but
+   had no hit area. `span.wb-node` is now a normal flex item (`flex: 1 1 auto`,
+   `position: static`) rather than removed from layout.
+2. **Home and a page could both read as selected.** The Home row sits outside the tree
+   widget, so the library never clears it. It is driven by `data-active` and now reads
+   the same selected token as a tree row.
+3. **Home had a different selected colour.** It used `--rtwiki-active-fill` (22% blue)
+   while tree rows used a different token. Both now read `--rtwiki-tree-selected`.
+4. **Selected and hovered rows looked the same.** Softening selection to
+   `--rtwiki-selected` was the error: that token is *white* in the light scheme, so a
+   selected row became indistinguishable from an unselected one and from the neutral
+   hover fill. Selection is an accent tint and hover is neutral; they are now different
+   token families by design.
+5. **Search field spacing.** Full-bleed with `border-radius: 0` is intended, but
+   overriding the input's horizontal padding clipped the placeholder against the search
+   icon's reserved section. The inset is left to the input.
+
+**The Home row aligns structurally, not arithmetically.** It carries its own
+expander-sized spacer element built from the same tokens the tree's expander cell uses,
+so its icon and label land on the same vertical lines as a page row by construction. An
+earlier version reproduced the library's arithmetic in `padding-left` and sat 3px off.
+
+**A pre-existing drag bug was fixed as a side effect.** `stability-regressions`'
+"before/inside/after drops still commit correctly" was failing on the baseline commit.
+The indent mismatch (16px rendered against 20px computed) had been miscalculating
+drop-target offsets; with the geometry corrected it passes.
+
+`tree-geometry` grew to **10 tests** covering all of the above: the indent grid, the cell
+width, the flex structure, vertical centring, JS/CSS row-height agreement, a real drag
+that asserts the move committed, Home/tree alignment, single-selection, the
+selected-vs-hover distinction, and the search field's width and inset.
+
 ### The palette is authored in Oklab, not hex
 
 Every surface and text token is now an `oklch()` value. The reason is the ladder:

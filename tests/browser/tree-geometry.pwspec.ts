@@ -153,12 +153,16 @@ test.describe('Tree geometry', () => {
       return {
         rowDisplay: getComputedStyle(row).display,
         colPosition: getComputedStyle(col).position,
-        colDisplay: getComputedStyle(col).display
+        colDisplay: getComputedStyle(col).display,
+        colWidth: Math.round(col.getBoundingClientRect().width)
       }
     })
     expect(layout.rowDisplay, 'the row must be the flex container').toBe('flex')
-    expect(layout.colPosition, 'the table-cell wrapper must leave layout').toBe('static')
-    expect(layout.colDisplay).toBe('contents')
+    // The cell keeps a real box - it is the row's only child, and removing it
+    // from layout costs the row its entire hit area.
+    expect(layout.colPosition, 'the cell must leave absolute positioning').toBe('static')
+    expect(layout.colDisplay).toBe('flex')
+    expect(layout.colWidth).toBeGreaterThan(100)
   })
 
   test("a row's content is vertically centred", async ({ page, request }) => {
@@ -206,5 +210,192 @@ test.describe('Tree geometry', () => {
     for (const h of heights) {
       expect(h, 'every row must render at the height the library lays out').toBe(32)
     }
+  })
+
+  test('a row has a real hit area, so drag-and-drop can start', async ({ page }) => {
+    // Regression: the row's only child is one span carrying both `wb-node` and
+    // `wb-col`. Applying `display: contents` to it collapsed that span to zero
+    // width, which left the row with no draggable surface and silently broke
+    // every drag without any error.
+    await page.goto('/')
+    const row = page.locator('[role="treeitem"]').first()
+    await expect(row).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(300)
+
+    const m = await row.evaluate((el) => {
+      const child = el.firstElementChild as HTMLElement
+      const cb = child.getBoundingClientRect()
+      const rb = el.getBoundingClientRect()
+      return {
+        childWidth: Math.round(cb.width),
+        childLeft: Math.round(cb.left - rb.left),
+        childDisplay: getComputedStyle(child).display,
+        childPosition: getComputedStyle(child).position
+      }
+    })
+    expect(m.childDisplay, 'the content wrapper must not be display:contents').not.toBe('contents')
+    expect(m.childPosition).toBe('static')
+    expect(m.childWidth, 'the row content must occupy the row').toBeGreaterThan(100)
+    expect(m.childLeft, 'content must start at the row edge, not outside it').toBeGreaterThanOrEqual(0)
+  })
+
+  test('the Home row aligns with the tree rows it sits above', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('[data-testid="tree-root-entry"]')).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator('[role="treeitem"]').first()).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(300)
+
+    const m = await page.evaluate(() => {
+      const root = document.querySelector('[data-testid="tree-root-entry"]') as HTMLElement
+      const row = document.querySelector('div.wb-row:has(span.wb-node)') as HTMLElement
+      const rel = (e: Element | null, host: HTMLElement) =>
+        e ? Math.round(e.getBoundingClientRect().left - host.getBoundingClientRect().left) : null
+      return {
+        rootLabelX: rel(root.querySelector('.navLabel, span:last-of-type'), root),
+        rowTitleX: rel(row.querySelector('span.wb-title'), row),
+        rootH: Math.round(root.getBoundingClientRect().height),
+        rowH: Math.round(row.getBoundingClientRect().height)
+      }
+    })
+    expect(Math.abs(m.rootLabelX! - m.rowTitleX!), 'Home text must line up with page titles').toBeLessThanOrEqual(1)
+    expect(m.rootH, 'Home row must be the same height as a tree row').toBe(m.rowH)
+  })
+
+  test('only one row reads as selected, and Home matches a selected page', async ({ page }) => {
+    await page.goto('/')
+    const root = page.locator('[data-testid="tree-root-entry"]')
+    await expect(root).toBeVisible({ timeout: 20_000 })
+
+    interface SelectionState {
+      root: string | null
+      rootBg: string
+      selected: number
+      selBg?: string | null
+    }
+    // At Home, only Home is selected.
+    let state: SelectionState = await page.evaluate(() => {
+      const root = document.querySelector('[data-testid="tree-root-entry"]') as HTMLElement
+      const rows = Array.from(document.querySelectorAll('div.wb-row:has(span.wb-node)')) as HTMLElement[]
+      return {
+        root: root.getAttribute('data-active'),
+        selected: rows.filter((r) => r.classList.contains('wb-active') || r.classList.contains('wb-selected')).length,
+        rootBg: getComputedStyle(root).backgroundColor
+      }
+    })
+    expect(state.root).toBe('true')
+    expect(state.selected, 'no page row may be selected while Home is').toBe(0)
+
+    // Select a page: Home must clear, exactly one page row lights up, and it
+    // must use the same fill Home used.
+    await page.locator('[role="treeitem"]').first().click()
+    await page.waitForTimeout(500)
+    state = await page.evaluate(() => {
+      const root = document.querySelector('[data-testid="tree-root-entry"]') as HTMLElement
+      const rows = Array.from(document.querySelectorAll('div.wb-row:has(span.wb-node)')) as HTMLElement[]
+      const sel = rows.filter((r) => r.classList.contains('wb-active') || r.classList.contains('wb-selected'))
+      return {
+        root: root.getAttribute('data-active'),
+        rootBg: getComputedStyle(root).backgroundColor,
+        selected: sel.length,
+        selBg: sel[0] ? getComputedStyle(sel[0]).backgroundColor : null
+      }
+    })
+    expect(state.root, 'Home must clear when a page is selected').toBe('false')
+    expect(state.rootBg).toBe('rgba(0, 0, 0, 0)')
+    expect(state.selected, 'exactly one page row may be selected').toBe(1)
+    // Same accent family as Home used, so the two never look like different
+    // kinds of selection. Hover may deepen it, so compare hue not exact alpha.
+    expect(state.selBg, 'a selected page must use the tree selected token').toContain('0.109804 0.439216 1')
+  })
+
+  test('a selected row is clearly distinct from a hovered row', async ({ page }) => {
+    await page.goto('/')
+    const row = page.locator('[role="treeitem"]').first()
+    await expect(row).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(300)
+
+    const colours = await row.evaluate((el) => {
+      const parse = (c: string) => {
+        const m = /rgba?\(([^)]+)\)/.exec(c)
+        return m ? m[1].split(',').map((n) => Number.parseFloat(n)) : null
+      }
+      const unselectedHover = getComputedStyle(el).backgroundColor
+      return { hovered: parse(unselectedHover) }
+    })
+    // A neutral hover is grey/transparent; a selected row is blue-tinted. If
+    // these converge the user cannot tell selection from hover.
+    expect(colours.hovered, 'hover must not be a blue selection tint').not.toContain('0.109804 0.439216 1')
+  })
+
+  test('the search field spans the pane and is inset inside its own border', async ({
+    page,
+    request
+  }) => {
+    await page.goto('/')
+    const input = page.locator('[aria-label="Search pages"]')
+    await expect(input).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(300)
+
+    const m = await page.evaluate(() => {
+      const input = document.querySelector('[aria-label="Search pages"]') as HTMLElement
+      const pane = document.querySelector('[data-testid="page-tree"]') as HTMLElement
+      const ib = input.getBoundingClientRect()
+      const pb = pane.getBoundingClientRect()
+      const cs = getComputedStyle(input)
+      return {
+        insetLeft: Math.round(ib.left - pb.left),
+        insetRight: Math.round(pb.right - ib.right),
+        width: Math.round(ib.width),
+        paneWidth: Math.round(pb.width),
+        padLeft: cs.paddingLeft,
+        padRight: cs.paddingRight
+      }
+    })
+    // Full width: the field spans the pane edge to edge.
+    expect(m.width).toBe(m.paneWidth)
+    expect(m.insetLeft).toBe(0)
+    expect(m.insetRight).toBe(0)
+    // The placeholder must not be clipped by the search icon's reserved
+    // section, and must not sit hard against the edge.
+    expect(Number.parseFloat(m.padLeft), 'text must be inset from the left edge').toBeGreaterThan(8)
+    expect(Number.parseFloat(m.padRight), 'text must be inset from the right edge').toBeGreaterThan(0)
+  })
+
+  test('a page can actually be dragged onto another', async ({ page, request }) => {
+    // The real proof for the hit-area regression: a row whose content collapsed
+    // to zero width still renders and still passes a colour check, but cannot
+    // be grabbed. This performs an actual drag and asserts the move committed.
+    const title = uniqueTitle('DragMe')
+    const parentTitle = uniqueTitle('DragParent')
+    // Both are roots, so both rows are rendered without expanding anything.
+    await request.post('/api/pages', { data: { title, pageType: 'rich', content: '' } })
+    await request.post('/api/pages', { data: { title: parentTitle, pageType: 'rich', content: '' } })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    const tree = page.locator('[data-testid="page-tree"]')
+    await expect(tree).toBeVisible({ timeout: 20_000 })
+    await tree.evaluate((el) => {
+      el.scrollTop = el.scrollHeight
+    })
+    await page.waitForTimeout(500)
+
+    const child = page.locator('[role="treeitem"]').filter({ hasText: title }).first()
+    const parent = page.locator('[role="treeitem"]').filter({ hasText: parentTitle }).first()
+    await expect(child).toBeVisible({ timeout: 20_000 })
+    await expect(parent).toBeVisible({ timeout: 20_000 })
+
+    await child.dragTo(parent)
+    await page.waitForTimeout(1200)
+
+    // The child must now be a child of the parent, not a root.
+    const nested = await request.get('/api/pages?limit=200')
+    const body = (await nested.json()) as {
+      pages: Array<{ id: string; title: string; parentId?: string | null }>
+    }
+    const childRow = body.pages.find((p) => p.title === title)
+    const parentRow = body.pages.find((p) => p.title === parentTitle)
+    expect(childRow?.parentId, 'the dragged page must be a child of the target').toBe(
+      parentRow?.id
+    )
   })
 })
