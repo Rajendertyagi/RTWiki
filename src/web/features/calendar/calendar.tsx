@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { useScheduleController } from '../../hooks/use-schedule-controller.js'
 import type { ReminderPayload, ScheduleEntryPayload } from '../../services/schedule-api.js'
+import type { CSSVars } from '../../style-props.js'
 import classes from './calendar.module.css'
 import { PresetsPanel } from './presets-panel.js'
 import {
@@ -33,10 +34,14 @@ function PaletteBox({ block }: { block: PaletteBlock }): JSX.Element {
       draggable
       onDragStart={(e) => setPaletteDragData(e, block)}
       className={classes.paletteBox}
-      style={{
-        backgroundColor: `var(--mantine-color-${block.color}-light)`,
-        color: `var(--mantine-color-${block.color}-light-color)`
-      }}
+      // The colour comes from the block's own data, so it arrives as custom
+      // properties and the paint rule stays in the stylesheet.
+      style={
+        {
+          '--swatch-bg': `var(--mantine-color-${block.color}-light)`,
+          '--swatch-fg': `var(--mantine-color-${block.color}-light-color)`
+        } as CSSVars
+      }
       data-testid="palette-block"
     >
       <Group justify="space-between" wrap="nowrap" gap={4}>

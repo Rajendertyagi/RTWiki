@@ -146,39 +146,40 @@ const defaultTheme: AppTheme = {
     }
   }),
   variants: {
-    light: {
-      canvas: '#ffffff',
-      pane: '#f2f2f2',
-      // One clear step below the pane. The previous rail was only 0.0295 in
-      // Oklab L from the pane, which is below the threshold the eye reliably
-      // resolves, so the rail blended into the tree beside it.
-      rail: '#e4e4e4',
-      elevated: '#ffffff',
-      border: '#dbdbdb',
-      text: '#383838',
-      textMuted: '#666666',
-      hover: 'rgba(0, 0, 0, 0.032)',
-      selected: '#ffffff'
-    },
     dark: {
-      // The canvas is TriliumNext's canvas tone, and is deliberately *declared*
-      // rather than inherited from the rich editor, which paints its own
-      // `#1f1f1f`; the editor surface is forced to follow this token instead.
+      // Oklch, not hex. The surface ladder is defined by its lightness channel
+      // alone, so the steps are exact by construction rather than hand-picked:
+      // 0.17 -> 0.22 -> 0.27 -> 0.32, a uniform 0.05 apart. A hex ladder can
+      // only be *measured* into evenness; here it simply is even. The test
+      // asserts the L channel directly.
       //
-      // The three structural surfaces step by a uniform 0.045 in Oklab L, which
-      // is the smallest reliably perceptible step at this lightness. The
-      // previous values were only ~0.02 apart, so rail, pane and canvas read as
-      // one near-uniform block and the colour was not doing any separating.
-      // The canvas is unchanged; the rail and pane moved away from it.
-      canvas: '#242424',
-      pane: '#191919',
-      rail: '#0f0f0f',
-      elevated: '#2f2f2f',
-      border: '#454545',
-      text: '#cccccc',
-      textMuted: '#bbbbbb',
-      hover: '#ffffff0d',
-      selected: '#ffffff25'
+      // The canvas is deliberately declared rather than inherited from the rich
+      // editor, which paints its own background from a binary light/dark scheme
+      // and knows nothing about the active theme. The editor surface is forced
+      // to follow this token instead.
+      rail: 'oklch(0.17 0.005 255)',
+      pane: 'oklch(0.22 0.005 255)',
+      canvas: 'oklch(0.27 0.005 255)',
+      elevated: 'oklch(0.32 0.006 255)',
+      // Sits one clear step above every surface, so an edge always reads.
+      border: 'oklch(0.4 0.008 255)',
+      text: 'oklch(0.85 0.005 255)',
+      textMuted: 'oklch(0.75 0.005 255)',
+      hover: 'oklch(1 0 0 / 0.05)',
+      selected: 'oklch(1 0 0 / 0.14)'
+    },
+    light: {
+      // Same idea in the other direction: the canvas is the brightest surface
+      // and each panel steps away from it by an even 0.045.
+      canvas: 'oklch(1 0 0)',
+      pane: 'oklch(0.955 0.004 255)',
+      rail: 'oklch(0.91 0.005 255)',
+      elevated: 'oklch(1 0 0)',
+      border: 'oklch(0.86 0.008 255)',
+      text: 'oklch(0.38 0.01 255)',
+      textMuted: 'oklch(0.55 0.01 255)',
+      hover: 'oklch(0 0 0 / 0.032)',
+      selected: 'oklch(1 0 0)'
     }
   }
 }

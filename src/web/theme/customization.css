@@ -62,7 +62,10 @@
   --rtwiki-tab-height: var(--rtwiki-row-height);
   --rtwiki-toolbar-height: var(--rtwiki-row-height);
   --rtwiki-header-height: var(--rtwiki-row-height);
-  --rtwiki-statusbar-height: 26px;
+  /* The status bar's own height is LAYOUT.statusBarHeight (28px), published as
+     --rtwiki-status-bar-height by the theme resolver. It used to be restated
+     here as 26px, which disagreed with the single source; the stylesheet now
+     reads the config rather than repeating it. */
   /* Compact divider between toolbar groups. */
   --rtwiki-chrome-divider: var(--mantine-color-default-border);
   /* Shared selected/active row fill — tree rows and the Home/root nav entry

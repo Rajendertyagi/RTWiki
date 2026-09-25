@@ -95,7 +95,7 @@ The file's own instruction is explicit: *do not restate these numbers elsewhere*
 | `--rtwiki-tab-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:55` | Tab strip |
 | `--rtwiki-toolbar-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:56` | Rich editor toolbar |
 | `--rtwiki-header-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:57` | Page title row |
-| `--rtwiki-statusbar-height` | **26px** | `customization.css:58` | ⚠ Stale. `LAYOUT.statusBarHeight` is 28px; the rendered footer host measures 28px, so this variable does not drive the final height. Reconcile before anything starts reading it |
+| ~~`--rtwiki-statusbar-height`~~ | **Retired.** Was a restated `26px` that disagreed with `LAYOUT.statusBarHeight` (28px) | Removed from `customization.css` | **CORRECTED.** The status bar now reads `--rtwiki-status-bar-height`, published from `LAYOUT` by the theme resolver. One source, no restatement |
 | `--rtwiki-chrome-pad-x` | `var(--mantine-spacing-sm)` | `customization.css` | Shared left/right padding of every chrome row |
 | `--rtwiki-chrome-hairline` | `rgba(0, 0, 0, 0.09)` light · `rgba(255, 255, 255, 0.09)` dark | `customization.css` | Every separator between chrome rows. **Deliberately fainter than `--rtwiki-border`** — see below |
 | `--rtwiki-chrome-border` | `var(--rtwiki-chrome-hairline)` | `customization.css` | Alias kept so existing consumers need no change |
@@ -346,15 +346,15 @@ is a compile error, and a test asserts completeness.
 
 | Token | Light value | Dark value | Region |
 |---|---|---|---|
-| `--rtwiki-canvas` | `#ffffff` | `#242424` | **Document canvas** |
-| `--rtwiki-pane` | `#f2f2f2` | `#191919` | Panels (tree, right sidebar, settings) |
-| `--rtwiki-rail` | `#e4e4e4` | `#0f0f0f` | Utility rail |
-| `--rtwiki-elevated` | `#ffffff` | `#2f2f2f` | Raised surfaces (hover fills, selected rows) |
-| `--rtwiki-border` | `#dbdbdb` | `#454545` | Separators |
-| `--rtwiki-text` | `#383838` | `#cccccc` | Primary text |
-| `--rtwiki-text-muted` | `#666666` | `#bbbbbb` | Muted / secondary text |
-| `--rtwiki-hover` | `rgba(0, 0, 0, 0.032)` | `#ffffff0d` | Hover fills |
-| `--rtwiki-selected` | `#ffffff` | `#ffffff25` | Selected tree rows |
+| `--rtwiki-canvas` | `oklch(1 0 0)` | `oklch(0.27 0.005 255)` | **Document canvas** |
+| `--rtwiki-pane` | `oklch(0.955 0.004 255)` | `oklch(0.22 0.005 255)` | Panels (tree, right sidebar, settings) |
+| `--rtwiki-rail` | `oklch(0.91 0.005 255)` | `oklch(0.17 0.005 255)` | Utility rail |
+| `--rtwiki-elevated` | `oklch(1 0 0)` | `oklch(0.32 0.006 255)` | Raised surfaces (hover fills, selected rows) |
+| `--rtwiki-border` | `oklch(0.86 0.008 255)` | `oklch(0.4 0.008 255)` | Separators |
+| `--rtwiki-text` | `oklch(0.38 0.01 255)` | `oklch(0.85 0.005 255)` | Primary text |
+| `--rtwiki-text-muted` | `oklch(0.55 0.01 255)` | `oklch(0.75 0.005 255)` | Muted / secondary text |
+| `--rtwiki-hover` | `oklch(0 0 0 / 0.032)` | `oklch(1 0 0 / 0.05)` | Hover fills |
+| `--rtwiki-selected` | `oklch(1 0 0)` | `oklch(1 0 0 / 0.14)` | Selected tree rows |
 
 The previous ambiguous pair — one token for the document and another for panels,
 which converged on the same tone in dark — has been **deleted, not aliased**. An
@@ -368,11 +368,15 @@ TriliumNext's palette, transcribed to RTWiki's region names
 
 | RTWiki token | Trilium origin |
 |---|---|
-| `--rtwiki-canvas` (light `#ffffff`, dark `#242424`) | `--main-background-color` |
-| `--rtwiki-pane` (light `#f2f2f2`, dark `#1f1f1f`) | `--left-pane-background-color` |
-| `--rtwiki-rail` (light `#e8e8e8`) | `--launcher-pane-vert-background-color` |
-| `--rtwiki-selected` (light `#ffffff`) | `--left-pane-item-selected-background` |
-| `--rtwiki-hover` (light `rgba(0,0,0,0.032)`) | `--left-pane-item-hover-background` |
+| `--rtwiki-canvas` (light L 1.0, dark L 0.27) | `--main-background-color` |
+| `--rtwiki-pane` (light L 0.955, dark L 0.22) | `--left-pane-background-color` |
+| `--rtwiki-rail` (light L 0.91, dark L 0.17) | `--launcher-pane-vert-background-color` |
+| `--rtwiki-selected` (light L 1.0) | `--left-pane-item-selected-background` |
+| `--rtwiki-hover` (light `oklch(0 0 0 / 0.032)`) | `--left-pane-item-hover-background` |
+
+The values are quoted as Oklab lightness rather than hex because that is now how
+they are authored — see §"The palette is authored in Oklab". The *origins* named in
+the right-hand column are still Trilium's own CSS variables, unchanged.
 
 The dark scale is no longer inverted relative to these origins. The earlier
 inversion existed because the canvas colour had to be inherited from the editor;
@@ -384,8 +388,8 @@ In **both** colour schemes the pane is recessed and the document canvas is the
 brightest surface:
 
 ```
-light:  rail (#e4e4e4) < pane (#f2f2f2) < canvas (#ffffff)
-dark:   rail (#0f0f0f) < pane (#191919) < canvas (#242424) < elevated (#2f2f2f)
+light:  rail (0.91) < pane (0.955) < canvas (1.0)
+dark:   rail (0.17) < pane (0.22) < canvas (0.27) < elevated (0.32)
 ```
 
 This relationship was the root cause of **F1** when it was violated. It is now
@@ -393,25 +397,58 @@ asserted for **every theme and every variant** in `tests/theme-registry.test.ts`
 (`canvas !== pane` and `rail !== pane`), so adding a theme cannot silently
 reintroduce the defect.
 
-### The ladder is measured, not eyeballed
+### The palette is authored in Oklab, not hex
 
-`canvas !== pane` is a weak assertion: two colours can differ and still look
-identical. The registry test therefore measures the step in **Oklab L**, a
-perceptually uniform space, and requires **at least 0.03** between adjacent
-structural surfaces. Comparing hex digits or sRGB values would let a two-digit
-difference pass as a distinction the eye cannot resolve.
-
-The first version of this test failed on the shipped palette:
+Every surface and text token is now an `oklch()` value. The reason is the ladder:
+in hex, a ladder can only be *measured* into evenness, and the first version of
+that measurement found the shipped palette was not. In Oklab the first channel **is**
+perceptual lightness, so the steps are exact by construction:
 
 ```
-default/dark: pane (#1f1f1f) must differ from rail (#1a1a1a)
-              by at least 0.03 in Oklab L
+dark:  rail 0.17  ->  pane 0.22  ->  canvas 0.27  ->  elevated 0.32   (0.05 apart)
+light: rail 0.91  ->  pane 0.955 ->  canvas 1.0                        (0.045 apart)
 ```
 
-Those two were only ~0.022 apart, and `canvas → elevated` was ~0.008 — effectively
-the same colour. The dark ladder is now a uniform **0.045** step, with the canvas
-left at `#242424` and the rail and pane moved away from it. The light rail was
-widened for the same reason (`#e8e8e8` → `#e4e4e4`).
+The test now reads the L channel directly instead of decoding a hex triple back
+into a colour space, and additionally asserts that every token is authored in
+`oklch()` — so a hex value cannot quietly reappear.
+
+One landmine this exposed: `preview-document.ts` had a colour allowlist that
+accepted only hex, `rgb()` and `hsl()`. OKLCH would have been **rejected**, and the
+sandboxed HTML preview would have silently fallen back to a transparent
+background — a regression that would have shown up as a mysteriously backgroundless
+preview. The allowlist now accepts `oklch()`/`oklab()`, with a test for it.
+
+### Layout lives in CSS, not in inline style objects
+
+The codebase had **15** `style={{ … }}` objects across 12 files. All are gone as
+*layout or paint* rules. What remains is 4 custom-property setters, which is the
+modern idiom: the component supplies a number, the stylesheet keeps the box model.
+
+| Was | Now |
+|---|---|
+| `style={{ width: LAYOUT.railWidth, flexShrink: 0 }}` | `width: var(--rtwiki-rail-width)` in CSS |
+| `style={{ width: LAYOUT.dividerHitWidth }}` | `width: var(--rtwiki-divider-hit-width)` in CSS |
+| `style={{ width, flexBasis: width }}` (resizable pane) | `--rtwiki-pane-width` → CSS owns `width`/`flex-basis` |
+| `style={{ paddingLeft: \`${8 + (level - 1) * 12}px\` }}` | `--rtwiki-indent-level` → `calc()` in CSS |
+| `style={{ width: \`${zoom * 100}%\` }}` (×2) | `--zoom-level` → CSS owns the width |
+| `style={{ width, height }}` (block resize) | `--block-width` / `--block-height` → CSS |
+| `style={{ backgroundColor: … }}`, `style={{ background: … }}` | `--swatch-bg` / `--swatch-color` → CSS paints |
+| `style={{ display: 'none' }}` (hidden file input) | A `visually-hidden` class — `display: none` also removed the input from the tab order and the accessibility tree |
+| `style={{ flex: 1 }}`, `letterSpacing`, `textAlign`, `width: '40%'` | Three new CSS modules for trash, shortcuts and calendar presets |
+
+**One source, two consumers.** `LAYOUT` remains the definition; the theme resolver
+publishes it as custom properties (`--rtwiki-rail-width`, `--rtwiki-divider-hit-width`,
+`--rtwiki-divider-step-width`, `--rtwiki-mobile-drawer-width`,
+`--rtwiki-status-bar-height`, `--rtwiki-workspace-min-width`). The same numbers are
+now readable from a stylesheet without becoming a second definition. This also
+retires the standing `--rtwiki-statusbar-height: 26px` vs `LAYOUT.statusBarHeight:
+28px` mismatch noted in §3.2, because the stylesheet now reads the config rather
+than restating it.
+
+`src/web/style-props.ts` exports a single `CSSVars` type, because React's
+`CSSProperties` excludes `--*` keys and a cast at each of the four call sites would
+be four chances to drift.
 
 ### Why the dark-mode values used to be inverted
 
@@ -602,7 +639,7 @@ background. Only the screenshot showed it; the computed background was correct
 throughout.
 
 The same mechanism therefore also states a default **text** colour, taken from the
-theme's `text` token (`#383838` light, `#cccccc` dark), so a bare page is readable in
+theme's `text` token (light L 0.38, dark L 0.85), so a bare page is readable in
 both schemes. A page that sets its own `color` still wins, because the shell's block is
 emitted first.
 

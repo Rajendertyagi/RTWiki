@@ -4,7 +4,9 @@
   justify-content: space-between;
   gap: var(--mantine-spacing-md);
   flex-shrink: 0;
-  min-height: var(--rtwiki-statusbar-height);
+  /* From LAYOUT.statusBarHeight, published by the theme resolver. The fallback
+     is a guard for the brief moment before the resolver's variables land. */
+  min-height: var(--rtwiki-status-bar-height, 28px);
   padding: 0 0.25em;
   border-top: 1px solid var(--rtwiki-chrome-border);
   background: var(--rtwiki-chrome-bg);

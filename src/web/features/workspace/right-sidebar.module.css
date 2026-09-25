@@ -1,9 +1,13 @@
 .panel {
   display: flex;
   flex-direction: column;
-  width: 260px;
-  flex: 0 0 260px;
+  flex: 0 0 auto;
   min-height: 0;
+  /* Width arrives as a custom property because it is user-resizable. The box
+     model still lives here, so the component passes a number rather than a bag
+     of layout properties. */
+  width: var(--rtwiki-pane-width, 260px);
+  flex-basis: var(--rtwiki-pane-width, 260px);
   /* A panel, so it takes the panel tone. It was painted with Mantine's body
    * colour - the same tone as the document beside it - which is why it needed a
    * full-strength border just to be visible at all. Colour is the separator
@@ -44,6 +48,9 @@
   width: 100%;
   text-align: left;
   padding: 4px 8px;
+  /* Indent is driven by a level count rather than a computed pixel value, so
+     the rhythm lives here and the component only supplies the depth. */
+  padding-left: calc(8px + (var(--rtwiki-indent-level, 1) - 1) * 12px);
   border: none;
   background: transparent;
   border-radius: var(--mantine-radius-sm);

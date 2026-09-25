@@ -16,6 +16,9 @@
   border: none;
   padding: 0;
   outline: none;
+  /* Pointer hit-area, from the published layout token. Owned here rather than
+     passed as an inline style. */
+  width: var(--rtwiki-divider-hit-width, 6px);
 }
 
 .line {

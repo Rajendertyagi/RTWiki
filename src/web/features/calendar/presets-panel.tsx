@@ -16,6 +16,7 @@ import type {
 } from '@rtwiki/shared/contracts/schedule'
 import { useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import classes from './presets-panel.module.css'
 
 interface PresetsPanelProps {
   opened: boolean
@@ -54,7 +55,7 @@ export function PresetsPanel({
             placeholder={UI_TEXT.schedulePresetName}
             value={newName}
             onChange={(e) => setNewName(e.currentTarget.value)}
-            style={{ flex: 1 }}
+            className={classes.nameField}
             data-testid="preset-name-input"
           />
           <Button onClick={handleSaveAs} disabled={!newName.trim()} data-testid="preset-save-as">

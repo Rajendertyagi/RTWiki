@@ -61,14 +61,20 @@ function escapeHtmlAttribute(value: string): string {
 
 /**
  * Accepts only values that are recognisably a single CSS colour: a hex triplet
- * or quad, or an rgb/rgba/hsl/hsla function with numeric arguments. The value
+ * or quad, an rgb/rgba/hsl/hsla function, or an oklch/oklab function. The value
  * is interpolated into a CSS declaration inside a sandboxed document, so this
  * is an allowlist - there is no escaping path, because a rejected value simply
  * falls back to the transparent default.
+ *
+ * Oklab-based functions are first-class here rather than an afterthought: the
+ * palette is authored in Oklab, so a hex-only allowlist would silently discard
+ * the resolved canvas colour and leave the preview backgroundless.
  */
 function isPlainCssColor(value: string | undefined): value is string {
   if (!value) return false
-  return /^(#[0-9a-fA-F]{3,8}|rgba?\(\s*[\d.\s,%/]+\)|hsla?\(\s*[\d.\s,%/deg]+\))$/.test(value)
+  return /^(#[0-9a-fA-F]{3,8}|rgba?\([\d.\s,%/]+\)|hsla?\([\d.\s,%/deg]+\)|(?:oklch|oklab)a?\([\d.\s,%/deg]+\))$/.test(
+    value
+  )
 }
 
 /**

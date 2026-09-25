@@ -36,6 +36,7 @@ import {
 import type { JSX } from 'react'
 import { useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
+import type { CSSVars } from '../../style-props.js'
 import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
 import type { AnyRichEditor } from './schema.js'
@@ -577,12 +578,15 @@ function SwatchGrid({
           className={
             active === color ? `${classes.swatch} ${classes.swatchActive}` : classes.swatch
           }
-          style={{
-            background:
-              color === 'default'
-                ? 'transparent'
-                : `var(--bn-colors-${highlight ? 'background-color' : 'text-color'}-${color}, var(--mantine-color-${color}-filled))`
-          }}
+          // The chosen colour is data; the paint rule stays in the stylesheet.
+          style={
+            {
+              '--swatch-color':
+                color === 'default'
+                  ? 'transparent'
+                  : `var(--bn-colors-${highlight ? 'background-color' : 'text-color'}-${color}, var(--mantine-color-${color}-filled))`
+            } as CSSVars
+          }
           onClick={() => onPick(color)}
         >
           {color === 'default' ? <span aria-hidden>∅</span> : null}

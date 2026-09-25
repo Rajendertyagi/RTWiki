@@ -25,6 +25,7 @@ import {
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import classes from './trash-view.module.css'
 
 interface TrashViewProps {
   onRestorePage?: (pageId: string) => void
@@ -135,7 +136,7 @@ export function TrashView({ onRestorePage }: TrashViewProps): JSX.Element {
                   <Table.Th>Title</Table.Th>
                   <Table.Th>Type</Table.Th>
                   <Table.Th>Deleted At</Table.Th>
-                  <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>
+                  <Table.Th className={classes.actionsCell}>Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -159,7 +160,7 @@ export function TrashView({ onRestorePage }: TrashViewProps): JSX.Element {
                         {page.deletedAt ? new Date(page.deletedAt).toLocaleString() : '-'}
                       </Text>
                     </Table.Td>
-                    <Table.Td style={{ textAlign: 'right' }}>
+                    <Table.Td className={classes.actionsCell}>
                       <Group gap="xs" justify="flex-end">
                         <Tooltip label={UI_TEXT.restoreAction}>
                           <ActionIcon

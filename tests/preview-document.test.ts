@@ -60,6 +60,13 @@ describe('preview document construction', () => {
     expect([...doc.matchAll(/<style>/g)]).toHaveLength(1)
   })
 
+  it('accepts an Oklab canvas colour, which the palette is authored in', () => {
+    // The surface tokens are Oklab, so a hex-only allowlist would reject the
+    // real canvas value and silently leave the preview without a background.
+    const doc = build({ documentBackground: 'oklch(0.27 0.005 255)' })
+    expect(doc).toContain('background: oklch(0.27 0.005 255)')
+  })
+
   it('rejects a surface colour that is not a plain colour value', () => {
     // Allowlist, not escaping. The value is interpolated into a CSS
     // declaration, so anything that is not recognisably a colour is discarded

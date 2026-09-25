@@ -3,6 +3,7 @@ import { IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { getBacklinks } from '../../services/pages-api.js'
+import type { CSSVars } from '../../style-props.js'
 import type { DocumentOutlineEntry } from '../rich-editor/document.js'
 import classes from './right-sidebar.module.css'
 
@@ -79,7 +80,9 @@ export function RightSidebar({
   return (
     <aside
       className={classes.panel}
-      style={{ width, flexBasis: width }}
+      // User-resizable, so the value is passed as a custom property and the CSS
+      // keeps the box model.
+      style={{ '--rtwiki-pane-width': `${width}px` } as CSSVars}
       aria-label={UI_TEXT.rightSidebarLabel}
     >
       <div className={classes.header}>
@@ -113,7 +116,9 @@ export function RightSidebar({
                 key={entry.blockId}
                 type="button"
                 className={classes.outlineEntry}
-                style={{ paddingLeft: `${8 + (entry.level - 1) * 12}px` }}
+                // Indent depth is data, so it arrives as a custom property and
+                // the spacing rule stays in the stylesheet.
+                style={{ '--rtwiki-indent-level': entry.level } as CSSVars}
                 onClick={() => onNavigateToHeading(entry.blockId)}
               >
                 {entry.text || UI_TEXT.untitledPage}

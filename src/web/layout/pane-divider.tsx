@@ -121,7 +121,6 @@ export function PaneDivider({
       data-dragging={dragging ? 'true' : 'false'}
       data-testid={testId}
       className={classes.divider}
-      style={{ width: LAYOUT.dividerHitWidth }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={(event) => endDrag(event.pointerId)}

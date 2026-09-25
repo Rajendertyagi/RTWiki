@@ -1,0 +1,4 @@
+/* Actions column, right-aligned in both the header and the body cells. */
+.actionsCell {
+  text-align: right;
+}

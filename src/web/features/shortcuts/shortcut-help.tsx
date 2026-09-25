@@ -1,5 +1,6 @@
 import { Kbd, Modal, Stack, Table, Text } from '@mantine/core'
 import { UI_TEXT } from '../../config/index.js'
+import classes from './shortcut-help.module.css'
 
 interface ShortcutHelpModalProps {
   opened: boolean
@@ -53,14 +54,14 @@ export function ShortcutHelpModal({ opened, onClose }: ShortcutHelpModalProps): 
       <Stack gap="lg">
         {SHORTCUT_CATEGORIES.map((category) => (
           <Stack gap="xs" key={category.title}>
-            <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: '0.5px' }}>
+            <Text fw={600} size="sm" c="dimmed" tt="uppercase" className={classes.categoryLabel}>
               {category.title}
             </Text>
             <Table withRowBorders={false} verticalSpacing="xs">
               <Table.Tbody>
                 {category.items.map((item) => (
                   <Table.Tr key={item.key}>
-                    <Table.Td style={{ width: '40%' }}>
+                    <Table.Td className={classes.shortcutCell}>
                       <Kbd>{item.key}</Kbd>
                     </Table.Td>
                     <Table.Td>

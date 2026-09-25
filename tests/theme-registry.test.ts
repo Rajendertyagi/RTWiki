@@ -92,30 +92,19 @@ describe('theme registry', () => {
 
 /**
  * The structural surfaces must be separated by a *perceptible* step, not merely
- * by different hex digits. Lightness is measured in Oklab, which is perceptually
- * uniform, so a fixed L* step looks like the same amount of change in both
- * schemes. Comparing raw hex or sRGB values would let a two-digit difference
- * pass as a distinction the eye cannot make.
+ * by different values. The palette is authored in Oklab, where the first channel
+ * is perceptual lightness, so the step is read directly rather than inferred by
+ * decoding a hex triple back into a colour space.
  */
 const MIN_LADDER_STEP = 0.03
 
-function parseHex(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
-  if (!m) throw new Error(`not a 6-digit hex colour: ${hex}`)
-  const n = Number.parseInt(m[1], 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-function srgbToLinear(channel: number): number {
-  const c = channel / 255
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-}
-
-/** Oklab lightness. For a neutral grey this is the cube root of linear luminance. */
-function oklabL(hex: string): number {
-  const [r, g, b] = parseHex(hex)
-  const y = 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b)
-  return Math.cbrt(y)
+/** Reads the L channel of an `oklch(L C H)` token, ignoring any alpha. */
+function lightnessOf(token: string): number {
+  const m = /^oklch\(\s*([\d.]+)/i.exec(token.trim())
+  if (!m) {
+    throw new Error(`expected an oklch() colour, got: ${token}`)
+  }
+  return Number.parseFloat(m[1])
 }
 
 describe('surface ladder separation', () => {
@@ -124,6 +113,20 @@ describe('surface ladder separation', () => {
   // hover and selected rows, not a structural surface, and in the light scheme
   // it is intentionally the same white as the canvas.
   const ladder = ['rail', 'pane', 'canvas'] as const
+
+  it('authors every surface token in Oklab', () => {
+    for (const id of Object.keys(APP_THEMES)) {
+      const { variants } = getTheme(id)
+      for (const variantName of ['light', 'dark'] as const) {
+        for (const token of REQUIRED_VARIANT_TOKENS) {
+          expect(
+            variants[variantName][token].startsWith('oklch('),
+            `${id}/${variantName}/${token} must be authored in oklch()`
+          ).toBe(true)
+        }
+      }
+    }
+  })
 
   it.each(Object.keys(APP_THEMES))(
     '%s separates rail, pane and canvas by a perceptible step',
@@ -134,7 +137,7 @@ describe('surface ladder separation', () => {
         for (let i = 1; i < ladder.length; i += 1) {
           const upper = ladder[i - 1]
           const lower = ladder[i]
-          const step = Math.abs(oklabL(variant[lower]) - oklabL(variant[upper]))
+          const step = Math.abs(lightnessOf(variant[lower]) - lightnessOf(variant[upper]))
           expect(
             step,
             `${id}/${variantName}: ${lower} (${variant[lower]}) must differ from ${upper} (${variant[upper]}) by at least ${MIN_LADDER_STEP} in Oklab L`
@@ -148,8 +151,20 @@ describe('surface ladder separation', () => {
     // The relationship the upstream reference relies on: the pane is recessed
     // and the document canvas is the brighter surface.
     const { variants } = getTheme(DEFAULT_THEME_ID)
-    expect(oklabL(variants.dark.pane)).toBeLessThan(oklabL(variants.dark.canvas))
-    expect(oklabL(variants.dark.rail)).toBeLessThan(oklabL(variants.dark.pane))
+    expect(lightnessOf(variants.dark.pane)).toBeLessThan(lightnessOf(variants.dark.canvas))
+    expect(lightnessOf(variants.dark.rail)).toBeLessThan(lightnessOf(variants.dark.pane))
+  })
+
+  it('makes the document the brightest large surface in both schemes', () => {
+    const { variants } = getTheme(DEFAULT_THEME_ID)
+    for (const variantName of ['light', 'dark'] as const) {
+      expect(lightnessOf(variants[variantName].canvas)).toBeGreaterThan(
+        lightnessOf(variants[variantName].pane)
+      )
+      expect(lightnessOf(variants[variantName].canvas)).toBeGreaterThan(
+        lightnessOf(variants[variantName].rail)
+      )
+    }
   })
 })
 
@@ -174,5 +189,102 @@ describe('legacy surface tokens', () => {
       }
     }
     expect(offenders).toEqual([])
+  })
+})
+
+describe('inline style objects', () => {
+  /**
+   * The codebase had 15 `style={{ ... }}` objects that hardcoded layout and
+   * paint rules into individual components. All were moved into stylesheets.
+   *
+   * What may remain is a style object that carries *only* CSS custom
+   * properties. That is the modern idiom for handing a data-driven value to
+   * CSS - a resized pane width, a tree depth, a zoom level - and it keeps the
+   * box model in the stylesheet. A literal property in a style object means
+   * the size or colour is now defined in two places, which is the drift this
+   * test exists to prevent.
+   */
+  const LITERAL_STYLE_PROPERTIES = [
+    'width',
+    'height',
+    'minWidth',
+    'minHeight',
+    'maxWidth',
+    'flex',
+    'flexBasis',
+    'flexShrink',
+    'flexGrow',
+    'padding',
+    'paddingLeft',
+    'paddingRight',
+    'margin',
+    'background',
+    'backgroundColor',
+    'color',
+    'display',
+    'position',
+    'top',
+    'left',
+    'right',
+    'bottom',
+    'border',
+    'textAlign',
+    'letterSpacing',
+    'fontSize',
+    'gap'
+  ]
+
+  /** Every character of every `style={...}` object, brace-matched. */
+  function collectStyleObjects(source: string): string[] {
+    const found: string[] = []
+    for (const match of source.matchAll(/style=\{\{/g)) {
+      let depth = 0
+      let i = match.index + 'style='.length
+      for (; i < source.length; i += 1) {
+        if (source[i] === '{') depth += 1
+        else if (source[i] === '}') {
+          depth -= 1
+          if (depth === 0) {
+            found.push(source.slice(match.index, i + 1))
+            break
+          }
+        }
+      }
+    }
+    return found
+  }
+
+  it('carry no layout or paint properties, only custom properties', () => {
+    const offenders: string[] = []
+    for (const file of collectSourceFiles(join(import.meta.dir, '..', 'src', 'web'))) {
+      if (!file.endsWith('.tsx')) continue
+      const contents = readFileSync(file, 'utf8')
+      for (const styleObject of collectStyleObjects(contents)) {
+        // Every top-level key in the object literal.
+        const keys = [...styleObject.matchAll(/(?:^|[{,])\s*'?([A-Za-z][\w-]*)'?\s*:/g)].map(
+          (m) => m[1]
+        )
+        for (const key of keys) {
+          if (key.startsWith('--')) continue
+          if (LITERAL_STYLE_PROPERTIES.includes(key)) {
+            const line = contents.slice(0, contents.indexOf(styleObject)).split('\n').length
+            offenders.push(`${file}:${line} style={{ ${key} }}`)
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('are gone entirely, or carry only custom properties', () => {
+    // A count, not a rule: it makes an accidental fifth inline object visible
+    // in a diff rather than silently accepted.
+    let count = 0
+    for (const file of collectSourceFiles(join(import.meta.dir, '..', 'src', 'web'))) {
+      if (!file.endsWith('.tsx')) continue
+      count += collectStyleObjects(readFileSync(file, 'utf8')).length
+    }
+    // Currently 4: two Mermaid zoom hosts and two right-sidebar values.
+    expect(count).toBeLessThanOrEqual(6)
   })
 })

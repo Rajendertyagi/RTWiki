@@ -95,8 +95,10 @@
 }
 
 .zoomHost {
-  /* Width set inline from zoom level — resize-based, never transform-clipped. */
+  /* Zoom level arrives as a custom property; the width rule lives here.
+     Resize-based, never transform-clipped. */
   min-width: 100%;
+  width: var(--zoom-level, 100%);
 }
 
 .statusRow {

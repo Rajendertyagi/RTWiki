@@ -23,6 +23,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
+import type { CSSVars } from '../../style-props.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { DIAGRAM_TEMPLATES } from '../rich-editor/insert-blocks.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
@@ -263,7 +264,7 @@ export default function MermaidPageWorkspace({
 
   const renderSvgArea = (currentSvg: string): JSX.Element => (
     <div className={`${classes.svgHost} ${fit ? classes.fit : classes.actual}`}>
-      <div className={classes.zoomHost} style={{ width: `${zoom * 100}%` }}>
+      <div className={classes.zoomHost} style={{ '--zoom-level': `${zoom * 100}%` } as CSSVars}>
         {/* Sanitized by svg-sanitize.ts + Mermaid strict-mode DOMPurify. */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: contained sanitized SVG rendering */}
         <div dangerouslySetInnerHTML={{ __html: currentSvg }} />

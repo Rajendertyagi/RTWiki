@@ -42,6 +42,8 @@
   align-items: center;
   justify-content: center;
   color: var(--mantine-color-dimmed);
+  /* The picked colour arrives as a custom property; painting stays here. */
+  background: var(--swatch-color, transparent);
 }
 
 .swatchActive {

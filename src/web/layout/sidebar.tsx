@@ -187,7 +187,7 @@ export function Sidebar({
         type="file"
         accept=".md,.markdown,text/markdown,text/plain"
         onChange={handleFileChosen}
-        style={{ display: 'none' }}
+        className={classes.hiddenFileInput}
         tabIndex={-1}
         aria-hidden="true"
       />

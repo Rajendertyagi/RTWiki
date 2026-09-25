@@ -1,0 +1,8 @@
+/* New-name field grows to fill the row; was an inline `flex: 1`. */
+.nameField {
+  flex: 1;
+}
+
+.nameField input {
+  width: 100%;
+}

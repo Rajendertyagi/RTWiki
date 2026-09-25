@@ -21,6 +21,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../../config/index.js'
 import { debugLog, safeHash } from '../../../diagnostics/debug-log.js'
+import type { CSSVars } from '../../../style-props.js'
 import { DIAGRAM_TEMPLATES } from '../insert-blocks.js'
 import { ResizableBlockContainer } from './block-resize.js'
 import classes from './mermaid-block.module.css'
@@ -217,7 +218,7 @@ export function MermaidBlockView({
   const renderSvg = (svg: string): JSX.Element => (
     <div
       className={`${classes.zoomHost} ${classes.svgHost} ${fit ? classes.fit : classes.actual}`}
-      style={{ width: `${zoom * 100}%` }}
+      style={{ '--zoom-level': `${zoom * 100}%` } as CSSVars}
       data-testid={`${blockType}-svg`}
       // Sanitized by svg-sanitize.ts (script/handler/external-ref removal)
       // and Mermaid strict-mode DOMPurify before it reaches this state.

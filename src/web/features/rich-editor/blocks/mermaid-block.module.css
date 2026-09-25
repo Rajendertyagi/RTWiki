@@ -60,6 +60,9 @@
   position: relative;
   max-width: 100%;
   min-width: 0;
+  /* Drag-resized dimensions arrive as custom properties; the box lives here. */
+  width: var(--block-width, auto);
+  height: var(--block-height, auto);
 }
 
 .sizePresets {
@@ -103,8 +106,10 @@
 }
 
 .zoomHost {
-  /* Width is set inline from the zoom level (resize-based, no transform clip). */
+  /* Zoom level arrives as a custom property; the width rule lives here.
+     Resize-based, never transform-clipped, so the scroll extent stays honest. */
   min-width: 100%;
+  width: var(--zoom-level, 100%);
 }
 
 .svgHost {

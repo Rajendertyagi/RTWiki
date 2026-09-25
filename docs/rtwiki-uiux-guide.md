@@ -134,6 +134,43 @@ Four surfaces, each with a role you can hold in your head:
 
 Why this matters: the real defect was that the document had been given a border and rounded corners, so it read as a card floating inside a panel rather than as the page itself. The border and the corners were removed, and the two surfaces were then given separate names so they could never be confused again. There is now a test that checks the document and the panel are never the same tone. If that ever breaks, the document will start looking like a card again — and the fix is always to give the surfaces distinct values, never to hide the problem with padding.
 
+### The shades are chosen by eye-measurement, not by taste
+
+Each surface is no longer picked by trying a grey until it looks right. It is picked
+by a single number: **how light or dark it is, on a scale from 0 (black) to 1
+(white), measured so that equal steps look like equal changes to the eye.**
+
+The four shades are now spaced at exactly equal steps:
+
+- **Dark mode** — rail 0.17, panel 0.22, document 0.27, raised 0.32. Each one is
+  **0.05** further from black than the one before it. Four identical steps.
+- **Light mode** — rail 0.91, panel 0.955, document 1.0. Each one is **0.045**
+  closer to white.
+
+Why this matters in plain terms: previously the steps were *nearly* equal, and
+nearly is not good enough. Two of the dark shades were so close together that the
+eye read them as the same colour, so the whole left side of the window looked like
+one flat block. Now the gaps are mathematically identical, so every step is as
+visible as every other one — and there is an automatic check that would catch it
+if a future colour change broke the spacing.
+
+The visible difference is a refinement, not a jump. The feel is the same; the
+steps are just honest now.
+
+### Sizing and shape live in the stylesheet, not in the code
+
+Every visual dimension in the app — the rail's width, how wide a draggable divider
+is, how deep a nested tree row is indented, how large a diagram is zoomed — used to
+be written into the individual screens as one-off instructions. There are now
+**no such one-off instructions left**. The stylesheet owns the shape and size; the
+screens only hand it the actual number when that number is real data (a tree's
+depth, a zoom level, a pane the user has dragged wider).
+
+This is invisible to a user, and that is the point. It means a width can only be
+changed in one place, so two parts of the app can never quietly disagree about
+how wide something is — and the app gets faster and lighter as a result, because
+the browser stops recalculating style rules that were buried in the code.
+
 ---
 
 ## 5. Text
@@ -203,6 +240,8 @@ an oversight to correct.
 | **Measurements** | Keep every size in one central place that the whole app reads from. | Write the same number in two different files. | Two copies drift apart, and then someone has to guess which is right. |
 | **Test assertions** | Assert on elements that actually exist in the current app. | Write tests that wait for a title input when the title is a contenteditable H1. | F4 is a shipped test that can never pass because it asserts a non-existent element. |
 | **New themes** | Add theme data to the registry; do not invent colours. | Guess palette values for Catppuccin or Nord. | These themes must come from their official palettes, not from memory or approximation. |
+| **Choosing a shade** | Change the single lightness number, and keep the steps equal. | Pick a grey by trying it and seeing whether it looks right. | An equal step is provably visible; a picked step is not. The check can verify one and not the other. |
+| **Sizing anything** | Put the size in the stylesheet or a shared setting. | Write the size into an individual screen. | A size written twice drifts, and the app slowly becomes heavier as styling accumulates in the code. |
 
 ---
 
@@ -235,6 +274,7 @@ These findings were recorded as fact and later proved wrong. The reason is noted
 | F3 (rail width) | Three conflicting rail values (60 / 40 / 42). | The comparison used the committed config while the working tree already had `railWidth: 40`. The config and render agreed once the correct baseline was used. |
 | F5 (status bar) | A 2-pixel disagreement about the status bar height between two places that define it. | The same mistake as F3: the comparison was made against the committed version of the settings rather than the current one. Once compared correctly, the two agreed. No defect. |
 | HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored page directly showed the CSS was saved, and the rule applied inside the preview. Two separate things had been mistaken for one: a new page starts with empty CSS, and the status bar reported "Saved" for work that had not been written yet. |
+| The preview background was going to break | Switching the palette to a perceptual colour format would leave HTML previews with no background, because the safety check only understood three older colour formats. | Caught before it shipped by reading the check while changing the palette. The check now understands the new format and has its own test. The lesson: a value that passes through a validator must be read when the value changes shape. |
 
 ---
 
@@ -291,6 +331,8 @@ Newest first.
 
 | When | What changed | Why |
 |---|---|---|
+| 2026-09-25 | The four surface shades are now spaced by an exact, measured amount | They had been picked by eye and were nearly equal, so two of them read as the same colour. A refinement, not a visible jump |
+| 2026-09-25 | All sizing and shape moved out of the individual screens into the stylesheet | Fifteen one-off size instructions were scattered across the app. Now there is one place for each, and nothing hardcodes a size inline |
 | 2026-09-25 | This guide was written, alongside a companion reference document | The existing reference was written for engineers and was not usable for making design decisions |
 | 2026-09-25 | The packaged app now includes the screen it shows | The built program shipped with no interface at all and showed a "not found" page. The build now places the screen beside the program, where it looks for it. |
 | 2026-09-25 | The save indicator was made truthful | It reported "Saved" for work that had not been written yet, so a pending edit looked saved |

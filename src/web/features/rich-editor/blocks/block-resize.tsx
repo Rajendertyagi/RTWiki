@@ -8,6 +8,7 @@ import {
   LAYOUT,
   UI_TEXT
 } from '../../../config/index.js'
+import type { CSSVars } from '../../../style-props.js'
 import classes from './mermaid-block.module.css'
 
 /**
@@ -122,10 +123,14 @@ export function ResizableBlockContainer({
     <div
       ref={containerRef}
       className={classes.sizeContainer}
-      style={{
-        width: activeWidth !== null ? `${activeWidth}px` : undefined,
-        height: activeHeight !== null ? `${activeHeight}px` : undefined
-      }}
+      // Drag-resized dimensions are data, so they arrive as custom properties
+      // and the box model stays in the stylesheet.
+      style={
+        {
+          '--block-width': activeWidth !== null ? `${activeWidth}px` : undefined,
+          '--block-height': activeHeight !== null ? `${activeHeight}px` : undefined
+        } as CSSVars
+      }
       data-testid={`${testIdPrefix}-container`}
       data-width={activeWidth ?? ''}
       data-height={activeHeight ?? ''}

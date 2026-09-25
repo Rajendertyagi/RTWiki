@@ -1,0 +1,9 @@
+/* Section label: small, spaced, quiet. The letter-spacing was an inline style. */
+.categoryLabel {
+  letter-spacing: 0.5px;
+}
+
+/* Shortcut column gets a fixed share so the description column aligns. */
+.shortcutCell {
+  width: 40%;
+}

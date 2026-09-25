@@ -56,7 +56,17 @@ export function createThemeCssVariablesResolver(theme: AppTheme): CSSVariablesRe
       // Shared overlay stacking level for every floating layer (menus,
       // popovers, portals, full-screen workspaces). Defined once here so
       // stylesheet consumers and inline styles never diverge.
-      '--rtwiki-overlay-z-index': String(LAYOUT.overlayZIndex)
+      '--rtwiki-overlay-z-index': String(LAYOUT.overlayZIndex),
+      // Layout dimensions, published as custom properties so CSS can own the
+      // layout instead of components passing style objects. LAYOUT stays the
+      // single source: this is the same numbers, made readable from a
+      // stylesheet, not a second definition of them.
+      '--rtwiki-rail-width': `${LAYOUT.railWidth}px`,
+      '--rtwiki-divider-hit-width': `${LAYOUT.dividerHitWidth}px`,
+      '--rtwiki-divider-step-width': `${LAYOUT.dividerStepWidth}px`,
+      '--rtwiki-mobile-drawer-width': `${LAYOUT.mobileDrawerWidth}px`,
+      '--rtwiki-status-bar-height': `${LAYOUT.statusBarHeight}px`,
+      '--rtwiki-workspace-min-width': `${LAYOUT.workspaceMinWidth}px`
     },
     light: buildVariantVariables(theme.variants.light),
     dark: buildVariantVariables(theme.variants.dark)
