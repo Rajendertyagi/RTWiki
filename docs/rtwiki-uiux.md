@@ -96,7 +96,9 @@ The file's own instruction is explicit: *do not restate these numbers elsewhere*
 | `--rtwiki-toolbar-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:56` | Rich editor toolbar |
 | `--rtwiki-header-height` | `var(--rtwiki-row-height)` → `40px` | `customization.css:57` | Page title row |
 | `--rtwiki-statusbar-height` | **26px** | `customization.css:58` | ⚠ Stale. `LAYOUT.statusBarHeight` is 28px; the rendered footer host measures 28px, so this variable does not drive the final height. Reconcile before anything starts reading it |
-| `--rtwiki-chrome-pad-x` | `var(--mantine-spacing-sm)` | `customization.css:51` | Shared left/right padding of every chrome row |
+| `--rtwiki-chrome-pad-x` | `var(--mantine-spacing-sm)` | `customization.css` | Shared left/right padding of every chrome row |
+| `--rtwiki-chrome-hairline` | `rgba(0, 0, 0, 0.09)` light · `rgba(255, 255, 255, 0.09)` dark | `customization.css` | Every separator between chrome rows. **Deliberately fainter than `--rtwiki-border`** — see below |
+| `--rtwiki-chrome-border` | `var(--rtwiki-chrome-hairline)` | `customization.css` | Alias kept so existing consumers need no change |
 | `--rtwiki-active-fill` | `color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)` | `customization.css:64` | Tree rows and the Home/root nav entry, so their selection fill is identical |
 | `--rtwiki-chrome-divider` | `var(--mantine-color-default-border)` | `customization.css:60` | Compact divider between toolbar groups |
 
@@ -198,7 +200,26 @@ toolbar's active swatch uses an explicit `outline: 2px solid` with a 1px offset
 (`rich-toolbar.module.css:48-49`) because it sits on a user-chosen colour where the
 automatic ring cannot be trusted.
 
-### 3.6 Motion
+### 3.6 Hairlines, shadows, and the separation hierarchy
+
+The rule adopted for RTWiki: **colour carries structure, shadow means "floating",
+and a hairline is the exception.** Shadows are reserved for menus, popovers, dialogs
+and an overlaying sidebar. Two surfaces of the *same* shade meeting side by side (the
+Markdown editor and its preview) are the one case where a hairline is the honest
+answer, because there is no colour difference to detect.
+
+Chrome separators are **deliberately fainter than the general `--rtwiki-border`
+token**. The chrome stacks several full-width rows against each other, so a
+full-strength separator turns the top of the window into a set of stacked bands. The
+hairline is a translucent value rather than a solid one, and it is **scheme-aware**: a
+translucent black is invisible on a dark surface, so the dark value is a translucent
+white at the same opacity. A single definition drives all four chrome separators (band,
+tab strip, page header, workspace), so they cannot drift apart.
+
+Shadows in the current stylesheet set number **two** — the sidebar and the utility
+rail. That is consistent with the rule: almost nothing in RTWiki genuinely floats.
+
+### 3.7 Motion
 
 Motion is minimal and consistent — there are exactly **three** transitions in the
 entire stylesheet set, all short and all on `background-color` or `transform`:
@@ -214,7 +235,7 @@ Page cards also transition `box-shadow`, `border-color` and `transform` at 150ms
 transitions, and no motion on the document canvas. This matches the upstream
 principle that motion is for state, not decoration.
 
-### 3.7 Spacing
+### 3.8 Spacing
 
 The Mantine spacing scale in the Default theme: `xs 8px`, `sm 12px`, `md 16px`,
 `lg 20px`, `xl 24px`. Component CSS references these tokens rather than literals.
@@ -222,7 +243,7 @@ The literal exceptions found are all small and local: colour swatch grid gap,
 insert-menu item padding `6px 10px`, and the tree metrics in §3.2, which are named
 tokens rather than literals.
 
-### 3.8 Layering
+### 3.9 Layering
 
 `--rtwiki-overlay-z-index: 1000` is exported from the theme resolver and is the
 single stacking level for every floating layer: menus, popovers, portals, and
@@ -232,7 +253,7 @@ chrome sets its own local contract (`window-chrome.module.css:11`): the
 `data-tauri-drag-region` backdrop is absolutely positioned and every interactive
 control inside it opts out.
 
-### 3.9 Interaction behaviours
+### 3.10 Interaction behaviours
 
 | Behaviour | Rule | Source / note |
 |---|---|---|

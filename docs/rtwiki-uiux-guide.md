@@ -33,7 +33,60 @@ These are the principles that guide every decision. Each has a reason.
 
 ---
 
+## 2b. How depth and separation should work
+
+This is a standing decision. It was reached by discussion, and it is recorded here so
+it does not have to be explained again.
+
+**The look we want:** hairline-thin lines, colour doing the work, shadows only where
+something genuinely floats, and a light, modern, unheavy feel. Nothing should look
+outlined, boxed or heavy.
+
+**The order of importance — this is the rule to follow when unsure:**
+
+1. **Colour does the structural work.** A panel is a different shade from the page it
+   sits beside. This is the main way the eye knows where one thing ends and another
+   begins, and it costs nothing visually.
+2. **Shadow means "floating".** Only for things genuinely above the page: menus,
+   pop-ups, dialogs, a sidebar that slides over content.
+3. **A hairline is the exception, not the default.** A single very fine, very faint
+   line, only where colour cannot do the job.
+
+**Where a hairline is still right.** Two surfaces of the *same* shade sitting side by
+side. For example the Markdown typing view and its preview. There is no colour
+difference to detect, so one faint line is the honest solution.
+
+**The one place a frame is always wrong: the document itself.** The page you are
+reading or writing is never outlined, never rounded, never boxed. It is simply the
+page.
+
+**In dark mode, shadow is nearly invisible.** A shadow needs light to define it, and
+there is very little light on a dark surface. So dark mode separates floating things
+with a faint light edge instead of a shadow, and relies on colour even more than
+light mode does. Where a dark surface steps away from another, it steps *lighter* —
+that is what reads as "lifted".
+
+**Hairlines should be barely there.** A visible grey line looks like a table. A faint
+one looks like a seam. If you can clearly see the line, it is too strong.
+
+### Why not borders everywhere
+
+It is tempting to outline everything so the structure is obvious. It goes wrong in
+three ways: the page stops reading as a page and starts reading as a widget; the
+interface accumulates visual noise; and it dates quickly, because heavy outlining is
+the opposite of the current look. Outlines are also the least flexible tool — they
+cannot express depth, only separation, and they do not adapt to a dark theme.
+
+### What this changed
+
+- The document area lost its frame entirely, so it reads as the page.
+- Colour separates the page from the panels around it, in both themes.
+- Where two same-shade surfaces meet, one faint line is used rather than a heavy
+  border.
+- Shadows are reserved for floating layers.
+
 ## 3. The parts of the window
+
 
 From top to bottom, left to right:
 
