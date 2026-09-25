@@ -1,5 +1,6 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { railHome } from './utils/shell.js'
 
 /**
  * Visual knowledge blocks (Formula, Diagram, Mind Map, Callouts) in the
@@ -394,11 +395,11 @@ test.describe('visual knowledge blocks', () => {
 
     // Switch away immediately (before autosave of further edits would land):
     // return to the dashboard first, then open the other page from its card.
-    await page.locator('[aria-label="Home"]').click()
+    await railHome(page).click()
     await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
     await page.getByRole('button', { name: `Open ${htmlTitle}`, exact: true }).click()
     await expect(page.locator('[data-testid="html-preview-view"]')).toBeVisible()
-    await page.locator('[aria-label="Home"]').click()
+    await railHome(page).click()
     await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible()
     await page.getByRole('button', { name: `Open ${richTitle}`, exact: true }).click()
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()

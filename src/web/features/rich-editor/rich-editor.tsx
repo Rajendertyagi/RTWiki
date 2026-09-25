@@ -16,6 +16,8 @@ import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
 import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
 import { RightSidebar } from '../workspace/right-sidebar.js'
+import type { StatusSaveState } from '../workspace/save-state.js'
+import { mapAutosaveStatus } from '../workspace/save-state.js'
 import { LinkedPageContext, type LinkedPageContextValue } from './blocks/linked-page-block.js'
 import {
   containUnknownBlocks,
@@ -86,7 +88,7 @@ interface RichEditorProps {
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
     isDirty: boolean
-    saveState: 'clean' | 'saving' | 'saved' | 'error'
+    saveState: StatusSaveState
     error?: string | null
   }) => void
   /** Hands the live editor instance to the parent once initialized. */
@@ -137,7 +139,11 @@ export function RichEditor({
     if (onSaveStateChange) {
       onSaveStateChange({
         isDirty,
-        saveState: status as 'clean' | 'saving' | 'saved' | 'error',
+        // Mapped, not cast. This used to cast `AutosaveStatus` straight to the
+        // display type, so `'dirty'` reached the status bar as a value it does
+        // not recognise and fell through to "Saved" - a Rich Note claimed to be
+        // saved while the edit was still only in memory.
+        saveState: mapAutosaveStatus(status),
         error: status === 'error' ? error : null
       })
     }

@@ -2,6 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { railHome } from './utils/shell.js'
+
+/** Shared `railHome` lives in ./utils/shell.js; this adds the editor assertion. */
 
 const editorRoot = '[data-testid="rich-editor"]'
 // BlockNote 0.54 (tiptap v3): the editable element carries BOTH classes on a
@@ -34,14 +37,20 @@ async function seedPage(
 }
 
 async function openNote(page: Page, title: string): Promise<void> {
+  // Go Home first. `page.goto('/')` restores the last session workspace, so the
+  // dashboard is not necessarily showing and the card lookup below times out.
   // The sidebar renders a NavLink (<a>) and the dashboard a <button> with the
-  // same accessible name; role=button with exact matching uniquely targets
-  // the dashboard card.
+  // same accessible name; role=button with exact matching uniquely targets the
+  // dashboard card.
+  await goHome(page)
   await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
 }
 
 async function goHome(page: Page): Promise<void> {
-  await page.locator('[aria-label="Home"]').click()
+  // Scoped to the rail: the status bar carries its own Home control, so the
+  // bare attribute selector matched two elements and every caller died on a
+  // strict-mode violation.
+  await railHome(page).click()
   await expect(page.locator(editorRoot)).toHaveCount(0)
 }
 
@@ -143,27 +152,28 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await page.keyboard.type('Toolbar probe text')
     await expect(page.getByRole('toolbar', { name: 'Formatting' })).toBeVisible()
 
-    // Autosave reaches the Saved state after the debounce window. The header
-    // save button's label flips Saving... -> Saved and becomes disabled once
-    // clean; typing first means 'Saved' can only reappear after the save.
-    const saveButton = page.getByRole('button', { name: 'Save note' })
-    await expect(saveButton).toHaveText('Saved', { timeout: 10_000 })
-    await expect(saveButton).toBeDisabled()
+    // Autosave reaches the Saved state after the debounce window. There is no
+    // manual save button: the status bar is the save indicator, and it is the
+    // only completion signal. Typing first means 'Saved' can only reappear
+    // after the save actually lands.
+    const statusBar = page.getByTestId('workspace-status-bar')
+    await expect(statusBar).toContainText('Unsaved changes')
+    await expect(statusBar).toContainText('Saved', { timeout: 10_000 })
     _savedTitle = title
   })
 
-  test('manual Save persists typed content', async ({ page, request }) => {
+  test('autosave persists typed content without a manual save', async ({ page, request }) => {
     const title = uniqueTitle('Save probe')
     await seedPage(request, title, 'rich', '')
     await page.goto('/')
     await openNote(page, title)
     await page.locator(editable).click()
     await page.keyboard.type(' Manual save line.')
-    await page.getByRole('button', { name: 'Save note' }).click()
-    // Completion signal: the header button disables once the save lands
-    // (both its label and the status paragraph read 'Saved', so text alone
-    // trips strict mode).
-    await expect(page.getByRole('button', { name: 'Save note' })).toBeDisabled({ timeout: 10_000 })
+    // The debounced autosave is the write path. Waiting for the indicator is
+    // what proves the PATCH landed before the reload below.
+    const statusBar = page.getByTestId('workspace-status-bar')
+    await expect(statusBar).toContainText('Unsaved changes')
+    await expect(statusBar).toContainText('Saved', { timeout: 10_000 })
 
     // Reload reproduces the saved content.
     await page.reload()
@@ -178,7 +188,7 @@ test.describe('Rich Note lifecycle (real application)', () => {
     await openNote(page, title)
     await page.locator(editable).click()
     await page.keyboard.type(' Reload probe text.')
-    await expect(page.getByRole('button', { name: 'Save note' })).toHaveText('Saved', {
+    await expect(page.getByTestId('workspace-status-bar')).toContainText('Saved', {
       timeout: 10_000
     })
     await goHome(page)

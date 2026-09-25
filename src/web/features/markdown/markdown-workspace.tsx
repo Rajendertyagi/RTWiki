@@ -9,6 +9,8 @@ import { CodeEditor } from '../html-editor/code-editor.js'
 import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { useEditorPreferences } from '../workspace/editor-preferences.js'
+import type { StatusSaveState } from '../workspace/save-state.js'
+import { isAutosaveDirty, mapAutosaveStatus } from '../workspace/save-state.js'
 import { renderMarkdown } from './markdown-render.js'
 import classes from './markdown-workspace.module.css'
 
@@ -20,7 +22,7 @@ export interface MarkdownPageWorkspaceProps {
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
     isDirty: boolean
-    saveState: 'clean' | 'saving' | 'saved' | 'error'
+    saveState: StatusSaveState
     error?: string | null
   }) => void
   onEditorStatusChange?: (status: EditorStatus) => void
@@ -73,8 +75,11 @@ export default function MarkdownPageWorkspace({
 
   useEffect(() => {
     onSaveStateChange?.({
-      isDirty: status !== 'idle' && status !== 'saved',
-      saveState: mapStatus(status),
+      isDirty: isAutosaveDirty(status),
+      // Shared mapping. This workspace had its own `mapStatus`, which folded
+      // `'dirty'` into `'clean'` - so a Markdown page reported "Saved" while the
+      // edit was still pending, exactly as a Rich Note did.
+      saveState: mapAutosaveStatus(status),
       error: status === 'error' ? error : null
     })
   }, [status, error, onSaveStateChange])
@@ -169,11 +174,4 @@ export default function MarkdownPageWorkspace({
       )}
     </div>
   )
-}
-
-function mapStatus(status: string): 'clean' | 'saving' | 'saved' | 'error' {
-  if (status === 'saving') return 'saving'
-  if (status === 'error') return 'error'
-  if (status === 'saved') return 'saved'
-  return 'clean'
 }

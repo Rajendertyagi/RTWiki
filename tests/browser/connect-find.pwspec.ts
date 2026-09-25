@@ -1,5 +1,6 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { goHome } from './utils/shell.js'
 
 /**
  * Connected-navigation workflows: internal page links ([[ picker + toolbar),
@@ -36,10 +37,7 @@ async function openNote(page: Page, title: string): Promise<void> {
   await page.goto('/')
   // Session restoration may reopen the last workspace directly; go Home
   // first so the dashboard card lookup is always valid.
-  await page.locator('[aria-label="Home"]').click()
-  // The dashboard heading may be a <h1>, <h2>, or plain text depending on
-  // the current layout; match on the "Pages" text rather than role=heading.
-  await expect(page.getByText('Pages', { exact: true }).first()).toBeVisible()
+  await goHome(page)
   await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
   await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 }
@@ -118,7 +116,7 @@ test.describe('connect and find', () => {
       }
     ])
 
-    // Rename the target via the API — the stored href keeps working.
+    // Rename the target via the API â€” the stored href keeps working.
     await request.patch(`/api/pages/${targetPage.id}`, { data: { title: 'Renamed Target' } })
 
     await openNote(page, source)
@@ -126,8 +124,10 @@ test.describe('connect and find', () => {
     await page.locator('a[href^="#/page/"]').first().click()
     await expect(page.getByTestId('rich-editor')).toBeVisible()
     await expect(page.locator('[role="tab"]')).toHaveCount(tabCountBefore + 1)
-    // The renamed title is visible in the header input.
-    await expect(page.locator('input[aria-label="Title"]')).not.toHaveValue(/Rename Me/)
+    // The renamed title is visible in the header. The title is a *button*
+    // carrying the title as text until it is double-clicked into an input, so
+    // the assertion has to read text, not an input value.
+    await expect(page.getByTestId('editor-title')).toHaveText('Renamed Target')
 
     // Clicking again must not duplicate the tab.
     await openNote(page, source)
@@ -155,7 +155,7 @@ test.describe('connect and find', () => {
     ])
     await openNote(page, source)
     // Type WITHOUT pressing Enter into a second paragraph, then navigate
-    // immediately — handleSelectPage flushes pending autosave first.
+    // immediately â€” handleSelectPage flushes pending autosave first.
     await page.locator('.bn-editor').click()
     await page.keyboard.press('Control+End')
     await page.keyboard.type('unsaved tail text')
@@ -193,7 +193,7 @@ test.describe('connect and find', () => {
     await expect(page.getByTestId('backlinks-list')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('backlink-entry').first()).toContainText(source)
 
-    // Remove the link in the source → server index empties → revisiting the
+    // Remove the link in the source â†’ server index empties â†’ revisiting the
     // target shows the explicit empty state.
     const removeRes = await request.patch(`/api/pages/${sourcePage.id}`, {
       data: { content: JSON.stringify([{ id: 'p', type: 'paragraph' }]) }
@@ -240,8 +240,9 @@ test.describe('connect and find', () => {
     await expect(anchor).toHaveClass(/rtwiki-broken-link/)
     await anchor.click()
     await expect(page.getByTestId('broken-link-notice')).toBeVisible()
-    // Still on the same note (no navigation to a different page).
-    await expect(page.locator('input[aria-label="Title"]')).toHaveValue(source)
+    // Still on the same note (no navigation to a different page). The title is
+    // a button carrying the text until double-clicked into an input.
+    await expect(page.getByTestId('editor-title')).toHaveText(source)
 
     // Recreating a page with the SAME TITLE must not reconnect the old ID.
     await seedRich(request, target)
@@ -294,7 +295,7 @@ test.describe('connect and find', () => {
     })
     expect(htmlRes.status()).toBe(201)
     await page.goto('/')
-    await page.locator('[aria-label="Home"]').click()
+    await goHome(page)
     await expect(page.getByText('Pages', { exact: true }).first()).toBeVisible()
     const htmlCard = page.getByRole('button', { name: `Open ${htmlTitle}`, exact: true })
     await htmlCard.waitFor()

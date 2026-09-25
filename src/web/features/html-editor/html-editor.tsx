@@ -17,7 +17,8 @@ import {
   setWordWrap as setWordWrapPref,
   useEditorPreferences
 } from '../workspace/editor-preferences.js'
-import type { StatusSaveState } from '../workspace/status-bar.js'
+import type { StatusSaveState } from '../workspace/save-state.js'
+import { isAutosaveDirty, mapAutosaveStatus } from '../workspace/save-state.js'
 // NOTE: StatusBar is now rendered once, globally, in the app-shell footer
 // (see App.tsx). It is no longer mounted per HTML source view.
 import { CodeEditor } from './code-editor.js'
@@ -144,24 +145,12 @@ export default function HtmlEditorWorkspace({
 
   useEffect(() => {
     if (onSaveStateChange) {
-      // Map the autosave lifecycle onto the display states. 'dirty' is its own
-      // state rather than being folded into 'clean': autosave is debounced, so
-      // between an edit and the save there is a window where the work exists
-      // only in memory. Reporting that as clean made the status bar claim
-      // "Saved" for unsaved work.
-      const saveState =
-        status === 'saving'
-          ? ('saving' as const)
-          : status === 'saved'
-            ? ('saved' as const)
-            : status === 'error'
-              ? ('error' as const)
-              : status === 'dirty'
-                ? ('pending' as const)
-                : ('clean' as const)
+      // Shared mapping. This was the only correct copy of the three, and it
+      // lived here while the Rich Note and Markdown editors were wrong. It now
+      // comes from one module so the three cannot drift apart again.
       onSaveStateChange({
-        isDirty: status !== 'idle' && status !== 'saved',
-        saveState,
+        isDirty: isAutosaveDirty(status),
+        saveState: mapAutosaveStatus(status),
         error: status === 'error' ? error : null
       })
     }

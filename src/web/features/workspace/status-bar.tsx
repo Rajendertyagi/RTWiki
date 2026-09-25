@@ -7,9 +7,12 @@ import { UI_TEXT } from '../../config/index.js'
 import { getBacklinks, getOutgoingLinks } from '../../services/pages-api.js'
 import { formatDate, formatRelativeTime } from '../../util/format-date.js'
 import { pagePlainText } from '../../util/page-preview-text.js'
+import type { StatusSaveState } from './save-state.js'
 import classes from './status-bar.module.css'
 
-export type StatusSaveState = 'clean' | 'pending' | 'saving' | 'saved' | 'error'
+// The save states and the mapping onto them live in ./save-state.ts, shared by
+// every editor. Re-exported so existing importers keep one obvious entry point.
+export type { StatusSaveState } from './save-state.js'
 
 interface StatusBarProps {
   /** Compact page-type label shown on the left (e.g. "Rich Note"). */
