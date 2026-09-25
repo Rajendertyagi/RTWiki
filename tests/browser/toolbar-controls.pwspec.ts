@@ -251,4 +251,73 @@ test.describe('Rich Note toolbar controls', () => {
       expect(metrics.height).toBeLessThan(80)
     }
   })
+  // ---------- density, grouping and availability ----------
+
+  test('the bar is grouped by separators, not one undifferentiated run', async ({ page }) => {
+    await newRichNote(page)
+    const bar = page.getByRole('toolbar')
+    await expect(bar).toBeVisible()
+
+    const m = await page.evaluate(() => {
+      const el = document.querySelector('[role="toolbar"]') as HTMLElement
+      const slots = Array.from(el.querySelectorAll('span')) as HTMLElement[]
+      const dividers = slots.filter((s) => s.className.includes('divider'))
+      const groups: number[] = []
+      let run = 0
+      for (const s of slots) {
+        if (s.className.includes('divider')) {
+          groups.push(run)
+          run = 0
+        } else if (s.querySelector('button')) run += 1
+      }
+      groups.push(run)
+      return {
+        buttons: el.querySelectorAll('button').length,
+        dividers: dividers.length,
+        groups,
+        labelled: Array.from(el.querySelectorAll('button')).filter(
+          (b) => (b.getAttribute('aria-label') ?? '').length > 0
+        ).length
+      }
+    })
+
+    // F6 recorded "no clear grouping". That is no longer true: the bar carries
+    // separators and every icon-only control is named for assistive technology.
+    expect(m.dividers, 'the bar must be split into groups').toBeGreaterThan(2)
+    expect(m.groups.filter((g) => g > 0).length).toBe(m.dividers + 1)
+    expect(m.labelled, 'every icon-only control needs an accessible name').toBe(m.buttons)
+  })
+
+  test('an unavailable control looks unavailable', async ({ page }) => {
+    // Before this was fixed, every disabled control computed `opacity: 1` -
+    // identical to every enabled one. In a row of 28 icon-only buttons there is
+    // then no way to tell that clicking one will do nothing, which reads as a
+    // broken button rather than an inactive one.
+    await newRichNote(page)
+    const bar = page.getByRole('toolbar')
+    await expect(bar).toBeVisible()
+
+    const m = await page.evaluate(() => {
+      const el = document.querySelector('[role="toolbar"]') as HTMLElement
+      const buttons = Array.from(el.querySelectorAll('button')) as HTMLButtonElement[]
+      const isDisabled = (b: HTMLButtonElement) =>
+        b.disabled || b.getAttribute('aria-disabled') === 'true'
+      const disabled = buttons.filter(isDisabled)
+      const enabled = buttons.filter((b) => !isDisabled(b))
+      return {
+        disabledCount: disabled.length,
+        disabledOpacity: [...new Set(disabled.map((b) => getComputedStyle(b).opacity))],
+        enabledOpacity: [...new Set(enabled.map((b) => getComputedStyle(b).opacity))]
+      }
+    })
+
+    // A selection-dependent control is always inactive with nothing selected.
+    expect(m.disabledCount, 'some control must be unavailable with no selection').toBeGreaterThan(0)
+    for (const o of m.disabledOpacity) {
+      expect(Number.parseFloat(o), `disabled control at opacity ${o}`).toBeLessThan(0.6)
+    }
+    for (const o of m.enabledOpacity) {
+      expect(Number.parseFloat(o), `enabled control at opacity ${o}`).toBe(1)
+    }
+  })
 })

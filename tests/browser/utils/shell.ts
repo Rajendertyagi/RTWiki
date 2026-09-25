@@ -20,6 +20,11 @@ export function railHome(page: Page): Locator {
   return railNav(page).locator('button[aria-label="Home"]')
 }
 
+/** The rail's Settings button. */
+export function railSettings(page: Page): Locator {
+  return railNav(page).locator('button[aria-label="Settings"]')
+}
+
 /** The status bar's Home control. Distinct from the rail's on purpose. */
 export function statusHome(page: Page): Locator {
   return page.getByTestId('status-home')

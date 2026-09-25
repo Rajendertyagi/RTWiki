@@ -15,8 +15,17 @@ import {
 } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
 import { MAX_USER_PORT, MIN_USER_PORT } from '@rtwiki/shared/constants'
-import { IconX } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import {
+  IconAppWindow,
+  IconCalendarEvent,
+  IconFileAnalytics,
+  IconLayoutSidebar,
+  IconPalette,
+  IconSearch,
+  IconTextCaption,
+  IconX
+} from '@tabler/icons-react'
+import { useEffect, useMemo, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { isDebugLoggingEnabled, setDebugLoggingEnabled } from '../../diagnostics/debug-log.js'
 import {
@@ -59,13 +68,24 @@ interface SettingsWorkspaceProps {
   onClose: () => void
 }
 
-const SECTIONS: { id: Section; label: string }[] = [
-  { id: 'appearance', label: UI_TEXT.settingsAppearance },
-  { id: 'layout', label: UI_TEXT.settingsLayout },
-  { id: 'editor', label: UI_TEXT.settingsEditor },
-  { id: 'scheduler', label: UI_TEXT.settingsScheduler },
-  { id: 'desktop', label: UI_TEXT.settingsDesktop },
-  { id: 'debugLogs', label: UI_TEXT.settingsDebugLogs }
+/**
+ * The section list, each with an icon.
+ *
+ * Icons because this list is a *list*, and every other list in the app (the
+ * page tree, the tab strip, the utility rail) leads with a small type icon.
+ * Trilium's settings navigation does the same and, more usefully, styles itself
+ * from the left-pane item tokens so it is visually indistinguishable from the
+ * note tree. One idiom for "a list you can pick from" is the point; a second
+ * look for the same action is what makes an app feel assembled rather than
+ * designed.
+ */
+const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+  { id: 'appearance', label: UI_TEXT.settingsAppearance, icon: IconPalette },
+  { id: 'layout', label: UI_TEXT.settingsLayout, icon: IconLayoutSidebar },
+  { id: 'editor', label: UI_TEXT.settingsEditor, icon: IconTextCaption },
+  { id: 'scheduler', label: UI_TEXT.settingsScheduler, icon: IconCalendarEvent },
+  { id: 'desktop', label: UI_TEXT.settingsDesktop, icon: IconAppWindow },
+  { id: 'debugLogs', label: UI_TEXT.settingsDebugLogs, icon: IconFileAnalytics }
 ]
 
 function browserPermissionText(permission: BrowserPermission): string {
@@ -87,6 +107,15 @@ export function SettingsWorkspace({
   onClose
 }: SettingsWorkspaceProps): JSX.Element {
   const [section, setSection] = useState<Section>('appearance')
+  // Filters the section list. Trilium ships a settings search for the same
+  // reason: a settings pane is a long list of short rows, and finding one by
+  // scrolling is worse than typing three letters.
+  const [query, setQuery] = useState('')
+  const visibleSections = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (q.length === 0) return SECTIONS
+    return SECTIONS.filter((s) => s.label.toLowerCase().includes(q))
+  }, [query])
   const { setColorScheme } = useMantineColorScheme()
   const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
   const editorPrefs = useEditorPreferences()
@@ -205,23 +234,42 @@ export function SettingsWorkspace({
 
   return (
     <div className={classes.workspace} data-testid="settings-workspace">
-      <div className={classes.nav}>
-        {SECTIONS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`${classes.navItem} ${section === item.id ? classes.navItemActive : ''}`}
-            aria-current={section === item.id ? 'page' : undefined}
-            onClick={() => setSection(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <nav className={classes.nav} aria-label={UI_TEXT.settingsLabel}>
+        <TextInput
+          size="xs"
+          className={classes.navSearch}
+          placeholder={UI_TEXT.settingsSearchPlaceholder}
+          aria-label={UI_TEXT.settingsSearchPlaceholder}
+          leftSection={<IconSearch size={13} />}
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+        />
+        <div className={classes.navList}>
+          {visibleSections.map((item) => {
+            const active = section === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={active ? `${classes.navItem} ${classes.navItemActive}` : classes.navItem}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => setSection(item.id)}
+              >
+                <item.icon size={15} />
+                <span className={classes.navItemLabel}>{item.label}</span>
+              </button>
+            )
+          })}
+          {visibleSections.length === 0 && (
+            <Text size="xs" c="dimmed" className={classes.navEmpty}>
+              {UI_TEXT.settingsNoMatches}
+            </Text>
+          )}
+        </div>
+      </nav>
 
       <div className={classes.content}>
-        <Group justify="space-between" className={classes.header}>
-          <Title order={3}>{UI_TEXT.settingsLabel}</Title>
+        <Group justify="flex-end" className={classes.header}>
           <Button
             variant="subtle"
             size="compact-sm"

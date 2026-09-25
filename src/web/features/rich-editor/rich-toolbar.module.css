@@ -15,6 +15,32 @@
   background: var(--mantine-color-default-border);
 }
 
+/*
+ * A control that cannot act right now must *look* like it cannot.
+ *
+ * Measured before this rule existed: every disabled control on the bar computed
+ * `opacity: 1`, identical to every enabled one. With 28 icon-only controls in a
+ * single row there is no other way to tell them apart, so the bar was claiming
+ * that unavailable commands were available - clicking one did nothing, which
+ * reads as a broken button rather than an unavailable one. Trilium dims its
+ * disabled toolbar buttons to 0.3 for the same reason.
+ *
+ * Dimming the whole control rather than recolouring the glyph keeps the shape
+ * legible while making the state obvious, and it costs no contrast budget on the
+ * enabled controls.
+ */
+.bar :disabled,
+.bar [aria-disabled="true"] {
+  opacity: 0.35;
+}
+
+.bar :disabled:hover,
+.bar [aria-disabled="true"]:hover {
+  /* No hover affordance on a control that will not act. */
+  background: transparent;
+  opacity: 0.35;
+}
+
 .textButton {
   min-width: 28px;
   font-weight: 600;

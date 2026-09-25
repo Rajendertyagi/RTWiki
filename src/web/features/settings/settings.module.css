@@ -5,26 +5,51 @@
   background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
+/*
+ * The section list, styled from the same tokens as the page tree's rows.
+ *
+ * Trilium styles its settings navigation from the left-pane item tokens, so the
+ * settings list and the note tree are the same visual object. That is the rule
+ * being followed here: one idiom for "a list you pick from". These are the same
+ * custom properties the tree rows use, not approximations of them.
+ */
 .nav {
-  flex: 0 0 180px;
+  flex: 0 0 200px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--mantine-spacing-sm);
+  padding: var(--rtwiki-tree-pane-inset, 8px);
   border-right: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   background: var(--rtwiki-chrome-surface, var(--mantine-color-body));
 }
 
+.navSearch {
+  flex: 0 0 auto;
+  margin-bottom: 6px;
+}
+
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .navItem {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
   width: 100%;
-  padding: 8px 12px;
+  /* Matches the tree row's vertical rhythm rather than inventing its own. */
+  min-height: var(--rtwiki-tree-row-inner-height, 30px);
+  padding: 0 8px;
   border: none;
   border-radius: var(--mantine-radius-sm);
   background: transparent;
   text-align: left;
   font: inherit;
-  font-size: var(--mantine-font-size-sm);
+  font-size: var(--rtwiki-tree-title-size, var(--mantine-font-size-sm));
   color: var(--rtwiki-text, var(--mantine-color-text));
   cursor: pointer;
 }
@@ -39,6 +64,22 @@
   box-shadow: inset 3px 0 0 var(--rtwiki-active-accent, var(--mantine-color-blue-filled));
 }
 
+/* The icon leads, the label truncates: the same shape as a tree row. */
+.navItem svg {
+  flex: 0 0 auto;
+}
+
+.navItemLabel {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.navEmpty {
+  padding: 8px;
+  text-align: center;
+}
+
 .content {
   flex: 1 1 auto;
   min-width: 0;
@@ -46,9 +87,19 @@
   flex-direction: column;
 }
 
+/*
+ * The close control only.
+ *
+ * This used to carry a "Settings" title as well, which named the pane the
+ * navigation beside it already names, and pushed the content down a row for
+ * nothing. Trilium's settings pages have no such heading: the navigation is the
+ * page identity.
+ */
 .header {
   flex: 0 0 auto;
-  padding: var(--mantine-spacing-md) var(--mantine-spacing-lg);
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
   border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
 }
 
