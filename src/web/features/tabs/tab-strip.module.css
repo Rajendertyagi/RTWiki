@@ -1,6 +1,6 @@
 .strip {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex-shrink: 0;
   gap: var(--mantine-spacing-xs);
   min-height: var(--rtwiki-tab-height);
@@ -71,6 +71,9 @@
      100px tab minimum; only bites when there are genuinely too many tabs. */
   min-width: 100px;
   height: calc(var(--rtwiki-tab-height) - 6px);
+  /* Inactive tabs hang from the top of the band; the active one drops to the
+     band floor (see .tabActive) so its panel tone meets the toolbar below. */
+  align-self: flex-start;
   padding: 0 8px;
   border-radius: var(--mantine-radius-sm) var(--mantine-radius-sm) 0 0;
   border: none;
@@ -98,6 +101,12 @@
  */
 .tabActive {
   background: var(--rtwiki-pane, var(--mantine-color-body));
+  /* To actually *merge* with the toolbar below, the active tab must reach the
+     bottom of the band. It used to sit 34px tall and centred in a 40px strip,
+     so a 6px strip of canvas ran underneath and the tab read as a floating
+     rounded rectangle - a ring. Inactive tabs stay short and hang from the top. */
+  height: var(--rtwiki-tab-height);
+  align-self: flex-end;
 }
 
 .tab:focus-visible {

@@ -52,7 +52,17 @@
   /* Disclosure chevron must stay legible on both themes (audit UI-004): a
      mid grey clears the 4.5:1 contrast floor on a light surface, and reads
      clearly on the dark surface too. */
-  --wb-expander-color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+  /* The chevron is the control you need to see in order to navigate the
+     hierarchy, so it must not be the faintest thing in the pane. Plain
+     `text-muted` measured 4.21:1 against the light pane - passing the 3:1 bar
+     for a graphical object, but the weakest element on screen. Mixing most of
+     the way to full text brings it to roughly 8:1 while still reading as
+     quieter than the title beside it. */
+  --wb-expander-color: color-mix(
+    in srgb,
+    var(--rtwiki-text, var(--mantine-color-text)) 72%,
+    var(--rtwiki-pane, var(--mantine-color-body))
+  );
   /* Crisp disclosure chevron (right-pointing); expanded rotates 90° to point
      down. A stroked SVG mask — no jagged unicode glyph, theme-aware via the
      expander colour. */
@@ -327,6 +337,12 @@
   font-size: var(--rtwiki-tree-title-size);
   line-height: 1.25;
   vertical-align: middle;
+  /* Each nesting level costs 20px of title, and the tree does not scroll
+     sideways. Without a floor, a page eleven levels deep is left with roughly
+     one character of name and no way to read it. The floor guarantees the
+     ellipsis has something to show; the title attribute still carries the full
+     name on hover. */
+  min-width: 72px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

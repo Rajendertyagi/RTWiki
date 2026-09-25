@@ -170,37 +170,48 @@ export function StatusBar({
         <Text size="xs" c="dimmed" className={classes.typeLabel}>
           {pageTypeLabel}
         </Text>
-        {page ? (
-          <nav className={classes.breadcrumb} aria-label={UI_TEXT.pageLocationLabel}>
-            <ActionIcon
-              variant={activeHome ? 'filled' : 'subtle'}
-              color={activeHome ? 'blue' : 'gray'}
-              size="sm"
-              onClick={() => onHome?.()}
-              aria-label={UI_TEXT.utilityRailHome}
-              aria-current={activeHome ? 'page' : undefined}
-              className={classes.homeButton}
-              data-testid="status-home"
-            >
-              <IconHome size={16} />
-            </ActionIcon>
-            {breadcrumb?.map((crumb) => (
-              <Fragment key={crumb.id}>
-                <UnstyledButton
-                  className={classes.crumb}
-                  onClick={() => onOpenPage?.(crumb.id)}
-                  data-testid="status-crumb"
-                >
-                  {crumb.title}
-                </UnstyledButton>
-                <span className={classes.crumbSep} aria-hidden>
-                  ›
-                </span>
-              </Fragment>
-            ))}
-            <span className={classes.crumbCurrent}>{page.title || UI_TEXT.untitledPage}</span>
-          </nav>
-        ) : null}
+        {/*
+          The location breadcrumb renders for the dashboard too, not only when a
+          page is open. It used to be gated on `page`, so on Home the bar showed
+          nothing but the app name and the readiness line: no indication of
+          where you were and no way to get back. With no page there is simply no
+          breadcrumb trail, but the Home button and its label still belong.
+        */}
+        <nav className={classes.breadcrumb} aria-label={UI_TEXT.pageLocationLabel}>
+          <ActionIcon
+            variant={activeHome ? 'filled' : 'subtle'}
+            color={activeHome ? 'blue' : 'gray'}
+            size="sm"
+            onClick={() => onHome?.()}
+            aria-label={UI_TEXT.utilityRailHome}
+            aria-current={activeHome ? 'page' : undefined}
+            className={classes.homeButton}
+            data-testid="status-home"
+          >
+            <IconHome size={16} />
+          </ActionIcon>
+          {page ? (
+            <>
+              {breadcrumb?.map((crumb) => (
+                <Fragment key={crumb.id}>
+                  <UnstyledButton
+                    className={classes.crumb}
+                    onClick={() => onOpenPage?.(crumb.id)}
+                    data-testid="status-crumb"
+                  >
+                    {crumb.title}
+                  </UnstyledButton>
+                  <span className={classes.crumbSep} aria-hidden>
+                    ›
+                  </span>
+                </Fragment>
+              ))}
+              <span className={classes.crumbCurrent}>{page.title || UI_TEXT.untitledPage}</span>
+            </>
+          ) : (
+            <span className={classes.crumbCurrent}>{UI_TEXT.dashboardTitle}</span>
+          )}
+        </nav>
         {children}
       </div>
 

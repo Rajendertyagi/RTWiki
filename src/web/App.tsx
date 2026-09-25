@@ -761,7 +761,13 @@ export function App(): JSX.Element {
         onTreeWidthCommit={handleTreeWidthCommit}
         statusBar={globalStatusBar}
         chrome={isNative ? <WindowChrome tabStrip={tabStripNode} /> : undefined}
-        tabStrip={isNative ? undefined : tabStripNode}
+        // Browser mode renders no window caption buttons, so an empty tab strip
+        // is a dead 40px band across the top of the dashboard. Only render it
+        // when a tab actually exists. Native mode keeps the band unconditionally
+        // because the caption buttons live in it.
+        tabStrip={
+          isNative ? undefined : openTabs.length > 0 ? tabStripNode : undefined
+        }
         utilityRail={
           <UtilityRail
             activeHome={

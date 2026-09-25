@@ -314,6 +314,32 @@ export class PageTreeHost {
     // observe document.activeElement); the row carries tabindex=-1.
     const row = this.rowElement(target.key)
     row?.focus()
+    this.syncActiveDescendant(target)
+  }
+
+  /**
+   * Points the tree container's `aria-activedescendant` at the row the keyboard
+   * is currently on.
+   *
+   * Wunderbaum moves an internal focus ring with the arrow keys, but the
+   * container is what actually holds DOM focus and every row is `tabindex=-1`,
+   * so nothing in the accessibility tree reflects that ring. Without this a
+   * screen-reader user pressing Down hears no change. The row element may not
+   * be rendered yet (the tree virtualises), in which case the pointer is left
+   * alone rather than set to a dangling id.
+   */
+  syncActiveDescendant(node: { key?: string } | null | undefined): void {
+    const container = this.tree?.element as HTMLElement | undefined
+    if (!container) return
+    const key = node?.key ?? null
+    if (key === null) {
+      container.removeAttribute('aria-activedescendant')
+      return
+    }
+    const subfile = parseSubfileKey(key)
+    const id = subfile ? `wb-row-${subfile.pageId}-${subfile.field}` : `wb-row-${key}`
+    const row = container.querySelector(`#${CSS.escape(id)}`)
+    if (row) container.setAttribute('aria-activedescendant', id)
   }
 
   // -------------------------------------------------------------------------
@@ -486,6 +512,7 @@ export class PageTreeHost {
       click: (e) => {
         const node = this.asNode(e.node)
         if (!node) return undefined
+        this.syncActiveDescendant(node)
         // The disclosure control toggles expansion through Wunderbaum's
         // default handler — never open the page from the expander region.
         if ((e.info as { region?: string }).region === 'expander') return undefined
@@ -570,6 +597,7 @@ export class PageTreeHost {
           // carry data-page-id, or `[data-page-id="<pageId>"]` locators match
           // the parent and all three subfiles at once (strict-mode violation).
           row.setAttribute('data-subfile-id', `${subfile.pageId}::${subfile.field}`)
+          row.setAttribute('id', `wb-row-${subfile.pageId}-${subfile.field}`)
           row.setAttribute('aria-level', String(node.getLevel()))
           row.setAttribute('aria-selected', 'false')
           row.removeAttribute('aria-expanded')
@@ -580,6 +608,12 @@ export class PageTreeHost {
         } else {
           row.setAttribute('role', 'treeitem')
           row.setAttribute('data-page-id', node.key)
+          // Stable DOM id so the tree container can point at the row the
+          // keyboard is on via aria-activedescendant. The container takes DOM
+          // focus and every row is tabindex=-1, so without this neither ARIA
+          // tree pattern is complete and a screen reader has no way to know
+          // where the arrow keys are.
+          row.setAttribute('id', `wb-row-${node.key}`)
           row.setAttribute('aria-level', String(node.getLevel()))
           row.setAttribute('aria-selected', String(node.isActive()))
           if (expandable) {

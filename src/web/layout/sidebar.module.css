@@ -6,22 +6,21 @@
 }
 
 .searchSection {
-  /* The field spans the pane edge to edge, so the horizontal breathing room
-     moves *inside* the input rather than living on the section. Padding the
-     section instead left the box touching both pane edges with a square
-     border; padding the input keeps the field full width while its text and
-     border still sit clear of the edge. */
-  padding: var(--mantine-spacing-xs) 0;
+  /* Wide, but not edge-to-edge. A field whose border is clipped by the pane
+     edges has no visible outline at all - the border measured 1.49:1 against
+     its own background - so it read as an unfinished strip. A small symmetric
+     inset keeps the border whole and visible while still giving the field the
+     full usable width. */
+  padding: var(--mantine-spacing-xs);
 }
 
-/* Full-bleed field: the border reaches both pane edges with square corners, so
-   the pane reads as one continuous surface. The horizontal inset is left to the
-   input's own padding - overriding it here collides with the reserved section
-   for the search icon and clips the placeholder. */
+/* A defined, visible outline, from the theme token rather than Mantine's
+   default border colour, so the field follows both schemes. The input's own
+   horizontal padding is left alone: overriding it clips the placeholder against
+   the reserved section for the search icon. */
 .searchSection :global(.mantine-TextInput-input) {
-  border-left: none;
-  border-right: none;
-  border-radius: 0;
+  border-color: var(--rtwiki-border, var(--mantine-color-default-border));
+  background: var(--rtwiki-canvas, var(--mantine-color-body));
 }
 
 .listSection {

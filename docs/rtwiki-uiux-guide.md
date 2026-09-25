@@ -337,6 +337,10 @@ Newest first.
 
 | When | What changed | Why |
 |---|---|---|
+| 2026-09-25 | The empty bar above the dashboard is gone, and the information bar now shows where you are | On the home page there were no tabs, so a 40-pixel empty strip sat above your content for no reason, and the bar along the bottom lost its "you are here" information |
+| 2026-09-25 | The open tab now joins up with the row below it | The active tab was floating above the toolbar as a rounded shape rather than connecting to the page beneath it, which read as an outline rather than a tab |
+| 2026-09-25 | The search box in the side panel is wide again, with a proper outline | A previous attempt made it run edge to edge with no corners, and its border turned out to be so faint the box was nearly invisible |
+| 2026-09-25 | The page tree is easier to use with a keyboard or a screen reader | The arrow keys moved correctly but nothing announced which page you were on, so a screen reader read nothing when you pressed Down |
 | 2026-09-25 | The page tree was rebuilt so the rows line up properly | Nested pages were drifting sideways by a few pixels per level, and long titles were being cut off using the wrong measurement. The rows now sit on an exact grid |
 | 2026-09-25 | The tree is easier to read: bigger icons, larger text, visible arrows, and each page's name is no longer repeated after its type | Every line was showing its type twice — once as an icon, once as words. Removing the words gave each title about 60 pixels back |
 | 2026-09-25 | The "Root" row now matches the other rows, and the search box spans the full width of the pane | Both were slightly different sizes from the rows below them, which is what made the spacing look uneven |

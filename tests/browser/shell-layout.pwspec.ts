@@ -165,9 +165,14 @@ test.describe('Shell layout regions', () => {
     // Rail is the outermost column.
     expect(rail.x).toBeLessThanOrEqual(1)
 
-    // No global app-title header row above the tab strip / content.
-    const tabs = await box(page, '[role="tablist"]')
-    expect(tabs.y).toBeLessThanOrEqual(1)
+    // No global app-title header row above the tab strip / content. With no
+    // open tabs the tab row is not rendered at all, which satisfies this more
+    // directly than checking where it starts - so both are accepted.
+    const tablist = page.locator('[role="tablist"]')
+    if ((await tablist.count()) > 0) {
+      const tabs = await box(page, '[role="tablist"]')
+      expect(tabs.y).toBeLessThanOrEqual(1)
+    }
     await expect(page.getByRole('heading', { name: 'RTWiki' })).toHaveCount(0)
   })
 

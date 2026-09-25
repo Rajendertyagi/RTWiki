@@ -532,6 +532,47 @@ width, the flex structure, vertical centring, JS/CSS row-height agreement, a rea
 that asserts the move committed, Home/tree alignment, single-selection, the
 selected-vs-hover distinction, and the search field's width and inset.
 
+**Three more findings from using the rebuilt app**, each with a measured cause:
+
+- **The tab bar rendered an empty 40px band on the dashboard.** In browser mode there
+  are no window caption buttons, so with no tabs open the row was pure dead space above
+  the dashboard. The strip is now rendered only when at least one tab exists; native mode
+  keeps it unconditionally because the caption buttons live in it.
+- **The status bar went bare on the dashboard.** The location breadcrumb was gated on a
+  page being open, so on Home it showed only the app name and a readiness line - no
+  indication of where you were and no Home control. It now always renders, with the Home
+  button and a "Pages" label when there is no page to show a trail for.
+- **The active tab read as a floating rounded rectangle.** It sat 34px tall and centred
+  in a 40px band, so 6px of canvas ran beneath it and the tab looked like a ring rather
+  than merging with the content below. Inactive tabs now hang from the top of the band and
+  the active one drops to the band floor, so its panel tone runs straight into the toolbar.
+
+**One audit finding was a false alarm and was deliberately not "fixed".** Arrow-key
+navigation was reported broken because pressing ArrowDown left `aria-selected` unchanged.
+But `aria-selected` tracks *page selection*, not *keyboard focus*; pressing ArrowDown
+twice then Enter opens three different pages, so navigation works. What genuinely was
+missing is that **neither ARIA tree pattern was complete**: the container holds DOM focus
+and every row is `tabindex=-1`, so nothing told a screen reader where the arrow keys were.
+Rows now carry stable ids and the container's `aria-activedescendant` tracks the focused
+row.
+
+**Two audit findings were design trades, not defects, and were left alone.** The 24px
+permanently reserved for the row-action button is exactly the button's width plus its
+offset; removing it would let the button overlap the title on hover, which is worse than
+wasting the space. And the action button appearing in the tab order is correct - it is
+`display: none` until the row is library-focused, so tabbing into it is the keyboard
+affordance, not a leak.
+
+**Two were fixed.** The chevron measured 4.21:1 against the light pane - passing the 3:1
+graphical bar but the weakest element on screen, on the very control needed to navigate;
+it now mixes most of the way to full text. And a page eleven levels deep had about one
+character of name, because each level costs 20px and the tree does not scroll sideways;
+titles now have a 72px floor so the ellipsis always has something to show.
+
+The search field was reverted to an inset, fully-bordered, rounded control. Full-bleed
+with square corners had been tried and was worse: the border measured 1.49:1 against its
+own background, so the field had no visible outline at all.
+
 ### The palette is authored in Oklab, not hex
 
 Every surface and text token is now an `oklch()` value. The reason is the ladder:

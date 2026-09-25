@@ -116,15 +116,36 @@ test.describe('Tree geometry', () => {
   })
 
   test('the rendered indent cell matches the library indent', async ({ page, request }) => {
-    await makeHierarchy(request, 2, uniqueTitle('Cell'))
+    // Build a real parent/child pair so a nested row - and therefore an actual
+    // indent cell - exists once the parent is expanded. Relying on whatever the
+    // database happened to contain made this pass or fail on state, not
+    // behaviour.
+    const stamp = Date.now()
+    const parentRes = await request.post('/api/pages', {
+      data: { title: `CellParent ${stamp}`, pageType: 'rich', content: '' }
+    })
+    const parentId = ((await parentRes.json()) as { page: { id: string } }).page.id
+    await request.post('/api/pages', {
+      data: { title: `CellChild ${stamp}`, pageType: 'rich', content: '', parentId }
+    })
     await page.goto('/')
-    await expect(page.locator('[data-testid="page-tree"]')).toBeVisible({ timeout: 20_000 })
-    // Expand the root so a nested row - and therefore a real indent cell - exists.
-    const expander = page.locator('[role="treeitem"] i.wb-expander').first()
-    if ((await expander.count()) > 0) {
-      await expander.click()
-      await page.waitForTimeout(400)
-    }
+    const tree = page.locator('[data-testid="page-tree"]')
+    await expect(tree).toBeVisible({ timeout: 20_000 })
+    await tree.evaluate((el) => {
+      el.scrollTop = el.scrollHeight
+    })
+    await page.waitForTimeout(500)
+
+    const parentRow = page
+      .locator('[role="treeitem"]')
+      .filter({ hasText: `CellParent ${stamp}` })
+      .first()
+    await parentRow.scrollIntoViewIfNeeded()
+    await parentRow.locator('i.wb-expander').click()
+    await page.waitForTimeout(500)
+    await expect(
+      page.locator('[role="treeitem"]').filter({ hasText: `CellChild ${stamp}` })
+    ).toBeVisible({ timeout: 10_000 })
 
     const cell = await page.evaluate(() => {
       // The expander element also carries `wb-indent`, so it must be excluded
@@ -236,7 +257,10 @@ test.describe('Tree geometry', () => {
     expect(m.childDisplay, 'the content wrapper must not be display:contents').not.toBe('contents')
     expect(m.childPosition).toBe('static')
     expect(m.childWidth, 'the row content must occupy the row').toBeGreaterThan(100)
-    expect(m.childLeft, 'content must start at the row edge, not outside it').toBeGreaterThanOrEqual(0)
+    expect(
+      m.childLeft,
+      'content must start at the row edge, not outside it'
+    ).toBeGreaterThanOrEqual(0)
   })
 
   test('the Home row aligns with the tree rows it sits above', async ({ page }) => {
@@ -257,7 +281,10 @@ test.describe('Tree geometry', () => {
         rowH: Math.round(row.getBoundingClientRect().height)
       }
     })
-    expect(Math.abs(m.rootLabelX! - m.rowTitleX!), 'Home text must line up with page titles').toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(m.rootLabelX! - m.rowTitleX!),
+      'Home text must line up with page titles'
+    ).toBeLessThanOrEqual(1)
     expect(m.rootH, 'Home row must be the same height as a tree row').toBe(m.rowH)
   })
 
@@ -275,10 +302,14 @@ test.describe('Tree geometry', () => {
     // At Home, only Home is selected.
     let state: SelectionState = await page.evaluate(() => {
       const root = document.querySelector('[data-testid="tree-root-entry"]') as HTMLElement
-      const rows = Array.from(document.querySelectorAll('div.wb-row:has(span.wb-node)')) as HTMLElement[]
+      const rows = Array.from(
+        document.querySelectorAll('div.wb-row:has(span.wb-node)')
+      ) as HTMLElement[]
       return {
         root: root.getAttribute('data-active'),
-        selected: rows.filter((r) => r.classList.contains('wb-active') || r.classList.contains('wb-selected')).length,
+        selected: rows.filter(
+          (r) => r.classList.contains('wb-active') || r.classList.contains('wb-selected')
+        ).length,
         rootBg: getComputedStyle(root).backgroundColor
       }
     })
@@ -291,8 +322,12 @@ test.describe('Tree geometry', () => {
     await page.waitForTimeout(500)
     state = await page.evaluate(() => {
       const root = document.querySelector('[data-testid="tree-root-entry"]') as HTMLElement
-      const rows = Array.from(document.querySelectorAll('div.wb-row:has(span.wb-node)')) as HTMLElement[]
-      const sel = rows.filter((r) => r.classList.contains('wb-active') || r.classList.contains('wb-selected'))
+      const rows = Array.from(
+        document.querySelectorAll('div.wb-row:has(span.wb-node)')
+      ) as HTMLElement[]
+      const sel = rows.filter(
+        (r) => r.classList.contains('wb-active') || r.classList.contains('wb-selected')
+      )
       return {
         root: root.getAttribute('data-active'),
         rootBg: getComputedStyle(root).backgroundColor,
@@ -305,7 +340,9 @@ test.describe('Tree geometry', () => {
     expect(state.selected, 'exactly one page row may be selected').toBe(1)
     // Same accent family as Home used, so the two never look like different
     // kinds of selection. Hover may deepen it, so compare hue not exact alpha.
-    expect(state.selBg, 'a selected page must use the tree selected token').toContain('0.109804 0.439216 1')
+    expect(state.selBg, 'a selected page must use the tree selected token').toContain(
+      '0.109804 0.439216 1'
+    )
   })
 
   test('a selected row is clearly distinct from a hovered row', async ({ page }) => {
@@ -324,10 +361,39 @@ test.describe('Tree geometry', () => {
     })
     // A neutral hover is grey/transparent; a selected row is blue-tinted. If
     // these converge the user cannot tell selection from hover.
-    expect(colours.hovered, 'hover must not be a blue selection tint').not.toContain('0.109804 0.439216 1')
+    expect(colours.hovered, 'hover must not be a blue selection tint').not.toContain(
+      '0.109804 0.439216 1'
+    )
   })
 
-  test('the search field spans the pane and is inset inside its own border', async ({
+  test('the search field is inset from the pane, not flush to its edges', async ({
+    page,
+    request
+  }) => {
+    await page.goto('/')
+    const input = page.locator('[aria-label="Search pages"]')
+    await expect(input).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(300)
+
+    const m = await page.evaluate(() => {
+      const input = document.querySelector('[aria-label="Search pages"]') as HTMLElement
+      const pane = document.querySelector('[data-testid="page-tree"]') as HTMLElement
+      const ib = input.getBoundingClientRect()
+      const pb = pane.getBoundingClientRect()
+      return {
+        left: Math.round(ib.left - pb.left),
+        right: Math.round(pb.right - ib.right)
+      }
+    })
+    // Symmetric and small: a complete, visible border rather than one clipped
+    // away by the pane edges. The full "wide field" contract is asserted by the
+    // dedicated search test in the same file.
+    expect(m.left).toBeGreaterThan(0)
+    expect(m.right).toBeGreaterThan(0)
+    expect(Math.abs(m.left - m.right)).toBeLessThanOrEqual(1)
+  })
+
+  test('the search field is wide, with a complete and visible border', async ({
     page,
     request
   }) => {
@@ -343,22 +409,121 @@ test.describe('Tree geometry', () => {
       const pb = pane.getBoundingClientRect()
       const cs = getComputedStyle(input)
       return {
-        insetLeft: Math.round(ib.left - pb.left),
-        insetRight: Math.round(pb.right - ib.right),
         width: Math.round(ib.width),
         paneWidth: Math.round(pb.width),
-        padLeft: cs.paddingLeft,
-        padRight: cs.paddingRight
+        insetEachSide: Math.round(ib.left - pb.left),
+        radius: cs.borderRadius,
+        // A complete border is what makes the field look like a field.
+        leftBorder: cs.borderLeftWidth,
+        rightBorder: cs.borderRightWidth,
+        topBorder: cs.borderTopWidth,
+        padLeft: cs.paddingLeft
       }
     })
-    // Full width: the field spans the pane edge to edge.
-    expect(m.width).toBe(m.paneWidth)
-    expect(m.insetLeft).toBe(0)
-    expect(m.insetRight).toBe(0)
-    // The placeholder must not be clipped by the search icon's reserved
-    // section, and must not sit hard against the edge.
-    expect(Number.parseFloat(m.padLeft), 'text must be inset from the left edge').toBeGreaterThan(8)
-    expect(Number.parseFloat(m.padRight), 'text must be inset from the right edge').toBeGreaterThan(0)
+    // Wide: nearly the full pane, with only a small symmetric inset.
+    expect(m.width).toBeGreaterThan(m.paneWidth * 0.9)
+    expect(m.insetEachSide).toBeGreaterThan(0)
+    expect(m.insetEachSide).toBeLessThan(12)
+    // Complete: all sides present, and the corners rounded.
+    expect(m.leftBorder).toBe('1px')
+    expect(m.rightBorder).toBe('1px')
+    expect(m.topBorder).toBe('1px')
+    expect(m.radius).not.toBe('0px')
+    // The placeholder must not be clipped by the search icon's section.
+    expect(Number.parseFloat(m.padLeft)).toBeGreaterThan(8)
+  })
+
+  test('the tree exposes the keyboard-focused row to assistive technology', async ({
+    page,
+    request
+  }) => {
+    // The container holds DOM focus and every row is tabindex=-1, so
+    // aria-activedescendant is the only thing that tells a screen reader where
+    // the arrow keys are. Without it, pressing Down announces nothing.
+    await page.goto('/')
+    await expect(page.locator('[role="treeitem"]').first()).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(300)
+
+    await page.locator('[role="treeitem"]').first().click()
+    await page.waitForTimeout(400)
+
+    const m = await page.evaluate(() => {
+      const tree = document.querySelector('[role="tree"]') as HTMLElement
+      const ad = tree.getAttribute('aria-activedescendant')
+      return {
+        activeDescendant: ad,
+        // It must resolve to a real, rendered row.
+        resolves: ad ? !!document.getElementById(ad) : false,
+        targetRole: ad ? (document.getElementById(ad)?.getAttribute('role') ?? null) : null,
+        everyRowHasId: Array.from(document.querySelectorAll('[role="treeitem"]')).every(
+          (r) => !!r.id
+        )
+      }
+    })
+    expect(m.activeDescendant, 'the tree must point at the focused row').toBeTruthy()
+    expect(m.resolves, 'aria-activedescendant must reference a rendered element').toBe(true)
+    expect(m.targetRole).toBe('treeitem')
+    expect(m.everyRowHasId, 'every row needs a stable id to be referenced').toBe(true)
+  })
+
+  test('a deeply nested page still shows a readable amount of its name', async ({
+    page,
+    request
+  }) => {
+    // Each level costs 20px of title and the tree does not scroll sideways.
+    const stamp = Date.now()
+    let parent: string | undefined
+    for (let i = 0; i < 9; i += 1) {
+      const r = await request.post('/api/pages', {
+        data: {
+          title: `V${stamp}LongPageNameAtLevel${i}`,
+          pageType: 'rich',
+          content: '',
+          parentId: parent
+        }
+      })
+      parent = ((await r.json()) as { page: { id: string } }).page.id
+    }
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    const tree = page.locator('[data-testid="page-tree"]')
+    await expect(tree).toBeVisible({ timeout: 20_000 })
+    await tree.evaluate((el) => {
+      el.scrollTop = el.scrollHeight
+    })
+    await page.waitForTimeout(500)
+
+    for (let i = 0; i < 9; i += 1) {
+      const row = page
+        .locator('[role="treeitem"]')
+        .filter({ hasText: `Level${i}` })
+        .first()
+      await row.scrollIntoViewIfNeeded().catch(() => {})
+      const exp = row.locator('i.wb-expander')
+      if (
+        (await exp.count()) > 0 &&
+        !((await exp.getAttribute('class')) ?? '').includes('rtw-expanded')
+      ) {
+        await exp.click().catch(() => {})
+        await page.waitForTimeout(150)
+      }
+    }
+    await page.waitForTimeout(400)
+
+    const deepest = await page.evaluate((s) => {
+      const rows = Array.from(document.querySelectorAll('[role="treeitem"]')) as HTMLElement[]
+      let best: { w: number; text: string } | null = null
+      for (const r of rows) {
+        const t = r.querySelector('span.wb-title') as HTMLElement | null
+        if (!t || !(t.textContent ?? '').includes(`V${s}`)) continue
+        const w = Math.round(t.getBoundingClientRect().width)
+        if (!best || w < best.w) best = { w, text: t.textContent ?? '' }
+      }
+      return best
+    }, String(stamp))
+    expect(deepest, 'the chain must be rendered').not.toBeNull()
+    // Without a floor this is about one character wide.
+    expect(deepest!.w, 'the deepest title must stay readable').toBeGreaterThanOrEqual(60)
   })
 
   test('a page can actually be dragged onto another', async ({ page, request }) => {
@@ -369,7 +534,9 @@ test.describe('Tree geometry', () => {
     const parentTitle = uniqueTitle('DragParent')
     // Both are roots, so both rows are rendered without expanding anything.
     await request.post('/api/pages', { data: { title, pageType: 'rich', content: '' } })
-    await request.post('/api/pages', { data: { title: parentTitle, pageType: 'rich', content: '' } })
+    await request.post('/api/pages', {
+      data: { title: parentTitle, pageType: 'rich', content: '' }
+    })
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/')
     const tree = page.locator('[data-testid="page-tree"]')
@@ -394,8 +561,6 @@ test.describe('Tree geometry', () => {
     }
     const childRow = body.pages.find((p) => p.title === title)
     const parentRow = body.pages.find((p) => p.title === parentTitle)
-    expect(childRow?.parentId, 'the dragged page must be a child of the target').toBe(
-      parentRow?.id
-    )
+    expect(childRow?.parentId, 'the dragged page must be a child of the target').toBe(parentRow?.id)
   })
 })
