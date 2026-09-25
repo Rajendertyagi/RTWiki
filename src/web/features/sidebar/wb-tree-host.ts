@@ -554,12 +554,26 @@ export class PageTreeHost {
           keyEvent?.preventDefault()
           const rect = this.rowElement(focused.key)?.getBoundingClientRect()
           this.suppressNextContextMenuUntil = Date.now() + 500
-          this.options?.callbacks.onContextMenu({
-            kind: 'page',
+          const payload = {
+            kind: 'page' as const,
             pageId: focused.key,
             x: rect ? rect.left + 48 : 0,
             y: rect ? rect.bottom + 2 : 0
-          })
+          }
+          // Opened on the next task, not synchronously.
+          //
+          // The ContextMenu key and Shift+F10 both fire a native `contextmenu`
+          // event immediately after this keydown. `preventDefault()` stops the
+          // *browser's* menu, but Mantine's Menu dismisses itself from its own
+          // document-level listeners, which `preventDefault()` cannot reach.
+          // Opening synchronously therefore mounted the menu and closed it again
+          // within a few milliseconds - measured, not inferred: the menu appeared
+          // and was gone before the next assertion, and Mantine's onChange fired
+          // with opened=false. Deferring past the native event means there is
+          // nothing for it to dismiss.
+          setTimeout(() => {
+            this.options?.callbacks.onContextMenu(payload)
+          }, 0)
           return false
         }
         if (keyEvent?.key === 'Enter' && node) {

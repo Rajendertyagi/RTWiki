@@ -24,11 +24,7 @@ function uniqueTitle(base: string): string {
   return `${base} ${Date.now()}-${seq}`
 }
 
-async function openRichNote(
-  page: Page,
-  request: APIRequestContext,
-  base: string
-): Promise<string> {
+async function openRichNote(page: Page, request: APIRequestContext, base: string): Promise<string> {
   const title = uniqueTitle(base)
   const res = await request.post('/api/pages', { data: { title, pageType: 'rich', content: '' } })
   expect(res.status()).toBe(201)
@@ -68,10 +64,9 @@ test.describe('Chrome row separators', () => {
     expect(read.tablist.borderBottom, 'tab bar must not draw a line under itself').toBe('0px')
     expect(read.toolbar.borderTop, 'toolbar must not draw a line above itself').toBe('0px')
     // And the tint must actually differ, or removing the line leaves them merged.
-    expect(
-      read.toolbar.background,
-      'toolbar must be tinted differently from the tab bar'
-    ).not.toBe(read.tablist.background)
+    expect(read.toolbar.background, 'toolbar must be tinted differently from the tab bar').not.toBe(
+      read.tablist.background
+    )
   })
 })
 
@@ -163,7 +158,10 @@ test.describe('Toolbar overflow', () => {
 
     // A button that was pushed out of the bar is reachable from the menu.
     const clearFormatting = page.getByLabel(/clear formatting/i)
-    const inBar = await page.getByRole('toolbar').getByLabel(/clear formatting/i).count()
+    const inBar = await page
+      .getByRole('toolbar')
+      .getByLabel(/clear formatting/i)
+      .count()
     await more.click()
     const dropdown = page.locator('[class*="Menu-dropdown"]')
     await expect(dropdown).toBeVisible()
@@ -172,7 +170,10 @@ test.describe('Toolbar overflow', () => {
       // labelled button, and still operable.
       const inMenu = await dropdown.getByLabel(/clear formatting/i).count()
       expect(inMenu, 'an overflowed button must be in the menu').toBeGreaterThan(0)
-      await dropdown.getByLabel(/clear formatting/i).first().click()
+      await dropdown
+        .getByLabel(/clear formatting/i)
+        .first()
+        .click()
       await expect(clearFormatting).toHaveCount(1)
     }
   })

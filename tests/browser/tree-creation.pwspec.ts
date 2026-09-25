@@ -70,8 +70,11 @@ test.describe('Sidebar creation menus', () => {
       )
     })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
-    await page.getByRole('menuitem', { name: 'New page' }).hover()
-    await page.getByRole('menuitem', { name: 'New Rich Note' }).click()
+    // The creation actions live under a type submenu. On the root's own menu
+    // "Insert child note" is the live one: the root is not a page, so it routes
+    // through onCreateRoot and creates a top-level page.
+    await page.getByRole('menuitem', { name: 'Insert child note' }).hover()
+    await page.getByRole('menuitem', { name: 'New child Rich Note' }).click()
 
     await expect(page.getByRole('tab', { name: /Untitled/i })).toHaveAttribute(
       'aria-selected',
@@ -96,8 +99,8 @@ test.describe('Sidebar creation menus', () => {
         })
       )
     })
-    await page.getByRole('menuitem', { name: 'New page' }).hover()
-    await page.getByRole('menuitem', { name: 'New HTML Page' }).click()
+    await page.getByRole('menuitem', { name: 'Insert child note' }).hover()
+    await page.getByRole('menuitem', { name: 'New child HTML Page' }).click()
 
     const pages = await listPages(request)
     const created = pages.find((p) => p.title.startsWith('Untitled') && p.pageType === 'html')
@@ -202,7 +205,15 @@ test.describe('Sidebar creation menus', () => {
       )
     })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
-    await page.locator('h4, [data-testid="page-tree"]').first().click()
+    // A neutral outside target, clicked by absolute coordinates in the main
+    // workspace region. The previous `h4, [data-testid="page-tree"]` matched the
+    // dashboard heading first, which is not a reliable click target, and the
+    // test timed out rather than failing on the behaviour it was written to
+    // check. The menu is portalled over the sidebar, so a point in the middle of
+    // the content area is unambiguously outside it and cannot hit a page row.
+    const main = await page.locator('main').boundingBox()
+    expect(main, 'the main workspace region must be present').not.toBeNull()
+    await page.mouse.click(main!.x + main!.width / 2, main!.y + main!.height / 2)
     await expect(page.getByTestId('tree-context-menu')).toBeHidden()
     expect((await listPages(request)).length).toBe(before)
   })

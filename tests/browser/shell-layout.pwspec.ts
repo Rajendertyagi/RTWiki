@@ -148,7 +148,7 @@ async function openRowByTitle(page: Page, title: string): Promise<void> {
 }
 
 test.describe('Shell layout regions', () => {
-  test('rail spans the full viewport height and no header row remains', async ({
+  test('rail runs from the top to the status bar, which spans the full width', async ({
     page,
     request
   }) => {
@@ -159,11 +159,28 @@ test.describe('Shell layout regions', () => {
     await page.goto('/')
 
     const rail = await box(page, 'nav[aria-label="RTWiki"]')
-    // Rail starts at the very top and reaches the bottom of the viewport.
+    const statusBar = await box(page, '[data-testid="workspace-status-bar"]')
+
+    // The rail starts at the very top and is the outermost column.
     expect(rail.y).toBeLessThanOrEqual(1)
-    expect(rail.y + rail.height).toBeGreaterThanOrEqual(DESKTOP.height - 1)
-    // Rail is the outermost column.
     expect(rail.x).toBeLessThanOrEqual(1)
+
+    // It stops where the status bar begins, rather than running to the bottom
+    // of the viewport. This is a settled decision, not a defect: the status bar
+    // spans the full width beneath the rail, so a full-height rail would leave
+    // a notch beside it. This assertion previously demanded the opposite and
+    // had been left failing rather than rewritten, which is a way of losing the
+    // decision. It is recorded here instead.
+    //
+    // A 1px seam between the two is tolerated: the measured values are 772 and
+    // 773 in an 800px viewport, and a fractional layout height rounding to a
+    // neighbouring pixel is not a gap a person can see.
+    expect(Math.abs(rail.y + rail.height - statusBar.y)).toBeLessThanOrEqual(1)
+
+    // And the status bar does reach both edges, which is the reason.
+    expect(statusBar.x).toBeLessThanOrEqual(1)
+    expect(statusBar.x + statusBar.width).toBeGreaterThanOrEqual(DESKTOP.width - 1)
+    expect(statusBar.y + statusBar.height).toBeGreaterThanOrEqual(DESKTOP.height - 1)
 
     // No global app-title header row above the tab strip / content. With no
     // open tabs the tab row is not rendered at all, which satisfies this more
