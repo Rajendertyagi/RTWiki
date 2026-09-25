@@ -407,17 +407,22 @@ changes"**. The union was previously redeclared as a string literal in four plac
 (`html-editor.tsx`, three times in `page-workspace.tsx`, and `App.tsx`); all four now
 import `StatusSaveState` so the states cannot drift apart again.
 
-### Three of the five HTML-editor failures were stale test selectors
+### Four of the five HTML-editor failures were stale test selectors
 
 Only one of the five pre-existing failures was a product defect. The breakdown:
 
 | Failure | Actual cause |
 |---|---|
-| 3 × "Saved" not visible | One product defect (above) plus a wrong selector: the tests looked for `p[aria-live="polite"]`, but `aria-live` sits on the status region's container, not on the `<p>` holding the text |
-| "switching pages flushes pending edits" | **Test bug.** `locator('[aria-label="Home"]')` became ambiguous when the status bar added its own Home button. Now scoped to the rail's navigation landmark |
-| "failed saves surface Retry and recover" | **Still failing.** After a save fails and Retry is pressed, no second PATCH is sent. Genuine open defect in autosave failure handling |
+| 3 × "Saved" not visible | One product defect (above) plus a wrong selector: the tests looked for a `<p>` carrying `aria-live="polite"`, but `aria-live` sits on the status region's container, not on the element holding the text |
+| "switching pages flushes pending edits" + "the toggle persists…" | **Test bug.** `locator('[aria-label="Home"]')` became ambiguous when the status bar added its own Home button. Now scoped to the rail's navigation landmark |
+| "failed saves surface Retry and recover" | **Test bug.** The test clicked `html-editor-retry`, a test id that exists nowhere in the source. Recovery is surfaced by the status bar's `status-retry` control, which flushes the pending save. Retry works correctly |
 
-Result: 9 passing / 5 failing → **14 passing / 1 failing**.
+Result: 9 passing / 5 failing → **15 passing / 0 failing**.
+
+The pattern across all four is worth recording: a selector that was correct when
+written became wrong as the shell grew around it. A stale selector and a real defect
+produce the same red test, so the cause has to be established from the source rather
+than assumed from the failure.
 
 ### The sandboxed preview and the browser's base background
 
@@ -653,7 +658,7 @@ in a browser. The items below are the ones verified by actually running the app.
 - `bun run format:check` — 0 errors
 - `tests/browser/rich-workspace.pwspec.ts` "Rich document surface" — 3/3 pass
 - `tests/browser/window-chrome.pwspec.ts` — 8/8 pass
-- `tests/browser/html-editor.pwspec.ts` — **14 pass / 1 fail** (was 9 / 5; the remaining failure is the open autosave-retry defect)
+- `tests/browser/html-editor.pwspec.ts` — **15 pass / 0 fail** (was 9 / 5)
 - A pending HTML/CSS/JavaScript edit reports "Unsaved changes" rather than "Saved" before the debounce elapses — asserted in both light and dark
 - CSS typed into a child file reaches the stored record and applies in the rendered preview (verified `color: rgb(1, 2, 3)`, `font-size: 40px` inside the frame) — measured
 - The rendered preview does not rebuild on its own while idle (0 `srcdoc` mutations over 3s) — measured, ruling out a rebuild loop

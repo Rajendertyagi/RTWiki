@@ -300,9 +300,11 @@ test.describe('HTML editor workspace (real Chromium)', () => {
 
     await typeIntoEditor(page, '<p id="retry-marker">retry me</p>')
     await expect(page.getByText('Save failed')).toBeVisible({ timeout: 10_000 })
-    // The editor's own Retry control drains the pending content save.
+    // The editor's own Retry control drains the pending content save. It lives
+    // in the status bar, which is where every workspace surfaces save recovery;
+    // there is no separate retry button inside the source view.
     const save = nextSave(page)
-    await page.getByTestId('html-editor-retry').click()
+    await page.getByTestId('status-retry').click()
     const result = await save.done
     expect(result.ok, `PATCH failed after retry: ${result.status}`).toBe(true)
     expect(result.payload).toContain('retry-marker')

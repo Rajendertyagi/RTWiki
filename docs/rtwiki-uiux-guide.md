@@ -165,7 +165,7 @@ These findings were recorded as fact and later proved wrong. The reason is noted
 | F2 (toolbar scroll) | The toolbar could not scroll; its overflow was set to be visible. | The measurement predated the code it described. The toolbar has allowed sideways scrolling and has refused to wrap for some time, so those readings cannot be right. The real behaviour has not been re-measured yet. |
 | F3 (rail width) | Three conflicting rail values (60 / 40 / 42). | The comparison used the committed config while the working tree already had `railWidth: 40`. The config and render agreed once the correct baseline was used. |
 | F5 (status bar) | A 2-pixel disagreement about the status bar height between two places that define it. | The same mistake as F3: the comparison was made against the committed version of the settings rather than the current one. Once compared correctly, the two agreed. No defect. |
-| HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored page directly showed the CSS was saved. Two separate things had been mistaken for one: a new page starts with empty CSS, and the HTML source view never shows a "Saved" message, so a successful save looks like a failure. The missing message is a real, still-open problem. |
+| HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored page directly showed the CSS was saved, and the rule applied inside the preview. Two separate things had been mistaken for one: a new page starts with empty CSS, and the status bar reported "Saved" for work that had not been written yet. |
 
 ---
 
@@ -181,8 +181,8 @@ These items have never been checked or verified in this environment:
 | **Empty, loading, and error states** | Not driven during the audit. |
 | **Keyboard navigation and focus order** | Not tested. |
 | **Contrast for every element** | Only the toolbar and the page tree rows were checked. Both were comfortable at about 10:1. Tabs, the title row, and the rest of the interface have not been measured. |
-| **"Saved" confirmation in the HTML source view** | **FIXED.** The bar said "Saved" for the whole two-second window before an autosave even ran, because a pending edit was reported as "clean". There is now a distinct **Unsaved changes** state. Five checks that had been failing now pass. |
-| **Retry after a failed save** | One check still fails: after a save fails and Retry is pressed, no second save is sent. Autosave failure handling is not yet correct. |
+| **"Saved" confirmation in the HTML source view** | **FIXED.** The bar said "Saved" for the whole two-second window before an autosave even ran, because a pending edit was reported as "clean". There is now a distinct **Unsaved changes** state. |
+| **Retry after a failed save** | **Works.** A failed save shows **Save failed** with a Retry button in the bottom bar; pressing it sends the pending content. A check that had been failing was clicking a button that does not exist, so the feature looked broken when it was not. |
 | **Pane drag-resize, collapse persistence, keyboard shortcuts** | Runtime behaviours not studied. |
 | **Tab overflow scrolling, command palette, contextual toolbar conditional groups** | Not driven during the audit. |
 
