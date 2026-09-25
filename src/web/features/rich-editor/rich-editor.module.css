@@ -29,10 +29,13 @@
    * from the flex chain (see .editorContainer note). */
   min-height: 0;
   overflow-y: auto;
-  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  border-radius: var(--mantine-radius-md);
+  /* The document is the page: it takes the canvas tone and carries no frame
+   * of its own. The panel tone (used by the rail, tree and right pane) put a
+   * grey rounded frame around the white BlockNote card, so the editor read as
+   * a widget embedded in a page and matched the sidebar tone exactly. Border
+   * and radius are absent for that same reason. */
   padding: var(--mantine-spacing-sm);
-  background: var(--rtwiki-surface, var(--mantine-color-body));
+  background: var(--rtwiki-background, var(--mantine-color-body));
 }
 
 /* Display formulas must never overflow a narrow document; scroll the block

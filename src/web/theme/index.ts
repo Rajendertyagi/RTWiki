@@ -9,8 +9,17 @@ export const rtwikiCssVariablesResolver: CSSVariablesResolver = () => ({
     // stylesheet consumers and inline styles never diverge.
     '--rtwiki-overlay-z-index': String(LAYOUT.overlayZIndex)
   },
+  // Surface scale invariants, per scheme:
+  //  - `--rtwiki-background` is the DOCUMENT canvas. It must equal the tone the
+  //    rich editor paints on its own content, otherwise the scroll owner frames
+  //    that content as a separate card.
+  //  - `--rtwiki-surface` is a PANEL (rail, tree, right pane, settings): always
+  //    a distinct step from the document, never the same tone.
+  //  - each scheme stays monotonic: rail < document < panel < raised (dark) and
+  //    panel < document (light, where the canvas is the brightest).
   light: {
     '--rtwiki-rail-bg': '#e8e8e8',
+    // Document canvas. BlockNote paints white content in the light scheme.
     '--rtwiki-background': '#ffffff',
     '--rtwiki-surface': '#f2f2f2',
     '--rtwiki-surface-raised': '#ffffff',
@@ -20,8 +29,11 @@ export const rtwikiCssVariablesResolver: CSSVariablesResolver = () => ({
   },
   dark: {
     '--rtwiki-rail-bg': '#1a1a1a',
-    '--rtwiki-background': '#242424',
-    '--rtwiki-surface': '#1f1f1f',
+    // Document canvas. BlockNote paints #1f1f1f content in the dark scheme, so
+    // the canvas matches it and the editor reads as one continuous page.
+    '--rtwiki-background': '#1f1f1f',
+    // One step lighter than the document, so panels stay distinguishable.
+    '--rtwiki-surface': '#242424',
     '--rtwiki-surface-raised': '#262626',
     '--rtwiki-border': '#454545',
     '--rtwiki-text': '#cccccc',

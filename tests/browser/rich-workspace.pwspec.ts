@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 
 /**
  * Working rich-note flow over the Trilium-inspired workspace:
@@ -229,5 +229,107 @@ test.describe('Working rich-note workspace', () => {
     )
     expect(realErrors).toEqual([])
     expect(pageErrors).toEqual([])
+  })
+})
+
+/**
+ * Document surface contract.
+ *
+ * The shell layers three tones: the page background, panel surfaces (rail, tree,
+ * right pane) and the document canvas. The document is the page — it must be the
+ * canvas tone, and it must be one continuous surface from the scroll owner down
+ * to the editor content. Giving the document the *panel* tone nests a lighter
+ * card inside a darker frame, which reads as a widget embedded in a page rather
+ * than the page itself.
+ */
+test.describe('Rich document surface', () => {
+  // Switches the app's colour scheme through its real control, so each
+  // assertion runs against the same code path a user exercises.
+  async function setScheme(page: Page, scheme: 'light' | 'dark'): Promise<void> {
+    const current = await page.evaluate(() =>
+      document.documentElement.getAttribute('data-mantine-color-scheme')
+    )
+    if (current === scheme) return
+    const toggle = page.getByRole('button', { name: /theme/i }).first()
+    await expect(toggle).toBeVisible()
+    await toggle.click()
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.getAttribute('data-mantine-color-scheme'))
+      )
+      .toBe(scheme)
+    await page.waitForTimeout(250)
+  }
+
+  // Seeds through the API and deep-links rather than the New Page dialog. This
+  // suite measures rendered surfaces; the create-and-autofocus flow is a
+  // separate contract covered by the tests above.
+  async function openRichPage(
+    page: Page,
+    title: string,
+    request: APIRequestContext
+  ): Promise<void> {
+    const res = await request.post('/api/pages', {
+      data: { title, pageType: 'rich', content: '' }
+    })
+    expect(res.status()).toBe(201)
+    const body = (await res.json()) as { page?: { id: string }; id?: string }
+    const id = body.page?.id ?? body.id
+    expect(id).toBeTruthy()
+    await page.goto(`/?page=${id}`)
+    await expect(page.locator('.bn-editor')).toBeVisible({ timeout: 20_000 })
+    await page.waitForTimeout(400)
+  }
+
+  test('the document is one continuous canvas, not a card inside a panel', async ({
+    page,
+    request
+  }) => {
+    await openRichPage(page, uniqueTitle('Surface'), request)
+
+    // Asserted in BOTH schemes: a light-only check hides an inverted dark
+    // regression, where the canvas ends up lighter than the content it holds.
+    for (const scheme of ['light', 'dark'] as const) {
+      await setScheme(page, scheme)
+      const surfaces = await page.evaluate(() => {
+        const content = document.querySelector('.bn-editor') as HTMLElement
+        const scrollOwner = content?.closest('[class*="blockNoteWrapper"]') as HTMLElement | null
+        const bg = (el: HTMLElement | null) => (el ? getComputedStyle(el).backgroundColor : null)
+        const cs = scrollOwner ? getComputedStyle(scrollOwner) : null
+        return {
+          contentBg: bg(content),
+          scrollOwnerBg: bg(scrollOwner),
+          borderWidth: cs?.borderTopWidth ?? null,
+          radius: cs?.borderTopLeftRadius ?? null
+        }
+      })
+
+      // No nested card: the scroll owner and the content share one surface.
+      expect(surfaces.scrollOwnerBg, `document vs content in ${scheme}`).toBe(surfaces.contentBg)
+      // ...and the document carries no frame of its own.
+      expect(surfaces.borderWidth, `document border in ${scheme}`).toBe('0px')
+      expect(surfaces.radius, `document radius in ${scheme}`).toBe('0px')
+    }
+  })
+
+  test('the document is visually distinct from the surrounding panel', async ({
+    page,
+    request
+  }) => {
+    await openRichPage(page, uniqueTitle('Layering'), request)
+
+    for (const scheme of ['light', 'dark'] as const) {
+      await setScheme(page, scheme)
+      const tones = await page.evaluate(() => {
+        const content = document.querySelector('.bn-editor') as HTMLElement
+        const scrollOwner = content?.closest('[class*="blockNoteWrapper"]') as HTMLElement | null
+        // The tree pane is a panel surface and must stay distinguishable.
+        const tree = document.querySelector('[role="tree"]') as HTMLElement | null
+        const bg = (el: HTMLElement | null) => (el ? getComputedStyle(el).backgroundColor : null)
+        return { document: bg(scrollOwner), panel: bg(tree) }
+      })
+
+      expect(tones.document, `document vs panel in ${scheme}`).not.toBe(tones.panel)
+    }
   })
 })
