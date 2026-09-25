@@ -411,6 +411,23 @@ it is interpolated into a CSS declaration, so a value that is not recognisably a
 is discarded and the document falls back to transparent. The block is emitted before
 the page's own head and CSS, so a page may still choose its own background.
 
+### The default text colour, and why it is not optional
+
+Making the sandboxed background follow the theme **created** a second defect rather than
+ending the first. A page that brings no CSS of its own inherits the browser's default
+black text, so on the dark canvas it became unreadable — dark text on a dark
+background. Only the screenshot showed it; the computed background was correct
+throughout.
+
+The same mechanism therefore also states a default **text** colour, taken from the
+theme's `text` token (`#383838` light, `#cccccc` dark), so a bare page is readable in
+both schemes. A page that sets its own `color` still wins, because the shell's block is
+emitted first.
+
+This is a deliberate division of responsibility: **the shell states defaults, the page
+states its own choices.** The shell owns the surface a page sits on; it does not
+restyle a page that has declared its own colours.
+
 Note that `border: 0` on the iframe is load-bearing. Deleting the old `border`
 declaration is not enough: the user-agent stylesheet gives every iframe a 2px inset
 border, so removing the rule silently restores a frame. The browser test caught this.
@@ -580,6 +597,7 @@ Findings that were raised and then withdrawn after being checked. This exists so
 | F5 (status bar 26-vs-28 drift) | Same committed-vs-working-tree error as F3. The working tree sets `statusBarHeight: 28`, which matches the rendered footer host. **No defect.** | 2026-09-25 |
 | F1 ("canvas fills only 15% of its region") | Compared the **content** height (123px, a short note) against the **container** height (832px). The editor wrapper already filled its region at 752px. The fill ratio was never the defect; the framed-card treatment was. | 2026-09-25 |
 | F2 ("cannot scroll", `overflow-x: visible`) | The measurement predates the stylesheet it describes. `rich-toolbar.module.css` has set `overflow-x: auto` and `flex-wrap: nowrap` since `d14aec1`, so the bar could scroll and could not wrap. The recorded mechanism and counts are unreliable. | 2026-09-25 |
+| HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored record directly showed the CSS field saved correctly. Two separate things were mistaken for one: blank CSS on a new page is simply an empty field, and the HTML source view never shows a "Saved" indicator, so a successful save looks like a failure. The indicator is a real, still-open defect. | 2026-09-25 |
 
 ## 10. Coverage and known gaps
 

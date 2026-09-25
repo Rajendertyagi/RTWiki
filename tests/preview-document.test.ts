@@ -45,6 +45,21 @@ describe('preview document construction', () => {
     expect(doc).not.toContain('background: transparent')
   })
 
+  it('gives the document a default text colour for the active theme', () => {
+    // The shell states the background, so it must state a matching default text
+    // colour too. Without this a page that brings no CSS of its own inherits
+    // the browser's black text and becomes unreadable on the dark canvas - the
+    // surface fix would have moved the defect rather than removed it.
+    const doc = build({ documentColor: 'rgb(4, 5, 6)' })
+    expect(doc).toContain('color: rgb(4, 5, 6)')
+  })
+
+  it('rejects a text colour that is not a plain colour value', () => {
+    const doc = build({ documentColor: 'red; } body { display: none' })
+    expect(doc).not.toContain('display: none')
+    expect([...doc.matchAll(/<style>/g)]).toHaveLength(1)
+  })
+
   it('rejects a surface colour that is not a plain colour value', () => {
     // Allowlist, not escaping. The value is interpolated into a CSS
     // declaration, so anything that is not recognisably a colour is discarded

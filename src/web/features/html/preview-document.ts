@@ -40,6 +40,14 @@ export interface PreviewDocumentInput {
    * that is not recognisably a colour is discarded.
    */
   documentBackground?: string
+  /**
+   * Resolved default text colour for the active theme, e.g. `#cccccc`.
+   *
+   * Stated for the same reason as the background. A page that brings no CSS of
+   * its own would otherwise inherit the browser's black text, which is
+   * unreadable once the background follows a dark theme.
+   */
+  documentColor?: string
 }
 
 function escapeHtmlAttribute(value: string): string {
@@ -199,7 +207,13 @@ export function buildPreviewDocument(input: PreviewDocumentInput): string {
   const documentBackground = isPlainCssColor(input.documentBackground)
     ? input.documentBackground
     : 'transparent'
-  const transparentCanvasBlock = `<style>\nhtml,\nbody {\n  background: ${documentBackground};\n}\n</style>`
+  // The default text colour is optional: with no value the document simply
+  // inherits the browser default, which is the correct behaviour for a page
+  // that supplies its own colours.
+  const documentColor = isPlainCssColor(input.documentColor)
+    ? `\n  color: ${input.documentColor};`
+    : ''
+  const transparentCanvasBlock = `<style>\nhtml,\nbody {\n  background: ${documentBackground};${documentColor}\n}\n</style>`
 
   const scriptBlock =
     input.jsEnabled && input.javascript.trim().length > 0

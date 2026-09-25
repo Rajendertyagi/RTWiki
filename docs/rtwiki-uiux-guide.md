@@ -104,7 +104,7 @@ The type scale is small and deliberate:
 | Page type | What the surface should look like |
 |---|---|
 | **Rich Note** | One continuous canvas. No border, no rounded corners, no card frame. The document fills the content area from edge to edge. |
-| **HTML page** | One continuous canvas now, as above. The content is shown inside a locked-down sandbox so its own scripts cannot reach the app. The background follows the app's theme; the text colours are the page's own business, exactly as with any note. |
+| **HTML page** | One continuous canvas now, as above. The content is shown inside a locked-down sandbox so its own scripts cannot reach the app. A page that brings no styling of its own still gets readable text in both themes; a page that brings its own styling keeps it. |
 | **Code page** | Editor surface bound to the document canvas. No separate card framing. |
 | **Markdown page** | The rendered view is one continuous canvas, as above. The typing view deliberately keeps its frame — see the note below. |
 | **Dashboard** | Uses separate cards with gently rounded corners. Cards are appropriate here because the dashboard is a collection of items, not a single document. |
@@ -165,6 +165,7 @@ These findings were recorded as fact and later proved wrong. The reason is noted
 | F2 (toolbar scroll) | The toolbar could not scroll; its overflow was set to be visible. | The measurement predated the code it described. The toolbar has allowed sideways scrolling and has refused to wrap for some time, so those readings cannot be right. The real behaviour has not been re-measured yet. |
 | F3 (rail width) | Three conflicting rail values (60 / 40 / 42). | The comparison used the committed config while the working tree already had `railWidth: 40`. The config and render agreed once the correct baseline was used. |
 | F5 (status bar) | A 2-pixel disagreement about the status bar height between two places that define it. | The same mistake as F3: the comparison was made against the committed version of the settings rather than the current one. Once compared correctly, the two agreed. No defect. |
+| HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored page directly showed the CSS was saved. Two separate things had been mistaken for one: a new page starts with empty CSS, and the HTML source view never shows a "Saved" message, so a successful save looks like a failure. The missing message is a real, still-open problem. |
 
 ---
 
@@ -180,6 +181,7 @@ These items have never been checked or verified in this environment:
 | **Empty, loading, and error states** | Not driven during the audit. |
 | **Keyboard navigation and focus order** | Not tested. |
 | **Contrast for every element** | Only the toolbar and the page tree rows were checked. Both were comfortable at about 10:1. Tabs, the title row, and the rest of the interface have not been measured. |
+| **"Saved" confirmation in the HTML source view** | Typing in an HTML, CSS or JavaScript child file saves correctly, but the view never shows a "Saved" message. Five existing checks fail on this. A successful save therefore looks like a failure. Not fixed. |
 | **Pane drag-resize, collapse persistence, keyboard shortcuts** | Runtime behaviours not studied. |
 | **Tab overflow scrolling, command palette, contextual toolbar conditional groups** | Not driven during the audit. |
 

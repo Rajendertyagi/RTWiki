@@ -69,7 +69,9 @@ export function PreviewFrame({
   // the generated document. Reading it from the registry rather than measuring
   // the DOM keeps one source of truth for every surface colour.
   const colorScheme = useComputedColorScheme('light')
-  const canvasColor = resolveActiveTheme().variants[colorScheme].canvas
+  const activeVariant = resolveActiveTheme().variants[colorScheme]
+  const canvasColor = activeVariant.canvas
+  const textColor = activeVariant.text
   // Builds (or rebuilds) the srcdoc document. Every call regenerates the
   // channel ID so stale messages from a previous preview can never be
   // accepted by the listener; failures are reported and rendered as a
@@ -102,7 +104,8 @@ export function PreviewFrame({
           jsEnabled: content.jsEnabled,
           nonce,
           channelId: channelIdRef.current,
-          documentBackground: canvasColor
+          documentBackground: canvasColor,
+          documentColor: textColor
         })
       }
     } catch (error) {
@@ -113,7 +116,7 @@ export function PreviewFrame({
       })
       return { error: UI_TEXT.htmlPreviewBuildFailed }
     }
-  }, [content, nonce, canvasColor])
+  }, [content, nonce, canvasColor, textColor])
 
   const [result, setResult] = useState<BuildResult>(() => buildPreview())
 
