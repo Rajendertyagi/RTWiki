@@ -1,11 +1,20 @@
 # RTWiki — UI/UX Reference
 
-This is the single authoritative reference for RTWiki's user interface. It records what the app currently looks like, why it looks that way, what has been measured and decided, and what remains to be done. It is not a design brief for a future redesign — it is the living record of the current state and its history.
+> **If you are the project owner and not a programmer, read
+> [rtwiki-uiux-guide.md](rtwiki-uiux-guide.md) instead.** That guide explains the
+> design intent in plain language. This document is the engineering reference: exact
+> measurements, source locations, and the reasoning behind each decision. The guide
+> points here whenever a number or a file location is needed.
+
+This is the authoritative technical reference for RTWiki's user interface. It records what the app currently looks like, why it looks that way, what has been measured and decided, and what remains to be done. It is not a design brief for a future redesign — it is the living record of the current state and its history.
 
 - **Date:** 2026-09-25
 - **Baseline:** Mantine **9.6.2**, chrome band **40px**
-- **Method:** real app driven with Playwright/Chromium against a live server; every number below is measured from the rendered DOM unless stated otherwise.
-- **Evidence:** `.superpowers/sdd/desktop-chrome-fix/audit/` — `re-audit-desktop.png`, `re-audit-mobile.png`, plus the original `desktop-light.png`, `editor-dark.png`, `mobile-light.png`, `tree-collapsed.png`.
+- **Method:** real app driven with Playwright/Chromium against a live server. Every number below is measured from the rendered DOM **unless §10 says it was only read from source** — the two are kept separate deliberately.
+- **Evidence:** screenshots from the audit live in a local scratch folder
+  (`.superpowers/sdd/desktop-chrome-fix/audit/`) that is **excluded from the repository**
+  via `.git/info/exclude`. They are therefore not available to anyone else. The
+  measurements quoted here stand on their own; the images are not part of the record.
 
 ## 1. Purpose and scope
 
