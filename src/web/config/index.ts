@@ -7,7 +7,11 @@
  * scattered widths in CSS or TSX. Minimums also derive the temporary
  * narrow-window collapse threshold (no fixed breakpoint).
  */
-// Base primitives for derived composite heights
+// Base primitives for derived composite heights.
+// The band and the tab row deliberately share one value: they are the same row.
+// A taller band leaves the 40px tab row top-aligned in dead space (measured 9px
+// at 50px) while the 46x49 caption buttons fill the full band height, so the
+// tabs and the window controls stop lining up.
 const TAB_STRIP_HEIGHT = 40
 
 export const LAYOUT = {
@@ -19,8 +23,8 @@ export const LAYOUT = {
    * height beside it, so the band never sits above them.
    */
   chromeBandHeight: TAB_STRIP_HEIGHT,
-  /** Narrow launcher/action rail (outermost full-height column). */
-  railWidth: 60,
+  /** Narrow launcher/action rail (outermost full-height column). Ultra-compact 40px. */
+  railWidth: 40,
   /** Mobile drawer width (base breakpoint); decoupled from the desktop tree pane. */
   mobileDrawerWidth: 280,
   /** Page-tree pane width when expanded (user default; persisted). */
@@ -47,8 +51,8 @@ export const LAYOUT = {
    * --rtwiki-overlay-z-index CSS variable for stylesheet consumers.
    */
   overlayZIndex: 1000,
-  /** Global application status-bar height (footer). */
-  statusBarHeight: 26,
+  /** Global application status-bar height (footer). Matches Trilium StatusBar 28px. */
+  statusBarHeight: 28,
   /** Visual-block container size clamps (px). */
   blockMinWidth: 240,
   blockMaxWidth: 1600,
@@ -383,7 +387,8 @@ export const UI_TEXT = {
   settingsDebugLogs: 'Debug Logs',
   appearanceThemeLabel: 'Theme',
   appearanceThemeLight: 'Light',
-  appearanceThemeDark: 'Dark',
+  appearanceThemeDark: 'Dark (Catppuccin)',
+  appearanceThemeNord: 'Nord Dark',
   appearanceThemeHint: 'Choose how RTWiki looks on this device.',
   layoutResetLabel: 'Reset layout',
   layoutResetHint: 'Restore default pane sizes and collapsed panels.',

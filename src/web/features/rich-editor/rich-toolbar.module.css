@@ -4,7 +4,8 @@
   gap: 2px;
   flex-wrap: wrap;
   padding: 4px 8px;
-  background: var(--mantine-color-body);
+  width: 100%;
+  background: var(--rtwiki-chrome-surface, var(--mantine-color-body));
 }
 
 .divider {

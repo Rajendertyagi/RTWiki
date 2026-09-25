@@ -13,11 +13,14 @@ import { LAYOUT } from '../../config/index.js'
 
 export const LAYOUT_PREFS_KEY = 'rtwiki.layout.preferences.v1'
 
+export type ThemePreset = 'catppuccin' | 'nord' | 'dark' | 'light'
+
 export interface LayoutPreferences {
   treeWidth: number
   rightSidebarWidth: number
   treeCollapsed: boolean
   rightSidebarCollapsed: boolean
+  themePreset: ThemePreset
 }
 
 export function defaultLayoutPreferences(): LayoutPreferences {
@@ -25,7 +28,8 @@ export function defaultLayoutPreferences(): LayoutPreferences {
     treeWidth: LAYOUT.treePaneWidth,
     rightSidebarWidth: LAYOUT.rightSidebarWidth,
     treeCollapsed: false,
-    rightSidebarCollapsed: false
+    rightSidebarCollapsed: false,
+    themePreset: 'catppuccin'
   }
 }
 
@@ -54,6 +58,14 @@ export function loadLayoutPreferences(): LayoutPreferences {
     if (!raw) return fallback
     const parsed: unknown = JSON.parse(raw)
     if (!isRecord(parsed)) return fallback
+    const presetRaw = parsed.themePreset
+    const themePreset: ThemePreset =
+      presetRaw === 'nord' ||
+      presetRaw === 'dark' ||
+      presetRaw === 'light' ||
+      presetRaw === 'catppuccin'
+        ? presetRaw
+        : fallback.themePreset
     return {
       treeWidth: clampPrefWidth(
         parsed.treeWidth,
@@ -68,7 +80,8 @@ export function loadLayoutPreferences(): LayoutPreferences {
         fallback.rightSidebarWidth
       ),
       treeCollapsed: parsed.treeCollapsed === true,
-      rightSidebarCollapsed: parsed.rightSidebarCollapsed === true
+      rightSidebarCollapsed: parsed.rightSidebarCollapsed === true,
+      themePreset
     }
   } catch {
     return fallback

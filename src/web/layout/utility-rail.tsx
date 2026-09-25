@@ -83,29 +83,19 @@ export function UtilityRail({
   return (
     <nav className={classes.rail} aria-label={UI_TEXT.appName}>
       <Stack gap="xs" align="center" className={classes.topGroup}>
-        <Stack gap={2} align="center">
-          <Tooltip label={UI_TEXT.utilityRailHome} position="right">
-            <ActionIcon
-              variant={activeHome ? 'filled' : 'subtle'}
-              color={activeHome ? 'blue' : 'gray'}
-              size="lg"
-              onClick={onHome}
-              aria-label={UI_TEXT.utilityRailHome}
-              aria-current={activeHome ? 'page' : undefined}
-              className={classes.action}
-            >
-              <IconHome size={18} />
-            </ActionIcon>
-          </Tooltip>
-          <Text
-            size="10px"
-            fw={700}
-            c="dimmed"
-            style={{ letterSpacing: '0.5px', textTransform: 'uppercase' }}
+        <Tooltip label={UI_TEXT.utilityRailHome} position="right">
+          <ActionIcon
+            variant={activeHome ? 'filled' : 'subtle'}
+            color={activeHome ? 'blue' : 'gray'}
+            size="lg"
+            onClick={onHome}
+            aria-label={UI_TEXT.utilityRailHome}
+            aria-current={activeHome ? 'page' : undefined}
+            className={classes.action}
           >
-            RTWiki
-          </Text>
-        </Stack>
+            <IconHome size={18} />
+          </ActionIcon>
+        </Tooltip>
 
         {onToggleTree ? (
           <Tooltip

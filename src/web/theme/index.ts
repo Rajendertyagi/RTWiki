@@ -10,20 +10,22 @@ export const rtwikiCssVariablesResolver: CSSVariablesResolver = () => ({
     '--rtwiki-overlay-z-index': String(LAYOUT.overlayZIndex)
   },
   light: {
-    '--rtwiki-background': '#f5f5f5',
-    '--rtwiki-surface': '#ffffff',
-    '--rtwiki-surface-raised': '#fafafa',
-    '--rtwiki-border': '#e0e0e0',
-    '--rtwiki-text': '#1a1a1a',
+    '--rtwiki-rail-bg': '#e8e8e8',
+    '--rtwiki-background': '#ffffff',
+    '--rtwiki-surface': '#f2f2f2',
+    '--rtwiki-surface-raised': '#ffffff',
+    '--rtwiki-border': '#dbdbdb',
+    '--rtwiki-text': '#383838',
     '--rtwiki-text-muted': '#666666'
   },
   dark: {
-    '--rtwiki-background': '#1a1a1a',
-    '--rtwiki-surface': '#242424',
-    '--rtwiki-surface-raised': '#2a2a2a',
-    '--rtwiki-border': '#3a3a3a',
-    '--rtwiki-text': '#e8e8e8',
-    '--rtwiki-text-muted': '#888888'
+    '--rtwiki-rail-bg': '#1a1a1a',
+    '--rtwiki-background': '#242424',
+    '--rtwiki-surface': '#1f1f1f',
+    '--rtwiki-surface-raised': '#262626',
+    '--rtwiki-border': '#454545',
+    '--rtwiki-text': '#cccccc',
+    '--rtwiki-text-muted': '#bbbbbb'
   }
 })
 

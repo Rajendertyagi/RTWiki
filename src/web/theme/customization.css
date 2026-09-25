@@ -44,9 +44,9 @@
  */
 :root {
   /* Surfaces and separators. */
-  --rtwiki-chrome-bg: var(--mantine-color-body);
-  --rtwiki-chrome-surface: var(--mantine-color-body);
-  --rtwiki-chrome-border: var(--mantine-color-default-border);
+  --rtwiki-chrome-bg: var(--rtwiki-background, var(--mantine-color-body));
+  --rtwiki-chrome-surface: var(--rtwiki-surface, var(--mantine-color-body));
+  --rtwiki-chrome-border: var(--rtwiki-border, var(--mantine-color-default-border));
   /* Shared horizontal chrome padding (left/right of each row). */
   --rtwiki-chrome-pad-x: var(--mantine-spacing-sm);
   /* Row heights — tab strip, toolbars and the page header share one equal,
