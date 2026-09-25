@@ -238,8 +238,8 @@ These items have never been checked or verified in this environment:
 
 | Item | Reason |
 |---|---|
-| **Native Tauri desktop window** | No Rust toolchain is available here. All verification has been done in browser mode against the same bundle. |
-| **Windows `decorations(false)` build** | Requires a Tauri build, which is not available in this environment. |
+| **Native desktop window** | The app has never been checked as a real desktop window — the toolchain to build it is not available here. Everything so far was checked in a browser. The underlying program itself does start and serve the app correctly. |
+| **Windows `decorations(false)` build** | Requires building the desktop shell, which is not available in this environment. |
 | **HTML pages, code pages, Calendar/Study, Settings, Trash, Favorites views** | Only Rich Note and dashboard were driven during verification. |
 | **Empty, loading, and error states** | Not driven during the audit. |
 | **Keyboard navigation and focus order** | Not tested. |
@@ -286,6 +286,7 @@ Newest first.
 | When | What changed | Why |
 |---|---|---|
 | 2026-09-25 | This guide was written, alongside a companion reference document | The existing reference was written for engineers and was not usable for making design decisions |
+| 2026-09-25 | The packaged app now includes the screen it shows | The built program shipped with no interface at all and showed a "not found" page. The build now places the screen beside the program, where it looks for it. |
 | 2026-09-25 | The save indicator was made truthful | It reported "Saved" for work that had not been written yet, so a pending edit looked saved |
 | 2026-09-25 | The HTML and Markdown rendered views stopped being cards | They were framed and painted a different shade from the page, so in dark mode the content looked like a hole. Only the typing view keeps a frame, on purpose |
 | 2026-09-25 | The theme foundation was completed | Colour rules now have one source and a test that protects them |

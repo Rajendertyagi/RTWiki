@@ -460,6 +460,44 @@ panel tone. A text-entry surface has a real usability argument for staying disti
 from the rendered result, so this is a design decision and is excluded from the
 document-surface test.
 
+### Packaging: the compiled executable had no frontend
+
+`bun run build` runs `build:web` then `build:server`. The server step compiled
+`build/server/RTWiki.exe` and stopped. It never staged the frontend, so the shipped
+executable had **no UI at all**.
+
+The reason this was easy to miss: `resolveRuntimePaths` deliberately resolves assets
+from the **executable's own directory** in compiled mode
+(`src/server/config/index.ts:86-88`):
+
+```
+compiled:     <exeDir>/web          -> build/server/web
+development:  <repo>/build/web
+```
+
+So `build/web` was correct for the dev server and the browser tests, while
+`build/server/web` — the only place the packaged app looks — did not exist. The
+application started, listened, and returned `{"error":"Not found"}` for every page.
+That reads as a product bug rather than a packaging one, and it is the same symptom
+that made `build/web` intermittently appear to empty during testing.
+
+`scripts/build.ts` now stages `build/web` into `build/server/web` after compiling,
+replacing rather than merging so a stale asset cannot survive into a new build. If
+`build/web` is absent it warns loudly rather than silently producing an executable
+that serves nothing, because `bun run build:server` on its own is a legitimate way
+to rebuild just the executable.
+
+Verified by launching the compiled executable and requesting the root path: HTTP
+200, 880 bytes, containing the app mount point.
+
+### The native desktop gap is narrower than it was
+
+The compiled binary now demonstrably serves the frontend. What remains unverified is
+the **Tauri desktop shell** itself: the custom caption buttons, window dragging and
+the shutdown handshake have only been exercised in a browser against the same
+bundle. `tauri build` was not run — there is no Rust toolchain in this environment
+— so the packaged Windows shell remains unbuilt.
+
 ### The save status indicator lied about pending work
 
 The status bar mapped every state that was not actively saving or failing to
@@ -717,6 +755,8 @@ in a browser. The items below are the ones verified by actually running the app.
 - **Editor surface follows the declared canvas token** — a sentinel `rgb(1, 2, 3)` injected on `--rtwiki-canvas` is adopted by both `.bn-editor` and the scroll owner, in light and dark — measured
 - **HTML and Markdown rendered surfaces are frameless and on the canvas** — asserted in both schemes, including the nested iframe frame — measured
 - **The sandboxed HTML preview paints the resolved canvas colour** — unit-asserted on the generated document; confirmed visually in both schemes
+- **The compiled executable serves the frontend** — launched `build/server/RTWiki.exe` and requested the root path: HTTP 200, 880 bytes, app mount point present
+- `bun run build:web` then `bun run build:server` stages 150 frontend files into `build/server/web`, the only location a compiled app looks
 - Markdown dark rendering inspected by screenshot: continuous canvas, themed text, no frame — measured
 - No reference to the superseded surface token names remains anywhere in `src/web` — asserted by test
 - `canvas !== pane` and `rail !== pane` hold for every registered theme and variant — asserted by test
@@ -743,7 +783,7 @@ way the F1 and F2 entries were.
 
 | Item | Reason |
 |---|---|
-| Native Tauri shell behaviour | No Rust toolchain available; this is browser-mode geometry against the same bundle |
+| Native Tauri shell behaviour | No Rust toolchain available. The compiled **server executable** was verified to serve the frontend (HTTP 200), but the Tauri window, caption buttons and shutdown handshake have only been exercised in a browser against the same bundle |
 | Windows `decorations(false)` build | Requires a Tauri build |
 | HTML pages, code pages, Calendar/Study, Settings, Trash, Favorites views | Only Rich Note and dashboard were driven |
 | Empty, loading and error states | Not driven |
