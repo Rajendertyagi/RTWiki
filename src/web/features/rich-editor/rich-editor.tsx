@@ -393,7 +393,16 @@ function RichEditorInner(props: InnerProps): JSX.Element {
       const editorHasFocus = editorEl !== null && active !== null && editorEl.contains(active)
       const focusOnOtherInput =
         active !== null &&
-        (active.closest('input, textarea, [contenteditable="true"], [role="tree"]') !== null ||
+        (active.closest(
+          // `role="tab"` belongs here for the same reason `role="tree"` already
+          // does: both are deliberate keyboard focus targets. Without it, this
+          // grace window stole focus from the tab strip for up to 1.2s after a
+          // page opened, so reordering tabs with Ctrl+Arrow moved the tab and
+          // then the caret jumped into the document. Buttons are deliberately
+          // NOT listed: reclaiming focus from a button is the whole point of
+          // this effect, since a Mantine Modal restores focus to its trigger.
+          'input, textarea, [contenteditable="true"], [role="tree"], [role="tab"], [role="tablist"]'
+        ) !== null ||
           active === editorEl)
       if (editorEl && !editorHasFocus && !focusOnOtherInput) {
         const blocks = editor.document

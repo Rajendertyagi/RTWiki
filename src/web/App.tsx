@@ -27,7 +27,13 @@ import { ShortcutHelpModal } from './features/shortcuts/shortcut-help.js'
 import { fetchShutdownToken, requestShutdown } from './features/shutdown/shutdown-client.js'
 import { StopConfirmModal } from './features/shutdown/stop-confirm-modal.js'
 import { TabStrip } from './features/tabs/tab-strip.js'
-import { closeInTabs, type OpenTab, openInTabs, renameInTabs } from './features/tabs/tabs-model.js'
+import {
+  closeInTabs,
+  type OpenTab,
+  openInTabs,
+  renameInTabs,
+  reorderInTabs
+} from './features/tabs/tabs-model.js'
 import { TrashView } from './features/trash/trash-view.js'
 import {
   type LayoutPreferences,
@@ -749,6 +755,10 @@ export function App(): JSX.Element {
         void handleSelectPage(id)
       }}
       onClose={(id) => void handleTabClose(id)}
+      onReorder={(orderedIds) => {
+        debugLog('ui', 'ui_tab_reorder', { len: orderedIds.length })
+        setOpenTabs((current) => reorderInTabs(current, orderedIds))
+      }}
     />
   )
 
@@ -765,9 +775,7 @@ export function App(): JSX.Element {
         // is a dead 40px band across the top of the dashboard. Only render it
         // when a tab actually exists. Native mode keeps the band unconditionally
         // because the caption buttons live in it.
-        tabStrip={
-          isNative ? undefined : openTabs.length > 0 ? tabStripNode : undefined
-        }
+        tabStrip={isNative ? undefined : openTabs.length > 0 ? tabStripNode : undefined}
         utilityRail={
           <UtilityRail
             activeHome={

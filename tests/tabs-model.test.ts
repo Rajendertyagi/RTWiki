@@ -1,87 +1,103 @@
-import { describe, expect, it } from 'bun:test'
-import {
-  closeInTabs,
-  findTab,
-  type OpenTab,
-  openInTabs,
-  removeFromTabs,
-  renameInTabs
-} from '../src/web/features/tabs/tabs-model.js'
+import { describe, expect, test } from 'bun:test'
+import { moveInTabs, type OpenTab, reorderInTabs } from '../src/web/features/tabs/tabs-model.js'
 
-const UNTITLED = 'Untitled'
-
-function tab(id: string, title = id): OpenTab {
-  return { pageId: id, title, pageType: 'rich' }
+function tabs(...ids: string[]): OpenTab[] {
+  return ids.map((id) => ({ pageId: id, title: id.toUpperCase(), pageType: 'rich' as const }))
 }
 
-describe('openInTabs', () => {
-  it('appends a new tab for a page that is not open', () => {
-    const tabs = openInTabs([tab('a')], { id: 'b', title: 'B', pageType: 'rich' }, UNTITLED)
-    expect(tabs.map((t) => t.pageId)).toEqual(['a', 'b'])
+const ids = (list: OpenTab[]): string[] => list.map((tab) => tab.pageId)
+
+describe('moveInTabs', () => {
+  test('moves a tab forwards, shifting the ones it passes', () => {
+    expect(ids(moveInTabs(tabs('a', 'b', 'c', 'd'), 0, 2))).toEqual(['b', 'c', 'a', 'd'])
   })
 
-  it('does not duplicate an already-open page', () => {
-    const before = [tab('a'), tab('b')]
-    const after = openInTabs(before, { id: 'a', title: 'A2', pageType: 'rich' }, UNTITLED)
-    expect(after).toBe(before)
+  test('moves a tab backwards, shifting the ones it passes', () => {
+    expect(ids(moveInTabs(tabs('a', 'b', 'c', 'd'), 3, 1))).toEqual(['a', 'd', 'b', 'c'])
   })
 
-  it('uses the untitled label for blank titles', () => {
-    const tabs = openInTabs([], { id: 'n', title: '', pageType: 'html' }, UNTITLED)
-    expect(tabs[0].title).toBe(UNTITLED)
-    expect(tabs[0].pageType).toBe('html')
-  })
-})
-
-describe('closeInTabs', () => {
-  const three = [tab('a'), tab('b'), tab('c')]
-
-  it('closes a background tab and keeps the active one', () => {
-    const result = closeInTabs(three, 'a', 'c')
-    expect(result.tabs.map((t) => t.pageId)).toEqual(['b', 'c'])
-    expect(result.activatePageId).toBe('c')
+  test('moving to the last position puts it at the end', () => {
+    expect(ids(moveInTabs(tabs('a', 'b', 'c'), 0, 2))).toEqual(['b', 'c', 'a'])
   })
 
-  it('activates the right neighbour when closing the active tab', () => {
-    const result = closeInTabs(three, 'b', 'b')
-    expect(result.tabs.map((t) => t.pageId)).toEqual(['a', 'c'])
-    expect(result.activatePageId).toBe('c')
+  test('moving to the first position puts it at the front', () => {
+    expect(ids(moveInTabs(tabs('a', 'b', 'c'), 2, 0))).toEqual(['c', 'a', 'b'])
   })
 
-  it('falls back to the left neighbour when the active tab is last', () => {
-    const result = closeInTabs(three, 'c', 'c')
-    expect(result.activatePageId).toBe('b')
+  test('a no-op returns the same array reference so React can skip the render', () => {
+    const original = tabs('a', 'b', 'c')
+    expect(moveInTabs(original, 1, 1)).toBe(original)
   })
 
-  it('returns null activation when the final tab closes', () => {
-    const result = closeInTabs([tab('only')], 'only', 'only')
-    expect(result.tabs).toEqual([])
-    expect(result.activatePageId).toBeNull()
+  test('out-of-range indices are ignored rather than throwing', () => {
+    // Indices come from measured pointer positions and from key repeat, so a
+    // stale one must not be able to corrupt the order.
+    const original = tabs('a', 'b', 'c')
+    for (const [from, to] of [
+      [-1, 0],
+      [0, -1],
+      [3, 0],
+      [0, 3],
+      [99, 99]
+    ] as const) {
+      expect(moveInTabs(original, from, to)).toBe(original)
+    }
   })
 
-  it('is a no-op for an unknown tab', () => {
-    const result = closeInTabs(three, 'zzz', 'b')
-    expect(result.tabs).toEqual(three)
-    expect(result.activatePageId).toBe('b')
-  })
-})
-
-describe('rename and remove', () => {
-  it('renames the matching tab and applies the untitled label to blanks', () => {
-    const tabs = renameInTabs([tab('a', 'Old'), tab('b')], 'a', '', UNTITLED)
-    expect(tabs[0].title).toBe(UNTITLED)
-    expect(tabs[1].title).toBe('b')
+  test('does not mutate the input', () => {
+    const original = tabs('a', 'b', 'c')
+    moveInTabs(original, 0, 2)
+    expect(ids(original)).toEqual(['a', 'b', 'c'])
   })
 
-  it('removes deleted pages from the strip', () => {
-    const tabs = removeFromTabs([tab('a'), tab('b'), tab('c')], new Set(['a', 'c']))
-    expect(tabs.map((t) => t.pageId)).toEqual(['b'])
+  test('a single tab cannot be moved', () => {
+    const single = tabs('a')
+    expect(moveInTabs(single, 0, 0)).toBe(single)
+  })
+
+  test('an empty list is safe', () => {
+    const empty: OpenTab[] = []
+    expect(moveInTabs(empty, 0, 0)).toBe(empty)
   })
 })
 
-describe('findTab', () => {
-  it('finds by id', () => {
-    expect(findTab([tab('x')], 'x')?.title).toBe('x')
-    expect(findTab([tab('x')], 'y')).toBeUndefined()
+describe('reorderInTabs', () => {
+  test('applies a wholly new order', () => {
+    expect(ids(reorderInTabs(tabs('a', 'b', 'c', 'd'), ['b', 'c', 'd', 'a']))).toEqual([
+      'b',
+      'c',
+      'd',
+      'a'
+    ])
+  })
+
+  test('a partial list keeps the omitted tabs, in their existing order', () => {
+    // A drag that reports only the visible subset must never silently discard
+    // an open tab.
+    expect(ids(reorderInTabs(tabs('a', 'b', 'c', 'd'), ['d', 'a']))).toEqual(['d', 'a', 'b', 'c'])
+  })
+
+  test('unknown ids are ignored', () => {
+    expect(ids(reorderInTabs(tabs('a', 'b'), ['zzz', 'b', 'a']))).toEqual(['b', 'a'])
+  })
+
+  test('a duplicated id does not clone the tab', () => {
+    const result = reorderInTabs(tabs('a', 'b', 'c'), ['a', 'a', 'b', 'c'])
+    expect(ids(result)).toEqual(['a', 'b', 'c'])
+  })
+
+  test('an empty list leaves the order untouched', () => {
+    expect(ids(reorderInTabs(tabs('a', 'b'), []))).toEqual(['a', 'b'])
+  })
+
+  test('an already-correct order returns the same reference', () => {
+    const original = tabs('a', 'b', 'c')
+    expect(reorderInTabs(original, ['a', 'b', 'c'])).toBe(original)
+  })
+
+  test('does not mutate the input', () => {
+    const original = tabs('a', 'b', 'c')
+    reorderInTabs(original, ['c', 'b', 'a'])
+    expect(ids(original)).toEqual(['a', 'b', 'c'])
   })
 })

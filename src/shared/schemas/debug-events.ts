@@ -43,6 +43,7 @@ export const DEBUG_EVENT_NAMES = {
     'ui_subfile_open',
     'ui_card_open',
     'ui_tab_select',
+    'ui_tab_reorder',
     'ui_context_menu_action',
     'ui_return_to_preview',
     'ui_refresh_preview',

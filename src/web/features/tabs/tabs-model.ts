@@ -77,3 +77,58 @@ export function renameInTabs(
 export function removeFromTabs(tabs: OpenTab[], deletedIds: ReadonlySet<string>): OpenTab[] {
   return tabs.filter((tab) => !deletedIds.has(tab.pageId))
 }
+
+/**
+ * Moves the tab at `from` to `to`, leaving the others in order.
+ *
+ * The single source of truth for tab reordering, shared by the pointer drag and
+ * the Ctrl+Arrow keyboard shortcut, so both produce identical results. A no-op
+ * that returns the *same array reference* when nothing moves, so React can skip
+ * the re-render.
+ *
+ * Out-of-range indices are ignored rather than throwing: the indices come from
+ * measured pointer positions and from key repeat, and a stale one must not be
+ * able to corrupt the order.
+ */
+export function moveInTabs(tabs: OpenTab[], from: number, to: number): OpenTab[] {
+  const last = tabs.length - 1
+  if (from < 0 || from > last || to < 0 || to > last || from === to) return tabs
+  const next = [...tabs]
+  const [moved] = next.splice(from, 1)
+  if (!moved) return tabs
+  next.splice(to, 0, moved)
+  return next
+}
+
+/**
+ * Reorders tabs to match an externally supplied list of ids.
+ *
+ * This is what the drag reports: Motion computes the new order during the drag
+ * and hands it over whole. Ids that are not currently open are ignored, and
+ * tabs the caller left out are **appended in their existing order** rather than
+ * dropped, so a partial or stale list can never silently discard an open tab.
+ */
+export function reorderInTabs(tabs: OpenTab[], orderedIds: readonly string[]): OpenTab[] {
+  const byId = new Map(tabs.map((tab) => [tab.pageId, tab]))
+  const next: OpenTab[] = []
+  const taken = new Set<string>()
+  for (const id of orderedIds) {
+    const tab = byId.get(id)
+    // Guard duplicates too: an id listed twice must not clone the tab.
+    if (tab && !taken.has(id)) {
+      next.push(tab)
+      taken.add(id)
+    }
+  }
+  if (next.length === tabs.length) {
+    // Every tab was accounted for, so nothing needs appending. Return the
+    // original array when the order is also unchanged, so React can skip the
+    // re-render - length alone is not enough, the order may still have moved.
+    const unchanged = next.every((tab, i) => tabs[i] === tab)
+    return unchanged ? tabs : next
+  }
+  for (const tab of tabs) {
+    if (!taken.has(tab.pageId)) next.push(tab)
+  }
+  return next
+}

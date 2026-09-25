@@ -1168,6 +1168,70 @@ This also means every screenshot taken after this point shows the real app rathe
 forty pages of test noise, which had been making visual judgements harder than
 necessary.
 
+## 7a. Tab reordering (F17) — **RESOLVED** ✅
+
+### What was asked for, and what was actually built
+
+Reported as: *"Trilium note tabs are different — you can reorder them, they seem real tabs."* The tab strip had order (the array position) but no way to change it: no drag, and no keyboard equivalent. Arrow keys switched tabs; nothing moved them.
+
+Shipped: **drag to reorder**, and **Ctrl+Arrow to reorder** for the keyboard. Both routes call the same pure function, so they cannot disagree.
+
+### The library: `motion`, not Draggabilly
+
+Trilium uses **Draggabilly 3.0.0** (`apps/client/package.json`). Copying that was the first plan, on the grounds that it is small and does the fiddly parts. Two facts changed the decision:
+
+| | Draggabilly | `motion` |
+|---|---|---|
+| Last release | **3.0.0, 2021-12-29** (package untouched since 2022-06) | **13.4.4, 2026-09-25** |
+| Unpacked | 84 KB (+`get-size`, `unidragger`) | 759 KB (+`framer-motion`, `tslib`) |
+| Model | imperative; mutates the DOM directly | `values` + `onReorder`, React state |
+
+The decisive factor is the model, not the size. Draggabilly rearranges DOM nodes behind React's back, so React and the library can disagree — the failure mode that makes imperative drag libraries expensive in a React app. `Reorder` is built *around* a state array, so the transform-only strategy this document had assumed would be necessary is simply the library's own API. The risk that was the main objection to the whole feature does not exist.
+
+**Trilium picked Draggabilly because Trilium is jQuery.** Copying the behaviour rather than the library was the better reading of "copy Trilium".
+
+### The spike, and what it proved
+
+Two things could have ruled `motion` out, and neither is answerable from documentation. Both were measured before any production code was written, in a throwaway component mounted at `?spike=reorder`:
+
+| Question | Result |
+|---|---|
+| Does `Reorder.Item` forward `role`, `aria-selected`, `tabindex`, `id`, `className` and DOM handlers? | **Pass.** `role="tab"`, `aria-selected`, `tabindex`, `id` and `className` all reached the DOM; `click`, `keydown` and `auxclick` all fired. The whole tablist depends on this |
+| Does anything above the tabs carry a CSS `transform`? | **Pass.** `.strip` → `MAIN` → `.mantine-AppShell-root` → `div` → `BODY` → `HTML` all report `transform: none`, `scale: none`, `rotate: none`, `zoom: 1` |
+
+A third check drove the whole thing: a **real pointer drag** on the spike, asserting the order changed. It is the only check that could have caught a non-functional drag.
+
+`motion`'s own troubleshooting section warns that a transformed parent makes drag offsets and reorder thresholds wrong *by the same factor* — a silent, subtle failure. That is why the ancestor chain was measured rather than grepped.
+
+### Two integration requirements found by measuring
+
+**1. `.tab` needed `position: relative`.** The library raises the dragged tab with `z-index`, and `z-index` does nothing to a `position: static` element. Our `.tab` had no `position`. The drag still reordered correctly *and rendered the dragged tab underneath its neighbours* — a pass-with-a-visual-defect, the exact class of bug this project has been bitten by before.
+
+**2. The editor was stealing focus from the tab strip — a pre-existing bug.** After a keyboard reorder, focus landed correctly on the moved tab and was then taken by the document editor. `rich-editor.tsx` runs a 1.2-second grace window that reclaims focus after a page opens, and its whitelist of legitimate targets was `input, textarea, [contenteditable="true"], [role="tree"]`. **A tab was not on it.** So for up to 1.2s after opening a page, any focus placed on a tab was yanked into the document.
+
+`role="tab"` and `role="tablist"` are now on that list. `button` is deliberately **not**: reclaiming focus from a button is the entire purpose of that effect, because a Mantine Modal restores focus to its trigger. Widening the list to "anything interactive" would have silently broken that.
+
+This bug predates the tab work. It was unreachable until something moved focus to a tab, which is exactly what reordering does.
+
+### Decisions recorded
+
+- **Keyboard reordering was kept even though Trilium has none.** Trilium's tab row has no `role="tablist"`, no `role="tab"`, no `tabindex` and no key handling at all — three `aria-label`s on icons is the whole of its accessibility surface. Copying that faithfully would have meant deleting a working, tested ARIA tablist. The owner chose to keep ours and add Ctrl+Arrow on top. The trade-off is recorded rather than forgotten: we now match Trilium's *feel* and exceed its *reach*.
+- **A bare arrow still switches; Ctrl+Arrow moves.** Neither replaces the other, so both exist.
+- **Ctrl+Arrow stops at the ends instead of wrapping.** Wrapping would silently send the first tab to the last position, which is never what was meant.
+- **Reorder is announced** through a polite live region (`"Alpha, moved to position 2 of 3"`), and focus travels with the moved tab. Focus is applied in an effect, not a `requestAnimationFrame`: inside a frame callback the row can still be the outgoing one, and the focus call lands on a detached node — which is exactly what happened on the first attempt.
+- **Reorder is session-only**, matching every other property of the tab strip. Persisting it is separate work with a storage decision attached.
+
+### What was deliberately not copied
+
+Trilium's tab row is three features and a different architecture. Only the first was taken.
+
+- **Tear-off** (drag a tab down past 100px to open it in its own window) — this is a multi-window feature, not a tab-row one. It is an Electron command in Trilium; here it would need Tauri multi-window, which the MVP scope rules out. It looked like a small gesture and is not.
+- **Pinning** — not a visual. `tab_pinning.ts` shows a pinned tab *refuses to navigate to a different note*, cannot be closed, and cannot be dragged out of the pinned zone. It changes what a tab does, so it needs a design decision, not a copy.
+- **Splits and hoisting** — a Trilium tab is a *note context* holding several side-by-side note views, with a composite title. Ours is one tab = one page. That is a different design, not a gap to close.
+- **Note history** with cross-tab back/forward buttons.
+- **The window-drag filler.** `.tab-row-filler` carries `-webkit-app-region: drag` and drags the **Electron window**, not a tab. Our work plan has carried a "filler-based drag region" item since the beginning on the strength of a comment; in a browser-first app (ADR-001) it means nothing. **That plan item should be struck rather than implemented.**
+- **Shrinking tab sizes** (`is-small`/`is-smaller`/`is-mini` at 84/60/48px) — a real, cheap feature we do not have. Left for later, pending a decision.
+
 ## 8. Ordered work plan
 
 The agreed sequence, with reasoning for the order:
@@ -1204,6 +1268,10 @@ Findings that were raised and then withdrawn after being checked. This exists so
 | HTML child files "do not save" | Typing into a CSS child file looked lost. | It was not. Reading the stored record directly showed the CSS field saved correctly. Two separate things were mistaken for one: blank CSS on a new page is simply an empty field, and the HTML source view never shows a "Saved" indicator, so a successful save looks like a failure. The indicator is a real, still-open defect. | 2026-09-25 |
 | "Two stability-regressions tests are new failures caused by this change" | They failed on the **previous commit too**, verified by stashing the work and re-running against the baseline build. | Not a regression. The recorded baseline of 4 failures in that file was **incomplete** — it is 6. This is the second time a baseline was trusted without re-measuring it (see F3/F5 above). Re-derive a baseline by running the code you are about to change, not by remembering an earlier count. | 2026-09-26 |
 | "The 72px title floor is not being applied" | The computed value read 14px, and the rule plainly declared `min-width: 72px`. | The rule was being **outranked**, not ignored: `wunderbaum.css` sets `min-width: 1em` on `div.wunderbaum span.wb-node span.wb-title`, and 1em at 14px is exactly the 14px that was measured. The library stylesheet is imported *after* the CSS module, so an unscoped `span.wb-title` rule loses outright. A number that looks like a default is often another rule's value. | 2026-09-26 |
+| "`@mantine/dnd` is the Mantine package for sortable lists" | Stated as fact, and offered to the owner as an option for tab reordering. | **It does not exist.** 404 on the npm registry, and absent from an npm search for "mantine dnd". The real candidates are third-party (`@dnd-kit/sortable`, `@hello-pangea/dnd`, `react-dnd`). Worse, the premise was wrong in a way that would have been acted on: `@mantine/core` has **no** drag-and-drop dependency at all (`clsx`, `type-fest`, `@floating-ui/react`, `react-number-format`, `react-remove-scroll`), so Mantine ships no reusable drag primitive. The claim came from recall about a library whose surface had never been read. | 2026-09-26 |
+| "Draggabilly is the right choice — it is small" | Recommended over `@dnd-kit` partly on dependency weight, and the plan was built around it. | Draggabilly `3.0.0` was published **2021-12-29** and the package has not been touched since **2022-06-15**. It is abandoned, and its imperative DOM model is the specific thing that makes drag expensive in React. `motion@13.4.4` shipped the day before this was checked. The size argument was real but the maintenance fact, which I had not looked up, was decisive. | 2026-09-26 |
+| "The spike proved `motion` could not reorder" | The first spike run showed the tab order unchanged after a full pointer drag, which reads as a hard blocker on the library. | The spike's drag handle was an **empty `div` in normal flow** — zero height — so pointer hit-testing never reached it. The library was fine. A red result from a harness you built yourself is a fact about the harness; the drag was only proven after the handle was given real dimensions, at which point `a,b,c,d` → `b,c,d,a`. | 2026-09-26 |
+| "The editor's focus-reclaim effect is unrelated to tab work" | Treated as out of scope while reordering was being debugged. | It is the direct cause. `rich-editor.tsx` reclaims focus for 1.2s after a page opens and its whitelist omitted `role="tab"`, so every keyboard reorder ended with the caret jumping into the document. Pre-existing, and unreachable until something moved focus to a tab. **A symptom in a neighbouring module is evidence about that module, not noise.** | 2026-09-26 |
 
 ## 10. Coverage and known gaps
 
@@ -1241,7 +1309,14 @@ in a browser. The items below are the ones verified by actually running the app.
 - **`span.wb-title` carries a 72px readability floor** — measured as a computed `min-width` on a title inside a tree row, after the library's `1em` was outranked
 - **Markdown and Diagram pages render no toolbar** (`hasToolbarRow: false`, `toolbarCount: 0`) — measured, confirming F15 as a real gap rather than a report in error
 - **On Home, two elements claimed "you are here" simultaneously** — measured by scanning the document for blue fills, inset blue accents, `aria-current` and `data-active`
-- `bun test` — **482 pass / 0 fail**
+- **Tab reordering by pointer** — a real `mouse.down`/`move`/`up` drag across a neighbouring tab changes the DOM order, and no tab is lost or duplicated — measured, `tab-reorder.pwspec.ts`
+- **Tab reordering by keyboard** — `Ctrl+ArrowRight` moves the focused tab one place, and the live region reads `"Alpha, moved to position 2 of 3"` — measured
+- **Focus follows a keyboard-moved tab**, and survives 900ms without being stolen — measured, after fixing the editor's reclaim list
+- **Ctrl+Arrow stops at the ends** rather than wrapping the first tab to the end — measured
+- **A bare arrow still switches tabs and does not reorder** — measured
+- **The × still closes and does not start a drag**, with the order unchanged — measured
+- **The strip is still a valid ARIA tablist**: one `aria-selected="true"`, exactly one `tabindex="0"`, unique ids, a labelled `role="tablist"` — measured
+- `bun test` — **487 pass / 0 fail** (16 new for the reorder model)
 
 **Read from source but not re-measured in a browser:** the §3.2 tree metrics, the §3.3
 type scale, the §3.4 radii distribution, and the §3.6 motion inventory. These are
@@ -1264,6 +1339,9 @@ way the F1 and F2 entries were.
 | Markdown and Diagram workspaces | Only their **absence** of a toolbar was measured (F15). Their editors were not driven |
 | Settings, Calendar, Trash, Favorites views | Only that they open as blocking overlays was confirmed by reading the state wiring (F16). The views themselves were not driven |
 | The **full** browser suite | Never run to completion. Specs are run individually and their failures compared against a re-measured baseline |
+| Tab **tear-off, pinning, splits, hoisting and note history** | All read from Trilium's source and deliberately not implemented. Their absence is a decision, not an oversight — see §7a |
+| Tab **order persistence across restarts** | Not implemented. Reordering is session-only, matching every other property of the tab strip |
+| Tab **shrinking at narrow widths** (`is-small`/`is-smaller`/`is-mini`) | Trilium steps tab size down at 84/60/48px, dropping the icon then the title. Read from source, not implemented; left pending a decision alongside the stale mobile-toolbar measurement (F2) |
 
 ## 11. Verification commands
 
