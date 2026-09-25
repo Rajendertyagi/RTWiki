@@ -41,9 +41,9 @@ The following rules were extracted from the TriliumNext study ([trilium-uiux-ref
 | 2 | **Per-region surface tokens** | §9 and §12 | `--rtwiki-background` is the document canvas; `--rtwiki-surface` is panel chrome. The pane is always recessed relative to the document in both colour schemes. |
 | 3 | **Borders as focus indicators, not frames** | §4 | The note canvas border is transparent by default; it appears only when a split is active in a multi-split view. |
 | 4 | **Radii are conditional on layout context** | §4 | Top radius drops when a toolbar spans above; bottom radius drops when the status bar panel is open. |
-| 5 | **Drag regions via a filler element** | §3 | The tab strip uses a `.tab-row-filler` as the drag handle rather than a stacked backdrop. Simpler z-index model. |
+| 5 | **Drag regions via a filler element** | §3 | *Adopted target, not yet built.* The band currently uses an absolutely positioned `.dragLayer` backdrop carrying `data-tauri-drag-region`. Replacing it with a filler element removes the overlap and the z-index ordering. Tracked as work-plan item 5. |
 | 6 | **Component responsiveness via container queries** | §8 | The toolbar should reflow by its own width, not a viewport breakpoint. |
-| 7 | **Caption buttons aligned by explicit centre-line calculation** | §13.8 | The band height (40px) and caption button height (46px) differ; alignment is computed, not `align-items: center`. |
+| 7 | **Caption buttons aligned by explicit centre-line calculation** | §13.8 | *Adopted target, not yet built.* Today the buttons are 46px wide and full band height (40px) inside an `align-items: stretch` row, so no centre-line calculation is needed. The pattern matters only if button and band heights ever diverge. |
 | 8 | **Keep tab strip unmodified** | Task constraint | `TabStrip` is not to be changed during this phase of work. |
 
 ## 3. Layout and geometry as built
@@ -86,25 +86,27 @@ RTWiki ships a custom caption bar when running inside the Tauri desktop shell. T
 
 ```
 RootContainer
-├── chrome band (40px, full width)
-│   ├── utility rail (40px wide, full height, sits beside the band)
-│   └── page tree pane (full height, beside the rail)
-├── tab strip (40px, inside the band row)
-│   └── tab-row-filler  (drag handle, -webkit-app-region: drag)
-├── main content area (fills remaining height)
-│   ├── rich editor toolbar (40px)
-│   ├── page title row (40px)
-│   └── editor canvas
-└── status bar (28px, at the bottom)
+├── utility rail (40px wide, full window height)
+├── page tree pane (336px default, full window height)
+└── content column
+    ├── chrome band (40px)
+    │   ├── tab strip (40px, the same DOM row as the band)
+    │   ├── dragLayer (absolute backdrop, data-tauri-drag-region)
+    │   └── caption controls (46px wide each, full band height)
+    ├── main content area (fills remaining height)
+    │   ├── rich editor toolbar (40px)
+    │   ├── page title row (40px)
+    │   └── editor canvas
+    └── status bar (28px, at the bottom)
 ```
 
 ### Custom caption behaviour
 
-- The band is **40px** tall. Caption buttons are **46×40px** (they overflow the band vertically by 6px on each side, but the click target is contained within the 40px band because Tauri's `decorations: false` removes the OS title bar entirely).
-- Alignment is by explicit centre-line calculation, not `align-items: center`, because the band height (40px) and button height (46px) deliberately differ.
+- The band is **40px** tall. Each caption button is **46px wide and full band height** (`height: 100%` inside a `.controls` flex row using `align-items: stretch`), so a button is 46 × 40 and does **not** overflow the band. Tauri runs with `decorations: false`, so there is no OS title bar to align against.
+- **Planned, not built:** aligning the buttons by an explicit centre-line calculation rather than by stretch. This only matters if a future change makes the button height differ from the band height; today the two are equal by construction, so the centre-line calculation would be a no-op. Recorded as work-plan item 7.
 - The tab strip is the same visual row as the chrome band — they share the `TAB_STRIP_HEIGHT = 40` constant. There is no dead space between them.
 - The utility rail and the page tree run the **full window height** beside the band; the band only spans the content area, not the rail.
-- Drag-region approach: the tab strip uses a `.tab-row-filler` element as the drag handle (pattern from Trilium §3), not a stacked backdrop.
+- Drag-region approach (**current**): an absolutely positioned `.dragLayer` element carrying `data-tauri-drag-region` sits behind the band's interactive controls (`window-chrome.tsx:127`); the layering contract is documented at `window-chrome.module.css:11`. Replacing this backdrop with a filler element is planned work (work-plan item 5), not the current state.
 
 ### Tauri capability requirement
 
@@ -141,7 +143,7 @@ These are TriliumNext's token values transcribed to RTWiki names ([trilium-uiux-
 | `--rtwiki-surface #f2f2f2` (light) | `--left-pane-background-color: #f2f2f2` |
 | `--rtwiki-surface #242424` (dark) | `--main-background-color: #242424` ⚠ |
 
-> **⚠ Critical inversion in dark mode.** The dark-mode values are **swapped relative to their Trilium origins**: `--rtwiki-background` (document canvas) is `#1f1f1f` (Trilium's *pane* colour) and `--rtwiki-surface` (panel) is `#242424` (Trilium's *canvas* colour). This was a deliberate decision, not an error — see the reasoning below.
+> **⚠ Inversion in dark mode — now SUPERSEDED.** The dark values are swapped relative to their Trilium origins: `--rtwiki-background` (canvas) is `#1f1f1f` (Trilium's *pane* colour) and `--rtwiki-surface` (panel) is `#242424` (Trilium's *canvas* colour). This was deliberate when made, to avoid a tone seam against BlockNote's own `#1f1f1f` editor. **The multi-theme decision reverses it** (§6): the dark canvas returns to Trilium's `#242424` and the editor is forced to match the declared token instead. Do not preserve the inversion.
 
 ### The relationship that must hold
 
@@ -154,11 +156,13 @@ dark:   rail (#1a1a1a) < canvas (#1f1f1f) < surface (#242424)
 
 The pane is always recessed; the document canvas is always the brightest surface (light) or the darkest-but-not-deepest surface (dark). This relationship was the root cause of **F1** when it was violated: the old palette used a single `--rtwiki-surface` token for both regions, which made the canvas match the sidebar tone and produced a grey frame around a white card.
 
-### Why the dark-mode values look inverted
+### Why the dark-mode values were inverted, and why that is changing
 
-BlockNote paints its own dark editor background at `#1f1f1f`. If `--rtwiki-background` were set to Trilium's canvas colour (`#242424`), there would be a visible tone mismatch at the editor boundary — the editor would appear as a darker rectangle inside a lighter page. Setting `--rtwiki-background` to `#1f1f1f` makes the canvas and the editor one continuous surface. The trade-off is that the canvas is now the same tone as Trilium's *pane*, but this is the lesser evil: a seamless editor reads better than a framed one.
+BlockNote paints its own dark editor background at `#1f1f1f`, and it only understands a binary light/dark scheme. The original fix therefore set the canvas to `#1f1f1f` so the editor read as one continuous surface, accepting that the canvas then matched Trilium's *pane* colour rather than its canvas colour.
 
-**This is an explicit decision, not an oversight.** It is recorded here so future palette work does not "correct" it back to Trilium's literal mapping.
+That was a reasonable trade for two schemes, but it cannot scale: under a third theme the document would keep painting a fixed grey, because its colour was **derived from the editor** rather than **declared**. The multi-theme decision (§6) reverses the direction of dependency — the canvas becomes a declared token and the editor surface is forced to it. The dark canvas therefore returns to Trilium's `#242424` and the pane to `#1f1f1f`, restoring Trilium's relationship: pane recessed, canvas brighter.
+
+**Status: decided, not yet implemented.** The token names in the table above are also due to be replaced by per-region names (`--rtwiki-canvas`, `--rtwiki-pane`, `--rtwiki-rail`, `--rtwiki-elevated`) as part of the same work.
 
 ### Root cause of the document-surface defect (F1, now resolved)
 
@@ -174,7 +178,7 @@ This section records the decisions that shape the next phase of work. Nothing he
 
 ### Decision 1: Surfaces follow the active theme through declared CSS custom properties
 
-Each theme will supply its own set of `--rtwiki-*` custom properties. The rich editor's surface will be forced to the canvas token (`--rtwiki-background`) so it is declared rather than inherited from the editor library. This means BlockNote's own background paint will be overridden to match the active theme's canvas tone.
+Each theme will supply its own set of `--rtwiki-*` custom properties, keyed by **region** rather than by a single ambiguous name. The rich editor's surface will be forced to the canvas token (`--rtwiki-canvas`) so it is declared rather than inherited from the editor library, which means BlockNote's own background paint is overridden to match the active theme's canvas tone. The ambiguous names `--rtwiki-background` and `--rtwiki-surface` are to be **deleted, not aliased** — an alias would preserve the exact ambiguity that caused F1.
 
 ### Decision 2: BlockNote and Mermaid keep operating on Mantine's binary scheme
 
@@ -224,9 +228,13 @@ The default `themePreset` in `layout-preferences.ts` is `'catppuccin'`, but no C
 
 ## 7. Open defects and their confirmed mechanisms
 
-### F1 — Editor canvas fills only 15% of its region — **RESOLVED** ✅
+### F1 — Document rendered as a framed card in a panel — **RESOLVED** ✅
 
-Resolved in commit `3232ab6`. The document canvas now fills its region. Measured fill ratio is effectively 1.0 (within measurement tolerance). The fix was structural (splitting the surface token), not cosmetic.
+The real defect was **not** a fill-ratio problem. The document was painted as a rounded card with a visible border and grey gutters, so it read as a widget *inside* a page rather than as the page. Resolved in commit `3232ab6` by making the document one continuous canvas: no border, no radius, and a canvas tone equal to the editor's own content tone in both schemes.
+
+**The "fills only 15% of its region" framing was a measurement error and is withdrawn.** It compared the *content* height (123px — a short note) against the *container* height (832px); the editor wrapper already filled its region at 752px. The fill ratio was never the defect and no fill-ratio fix was made. See the corrections log (§9).
+
+> The defect register [ui-ux-audit-findings.md](ui-ux-audit-findings.md) still titles F1 as the 15% fill-ratio problem. That title is stale and should be corrected to match this section.
 
 ### F2 — Mobile loses 24 of 35 toolbar controls at 390px — **OPEN** 🔴
 
@@ -296,6 +304,7 @@ Findings that were raised and then withdrawn after being checked. This exists so
 |---|---|---|
 | F3 (rail width drift) | Compared rendered values against the **committed** config while the working tree already set `railWidth: 40`. The config and render agreed once the correct baseline was used. | 2026-09-25 |
 | F5 (status bar 26-vs-28 drift) | Same committed-vs-working-tree error as F3. The working tree sets `statusBarHeight: 28`, which matches the rendered footer host. **No defect.** | 2026-09-25 |
+| F1 ("canvas fills only 15% of its region") | Compared the **content** height (123px, a short note) against the **container** height (832px). The editor wrapper already filled its region at 752px. The fill ratio was never the defect; the framed-card treatment was. | 2026-09-25 |
 
 ## 10. Coverage and known gaps
 
@@ -304,7 +313,7 @@ Findings that were raised and then withdrawn after being checked. This exists so
 - Chrome band geometry (40px) — measured from DOM, confirmed consistent across light/dark
 - Tab strip, toolbar, and title row heights (all 40px) — measured
 - Rail width (40px in config, 42px rendered due to padding overflow) — measured
-- Document canvas fill ratio after F1 fix — measured (effectively 1.0)
+- Document surface after the F1 fix — border and radius both `0px`, and the canvas tone equals the editor content tone in both schemes — measured
 - Status bar rendered height (28px) — measured
 - Dark mode contrast (10.26:1 on tree rows and title text) — measured
 - Mobile toolbar reachability at 390px (11 of 35 controls reachable) — measured
@@ -351,4 +360,4 @@ The documentation verifier (`scripts/verify-docs.ts`) scans all Markdown files i
 
 ---
 
-*This document is part of the RTWiki repository at `D:\Temp\RTWiki`. It is updated whenever the UI state changes meaningfully — new defects found, decisions made, or measurements revised. See [AGENTS.md](../AGENTS.md) §13 for the documentation protocol.*
+*This document is part of the RTWiki repository. It is updated whenever the UI state changes meaningfully — new defects found, decisions made, or measurements revised. See [AGENTS.md](../AGENTS.md) §13 for the documentation protocol.*
