@@ -1,67 +1,66 @@
 # TriliumNext UI/UX Reference — for RTWiki
 
 **Purpose:** a section-wise reference of how TriliumNext actually builds its shell —
-layout, geometry, behaviour, shape and surface — so the RTWiki UI/UX work can be
-done against a real reference instead of guesswork.
+layout, geometry, behaviour, shape, colour and type — so the RTWiki UI/UX work can be
+done against a real reference instead of guesswork. Every value is quoted from source
+with a file or line reference; anything not read deeply is marked, not guessed.
 
-- **Source:** `D:\Temp\Trilium` (`@triliumnext/client` **v0.105.0**)
+- **Source:** `D:\Temp\Trilium` — `@triliumnext/client` **v0.105.0**
 - **Theme studied:** `theme-next` (the modern "Next" theme), not the legacy `style.css`
-- **Primary files:** `src/layouts/desktop_layout.tsx`,
+- **Files:** `src/layouts/desktop_layout.tsx`, `src/layouts/mobile_layout.{tsx,css}`,
   `src/stylesheets/theme-next/{shell,base,ribbon,pages,forms,dialogs}.css`,
   `src/stylesheets/theme-next/notes/{text,canvas}.css`,
   `src/stylesheets/theme-next-{light,dark}.css`
-- Every value below is quoted from those files with a line reference. Where I have
-  **not** read something deeply, it is marked **[shallow]** rather than guessed.
 
 ---
 
-## 1. The layout model
+## 1. Layout model
 
-Trilium has **two layouts**, switched by the user option `layoutOrientation`:
+Two layouts, switched by the user option `layoutOrientation`:
 
-| Class on root | Option | Launcher pane | Tab bar |
+| Root class | Option | Launcher | Tab bar |
 |---|---|---|---|
-| `.vertical-layout` | `layoutOrientation = "vertical"` | **vertical strip on the left** | row inside the rest pane, right of the launcher |
-| `.horizontal-layout` | `"horizontal"` | **horizontal strip at the top** | full-width row **above** the launcher |
+| `.vertical-layout` | `"vertical"` | vertical strip, **left** | row inside the rest pane, right of the launcher |
+| `.horizontal-layout` | `"horizontal"` | horizontal strip, **top** | full-width row **above** the launcher |
 
-Note the inversion: "vertical" means the *launcher* is vertical, not the tabs.
+The naming inverts intuition: "vertical" describes the *launcher*, not the tabs.
 
 ### DOM skeleton (`desktop_layout.tsx:63-192`)
 
 ```
 RootContainer                       .vertical-layout | .horizontal-layout
-├── [horizontal layout only] tab-row-container      height 40px, full width
-├── launcherPane                    53px wide (vertical) | 53px tall (horizontal)
-└── horizontal-main-container       row, flex-grow 1
-    ├── [vertical layout] launcherPane
-    ├── LeftPaneContainer           QuickSearch + NoteTree
-    └── rest-pane                   column, flex-grow 1
-        ├── [if tab bar not full width] tab-row-container    height 40px
+├── [horizontal only] tab-row-container       40px, full width
+├── launcherPane                     53px wide (vertical) | 53px tall (horizontal)
+└── horizontal-main-container        row, flex-grow 1
+    ├── [vertical only] launcherPane
+    ├── LeftPaneContainer            QuickSearch + NoteTree
+    └── rest-pane                    column, flex-grow 1
+        ├── [if tab bar not full width] tab-row-container     40px
         ├── [new layout] FixedFormattingToolbar
-        ├── vertical-main-container row, filling, collapsible
-        │   ├── center-pane       column, filling, collapsible
+        ├── vertical-main-container  row, filling, collapsible
+        │   ├── center-pane          column, filling, collapsible
         │   │   └── SplitNoteContainer → NoteWrapper
-        │   │       ├── .title-row.note-split-title   margin 5px per child
+        │   │       ├── .title-row.note-split-title      margin 5px per child
         │   │       │   NoteIcon · NoteTitle · NoteBadges · Spacer · NoteActions
         │   │       ├── Ribbon (legacy layout only)
-        │   │       └── ScrollingContainer           InlineTitle · NoteDetail
+        │   │       └── ScrollingContainer              InlineTitle · NoteDetail
         │   └── RightPaneContainer | RightPanelContainer
-        └── [vertical layout, new layout] StatusBar
+        └── [vertical only, new layout] StatusBar
 └── [horizontal layout] StatusBar
 ```
 
-Two independent feature flags shape it:
+Two feature flags shape it:
+
 - **`fullWidthTabBar`** — `launcherPaneIsHorizontal || (isElectron && !hasNativeTitleBar
-  && areWindowControlsOnLeft())`. The comment is explicit: when window controls sit
-  on the left, a tab bar confined to the rest pane cannot give them room, so they
-  end up drawn over the launcher pane instead.
-- **`isNewLayout`** — `experimental-feature-new-layout`. Swaps `Ribbon` for
-  `InlineTitle` + `NoteTitleActions`, swaps the right pane container, and adds the
-  status bar.
+  && areWindowControlsOnLeft())`. The in-code comment is explicit: when window controls
+  sit on the left, a tab bar confined to the rest pane cannot give them room, so they
+  are drawn over the launcher instead.
+- **`isNewLayout`** (`experimental-feature-new-layout`) — swaps `Ribbon` for
+  `InlineTitle` + `NoteTitleActions`, swaps the right-pane container, adds the status bar.
 
 ---
 
-## 2. Geometry reference
+## 2. Geometry
 
 | Element | Value | Source |
 |---|---|---|
@@ -71,59 +70,50 @@ Two independent feature flags shape it:
 | `--launcher-pane-horiz-size` | 54px | `base.css` |
 | Tab row container | **40px** | `desktop_layout.tsx:92,118` |
 | `--tab-bar-height` | 50px base / **44px** shell / 44px horizontal | `base.css`, `shell.css:1022`, `shell.css:46` |
-| `--tab-height` | (tab) centred via `calc((bar - tab)/2)` | `shell.css:1138` |
+| Tab centring | `calc((bar − tab) / 2)` | `shell.css:1138` |
 | `--center-pane-border-radius` | 10px | `base.css` |
 | Dropdown radius | 10px | `shell.css:12` |
-| Selected-item shadow | 2px base / 4px shell | `base.css`, `shell.css` |
+| Selected-item shadow size | 2px base / 4px shell | `base.css`, `shell.css` |
 | Note title input radius / inset | 8px / 12px | `shell.css:1443-1444` |
 | Note icon button radius | 8px | `shell.css:1452` |
 | Note split border | **2px solid transparent** | `shell.css:1379` |
-| Launcher icon (vertical) | 150% | `base.css` |
-| Launcher icon (horizontal) | 20px | `base.css` |
-| Launcher button margin / gap | 6px/8px, gap 3px | `base.css` |
-| Tab toggle button | `--icon-button-size: 30px`, ratio `.6` | `shell.css:1026-1027` |
-| Right-pane heading | 600 weight, `.85em`, `.3pt` tracking | `shell.css:1969-1974` |
+| Launcher icon (vertical / horizontal) | 150% / 20px | `base.css` |
+| Launcher button margin / gap | 6px / 8px, gap 3px | `base.css` |
+| Tab toggle button | `--icon-button-size: 30px`, ratio `.6` | `shell.css:1026` |
+| Right-pane heading | 600, `.85em`, `.3pt` | `shell.css:1969-1974` |
 | Right-pane row radius | 4px | `shell.css:1992` |
 | Launcher collapsed border | 2px | `shell.css:137` |
+| Left-pane item selected shadow | `1px 1px 2px rgba(0,0,0,.2)` | `theme-next-light.css` |
+| Left-pane item hover | `rgba(0,0,0,.032)` | `theme-next-light.css` |
+| Launcher button hover shadow | `4px 4px 4px rgba(0,0,0,.075)` | `theme-next-light.css` |
 
-**Notable:** the launcher is set to 53px inline but the CSS tokens say 58/54px, and
-the tab row is 40px inline against a `--tab-bar-height` of 44/50px. Trilium carries
-its own small drift between inline widget styles and token values. Do not copy that
-pattern — RTWiki's `LAYOUT` block already avoids it, and keeping one number per
-dimension is the rule to preserve.
+**Antipattern to avoid:** Trilium sets the launcher to 53px and the tab row to 40px as
+*inline widget styles*, while CSS tokens say 58/54px and 44/50px. It carries its own
+small drift. RTWiki's single `LAYOUT` block is the better model — one number per
+dimension, and no parallel token set.
 
 ---
 
-## 3. The tab row — the answer to RTWiki's chrome
+## 3. Tab row
 
-This is the section that maps most directly onto RTWiki's window band.
-
-**Height model.** The row is `--tab-bar-height` tall; individual tabs are
-`--tab-height` and are **centred inside it**:
+**Two-height model.** The row is `--tab-bar-height`; tabs are `--tab-height` and are
+centred inside it:
 
 ```css
 body.layout-vertical .tab-row-widget > * { margin-top: calc((var(--tab-bar-height) - var(--tab-height)) / 2); }
 body.layout-horizontal .tab-row-container { padding-top: calc(var(--tab-bar-height) - var(--tab-height)); }
 ```
 
-So the row is a fixed band and the tabs float within it. RTWiki's band is currently
-one row at exactly 40px with the tab row filling it — simpler, and fine, as long as
-the two heights are not allowed to disagree (which is exactly the 50px bug just fixed).
-
-**The active-tab seam.** The row carries a bottom border that is *interrupted* by the
-active tab, so the line appears to run into the active tab rather than under it:
+**The active-tab seam.** The row's bottom border is interrupted by the active tab, so
+the line appears to run *into* it:
 
 ```css
 .tab-row-container .note-tab[active]:before { inset-inline-start: -32768px; inset-inline-end: calc(100% - 1px); }
 .tab-row-container .note-tab[active]:after  { inset-inline-start: 100%; width: 100vw; }
 ```
 
-RTWiki's active tab currently fills its slot with a solid background and a top
-border. Trilium's treatment (line running to the tab edges, active tab transparent)
-is the browser idiom and reads lighter at small sizes.
-
-**Drag regions — the pattern to copy.** The row is a drag surface, and everything
-interactive inside it is explicitly opted out:
+**Drag regions — the pattern worth copying.** The row is a drag surface and everything
+interactive inside opts out explicitly:
 
 ```css
 body.layout-horizontal .tab-row-container,
@@ -135,23 +125,16 @@ body.layout-vertical .tab-row-widget > *:not(.tab-row-filler),
 body.layout-vertical #left-pane .quick-search > * { -webkit-app-region: no-drag; }
 ```
 
-There is an explicit **`.tab-row-filler`** element that is the drag handle, and every
-other child is `no-drag`. This is structurally simpler than RTWiki's current approach
-(an absolutely positioned drag backdrop *behind* the row, with content at a higher
-z-index). Both are valid; the filler approach avoids a stacking-context fight and
-scales better, because there is no overlap to reason about.
+There is an explicit **`.tab-row-filler`** as the drag handle. This is structurally
+simpler than a stacked drag backdrop: no overlap, no z-index ordering to reason about.
+Note also that **`#left-pane .quick-search` is a drag surface** — RTWiki does not do this.
 
-Note `#left-pane .quick-search` is also a drag surface — the search box area moves
-the window. RTWiki does not do this.
-
-**Row contents** (from the layout): `TabHistoryNavigationButtons` (back/forward),
-`TabRowWidget`, scroll buttons left/right, a new-tab button, and pane toggles.
+**Row contents:** `TabHistoryNavigationButtons` (back/forward), `TabRowWidget`,
+scroll buttons left/right, new-tab button, pane toggles.
 
 ---
 
-## 4. The note canvas — the answer to F1
-
-This is the single most important section for RTWiki.
+## 4. Note canvas — the reference for F1
 
 ```css
 #center-pane .note-split {
@@ -162,8 +145,8 @@ This is the single most important section for RTWiki.
 }
 ```
 
-**The note normally has no frame at all.** A 2px border exists but is *transparent*.
-It only becomes visible when a split is the active one in a multi-split view:
+**The note normally has no frame.** The 2px border exists but is *transparent*. It
+only appears when a split is the **active** one in a multi-split view:
 
 ```css
 #center-pane > .split-note-container-widget:has(> .note-split.visible ~ .note-split.visible) > .note-split.active {
@@ -171,11 +154,9 @@ It only becomes visible when a split is the active one in a multi-split view:
 }
 ```
 
-So the border is a **focus indicator**, not decoration. That is the opposite of
-RTWiki, where the document wrapper always carried a visible 1px border and an 8px
-radius — which is what made it read as a widget.
+So the border is a **focus indicator**, not decoration.
 
-**Radius is conditional, not constant:**
+**Radius is conditional, never constant:**
 
 | Condition | Effect |
 |---|---|
@@ -183,11 +164,11 @@ radius — which is what made it read as a widget.
 | new layout, first split | also `border-end-start-radius` |
 | classic toolbar visible | `--note-split-top-border-radius: 0` |
 | left pane collapsed | `--note-split-top-border-radius: 0` |
-| status bar panel open | `--note-split-bottom-border-radius: 0` |
+| status-bar panel open | `--note-split-bottom-border-radius: 0` |
 
-The radius is tied to **whether the note is actually a floating page**. When a
-toolbar spans above it, or the pane is full-bleed, the radius is dropped so the
-content meets the chrome cleanly. RTWiki's fixed radius cannot express this.
+The radius exists only when the note is genuinely a floating page. When a toolbar
+spans above it, or the pane goes full-bleed, it is dropped so content meets chrome
+cleanly.
 
 **The title is not a form field:**
 
@@ -195,186 +176,241 @@ content meets the chrome cleanly. RTWiki's fixed radius cannot express this.
 .note-title-widget input { --input-background-color: transparent; border-radius: 8px; padding-inline-start: 12px; }
 ```
 
-Transparent input background, so the title reads as document text, not a field. The
-icon button next to it also drops its border and uses the same 8px radius.
-
-**Entrance animation** is a 100ms linear opacity fade — fast enough to feel
+**Entrance:** `note-entrance`, 100ms linear opacity fade — fast enough to feel
 responsive rather than decorative.
 
 ---
 
-## 5. Launcher pane (the rail)
+## 5. Launcher pane
 
-- 53px, flex column (vertical layout) holding `GlobalMenu`, `LauncherContainer`,
-  `LeftPaneToggle`
-- Icon size 150%, button margin 6px, gap 3px
-- Has its own **thin scrollbar** with JS-measured padding, and a comment explaining
-  that the padding is set from JS so WebKit shows a persistent bar
-- When collapsed in vertical layout, gets a 2px inline-end border
-  (`left-pane-collapsed-border-color`, `#0000000d` in light)
-
-RTWiki comparison: rail is 40px (`LAYOUT.railWidth`) and its `nav` element measures
-42px because CSS pads it by content — a 2px overflow into a 40px navbar (F3 residual).
+- 53px flex column: `GlobalMenu`, `LauncherContainer`, `LeftPaneToggle`
+- Icon 150%, margin 6px, gap 3px
+- Own **thin scrollbar** with JS-measured padding, with a comment explaining the
+  padding is set from JS so WebKit shows a persistent bar
+- Collapsed in vertical layout → 2px inline-end border (`#0000000d` light, `#0009` dark)
 
 ---
 
 ## 6. Left pane — search and tree
 
-**[shallow]** — mapped the section boundaries but not every rule.
-
-- `QuickSearchWidget` sits at the top of the left pane, above `NoteTreeWidget`
-- The search box is a "background rectangle" model (`.quick-search` with an inner
-  background element that changes on hover/focus) rather than a bordered input
-- The tree root, selected-item bulk-action button, protected-note indicator, context
-  menu, and a **toolbar with collapsed and expanded states** (floating expand button)
-- Selected items use a shadow token (`--left-pane-item-selected-shadow-size`), not a
-  solid fill
-- `@keyframes left-pane-item-select` — there is an explicit selection animation
+- `QuickSearchWidget` above `NoteTreeWidget`
+- Search is a **background-rectangle model** (inner background element changing on
+  hover/focus), not a bordered input
+- Tree has a toolbar with **collapsed and expanded states** plus a floating expand
+  button, a selected-item bulk-action button, a protected-note indicator, a context
+  menu, and an explicit `left-pane-item-select` animation
+- **Selection is white + a shadow** (`1px 1px 2px rgba(0,0,0,.2)`), not a solid fill
 
 ---
 
 ## 7. Right pane
 
-- Background `--right-pane-background-color`
-- Children fade in: `animation: fade-in 200ms ease-in`
-- Card headers: no border, title at 600/`.85em`/`.3pt` in a dedicated
-  `--right-pane-heading-color`
-- Rows: 4px radius, 150ms colour transition on normal state, 300ms on hover,
-  `:active` returns to `transparent`
-- The new layout replaces this with `RightPanelContainer`
-
-RTWiki's right pane ("Page details" with Outline / Backlinks / Page Info) is the
-direct analogue and currently uses a permanent card framing. The section headers
-there should use the small-caps-ish 600/`.85em` treatment rather than plain labels.
+- `--right-pane-background-color`; children `fade-in 200ms ease-in`
+- Card headers: no border, title 600/`.85em`/`.3pt` in `--right-pane-heading-color`
+- Rows: 4px radius, 150ms transition, 300ms on hover, `:active` → `transparent`
+- Replaced by `RightPanelContainer` in the new layout
 
 ---
 
 ## 8. Formatting toolbar
 
-Not `ribbon.css` — that file styles **note metadata** (promoted attributes, file and
-image properties, note info, owned attributes, similar notes). The formatting toolbar
-is the CKEditor **classic toolbar**, themed through `--classic-toolbar-*-layout-
-background-color` and `--ck-editor-toolbar-button-*` tokens, and mounted either as
-`Ribbon` (legacy) or `FixedFormattingToolbar` (new layout).
+Not `ribbon.css` — that styles **note metadata** (promoted attributes, file/image
+properties, note info, owned attributes, similar notes). The formatting toolbar is the
+CKEditor **classic toolbar**, themed via `--classic-toolbar-*-layout-background-color`
+and `--ck-editor-toolbar-button-*` tokens, mounted as `Ribbon` (legacy) or
+`FixedFormattingToolbar` (new layout).
 
-**[shallow]** — I have the token names and mount points but have not audited the
-button inventory, grouping, or overflow behaviour. This is the area to study before
-RTWiki's F2 (24 of 35 controls unreachable on mobile). Trilium's `ribbon.css` does
-show the responsive idiom it uses elsewhere:
+**Its responsive idiom is container queries, not viewport media queries:**
 
 ```css
-@container info-section (max-width: 800px) { ... reflow to flex-wrap with gap ... }
+@container info-section (max-width: 800px) { /* reflow to flex-wrap with gap */ }
 ```
 
-**Container queries**, not viewport media queries, for component-level
-responsiveness. That is a materially better approach for a toolbar than RTWiki's
-current viewport breakpoints.
+A component reflows by **its own width**. This is the technique to reach for on
+RTWiki's toolbar rather than viewport breakpoints.
 
 ---
 
-## 9. Surface and colour system
+## 9. Colour system
 
-Trilium uses a large token vocabulary. Names follow a strict
-`--<component>-<role>-<state>` convention rather than a generic scale:
+Trilium uses a strict `--<component>-<role>-<state>` vocabulary. **There is no global
+"surface" token** — each region names its own background, and tokens often resolve
+differently per orientation (`...-vert-` vs `...-horiz-`).
 
-```
---window-background-color        --note-split-background-color
---left-pane-background-color     --right-pane-background-color
---launcher-pane-vert/horiz-background-color
---hover-item-background-color    --hover-item-text-color
---active-tab-background-color    --floating-button-background-color
---link-selection-outline-color   --subtle-border-color
---muted-text-color                --menu-text-color
---ck-editor-toolbar-button-on-background
-```
+### Light (`theme-next-light.css`)
 
-**There is no single global "surface" token.** Each region names its own background,
-and the same token resolves differently per orientation (`...-vert-` vs
-`...-horiz-`). This is the opposite of RTWiki, where one `--rtwiki-surface` is
-applied to 14 files — which is precisely what caused the F1 regression, where the
-document was handed the panel tone.
+| Token | Value |
+|---|---|
+| `--main-background-color` | `white` |
+| `--main-text-color` | `black` |
+| `--main-border-color` | `#dbdbdb` |
+| `--subtle-border-color` | `rgba(0,0,0,0.1)` |
+| `--left-pane-background-color` | `#f2f2f2` |
+| `--left-pane-text-color` | `#383838` |
+| `--left-pane-item-selected-background` | `white` |
+| `--left-pane-item-selected-color` | `black` |
+| `--left-pane-item-hover-background` | `rgba(0,0,0,0.032)` |
+| `--launcher-pane-vert-background-color` | `#e8e8e8` |
+| `--launcher-pane-horiz-background-color` | `#fafafa` |
+| `--muted-text-color` | `#666` |
+| `--hover-item-background-color` | `#0000001a` |
+| `--active-item-background-color` | `#ddd` |
+| `--input-background-color` | `#00000012` |
+| `--input-focus-outline-color` | `#00000063` |
+| `--menu-background-color` | `#ffffffd9` |
+| `--dropdown-border-color` | `#ccc` |
+| `--dropdown-shadow-opacity` | `0.2` |
 
-**Recommendation for RTWiki:** replace the single ambiguous `--rtwiki-surface` with
-per-region tokens, the way Trilium does. The F1 bug existed because "surface" could
-mean panel or document and nothing enforced which.
+### Dark (`theme-next-dark.css`)
 
-Themes are separate files (`theme-next-light.css`, `theme-next-dark.css`), and
-background effects (Windows Mica, macOS vibrancy) override the same tokens rather
-than adding a parallel system.
+| Token | Value |
+|---|---|
+| `--main-background-color` | `#242424` |
+| `--main-text-color` | `#ccc` |
+| `--main-border-color` | `#454545` |
+| `--subtle-border-color` | `#313131` |
+| `--left-pane-background-color` | `#1f1f1f` |
+| `--left-pane-text-color` | `#aaaaaa` |
+| `--left-pane-item-selected-background` | `#ffffff25` |
+| `--left-pane-item-hover-background` | `#ffffff0d` |
+| `--muted-text-color` | `#bbb` |
+| `--hover-item-background-color` | `#ffffff16` |
+| `--active-item-background-color` | `#777` |
+| `--input-background-color` | `#ffffff12` |
+| `--left-pane-collapsed-border-color` | `#0009` |
+
+### The relationship that matters
+
+Light: **pane `#f2f2f2` is darker than the `#ffffff` canvas.** Dark: **pane `#1f1f1f`
+is darker than the `#242424` canvas.** In both schemes the pane is *recessed* and the
+document is the brightest surface.
+
+**This is the key to the RTWiki palette work — see §12.**
 
 ---
 
-## 10. Shape, separators and motion
+## 10. Typography
+
+- `--main-font-family: "Inter", sans-serif`; `--main-font-size: normal`
+- Deliberately minimal: there is **no global heading or body scale** in the Next theme.
+  Sizing comes from CKEditor's own defaults plus small local adjustments
+  (`.9em`, `.85em`, `1.4em`, `0.7em` for captions/labels)
+- Section labels use a consistent small treatment: **600 weight, `.85em`, `.3pt`
+  letter-spacing** (right-pane headings, and the uppercase `.65rem` / `1pt` treatment
+  for card legends in `ribbon.css`)
+- **No text-measure constraint** was found in `base.css` or `shell.css` — the note
+  spans its pane. This is a canvas-style choice, not an oversight. *(Confirm against
+  `notes/text.css` before relying on it.)*
+- Body text is `1em`; the one `48px` in `text.css` is a specific large element, not a scale
+
+---
+
+## 11. Shape, separators, motion
 
 | Concern | Trilium |
 |---|---|
-| Radii | 10px panes/dropdowns, 8px inputs and icon buttons, 4px list rows |
-| Separators | 1px, colour-only, conditionally applied (e.g. toolbar removes the note radius) |
+| Radii | 10px panes/dropdowns · 8px inputs and icon buttons · 4px list rows |
+| Separators | 1px, colour-only, **conditionally applied** |
 | Note frame | transparent 2px, shown only when active in a split |
-| Transitions | 150ms for state, 300ms for hover, 100ms note entrance, 200ms pane fade-in |
-| Easing | mostly `ease-in-out` / `ease-out` |
+| Transitions | 150ms state · 300ms hover · 100ms note entrance · 200ms pane fade |
+| Entrance | opacity/filter fade, never a slide or scale |
 
-The consistent idea: **radii and borders are conditional on layout context**, never
-unconditional decoration.
+The consistent principle: **radii and borders are conditional on layout context**,
+never unconditional decoration.
 
 ---
 
-## 11. Behaviours worth adopting
+## 12. The RTWiki hex finding
 
-1. **Drag regions via an explicit filler + `no-drag` children** (§3) instead of a
-   stacked backdrop.
+The uncommitted RTWiki palette introduced with the 9.6.2 work contains:
+
+```
+light: --rtwiki-background #ffffff, --rtwiki-surface #f2f2f2
+dark:  --rtwiki-background #242424, --rtwiki-surface #1f1f1f
+```
+
+Those are **not arbitrary**. They are Trilium's values:
+
+| RTWiki token | Trilium origin |
+|---|---|
+| `--rtwiki-background #ffffff` | `--main-background-color: white` |
+| `--rtwiki-background #242424` (dark) | `--main-background-color: #242424` |
+| `--rtwiki-surface #f2f2f2` | **`--left-pane-background-color`** |
+| `--rtwiki-surface #1f1f1f` (dark) | **`--left-pane-background-color`** |
+
+So the palette was transcribed correctly. **The mistake was applying the *left-pane*
+token globally as `--rtwiki-surface`** — which is exactly what handed the document
+canvas a pane tone and produced the F1 regression (grey frame around a white card, in
+a document that matched the sidebar exactly).
+
+**The fix is structural, not cosmetic:** split the single `--rtwiki-surface` into
+per-region tokens named the way Trilium names them, and assign Trilium's values to the
+correct regions. The palette is already right; only the addressing is wrong.
+
+**Open decision:** BlockNote paints its own dark editor background at `#1f1f1f` —
+which is Trilium's *pane* colour, not its canvas (`#242424`). So either the document
+token follows BlockNote (current RTWiki fix) or BlockNote's background is overridden to
+match Trilium's canvas. Worth an explicit decision; both are defensible.
+
+---
+
+## 13. Behaviours worth adopting
+
+1. **Filler-based drag regions** (§3) instead of a stacked backdrop.
 2. **The search box is a window drag surface** (§3) — free draggable area.
-3. **Container queries for component responsiveness** (§8) instead of viewport
-   breakpoints, so a toolbar reflows by its own width.
+3. **Container queries** (§8) for component responsiveness.
 4. **Borders as focus indicators, not frames** (§4).
-5. **Tab seam that flows into the active tab** (§3).
+5. **Tab seam flowing into the active tab** (§3).
 6. **Zen mode** — `CloseZenModeButton` plus an animated toolbar entrance
    (`zen-formatting-toolbar-entrance`, 300ms `translateY(200%) → 0`).
 7. **Full-width tab bar when window controls sit on the left** (`fullWidthTabBar`) —
    directly relevant to RTWiki's custom caption buttons.
-8. **Native titlebar overlay awareness** — Linux `--native-titlebar-height` 36px, 52px
-   in horizontal layout, with the caption buttons centred against the tab row's
-   centre line (`3 + 30/2 = 18`). RTWiki's caption buttons are 46×40 and sit in the
-   band; Trilium solves the same alignment problem with an explicit calculation.
+8. **Caption-button alignment by explicit centre-line calculation** (Linux
+   `--native-titlebar-height` 36px / 52px horizontal; centre `3 + 30/2 = 18`), because
+   the row height and the control height deliberately differ.
+9. **Background effects as token overrides** (Windows Mica / tabbed, macOS
+   under-window / hud) rather than a parallel system.
 
 ---
 
-## 12. Coverage — what I have *not* studied
+## 14. Mobile
 
-Marked so the next pass is targeted rather than assumed done:
-
-- **[shallow]** Left pane: full search-box and note-tree rule set, selection animation
-- **[shallow]** Formatting toolbar: button inventory, grouping, overflow, CKEditor theming
-- **[not read]** `text.css` (26 KB) — heading scale, paragraph rhythm, code blocks,
-  tables, the text measure / line length
-- **[not read]** `theme-next-light.css` / `-dark.css` (22 KB each) — the actual colour
-  values; I have token *names* and structure, not the palette
-- **[not read]** `pages.css`, `forms.css` (32 KB), `dialogs.css`
-- **[not read]** `mobile_layout.tsx` / `mobile_layout.css`
-- **[not read]** Legacy `style.css`, `theme-light.css`, `theme-dark.css`
-- **not studied** runtime behaviour: pane drag-resize, collapse persistence, keyboard
-  shortcuts, tab overflow scrolling, command palette
+`mobile_layout.css` is **498 bytes** — a handful of tweaks. Mobile is a **variant of
+the same shell**, selected by a `body.mobile` class that appears throughout
+`shell.css` (`body.mobile #root-widget`, `body.mobile #detail-container .note-split`,
+`body.mobile .dropdown-menu`), with its own DOM in `mobile_layout.tsx`. There is no
+second design system. *(The mobile DOM itself is marked not read.)*
 
 ---
 
-## 13. Direct implications for RTWiki
+## 15. Coverage — honestly marked
 
-Ordered by expected gain, each grounded in something measured above:
+**Read and extracted:** layout model, DOM skeleton, geometry, tab row, note canvas,
+launcher, right pane, colour palette (light + dark), ribbon, part of the left pane.
 
-1. **Drop the document frame entirely** (§4). Make the border transparent-by-default
-   and radius conditional. RTWiki has already removed the rich editor's frame; the
-   same reasoning applies to the HTML editor and markdown workspace, which still use
-   `--rtwiki-surface` with a visible border.
-2. **Replace `--rtwiki-surface` with per-region tokens** (§9). This is the structural
-   fix for F1's root cause, not a per-component patch.
-3. **Adopt the filler drag pattern for the band** (§3) and make the tab strip a drag
-   surface like the search box.
-4. **Switch the toolbar to container queries** (§8) and give it an overflow affordance
-   (F2).
-5. **Use the small heading treatment in the right pane** (§7).
-6. **Recentre the caption buttons against the band** using Trilium's explicit
-   centre-line calculation (§11.8) rather than relying on `align-items: center` with
-   mismatched heights.
-7. **Keep one number per dimension** (§2). Trilium's own 53-vs-58 and 40-vs-44 drift
-   is the anti-pattern; RTWiki's `LAYOUT` block is the better model and should not
-   acquire a parallel token set.
+**Partial:** left pane search and tree rules (section boundaries mapped, not every
+rule); classic formatting toolbar (token names and mount points, not the button
+inventory or overflow behaviour).
+
+**Not read:** `notes/text.css` typography detail (26 KB) · `forms.css` (32 KB) ·
+`dialogs.css` · `pages.css` · `mobile_layout.tsx` DOM · legacy `style.css` /
+`theme-light.css` / `theme-dark.css`.
+
+**Not studied (runtime):** pane drag-resize, collapse persistence, keyboard shortcuts,
+tab overflow scrolling, command palette, the contextual toolbar's conditional groups.
+
+---
+
+## 16. Ordered implications for RTWiki
+
+| # | Action | Grounded in | Note |
+|---|---|---|---|
+| 1 | Split `--rtwiki-surface` into per-region tokens; assign Trilium's values per region | §9, §12 | Structural fix for F1's root cause. Palette already correct |
+| 2 | Decide the dark document tone vs BlockNote's `#1f1f1f` | §12 | Explicit decision, not incidental |
+| 3 | Drop the remaining document frames (HTML editor, markdown still framed) | §4 | Border transparent by default; radius conditional |
+| 4 | Filler-based drag region for the band; make the tab strip a drag surface | §3 | Replaces the stacked backdrop |
+| 5 | Toolbar to container queries + an overflow affordance | §8 | F2: 24 of 35 controls unreachable at 390px |
+| 6 | Small heading treatment in the right pane | §7, §10 | 600 / `.85em` / `.3pt` |
+| 7 | Caption buttons aligned by explicit centre line | §13.8 | Not `align-items: center` with mismatched heights |
+| 8 | Tab seam into the active tab | §3 | Browser idiom |
+| 9 | Keep one number per dimension | §2 | Do not acquire a parallel token set |
