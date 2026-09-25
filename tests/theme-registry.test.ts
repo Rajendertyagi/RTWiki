@@ -90,6 +90,69 @@ describe('theme registry', () => {
   })
 })
 
+/**
+ * The structural surfaces must be separated by a *perceptible* step, not merely
+ * by different hex digits. Lightness is measured in Oklab, which is perceptually
+ * uniform, so a fixed L* step looks like the same amount of change in both
+ * schemes. Comparing raw hex or sRGB values would let a two-digit difference
+ * pass as a distinction the eye cannot make.
+ */
+const MIN_LADDER_STEP = 0.03
+
+function parseHex(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) throw new Error(`not a 6-digit hex colour: ${hex}`)
+  const n = Number.parseInt(m[1], 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+function srgbToLinear(channel: number): number {
+  const c = channel / 255
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+
+/** Oklab lightness. For a neutral grey this is the cube root of linear luminance. */
+function oklabL(hex: string): number {
+  const [r, g, b] = parseHex(hex)
+  const y = 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b)
+  return Math.cbrt(y)
+}
+
+describe('surface ladder separation', () => {
+  // rail -> pane -> canvas, ordered so a deeper region is a distinct step from
+  // the one above it. `elevated` is deliberately excluded: it is a fill for
+  // hover and selected rows, not a structural surface, and in the light scheme
+  // it is intentionally the same white as the canvas.
+  const ladder = ['rail', 'pane', 'canvas'] as const
+
+  it.each(Object.keys(APP_THEMES))(
+    '%s separates rail, pane and canvas by a perceptible step',
+    (id) => {
+      const { variants } = getTheme(id)
+      for (const variantName of ['light', 'dark'] as const) {
+        const variant = variants[variantName]
+        for (let i = 1; i < ladder.length; i += 1) {
+          const upper = ladder[i - 1]
+          const lower = ladder[i]
+          const step = Math.abs(oklabL(variant[lower]) - oklabL(variant[upper]))
+          expect(
+            step,
+            `${id}/${variantName}: ${lower} (${variant[lower]}) must differ from ${upper} (${variant[upper]}) by at least ${MIN_LADDER_STEP} in Oklab L`
+          ).toBeGreaterThanOrEqual(MIN_LADDER_STEP)
+        }
+      }
+    }
+  )
+
+  it('keeps a deeper region darker than the one above it in the dark scheme', () => {
+    // The relationship the upstream reference relies on: the pane is recessed
+    // and the document canvas is the brighter surface.
+    const { variants } = getTheme(DEFAULT_THEME_ID)
+    expect(oklabL(variants.dark.pane)).toBeLessThan(oklabL(variants.dark.canvas))
+    expect(oklabL(variants.dark.rail)).toBeLessThan(oklabL(variants.dark.pane))
+  })
+})
+
 describe('legacy surface tokens', () => {
   // These names are deleted rather than aliased. An alias would preserve the
   // exact ambiguity that caused F1, so their absence is the contract.

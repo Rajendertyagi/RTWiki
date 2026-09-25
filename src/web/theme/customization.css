@@ -83,6 +83,43 @@
 }
 
 /*
+ * Floating layers: one recipe for everything that genuinely floats above the
+ * page - menus, popovers, dialogs, tooltips and the toast.
+ *
+ * The layers are the point. A single blur says "there is a box here"; a
+ * highlight along the top edge, a hairline inner rim, a solid outer ring that
+ * separates the surface from whatever is behind it, and then three
+ * progressively larger and softer drops, says "this is lifted off the page".
+ * The ring is what keeps the edge readable when the drop is too soft to do it
+ * alone.
+ *
+ * In dark mode the top highlight and inner rim are a translucent white. A drop
+ * shadow is almost invisible on a near-black surface, so a light edge does the
+ * work the shadow cannot.
+ */
+:root {
+  --rtwiki-floating-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(0 0 0 / 0.04),
+    0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px -0.5px rgb(0 0 0 / 0.08),
+    0 4px 8px -2px rgb(0 0 0 / 0.08), 0 12px 20px -4px rgb(0 0 0 / 0.08);
+}
+
+[data-mantine-color-scheme="dark"] {
+  --rtwiki-floating-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 0 0 1px rgb(0 0 0 / 0.36), 0 1px 1px -0.5px rgb(0 0 0 / 0.22),
+    0 3px 3px -1.5px rgb(0 0 0 / 0.2), 0 6px 6px -3px rgb(0 0 0 / 0.16);
+}
+
+/*
+ * Applied through theme component defaults, so every floating layer picks up
+ * the recipe without each call site having to remember it.
+ */
+.rtwiki-floating {
+  box-shadow: var(--rtwiki-floating-shadow);
+}
+
+/*
  * Application height-chain root (Slice 1: scroll ownership). The shell
  * (.main in app-shell.module.css) is the single definite-height flex column
  * (100dvh); every region below it binds through flex with min-height: 0.

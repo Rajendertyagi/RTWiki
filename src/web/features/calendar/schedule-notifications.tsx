@@ -1,6 +1,7 @@
 import { Notifications } from '@mantine/notifications'
 import { useEffect } from 'react'
 import { scheduleNotifier } from '../../services/schedule-notifier.js'
+import { FLOATING } from '../../theme/registry.js'
 import { loadSchedulerPreferences } from '../workspace/scheduler-preferences.js'
 
 /**
@@ -28,5 +29,7 @@ export function ScheduleNotifierHost(): JSX.Element {
     }
   }, [])
 
-  return <Notifications position="bottom-right" />
+  // The toast floats like any other layer, so it takes the same shared recipe
+  // rather than a library default.
+  return <Notifications position="bottom-right" classNames={{ notification: FLOATING }} />
 }

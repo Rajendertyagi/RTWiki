@@ -80,10 +80,18 @@ cannot express depth, only separation, and they do not adapt to a dark theme.
 ### What this changed
 
 - The document area lost its frame entirely, so it reads as the page.
-- Colour separates the page from the panels around it, in both themes.
+- Colour separates the page from the panels around it, in both themes. The three
+  structural surfaces are now a **measured** ladder: each one is a clear, even step
+  away from the next, in both light and dark. A check measures the difference rather
+  than trusting the eye, so a future colour change cannot quietly flatten the
+  structure again.
 - Where two same-shade surfaces meet, one faint line is used rather than a heavy
   border.
-- Shadows are reserved for floating layers.
+- The lines between the stacked rows at the top are now barely there, so the top of
+  the window reads as one light block rather than a set of bands.
+- Everything that genuinely floats — menus, pop-ups, dialogs, tooltips, and the
+  notification toast — now shares one soft layered shadow with a faint light edge, so
+  it visibly lifts off the page instead of sitting on it.
 
 ## 3. The parts of the window
 
@@ -178,7 +186,9 @@ an oversight to correct.
 | Choice | Do | Don't | Why |
 |---|---|---|---|
 | **Surface tones** | Give the document and the panel their own named colours, and keep the document brighter. | Let the document and the panel end up the same tone. | The document must never blend into its surroundings. A test now checks they are never equal, so this cannot regress silently. |
-| **Borders** | Use borders only as focus indicators (active split, selected row). | Add borders to the document canvas for decoration. | A permanent border competes with content and breaks the canvas feel. |
+| **Colour contrast** | Make each surface a clear, even step from the one beside it, in both themes. | Two surfaces that are a hair apart. They look identical, so the structure has to come from a border — which defeats the point. | The document is the brightest surface, the panels sit behind it, and the rail sits behind them. It is checked by measurement, not by eye. |
+| **Separators** | Use one very faint line, and only where colour cannot do the job. | Heavy or doubled lines. A line you can clearly see is too strong. | The top of the window stacks several rows; strong lines turn it into bands. |
+| **Floating things** | Give menus, pop-ups, dialogs, tooltips and notifications one shared soft shadow with a faint light edge. | Giving each one its own, or leaving them flat. | A thing that floats should look lifted. The light edge matters most in dark mode, where a shadow alone is nearly invisible. |
 | **Radii** | Round corners on controls and cards. Leave the canvas square. | Apply radius to the document surface. | The canvas is structural; radius implies a widget. |
 | **Row height** | Keep chrome rows at 40px and tree rows at 30px. | Add dead space inside a row (e.g. a 50px band with a 40px tab row). | Dead space wastes screen real estate and signals unfinished geometry. |
 | **Motion** | Use transitions only for state changes (hover, selection, divider hover). | Add entrance animations, slide transitions, or decorative motion. | Motion should communicate, not decorate. Every animation adds perceived latency. |

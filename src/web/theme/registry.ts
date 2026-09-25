@@ -1,5 +1,12 @@
 import type { MantineThemeOverride } from '@mantine/core'
-import { createTheme } from '@mantine/core'
+import { createTheme, Menu, Modal, Popover, Tooltip } from '@mantine/core'
+
+/**
+ * The one class every floating surface carries. Defined in customization.css,
+ * which holds the layered recipe; wired here through component defaults so no
+ * call site has to remember it and no menu can quietly ship without it.
+ */
+export const FLOATING = 'rtwiki-floating'
 
 /**
  * RTWiki theme registry.
@@ -122,13 +129,23 @@ const defaultTheme: AppTheme = {
       md: '0.875rem',
       lg: '1rem',
       xl: '1.125rem'
+    },
+    components: {
+      // Menu, Popover, Dialog, tooltip: the four things that genuinely float.
+      Menu: Menu.extend({ classNames: { dropdown: FLOATING } }),
+      Popover: Popover.extend({ classNames: { dropdown: FLOATING } }),
+      Modal: Modal.extend({ classNames: { content: FLOATING } }),
+      Tooltip: Tooltip.extend({ classNames: { tooltip: FLOATING } })
     }
   }),
   variants: {
     light: {
       canvas: '#ffffff',
       pane: '#f2f2f2',
-      rail: '#e8e8e8',
+      // One clear step below the pane. The previous rail was only 0.0295 in
+      // Oklab L from the pane, which is below the threshold the eye reliably
+      // resolves, so the rail blended into the tree beside it.
+      rail: '#e4e4e4',
       elevated: '#ffffff',
       border: '#dbdbdb',
       text: '#383838',
@@ -137,13 +154,19 @@ const defaultTheme: AppTheme = {
       selected: '#ffffff'
     },
     dark: {
-      // The canvas is TriliumNext's canvas tone. It is deliberately *declared*
+      // The canvas is TriliumNext's canvas tone, and is deliberately *declared*
       // rather than inherited from the rich editor, which paints its own
       // `#1f1f1f`; the editor surface is forced to follow this token instead.
+      //
+      // The three structural surfaces step by a uniform 0.045 in Oklab L, which
+      // is the smallest reliably perceptible step at this lightness. The
+      // previous values were only ~0.02 apart, so rail, pane and canvas read as
+      // one near-uniform block and the colour was not doing any separating.
+      // The canvas is unchanged; the rail and pane moved away from it.
       canvas: '#242424',
-      pane: '#1f1f1f',
-      rail: '#1a1a1a',
-      elevated: '#262626',
+      pane: '#191919',
+      rail: '#0f0f0f',
+      elevated: '#2f2f2f',
       border: '#454545',
       text: '#cccccc',
       textMuted: '#bbbbbb',

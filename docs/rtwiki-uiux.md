@@ -187,13 +187,31 @@ absent.
 
 ### 3.5 Elevation and shadows
 
-Three shadows in the Default theme, used sparingly:
+Floating layers — menus, popovers, dialogs, tooltips and the toast — share **one
+layered recipe**, defined once as `--rtwiki-floating-shadow` in
+`customization.css` and applied through theme component defaults, so no call site has
+to remember it and no menu can quietly ship without it.
 
-| Token | Value | Typical use |
+| Layer | Light | Dark |
 |---|---|---|
-| `xs` | `0 1px 2px rgba(0,0,0,0.05)` | Hairline lift |
-| `sm` | `0 2px 8px rgba(0,0,0,0.08)` | Menus, popovers |
-| `md` | `0 4px 16px rgba(0,0,0,0.12)` | Modals |
+| Top-edge highlight | `inset 0 1px 0 rgb(255 255 255 / 0.8)` | `inset 0 1px 0 rgb(255 255 255 / 0.12)` |
+| Inner rim | `inset 0 0 0 1px rgb(0 0 0 / 0.04)` | `inset 0 0 0 1px rgb(255 255 255 / 0.08)` |
+| Outer ring | `0 0 0 1px rgb(0 0 0 / 0.1)` | `0 0 0 1px rgb(0 0 0 / 0.36)` |
+| Drops (growing) | 2px → 8px → 20px at 8% | 1px → 3px → 6px at 22/20/16% |
+
+The layers are the point. A single blur says "there is a box here"; a top highlight,
+an inner rim, a solid ring and three softening drops say "lifted off the page". The
+ring is what keeps the edge readable when the drop is too soft to do it alone. In
+dark mode the highlight and rim are translucent **white**, because a drop shadow is
+almost invisible on a near-black surface.
+
+Before this, the only shadow in the app was `box-shadow: none` on menus — the test
+`tests/browser/floating-layers.pwspec.ts` now requires at least three layers on an
+open menu, and would fail on a library default.
+
+The remaining three shadows in the stylesheet are the Mantine scale (`xs` `0 1px 2px
+rgba(0,0,0,0.05)`, `sm` `0 2px 8px rgba(0,0,0,0.08)`, `md` `0 4px 16px
+rgba(0,0,0,0.12)`) plus the sidebar and rail lifts.
 
 The focus ring is Mantine's `auto`, so it adapts to the surface behind it. The
 toolbar's active swatch uses an explicit `outline: 2px solid` with a 1px offset
@@ -216,8 +234,19 @@ translucent black is invisible on a dark surface, so the dark value is a translu
 white at the same opacity. A single definition drives all four chrome separators (band,
 tab strip, page header, workspace), so they cannot drift apart.
 
-Shadows in the current stylesheet set number **two** — the sidebar and the utility
-rail. That is consistent with the rule: almost nothing in RTWiki genuinely floats.
+Shadows are reserved for floating layers. Every menu, pop-up, dialog, tooltip and
+the toast now share one layered recipe (§3.5) rather than each relying on a library
+default or on nothing at all.
+
+Separators are **deliberately fainter than the general `--rtwiki-border` token**. The
+chrome stacks several full-width rows against each other, so a full-strength
+separator turns the top of the window into a set of stacked bands. The hairline is a
+translucent value rather than a solid one, and it is **scheme-aware**: a translucent
+black is invisible on a dark surface, so the dark value is a translucent white at the
+same opacity. A single definition drives all four chrome separators (band, tab strip,
+page header, workspace), so they cannot drift apart.
+
+The surface ladder is **measured in Oklab L**, not judged by eye (§5).
 
 ### 3.7 Motion
 
@@ -318,9 +347,9 @@ is a compile error, and a test asserts completeness.
 | Token | Light value | Dark value | Region |
 |---|---|---|---|
 | `--rtwiki-canvas` | `#ffffff` | `#242424` | **Document canvas** |
-| `--rtwiki-pane` | `#f2f2f2` | `#1f1f1f` | Panels (tree, right sidebar, settings) |
-| `--rtwiki-rail` | `#e8e8e8` | `#1a1a1a` | Utility rail |
-| `--rtwiki-elevated` | `#ffffff` | `#262626` | Raised surfaces (hover fills, selected rows) |
+| `--rtwiki-pane` | `#f2f2f2` | `#191919` | Panels (tree, right sidebar, settings) |
+| `--rtwiki-rail` | `#e4e4e4` | `#0f0f0f` | Utility rail |
+| `--rtwiki-elevated` | `#ffffff` | `#2f2f2f` | Raised surfaces (hover fills, selected rows) |
 | `--rtwiki-border` | `#dbdbdb` | `#454545` | Separators |
 | `--rtwiki-text` | `#383838` | `#cccccc` | Primary text |
 | `--rtwiki-text-muted` | `#666666` | `#bbbbbb` | Muted / secondary text |
@@ -355,14 +384,34 @@ In **both** colour schemes the pane is recessed and the document canvas is the
 brightest surface:
 
 ```
-light:  rail (#e8e8e8) < pane (#f2f2f2) < canvas (#ffffff)
-dark:   rail (#1a1a1a) < pane (#1f1f1f) < canvas (#242424) < elevated (#262626)
+light:  rail (#e4e4e4) < pane (#f2f2f2) < canvas (#ffffff)
+dark:   rail (#0f0f0f) < pane (#191919) < canvas (#242424) < elevated (#2f2f2f)
 ```
 
 This relationship was the root cause of **F1** when it was violated. It is now
 asserted for **every theme and every variant** in `tests/theme-registry.test.ts`
 (`canvas !== pane` and `rail !== pane`), so adding a theme cannot silently
 reintroduce the defect.
+
+### The ladder is measured, not eyeballed
+
+`canvas !== pane` is a weak assertion: two colours can differ and still look
+identical. The registry test therefore measures the step in **Oklab L**, a
+perceptually uniform space, and requires **at least 0.03** between adjacent
+structural surfaces. Comparing hex digits or sRGB values would let a two-digit
+difference pass as a distinction the eye cannot resolve.
+
+The first version of this test failed on the shipped palette:
+
+```
+default/dark: pane (#1f1f1f) must differ from rail (#1a1a1a)
+              by at least 0.03 in Oklab L
+```
+
+Those two were only ~0.022 apart, and `canvas → elevated` was ~0.008 — effectively
+the same colour. The dark ladder is now a uniform **0.045** step, with the canvas
+left at `#242424` and the rail and pane moved away from it. The light rail was
+widened for the same reason (`#e8e8e8` → `#e4e4e4`).
 
 ### Why the dark-mode values used to be inverted
 
