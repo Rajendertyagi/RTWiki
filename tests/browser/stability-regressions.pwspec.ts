@@ -319,16 +319,23 @@ test.describe('stability regressions', () => {
       const child = await seedPage(request, childOriginal, 'rich', '', parent.id)
       await page.goto('/')
       await expandRow(page, parent.id)
-      // A background refetch can remount the tree and reset expansion; retry
-      // the expand-and-wait pair until the child row stays visible.
+      // Retry the expand-and-wait pair until the child row stays visible. This
+      // was needed because a rename triggered a full page refetch that remounted
+      // the tree and reset expansion. Rename now patches local state from the
+      // server's response, so it neither refetches nor remounts — the retry is
+      // kept as a guard: if a refetch ever returns to this path, the row stops
+      // being stable and the `toPass` below turns that back into a clear failure
+      // instead of a slow flake.
       await expect(async () => {
         await expandRow(page, parent.id)
         await pageRow(page, childOriginal).waitFor({ state: 'visible', timeout: 3_000 })
       }).toPass({ timeout: 20_000 })
       await renameViaTree(page, childOriginal, childRenamed)
-      // A mutation-triggered refetch remounts the tree (pre-existing
-      // behaviour), so re-expand the parent before asserting the child row.
-      await expandRow(page, parent.id)
+      // The rename keeps the tree mounted and the parent expanded, because it
+      // patches local state instead of refetching. Re-expanding here would
+      // therefore be a no-op; it is left out so that a regression which
+      // reintroduces the refetch shows up as a failure to find the row, rather
+      // than being papered over by this line.
       await expectTitleEverywhere(page, request, child.id, childRenamed)
       // The parent's title is untouched by the child rename.
       expect(await serverTitle(request, parent.id)).toBe(parentTitle)

@@ -379,7 +379,6 @@ export function usePagesController(): PagesController {
         setSelectedPage(page)
         setMutationStatus('saved')
         scheduleReset()
-        refreshPages()
         return page
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to create page'
@@ -388,7 +387,7 @@ export function usePagesController(): PagesController {
         return null
       }
     },
-    [refreshPages, scheduleReset]
+    [scheduleReset]
   )
 
   const savePageContent = useCallback(async (id: string, content: string): Promise<boolean> => {
@@ -410,10 +409,18 @@ export function usePagesController(): PagesController {
       setMutationStatus('saving')
       setMutationError(null)
       try {
-        await api.updatePage(id, { title })
+        // The server returns the authoritative updated page, so local state is
+        // patched from it rather than refetched. A rename changes no structure,
+        // so there is nothing a refetch could learn that this does not already
+        // carry — and `refreshPages()` here cost a full `listAllPages`, which is
+        // one HTTP request per 50 pages, and remounted the tree, collapsing the
+        // user's expansion on every rename. This is the same reconciliation
+        // shape `movePage` and `savePageContent` already use.
+        const updated = await api.updatePage(id, { title })
+        setPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+        setSelectedPage((prev) => (prev && prev.id === updated.id ? updated : prev))
         setMutationStatus('saved')
         scheduleReset()
-        refreshPages()
         return true
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to rename page'
@@ -422,9 +429,20 @@ export function usePagesController(): PagesController {
         return false
       }
     },
-    [refreshPages, scheduleReset]
+    [scheduleReset]
   )
 
+  /**
+   * Duplicates a page and its whole subtree.
+   *
+   * The refetch is deliberate and not removable the way the rename one was. The
+   * response carries only the new subtree *root*; the duplicated descendants are
+   * never sent, so without a refetch the tree would show a parent with no
+   * children. Duplicating is rare and not a hot path, so paying for it here is
+   * the right trade. The obvious alternative — returning the duplicated ids from
+   * the endpoint — is a server change with its own tests, and is not worth
+   * making for one rarely-used action.
+   */
   const duplicatePage = useCallback(
     async (id: string): Promise<Page | null> => {
       setMutationStatus('saving')
@@ -447,6 +465,16 @@ export function usePagesController(): PagesController {
     [refreshPages, scheduleReset]
   )
 
+  /**
+   * Soft-deletes a page.
+   *
+   * The refetch is deliberate. `softDeletePage` on the server does not cascade:
+   * it reparents the deleted page's children onto the deleted page's own parent
+   * and shifts every later sibling down to open a gap. That is a structural
+   * transformation of the tree, and reproducing it client-side would mean a
+   * second implementation of the same rule that could silently disagree with the
+   * server. Deleting is rare, so the authoritative refetch is the right trade.
+   */
   const deletePage = useCallback(
     async (id: string): Promise<boolean> => {
       setMutationStatus('saving')
