@@ -66,3 +66,13 @@ ehthumbs.db
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Scratch and throwaway artefacts, not product sources.
+#
+# docs/plans holds design mockups and working notes that are useful while a
+# change is in progress and are not part of the shipped documentation, which
+# lives in docs/ proper. .agnes is scratch output from tooling. Biome reads
+# .gitignore (vcs.useIgnoreFile), so leaving these untracked-but-unignored put
+# 162 lint errors from mockup HTML into a required CI gate.
+docs/plans/
+.agnes/

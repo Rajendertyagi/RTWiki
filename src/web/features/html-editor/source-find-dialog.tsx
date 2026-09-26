@@ -11,7 +11,7 @@ import type { EditorView } from '@codemirror/view'
 import { ActionIcon, Box, Button, Checkbox, Group, TextInput, Tooltip } from '@mantine/core'
 import { IconArrowDown, IconArrowUp, IconX } from '@tabler/icons-react'
 import type { JSX } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './source-find-dialog.module.css'
 
@@ -31,21 +31,33 @@ export function SourceFindDialog({ getView, mode, onClose }: SourceFindDialogPro
   const searchRef = useRef<HTMLInputElement | null>(null)
   const isReplace = mode === 'replace'
 
-  const applyQuery = (withReplace: boolean): SearchQuery =>
-    new SearchQuery({
-      search: query,
-      caseSensitive,
-      regexp: regex,
-      wholeWord,
-      replace: withReplace ? replaceText : undefined
-    })
+  // `applyQuery` and `pushQuery` are wrapped rather than left as plain closures
+  // so the effect below can depend on them honestly. Unwrapped, they are new
+  // function identities on every render, so listing them would re-run the effect
+  // on every render; omitting them only satisfies the linter by listing the
+  // values they happen to close over, which stops being true the moment either
+  // helper grows a dependency.
+  const applyQuery = useCallback(
+    (withReplace: boolean): SearchQuery =>
+      new SearchQuery({
+        search: query,
+        caseSensitive,
+        regexp: regex,
+        wholeWord,
+        replace: withReplace ? replaceText : undefined
+      }),
+    [query, caseSensitive, regex, wholeWord, replaceText]
+  )
 
   // Push the query into the editor (highlight + select first match) without
   // opening CodeMirror's bottom panel. setSearchQuery is a StateEffect here.
-  const pushQuery = (q: SearchQuery): void => {
-    const view = getView()
-    if (view) view.dispatch({ effects: setSearchQuery.of(q) })
-  }
+  const pushQuery = useCallback(
+    (q: SearchQuery): void => {
+      const view = getView()
+      if (view) view.dispatch({ effects: setSearchQuery.of(q) })
+    },
+    [getView]
+  )
 
   useEffect(() => {
     const view = getView()
@@ -57,7 +69,7 @@ export function SourceFindDialog({ getView, mode, onClose }: SourceFindDialogPro
     }
     pushQuery(applyQuery(isReplace))
     setNoMatch(!findNext(view))
-  }, [query, caseSensitive, regex, wholeWord, isReplace, replaceText, getView])
+  }, [applyQuery, pushQuery, query, isReplace, getView])
 
   useEffect(() => {
     searchRef.current?.focus()

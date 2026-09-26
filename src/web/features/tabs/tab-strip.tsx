@@ -87,6 +87,7 @@ function useTabOverflow(
     })
   }, [scrollerRef])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tabCount` is a re-run trigger, not a reference — see the note at the dependency list.
   useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
@@ -99,7 +100,8 @@ function useTabOverflow(
       observer.disconnect()
       el.removeEventListener('scroll', measure)
     }
-    // `tabCount` is deliberate and the exhaustive-deps rule is wrong here.
+    // `tabCount` is never referenced in the body, so the rule reads it as
+    // unnecessary. It is a deliberate re-run trigger and the rule is wrong here.
     // The ResizeObserver watches the scroller (whose border box never changes,
     // it is `flex: 1`) and the children that exist when the effect runs. A
     // *newly added* tab therefore fires nothing, yet it changes `scrollWidth`

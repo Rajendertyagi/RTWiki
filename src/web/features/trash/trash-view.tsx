@@ -23,7 +23,7 @@ import {
   IconTrash,
   IconTrashX
 } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './trash-view.module.css'
 
@@ -37,7 +37,10 @@ export function TrashView({ onRestorePage }: TrashViewProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
-  const fetchTrash = async (): Promise<void> => {
+  // Stable identity so the effect below can depend on it. It closes over nothing
+  // but the state setters, which are themselves stable, so an empty dependency
+  // list is accurate rather than merely convenient.
+  const fetchTrash = useCallback(async (): Promise<void> => {
     setLoading(true)
     setError(null)
     try {
@@ -52,11 +55,11 @@ export function TrashView({ onRestorePage }: TrashViewProps): JSX.Element {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void fetchTrash()
-  }, [])
+  }, [fetchTrash])
 
   const handleRestore = async (id: string): Promise<void> => {
     try {

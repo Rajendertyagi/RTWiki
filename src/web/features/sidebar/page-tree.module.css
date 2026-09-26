@@ -377,7 +377,6 @@
    reported as 14px after the rule looked correct. */
 :global(div.wunderbaum.wunderbaum span.wb-node span.wb-title) {
   flex: 1 1 auto;
-  min-width: 0;
   cursor: pointer;
   font-size: var(--rtwiki-tree-title-size);
   line-height: 1.25;

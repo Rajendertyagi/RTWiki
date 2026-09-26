@@ -14,8 +14,6 @@ import { expect, test } from '@playwright/test'
  * This spec covers all three page types, because that divergence is the defect.
  */
 
-const STATUS = '[data-testid="workspace-status-bar"]'
-
 type Editable = { page: import('@playwright/test').Page; target: string; typeText: string }
 
 /** Opens a page of the given type and returns how to type into it. */
