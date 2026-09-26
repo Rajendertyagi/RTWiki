@@ -43,6 +43,15 @@ describe('mermaid security configuration', () => {
     expect(MERMAID_CONFIG.look).toBe('classic')
   })
 
+  it('renders labels as SVG text, not HTML in a foreignObject', () => {
+    // `sanitizeDiagramSvg` removes every `foreignObject` as defence in depth.
+    // Mermaid puts HTML labels there by default, so with HTML labels enabled
+    // every diagram lost its labels while still rendering an `<svg>` — the
+    // failure mode the whole suite missed. SVG `<text>` cannot carry script or
+    // event handlers, so this is both the fix and the safer setting.
+    expect(MERMAID_CONFIG.htmlLabels).toBe(false)
+  })
+
   it('pins the mindmap layout, which the global dagre default would capture', () => {
     // The subtlest of the three. Since Mermaid 11 the mindmap renderer resolves
     // its layout through the registry instead of hardcoding `cose-bilkent`, so

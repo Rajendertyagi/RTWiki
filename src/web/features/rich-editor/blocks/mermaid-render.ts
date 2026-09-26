@@ -64,6 +64,17 @@ import { sanitizeDiagramSvg } from './svg-sanitize.js'
  *   from `class.layout`, which is unset. 12's global default is `elk`, and an
  *   explicit per-diagram value is the only way to be certain rather than
  *   dependent on that derivation.
+ *
+ * - `htmlLabels: false` — MANDATORY, and it is ours rather than Mermaid 12's.
+ *   With HTML labels (the default) Mermaid emits every node label inside a
+ *   `<foreignObject>`, and `sanitizeDiagramSvg` removes `foreignObject` outright
+ *   as defence in depth. The two together meant every diagram in RTWiki rendered
+ *   with no labels at all: shapes and connectors, no text. That was true of
+ *   every diagram type, on every page, and nothing failed - the existing tests
+ *   only asserted that an `<svg>` appeared. SVG `<text>` cannot carry script or
+ *   event handlers, so switching the labels to text removes the need to strip
+ *   `foreignObject` at all while making the output smaller and faster.
+ *   `tests/browser/diagram-labels.pwspec.ts` guards this.
  */
 export const MERMAID_CONFIG = Object.freeze({
   startOnLoad: false,
@@ -76,6 +87,7 @@ export const MERMAID_CONFIG = Object.freeze({
   fontFamily: 'inherit',
   layout: 'dagre',
   look: 'classic',
+  htmlLabels: false,
   mindmap: { layout: 'cose-bilkent' }
 })
 

@@ -297,6 +297,18 @@ test.describe('visual knowledge blocks', () => {
     ])
     await openNote(page, title)
     // Either a contained render or a contained error — never execution.
+    //
+    // Rendering is asynchronous, so wait for one of those two terminal states
+    // before deciding which assertion applies. Sampling immediately could read
+    // "neither yet" and then assert the wrong branch. Both branches keep their
+    // original assertions; only the wait is new.
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[data-testid="diagram-svg"]') !== null ||
+        document.querySelector('[data-testid="diagram-error"]') !== null,
+      undefined,
+      { timeout: 15_000 }
+    )
     const rendered = await page.locator('[data-testid="diagram-svg"]').count()
     if (rendered > 0) {
       const host = page.locator('[data-testid="diagram-svg"]').first()
