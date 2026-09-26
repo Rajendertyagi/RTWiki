@@ -35,8 +35,9 @@ import {
   IconUnderline
 } from '@tabler/icons-react'
 import type { JSX, ReactNode } from 'react'
-import { Children, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
+import { Children, isValidElement, useState } from 'react'
 import { LAYOUT, OVERLAY_OWNER_ATTR, UI_TEXT } from '../../config/index.js'
+import { useToolbarOverflow } from '../../hooks/use-toolbar-overflow.js'
 import type { CSSVars } from '../../style-props.js'
 import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
@@ -89,95 +90,6 @@ function withoutDividers(nodes: ReactNode[]): ReactNode[] {
  *
  * `split === null` means everything fits and no "more" button is needed.
  */
-function useToolbarOverflow(items: ReactNode[]): {
-  split: number | null
-  barRef: React.RefObject<HTMLDivElement | null>
-  slotProps: (index: number) => { ref: (node: HTMLSpanElement | null) => void }
-} {
-  const barRef = useRef<HTMLDivElement | null>(null)
-  const slots = useRef<Map<number, HTMLSpanElement>>(new Map())
-  const widths = useRef<Map<number, number>>(new Map())
-  // `items` is rebuilt on every render, so it is read through a ref rather than
-  // captured: depending on it directly would give `measure` a new identity each
-  // render and re-run the observer on every pass.
-  const itemsRef = useRef<ReactNode[]>(items)
-  itemsRef.current = items
-  const [split, setSplit] = useState<number | null>(null)
-
-  const measure = useCallback(() => {
-    const bar = barRef.current
-    if (!bar) return
-    const total = itemsRef.current.length
-    if (total === 0) return
-
-    // Cache the natural width of every control that is currently rendered.
-    // Widths are cached rather than read live because once a split is applied
-    // the tail is no longer in the bar: measuring only what is visible would
-    // report "it fits", clear the split, re-overflow, and loop forever.
-    for (const [index, node] of slots.current) {
-      widths.current.set(index, node.offsetWidth)
-    }
-    const list: number[] = []
-    for (let i = 0; i < total; i += 1) {
-      const w = widths.current.get(i)
-      // Not every control has been seen at a real width yet; wait rather than
-      // guess, or the first pass would strand the row.
-      if (w === undefined) return
-      list.push(w)
-    }
-
-    const cs = getComputedStyle(bar)
-    const gap = Number.parseFloat(cs.columnGap || cs.gap || '0') || 0
-    const padding =
-      (Number.parseFloat(cs.paddingLeft) || 0) + (Number.parseFloat(cs.paddingRight) || 0)
-    const available = bar.clientWidth - padding
-    // Not laid out yet. Measuring against zero would move everything out.
-    if (available <= 0) return
-
-    let used = 0
-    for (const w of list) used += (used === 0 ? 0 : gap) + w
-    if (used <= available) {
-      setSplit(null)
-      return
-    }
-
-    // Recompute with room left for the button that will replace the tail.
-    const budget = available - MORE_BUTTON_WIDTH - gap
-    let fit = 0
-    let running = 0
-    for (let i = 0; i < list.length; i += 1) {
-      const next = running + (running === 0 ? 0 : gap) + list[i]
-      if (next > budget) break
-      running = next
-      fit = i + 1
-    }
-    // Never strand the row with a lone separator at the split.
-    while (fit > 0 && isDivider(itemsRef.current[fit - 1])) fit -= 1
-    setSplit(fit >= list.length ? null : Math.max(fit, 0))
-  }, [])
-
-  useEffect(() => {
-    const bar = barRef.current
-    if (!bar) return
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(bar)
-    for (const node of slots.current.values()) observer.observe(node)
-    return () => observer.disconnect()
-  }, [measure, split])
-
-  const slotProps = useCallback(
-    (index: number) => ({
-      ref: (node: HTMLSpanElement | null) => {
-        if (node) slots.current.set(index, node)
-        else slots.current.delete(node ? index : index)
-      }
-    }),
-    []
-  )
-
-  return { split, barRef, slotProps }
-}
 
 function InsertEntryIcon({ entry }: { entry: InsertEntry }): JSX.Element {
   const Icon = INSERT_ICONS[entry.icon]
@@ -672,7 +584,10 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
   const items = Children.toArray(
     isValidElement<{ children?: ReactNode }>(controls) ? controls.props.children : null
   )
-  const { split, barRef, slotProps } = useToolbarOverflow(items)
+  const { split, barRef, slotProps } = useToolbarOverflow(items, {
+    isDivider,
+    moreButtonWidth: MORE_BUTTON_WIDTH
+  })
   const visible = split === null ? items : items.slice(0, split)
   const overflowed = split === null ? [] : withoutDividers(items.slice(split))
 
