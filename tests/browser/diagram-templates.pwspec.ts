@@ -298,6 +298,50 @@ test.describe('diagram templates', () => {
     expect(focused, 'focus must land on a menu row').toMatch(/^template-(row|variant)-/)
   })
 
+  test('diagram types that used to render empty now render', async ({ page }) => {
+    // Twelve types were excluded from the template list because Mermaid 12
+    // never resolved their lazily-registered definitions on the ordinary
+    // parse + render path: the diagram came out as an empty 24x24 SVG with no
+    // error. The fix force-loads the registry through Mermaid's public
+    // `registerExternalDiagrams`. These are the types that were measured empty.
+    //
+    // The assertion is that the rendered diagram is a real one — a viewBox with
+    // real extent and visible content — not merely that an `<svg>` exists, which
+    // is the assertion that let the original defect through.
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(`Lazy ${Date.now()}`)
+    await dialog.getByTestId('new-page-type-diagram').click()
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
+    await page.getByTestId('diagram-edit-button').click()
+
+    const cases: [string, string][] = [
+      [
+        'quadrantChart',
+        'quadrantChart\n    title Reach\n    x-axis Low --> High\n    y-axis Low --> High\n    quadrant-1 We grow\n    quadrant-2 Attract\n    quadrant-3 Delight\n    quadrant-4 Transform'
+      ],
+      [
+        'treemap',
+        'treemap\n    "Root"\n        "Alpha": 40\n        "Beta": 30\n        "Gamma": 30'
+      ],
+      ['venn', 'venn\n    A[Study]\n    B[Rest]\n    A --> 40\n    B --> 60']
+    ]
+
+    for (const [name, source] of cases) {
+      await page.getByTestId('diagram-source-input').fill(source)
+      const preview = page.getByTestId('diagram-live-preview').locator('svg')
+      await expect(preview, `${name} must render, not render empty`).toBeVisible()
+      const box = await preview.boundingBox()
+      expect(
+        box?.width ?? 0,
+        `${name} must have real width, not a 24px placeholder`
+      ).toBeGreaterThan(40)
+      expect(box?.height ?? 0, `${name} must have real height`).toBeGreaterThan(40)
+    }
+  })
+
   test('the template list has no duplicate labels', async () => {
     const labels = Object.values(DIAGRAM_TEMPLATES).map((d) => d.label)
     const dupes = labels.filter((l, i) => labels.indexOf(l) !== i)

@@ -69,6 +69,10 @@ export const DEBUG_EVENT_NAMES = {
     'editor_block_render_requested',
     'editor_block_render_succeeded',
     'editor_block_render_failed',
+    // Mermaid's one-off force-load of its lazily-registered diagram types. It is
+    // a distinct step from the render itself, and it is allowed to fail without
+    // failing the render, so it needs its own code to be diagnosable.
+    'editor_mermaid_lazy_load_failed',
     'editor_format_requested',
     'editor_format_applied',
     'editor_format_failed'

@@ -152,6 +152,42 @@ function applyConfig(
   mermaid.initialize({ ...MERMAID_CONFIG, theme })
 }
 
+/**
+ * Forces Mermaid to load every lazily-registered diagram definition, once.
+ *
+ * Mermaid 12 registers most diagram types lazily and never resolves them on the
+ * ordinary `parse` + `render` path. Reading the installed build, the only caller
+ * of its internal `loadRegisteredDiagrams()` is `registerExternalDiagrams` when
+ * passed `lazyLoad: false` — so without this, twelve of the thirty-three types
+ * Mermaid supports resolve to an empty 24x24 SVG with no error. They are the
+ * types deliberately absent from `DIAGRAM_TEMPLATES`.
+ *
+ * `registerExternalDiagrams` is public, documented API on Mermaid's `Mermaid`
+ * interface, and is the supported way to reach that behaviour. Passing an empty
+ * list adds no external diagrams; it exists purely to trigger the load, so
+ * `addDiagrams()` registers the detectors and the force-load resolves them.
+ *
+ * It runs once per session, inside the render mutex, because it mutates the same
+ * module-global registry the render path reads. The cost is that the lazy diagram
+ * chunks load on the first diagram rather than never, which is the trade for
+ * every type Mermaid supports actually working.
+ */
+let diagramsLoaded: Promise<void> | null = null
+
+async function ensureDiagramsLoaded(mermaid: Mermaid): Promise<void> {
+  diagramsLoaded ??= mermaid.registerExternalDiagrams([], { lazyLoad: false }).then(() => undefined)
+  try {
+    await diagramsLoaded
+  } catch (error) {
+    // A failed force-load must not poison every later render, and must not fail
+    // the render either: the eagerly-registered types still work without it.
+    diagramsLoaded = null
+    debugLog('editor', 'editor_mermaid_lazy_load_failed', {
+      code: error instanceof Error ? error.name : 'unknown'
+    })
+  }
+}
+
 /** Stable per-block render id seed: derived from the block id only. */
 export function mermaidRenderId(blockId: string): string {
   return `rtwiki-mmd-${safeHash(blockId)}`
@@ -204,6 +240,10 @@ export async function renderMermaidSvg(
       }
       stage = 'init'
       applyConfig(mermaid, options.theme)
+      // Before parsing: a lazily-registered type cannot be detected until its
+      // definition is loaded, so parsing first would fail on a diagram the user
+      // can legitimately type.
+      await ensureDiagramsLoaded(mermaid)
       stage = 'parse'
       await mermaid.parse(source)
       // `parse` is the unqueued step and the longest one; re-check before
