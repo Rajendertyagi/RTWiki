@@ -1,6 +1,7 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
 import { waitForRow } from './utils/row-visibility.js'
+import { railHome } from './utils/shell.js'
 
 /**
  * HTML pages are presented through three managed virtual source subfiles
@@ -44,7 +45,13 @@ function escapeRegExp(value: string): string {
  * is "<title> <type label>"), so "X - Copy" never matches "X".
  */
 function pageRow(page: Page, title: string) {
-  const pattern = new RegExp(`^${escapeRegExp(title)}\\s*(Rich Note|HTML Page)`)
+  // The row text is the title alone. It used to be "<title> HTML Page", and
+  // these tests kept requiring the type suffix after that suffix was removed
+  // from the tree - the row's type icon carries it now, so the words were a
+  // duplicate that gave every title about 60px back. The pattern below could
+  // therefore never match, and all nine tests in this file failed for that one
+  // reason.
+  const pattern = new RegExp(`^${escapeRegExp(title)}`)
   return page.locator('[role="treeitem"]').filter({ hasText: pattern }).first()
 }
 
@@ -177,7 +184,7 @@ test.describe('HTML source subfiles', () => {
     })
     await openTree(page)
     await expandAndShowSubfiles(page, title)
-    await page.getByRole('button', { name: 'Home' }).click()
+    await railHome(page).click()
 
     const cards = page.locator('.mantine-Card-root')
     // No card's TITLE may be a bare subfile label (the shared server holds

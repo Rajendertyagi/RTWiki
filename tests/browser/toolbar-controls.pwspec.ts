@@ -245,11 +245,20 @@ test.describe('Rich Note toolbar controls', () => {
       height: el.getBoundingClientRect().height,
       overflowX: getComputedStyle(el).overflowX
     }))
-    expect(metrics.overflowX).toBe('auto')
-    if (metrics.scrollWidth > metrics.clientWidth) {
-      // Overflowing content must scroll, never wrap into rows.
-      expect(metrics.height).toBeLessThan(80)
-    }
+    // The bar no longer scrolls. It was changed so that a narrow window moves
+    // the controls that do not fit into a trailing "more" menu, because a
+    // scrolling row hides the fact that there is anything to scroll to. This
+    // assertion used to require `overflow-x: auto` and therefore contradicted
+    // that decision; it now asserts the decision.
+    expect(metrics.overflowX, 'the bar must not scroll sideways').toBe('hidden')
+    expect(
+      metrics.scrollWidth,
+      'nothing may overflow the bar: the rest moves into the more menu'
+    ).toBeLessThanOrEqual(metrics.clientWidth + 1)
+    // And it must never wrap into rows.
+    expect(metrics.height).toBeLessThan(80)
+    // The controls that did not fit are reachable through the more menu.
+    await expect(page.getByTestId('toolbar-more')).toBeVisible()
   })
   // ---------- density, grouping and availability ----------
 
