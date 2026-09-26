@@ -1427,6 +1427,36 @@ Safe against the layout: `flex: 1` sizes the main axis (width); `min-height` is
 the cross axis, which `align-items: flex-end` already sizes to content — the same
 40px a tab reaches via `.tabActive`.
 
+### F24 — The editor computes its caret position and nothing displays it — **OPEN** 🟡
+
+Found while checking the independent review's claim that the `code-ide`
+failures were only stale selectors. Two of six were; the rest are not.
+
+`EditorStatus` is `{ line, column, selectedChars, formatError }`, produced by
+the CodeMirror layer, carried through `onEditorStatusChange` to `PageWorkspace`
+and into `App` — and **no component renders it**. The status bar derives word and
+character counts from the page's own text and shows no caret position and no
+language. `code-ide.pwspec.ts:226` is named *"status row shows caret position
+after typing"*, so the feature was intended.
+
+Trilium's status bar carries exactly this: a caret/line indicator, the language,
+and the indentation style. This is the same gap F6's neighbourhood sits in.
+
+Also absent: `source-breadcrumb` and `ide-status-row` have no element and no
+equivalent elsewhere.
+
+One of the six was worse than stale and is worth recording as a pattern:
+
+```ts
+await expect(page.getByTestId('ide-format-error')).toHaveCount(0)
+```
+
+against a test id that **does not exist in `src/`**. `toHaveCount(0)` on a
+missing element is vacuously true, so the assertion could never fail. It now
+points at the real `status-format-error`, meaning a formatting failure during an
+IDE test fails the test instead of passing silently. **An assertion against a
+name that does not exist is not a weak assertion; it is no assertion.**
+
 ## 8. Ordered work plan
 
 The agreed sequence, with reasoning for the order:

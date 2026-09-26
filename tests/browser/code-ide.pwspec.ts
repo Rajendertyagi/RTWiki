@@ -81,7 +81,7 @@ test.describe('source-file IDE', () => {
       'ide-font-increase',
       'ide-save-now',
       'ide-fullscreen',
-      'return-to-preview-button',
+      'return-to-preview',
       'source-breadcrumb',
       'ide-status-row'
     ]) {
@@ -163,7 +163,7 @@ test.describe('source-file IDE', () => {
     // Prettier expands the one-liner into multi-line CSS.
     await expect(editor).toContainText('margin: 0;', { timeout: 20_000 })
     // No contained format error is shown.
-    await expect(page.getByTestId('ide-format-error')).toHaveCount(0)
+    await expect(page.getByTestId('status-format-error')).toHaveCount(0)
   })
 
   test('font size and word wrap toggles work', async ({ page }) => {
@@ -219,7 +219,7 @@ test.describe('source-file IDE', () => {
     await expect(cssEditor).toContainText('.switch-probe')
 
     // Return to preview renders the latest draft.
-    await page.getByTestId('return-to-preview-button').click()
+    await page.getByTestId('return-to-preview').click()
     await expect(page.getByTestId('live-preview')).toBeVisible()
   })
 
@@ -253,7 +253,7 @@ test.describe('source-file IDE', () => {
         await row.getByRole('button').first().click()
       })
     await openSource(page, 'HTML')
-    await page.getByTestId('return-to-preview-button').click()
+    await page.getByTestId('return-to-preview').click()
     await expect(page.getByTestId('html-preview-view')).toBeVisible()
   })
 })
