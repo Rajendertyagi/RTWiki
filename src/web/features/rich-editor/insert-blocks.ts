@@ -27,6 +27,19 @@ export const MINDMAP_STARTER = 'mindmap\n  root((Main topic))\n    Topic A\n    
  * DIAGRAM_STARTER so the slash/Insert menu stays uncluttered.
  */
 export const DIAGRAM_TEMPLATES: Record<string, { label: string; source: string }> = {
+  // Order follows the toolbar, grouping the everyday diagram types first and
+  // the specialist ones after. Keys are Mermaid diagram ids.
+  //
+  // NOT every type Mermaid 12 registers is listed. Twelve were measured and
+  // removed because they render an empty 24x24 placeholder in this build:
+  // quadrantChart, treemap, treeView, venn, architecture, swimlanes, railroad,
+  // wardley, cynefin, eventModeling, agentflow and usecase. Their code chunks
+  // ARE in the bundle, so this is Mermaid 12's on-demand diagram loading not
+  // being triggered by our `parse` + `render` pipeline, not a missing feature
+  // and not a bad sample. Offering a template that cannot render is worse than
+  // not offering it, so they stay out until the loading path is fixed.
+  // `tests/browser/diagram-templates.pwspec.ts` renders every entry here, so
+  // adding one that does not work fails the build rather than the user.
   flowchart: {
     label: 'Flowchart',
     source:
@@ -55,6 +68,79 @@ export const DIAGRAM_TEMPLATES: Record<string, { label: string; source: string }
   timeline: {
     label: 'Timeline',
     source: 'timeline\n    title Project\n    2024 : Plan : Design\n    2025 : Build : Ship'
+  },
+  mindmap: {
+    label: 'Mind map',
+    source:
+      'mindmap\n    root((Idea))\n      Branch A\n        Leaf A1\n      Branch B\n        Leaf B1'
+  },
+  gantt: {
+    label: 'Gantt',
+    source:
+      'gantt\n    title Plan\n    dateFormat YYYY-MM-DD\n    section Work\n    Task one :a1, 2024-01-01, 10d\n    Task two :after a1, 12d'
+  },
+  pie: {
+    label: 'Pie',
+    source: 'pie title Pets\n    "Dogs" : 386\n    "Cats" : 85\n    "Rats" : 15'
+  },
+  gitGraph: {
+    label: 'Git graph',
+    source:
+      'gitGraph\n    commit id: "init"\n    branch develop\n    commit id: "feature"\n    checkout main\n    merge develop'
+  },
+  sankey: {
+    label: 'Sankey',
+    source:
+      'sankey-beta\n    Sources,Energy,20\n    Sources,Water,10\n    Energy,Homes,15\n    Water,Homes,8\n    Homes,Losses,7'
+  },
+  requirement: {
+    label: 'Requirement',
+    source:
+      'requirementDiagram\n    requirement REQ1 {\n      id: 1\n      text: the system shall respond\n      risk: high\n      verifymethod: test\n    }\n    element Entity1 {\n      type: simulation\n    }\n    REQ1 - satisfies -> Entity1'
+  },
+  c4: {
+    label: 'C4 context',
+    source:
+      'C4Context\n    title System context\n    Person(customer, "Customer", "A user")\n    System(wiki, "Wiki", "Stores notes")\n    Rel(customer, wiki, "Reads and writes")'
+  },
+  packet: {
+    label: 'Packet',
+    source:
+      'packet-beta\n    0-15: "Source port"\n    16-31: "Destination port"\n    32-63: "Payload"'
+  },
+  xychart: {
+    label: 'XY chart',
+    source:
+      'xychart-beta\n    title "Sales"\n    x-axis [jan, feb, mar, apr]\n    y-axis "Revenue (k)" 0 --> 60\n    bar [20, 35, 42, 51]\n    line [18, 30, 38, 46]'
+  },
+  block: {
+    label: 'Block',
+    source:
+      'block-beta\n    columns 3\n    a["Input"] b["Process"] c["Output"]\n    a --> b\n    b --> c'
+  },
+  radar: {
+    label: 'Radar',
+    source:
+      'radar-beta\n    title Skills\n    axis A["Speed"], B["Power"], C["Range"]\n    curve Alpha["Alpha"]{85, 60, 70}\n    curve Beta["Beta"]{60, 90, 45}\n    max 100\n    min 0'
+  },
+  ishikawa: {
+    label: 'Fishbone',
+    source:
+      'ishikawa-beta\n    defect[Defect]\n    people[People]\n    process[Process]\n    tools[Tools]\n    defect --> people\n    defect --> process\n    defect --> tools'
+  },
+  kanban: {
+    label: 'Kanban',
+    source:
+      'kanban\n    Todo[Todo]\n    Doing[Doing]\n    Done[Done]\n    Todo --> Doing\n    Doing --> Done'
+  },
+  userJourney: {
+    label: 'User journey',
+    source:
+      'journey\n    title Shopping\n    section Browse\n      Search: 5: Customer\n      Compare: 3: Customer\n    section Buy\n      Checkout: 2: Customer'
+  },
+  info: {
+    label: 'Info',
+    source: 'info'
   }
 }
 

@@ -97,9 +97,11 @@ test.describe('dedicated diagram and mind map pages', () => {
     await input.fill('sequenceDiagram\n    Alice->>Bob: Hi')
     await expect(page.getByTestId('diagram-live-preview').locator('svg')).toBeVisible()
 
-    // Template picker loads a starter into the source.
-    await page.getByTestId('diagram-template').click()
-    await page.getByText('Flowchart', { exact: true }).click()
+    // The flat template bar loads a starter into the source with one click.
+    // This used to drive a `Select` dropdown at `diagram-template`; that picker
+    // is gone, replaced by the bar, so the test was clicking a testid that no
+    // longer exists.
+    await page.getByTestId('template-flowchart').click()
     await expect(page.getByTestId('diagram-source-input')).toHaveValue(/graph|flowchart/)
 
     // Cancel restores the applied source; then apply a real change.

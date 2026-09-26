@@ -2,7 +2,6 @@ import {
   ActionIcon,
   Button,
   Group,
-  Select,
   Text,
   Textarea,
   Tooltip,
@@ -20,13 +19,13 @@ import {
   IconZoomOut
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { LAYOUT, UI_TEXT } from '../../config/index.js'
+import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
 import type { CSSVars } from '../../style-props.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
-import { DIAGRAM_TEMPLATES } from '../rich-editor/insert-blocks.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
+import { DiagramTemplateBar } from './diagram-template-bar.js'
 import classes from './mermaid-workspace.module.css'
 
 /**
@@ -304,7 +303,7 @@ export default function MermaidPageWorkspace({
                 data-testid={`${pageType}-apply`}
               >
                 {UI_TEXT.diagramApplyLabel}
-              </Button>
+              </Button>{' '}
               <Button
                 size="compact-xs"
                 variant="subtle"
@@ -313,24 +312,6 @@ export default function MermaidPageWorkspace({
               >
                 {UI_TEXT.cancelButton}
               </Button>
-              {pageType === 'diagram' ? (
-                <Select
-                  size="xs"
-                  w={180}
-                  data-testid={`${pageType}-template`}
-                  aria-label={UI_TEXT.diagramTemplateLabel}
-                  placeholder={UI_TEXT.diagramTemplateLabel}
-                  clearable
-                  comboboxProps={{ withinPortal: true, zIndex: LAYOUT.overlayZIndex }}
-                  data={Object.entries(DIAGRAM_TEMPLATES).map(([value, def]) => ({
-                    value,
-                    label: def.label
-                  }))}
-                  onChange={(value) => {
-                    if (value && DIAGRAM_TEMPLATES[value]) setDraft(DIAGRAM_TEMPLATES[value].source)
-                  }}
-                />
-              ) : null}
             </Group>
             <Group gap={4} wrap="nowrap">
               {refreshButton}
@@ -339,6 +320,23 @@ export default function MermaidPageWorkspace({
               {fullscreenToggle}
             </Group>
           </Group>
+          {pageType === 'diagram' ? (
+            // Its own row, directly under the edit bar: one row of template
+            // controls, never wrapping, never scrolling, with whatever does not
+            // fit split into a trailing dropdown by the shared overflow hook —
+            // the same behaviour as the rich document toolbar.
+            <DiagramTemplateBar
+              onPick={(source) => {
+                setDraft(source)
+                debugLog('ui', 'ui_context_menu_action', {
+                  targetId: pageId,
+                  code: `${pageType}-template-pick`,
+                  len: source.length,
+                  hash: safeHash(source)
+                })
+              }}
+            />
+          ) : null}
           <div className={classes.editSplit}>
             <Textarea
               className={classes.sourcePane}

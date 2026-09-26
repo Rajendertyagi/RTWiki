@@ -114,3 +114,38 @@
     flex-direction: column;
   }
 }
+
+/* Flat template bar: one row, never wrapping, never scrolling. Whatever does
+     not fit is split off by the shared useToolbarOverflow hook into a dropdown,
+     so the row is the same shape as the rich document toolbar. */
+.templateBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.templateSlot {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.moreButton {
+  flex: 0 0 auto;
+}
+
+/* Overflowed templates keep their own identity and handlers - they are moved,
+     not reimplemented - so the dropdown shows the same icon buttons. */
+.moreMenu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: var(--mantine-spacing-xs);
+}
+
+.moreItem {
+  display: inline-flex;
+}
