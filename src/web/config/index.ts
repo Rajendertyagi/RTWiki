@@ -60,6 +60,14 @@ export const LAYOUT = {
   blockMaxHeight: 2000
 } as const
 
+/**
+ * Data attribute marking a toolbar control that owns its own floating overlay
+ * (a popover-backed picker). The overflow menu must not unmount such a control
+ * when it is opened, or the overlay it just opened is torn down with it.
+ * Defined once so the attribute and the selector that reads it cannot drift.
+ */
+export const OVERLAY_OWNER_ATTR = 'data-keep-menu-open'
+
 /** Visual-block container size presets (width px, height px; 0 = auto). */
 export const BLOCK_SIZE_PRESETS = {
   small: { label: 'Small', width: 360, height: 240 },

@@ -4,7 +4,7 @@ import { buildInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
 import { IconLink } from '@tabler/icons-react'
 import type { JSX } from 'react'
 import { useMemo, useState } from 'react'
-import { LAYOUT, UI_TEXT } from '../../config/index.js'
+import { LAYOUT, OVERLAY_OWNER_ATTR, UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import classes from './rich-editor.module.css'
 import type { AnyRichEditor } from './schema.js'
@@ -104,6 +104,7 @@ export function WikiLinkToolbarAction({
             aria-haspopup="dialog"
             aria-expanded={opened}
             data-testid="wiki-link-button"
+            {...{ [OVERLAY_OWNER_ATTR]: true }}
             onClick={() => setOpened((o) => !o)}
           >
             <IconLink size={16} />

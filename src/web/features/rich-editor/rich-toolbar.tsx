@@ -36,7 +36,7 @@ import {
 } from '@tabler/icons-react'
 import type { JSX, ReactNode } from 'react'
 import { Children, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
-import { LAYOUT, UI_TEXT } from '../../config/index.js'
+import { LAYOUT, OVERLAY_OWNER_ATTR, UI_TEXT } from '../../config/index.js'
 import type { CSSVars } from '../../style-props.js'
 import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
@@ -233,6 +233,10 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
   const [linkOpened, setLinkOpened] = useState(false)
   const [textColorOpened, setTextColorOpened] = useState(false)
   const [highlightOpened, setHighlightOpened] = useState(false)
+  // The overflow menu is controlled so it can be dismissed on use. Left
+  // uncontrolled, Mantine only closes it for its own `Menu.Item` children, and
+  // these controls are bare `ActionIcon`s — see the Menu.Dropdown handler.
+  const [moreOpen, setMoreOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
 
   const withEditor = (action: () => void) => (): void => {
@@ -435,6 +439,7 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
               variant="subtle"
               aria-label={UI_TEXT.textColorLabel}
               aria-haspopup="menu"
+              {...{ [OVERLAY_OWNER_ATTR]: true }}
               onClick={() => setTextColorOpened((o) => !o)}
             >
               <IconLetterA size={16} />
@@ -472,6 +477,7 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
               variant="subtle"
               aria-label={UI_TEXT.highlightLabel}
               aria-haspopup="menu"
+              {...{ [OVERLAY_OWNER_ATTR]: true }}
               onClick={() => setHighlightOpened((o) => !o)}
             >
               <IconLetterA size={16} className={classes.swatchIconFill} />
@@ -513,6 +519,7 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
             <ActionIcon
               variant="subtle"
               aria-label={UI_TEXT.linkLabel}
+              {...{ [OVERLAY_OWNER_ATTR]: true }}
               onClick={() => setLinkOpened((open) => !open)}
             >
               <IconLink size={16} />
@@ -677,7 +684,19 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
         </span>
       ))}
       {overflowed.length > 0 ? (
-        <Menu position="bottom-end" withinPortal>
+        <Menu
+          position="bottom-end"
+          withinPortal
+          opened={moreOpen}
+          onChange={setMoreOpen}
+          // Mantine's Popover default is already `false`; `Menu` is what raises
+          // it, and the automatic return-focus on unmount runs after the
+          // browser's own focus step, so it moved DOM focus to this trigger
+          // button and the keystrokes that followed never reached the block the
+          // menu had just inserted. Escape and a trigger click still return
+          // focus by design; only the automatic outside-dismissal no longer does.
+          returnFocus={false}
+        >
           <Menu.Target>
             <ActionIcon
               variant="subtle"
@@ -688,7 +707,26 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
               <IconDotsVertical size={16} />
             </ActionIcon>
           </Menu.Target>
-          <Menu.Dropdown className={classes.moreMenu}>
+          <Menu.Dropdown
+            className={classes.moreMenu}
+            onClick={(event) => {
+              // Close when a control is actually used. Mantine only auto-closes
+              // for its own `Menu.Item` children, and the controls here are moved
+              // in whole — bare `ActionIcon`s — so nothing closed the menu. Left
+              // open, the very next click anywhere in the document was consumed
+              // dismissing it, and the block just inserted silently ignored the
+              // user's typing.
+              //
+              // The exception is a control that owns its own overlay (a colour
+              // grid, a link field). Closing the menu unmounts that control, which
+              // tears down the popover it just opened, so the click would land on
+              // a dropdown that no longer exists. Those triggers carry
+              // OVERLAY_OWNER_ATTR and the menu stays open until the next click
+              // lands outside it.
+              if (!(event.target as HTMLElement).closest(`[${OVERLAY_OWNER_ATTR}]`))
+                setMoreOpen(false)
+            }}
+          >
             {/* The same controls, moved whole. Nothing is re-implemented, so a
                 popover-backed or stateful control behaves identically here. */}
             {overflowed.map((item, index) => (

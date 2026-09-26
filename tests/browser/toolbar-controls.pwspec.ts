@@ -48,15 +48,24 @@ const toolbarButton = (page: Page, label: string) =>
  * assertions stay about *what the control does*, not where it is filed.
  */
 async function useControl(page: Page, testId: string): Promise<void> {
-  const onBar = page.getByTestId(testId)
+  // Scope the on-bar lookup to the toolbar. An unscoped `getByTestId` also
+  // matches a menu item that is portalled outside the toolbar — and, worse,
+  // matches one that is still present while the menu animates closed. Both
+  // mistakes end in a click on a detached element.
+  const onBar = page.getByRole('toolbar').getByTestId(testId)
   if ((await onBar.count()) > 0) {
     await onBar.click()
     return
   }
-  await page.getByTestId('toolbar-more').click()
+  const more = page.getByTestId('toolbar-more')
+  await more.click()
   const inMenu = page.getByTestId(testId)
   await inMenu.waitFor({ state: 'visible', timeout: 5_000 })
   await inMenu.click()
+  // The menu closes itself when one of its controls is used, so wait for that
+  // to settle. Without this, the next helper call can find the control in the
+  // DOM during the dismissal and click it as it detaches.
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
 }
 
 test.describe('Rich Note toolbar controls', () => {
@@ -197,6 +206,128 @@ test.describe('Rich Note toolbar controls', () => {
     // The former Insert dropdown is gone.
     await expect(page.getByTestId('insert-menu-button')).toHaveCount(0)
   })
+
+  test('the more menu closes when one of its controls is used', async ({ page }) => {
+    await newRichNote(page)
+    const more = page.getByTestId('toolbar-more')
+    await expect(more).toBeVisible()
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+
+    await more.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+
+    // Use a control that lives inside the menu. Mantine only auto-closes a menu
+    // for its own `Menu.Item` children, and these controls are moved in whole as
+    // bare `ActionIcon`s, so nothing closed it. Left open, the next click
+    // anywhere was consumed dismissing the menu and DOM focus was handed back to
+    // the trigger button — which is why typing into a just-inserted callout went
+    // nowhere. The menu closing is the whole contract, so assert it directly.
+    const inMenu = page.getByTestId('insert-code-block')
+    await inMenu.waitFor({ state: 'visible', timeout: 5_000 })
+    await inMenu.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('typing into a block inserted from the more menu lands in that block', async ({ page }) => {
+    // The user-visible consequence of the menu staying open. Insert from the
+    // menu, then click the block and type: with the menu still open the first
+    // click was swallowed and the keystrokes went to the toolbar button.
+    await newRichNote(page)
+    const more = page.getByTestId('toolbar-more')
+    await more.click()
+    const inMenu = page.getByTestId('insert-code-block')
+    await inMenu.waitFor({ state: 'visible', timeout: 5_000 })
+    await inMenu.click()
+
+    const body = page.locator(EDITABLE)
+    await body.click()
+    await page.keyboard.type('CODEFENCE')
+    await expect(page.locator(`${EDITABLE} code`).first()).toContainText('CODEFENCE')
+  })
+
+  test('typing straight after inserting from the more menu lands in the block', async ({
+    page
+  }) => {
+    // The focus theft itself, with no intervening click to mask it. The menu is a
+    // Popover with `returnFocus` raised to true, so unmounting the dropdown handed
+    // DOM focus back to the trigger button *after* the browser's own focus step.
+    // No `focusin` ever reached ProseMirror, so every keystroke went to the button
+    // and the block the menu had just inserted ignored all of them. A test that
+    // clicks the block first cannot see this.
+    await newRichNote(page)
+    await page.getByTestId('toolbar-more').click()
+    const inMenu = page.getByTestId('insert-callout-info')
+    await inMenu.waitFor({ state: 'visible', timeout: 5_000 })
+    await inMenu.click()
+    // No click in between: the keystrokes must reach the block the menu just made.
+    await page.keyboard.type('ZZNOCLICK')
+    await expect(page.locator(EDITABLE)).toContainText('ZZNOCLICK')
+  })
+
+  test('overlay-owning controls still work from inside the more menu', async ({ page }) => {
+    // Colour and link pickers carry their own floating overlay. Closing the menu
+    // on a click inside one unmounts that control, which tears down the popover it
+    // just opened — and at narrow widths these controls have overflowed into the
+    // menu, so the picker flashes and vanishes instead of opening. The trigger
+    // keeps the menu open; the *next* click, inside the portalled dropdown, has no
+    // marked DOM ancestor and closes the menu, which is the outcome that was
+    // actually wanted.
+    await newRichNote(page)
+    await page.setViewportSize({ width: 420, height: 900 })
+    await page.waitForTimeout(600)
+    const more = page.getByTestId('toolbar-more')
+    await more.click()
+    // `toolbarButton()` scopes to the bar, so it can never match a portalled menu
+    // child; the dropdown is addressed directly.
+    const inMenu = page.locator('[data-menu-dropdown]')
+    await inMenu.getByLabel('Highlight', { exact: true }).click()
+    // The menu must survive the click. Without the guard the control is torn down
+    // with it: measured, the grid was still in the DOM for a few milliseconds —
+    // long enough for a fast click to pick a swatch — and then vanished, which is
+    // the race that made this read as a control that half works. Assert the
+    // settled state, not the first frame of it.
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+    await page.waitForTimeout(500)
+    await expect(page.getByTestId('highlight-grid')).toBeVisible()
+    await page
+      .getByRole('menuitemradio', { name: /yellow/i })
+      .first()
+      .click()
+    await expect(
+      page.locator(`${EDITABLE} [data-style-type="backgroundColor"][data-value="yellow"]`).first()
+    ).toBeVisible()
+    // Using the picker is not a reason to keep the menu open: the swatch lives in
+    // a portal, so it has no marked DOM ancestor and the menu closes on it.
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+    await more.click()
+    await inMenu.getByLabel('Link', { exact: true }).click()
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+    await page.waitForTimeout(500)
+    await expect(page.getByTestId('link-url-input')).toBeVisible()
+    await page.getByTestId('link-url-input').fill('https://example.com/narrow')
+    await page.getByRole('button', { name: 'Apply link' }).click()
+    await expect(
+      page.locator(`${EDITABLE} a[href="https://example.com/narrow"]`).first()
+    ).toBeVisible()
+  })
+
+  for (const width of [1280, 900, 480, 420]) {
+    test(`the bar never overflows at ${width}px`, async ({ page }) => {
+      // Cheap insurance against the rejected alternative creeping back: pinning
+      // the three overlay-owning controls onto the bar overflows the row at every
+      // width (measured 1021 vs 920 at 1280) because the overflow budget knows
+      // nothing about pinned controls. Everything that does not fit belongs in the
+      // menu, at every width.
+      await newRichNote(page)
+      await page.setViewportSize({ width, height: 900 })
+      await page.waitForTimeout(600)
+      const m = await page.getByRole('toolbar').evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth
+      }))
+      expect(m.scrollWidth).toBeLessThanOrEqual(m.clientWidth + 1)
+    })
+  }
 
   test('every insertion control stays reachable at narrow width', async ({ page }) => {
     const title = uniqueTitle('NarrowInsert')
