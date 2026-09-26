@@ -159,17 +159,48 @@ test.describe('dedicated diagram and mind map pages', () => {
       .getByTestId('diagram-source-input')
       .fill('erDiagram\n    CUSTOMER ||--o{ ORDER : places')
     await page.getByTestId('diagram-apply').click()
-    await expect(page.getByTestId('diagram-save-status')).toContainText(/Saved/i, {
-      timeout: 15_000
-    })
 
-    const res = await request.get('/api/pages')
-    const body = (await res.json()) as { pages: Array<{ title: string; content: string }> }
-    const stored = body.pages.find((p) => p.title === title)?.content ?? ''
-    expect(stored).toContain('CUSTOMER')
+    // Synchronise on the thing actually under test: the autosaved content.
+    //
+    // Two earlier versions of this test were wrong in ways worth recording.
+    // It looked for `diagram-save-status`, a testid that no longer exists
+    // anywhere in the source, so it failed on "element(s) not found" and never
+    // reached the assertion that proves the save. Pointing it at the shared
+    // status bar was still wrong: that bar renders "Saved" for a CLEAN page
+    // too (status-bar.tsx computes the label from saveState, and clean maps to
+    // "Saved"), so the assertion passed instantly and the test then read the API
+    // before the 2000ms autosave debounce had fired — a race, reporting
+    // default content for an edit that had in fact been saved.
+    //
+    // Measured: apply -> saved -> view re-renders lands between 500ms and 2000ms.
+    let pageId = ''
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get('/api/pages')
+          const body = (await res.json()) as {
+            pages: Array<{ id: string; title: string; content: string }>
+          }
+          const found = body.pages.find((p) => p.title === title)
+          if (found?.content.includes('CUSTOMER')) pageId = found.id
+          return found?.content ?? ''
+        },
+        { timeout: 15_000 }
+      )
+      .toContain('CUSTOMER')
+
+    // Now that a save has demonstrably happened, the status bar is a meaningful
+    // thing to assert on.
+    await expect(page.getByTestId('workspace-status-bar')).toContainText(/Saved/i)
 
     await page.reload()
-    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    // Reopen by id rather than by dashboard card. The dashboard paginates, and a
+    // freshly created page sits at the end of the tree, so on a database with
+    // many pages the "Open <title>" button is simply not on the first page —
+    // which made this assertion depend on how much test data happened to be
+    // lying around.
+    await page.goto(`/?page=${pageId}`)
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
     await expect(page.getByTestId('diagram-rendered').locator('svg')).toBeVisible()
   })
 
