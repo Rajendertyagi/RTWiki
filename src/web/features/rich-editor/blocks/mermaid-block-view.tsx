@@ -19,11 +19,12 @@ import {
   IconZoomOut
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { LAYOUT, UI_TEXT } from '../../../config/index.js'
+import { UI_TEXT } from '../../../config/index.js'
 import { debugLog, safeHash } from '../../../diagnostics/debug-log.js'
 import type { CSSVars } from '../../../style-props.js'
 import { DIAGRAM_TEMPLATES } from '../insert-blocks.js'
 import { ResizableBlockContainer } from './block-resize.js'
+import { DiagramTemplateBar } from './diagram-template-bar.js'
 import classes from './mermaid-block.module.css'
 import { renderMermaidSvg } from './mermaid-render.js'
 
@@ -254,22 +255,18 @@ export function MermaidBlockView({
               data-testid={`${blockType}-source-input`}
             />
             {blockType === 'diagram' ? (
-              <Select
-                size="xs"
-                className={classes.templateSelect}
-                data-testid="diagram-template"
-                aria-label={UI_TEXT.diagramTemplateLabel}
-                placeholder={UI_TEXT.diagramTemplateLabel}
-                clearable
-                comboboxProps={{ withinPortal: true, zIndex: LAYOUT.overlayZIndex }}
-                data={Object.entries(DIAGRAM_TEMPLATES).map(([value, def]) => ({
-                  value,
-                  label: def.label
-                }))}
-                onChange={(value) => {
-                  if (value && DIAGRAM_TEMPLATES[value]) {
-                    setDraft(DIAGRAM_TEMPLATES[value].source)
-                  }
+              /* The same bar the Diagram page uses, rather than a second,
+                 different picker. Two ways to choose a template in one
+                 application is the kind of inconsistency that has to be
+                 remembered rather than discovered, and this way the block also
+                 gets the variants (Flowchart's four directions) for free. */
+              <DiagramTemplateBar
+                onPick={(source) => {
+                  setDraft(source)
+                  debugLog('ui', 'ui_context_menu_action', {
+                    targetId: blockId,
+                    code: 'diagram-template-pick'
+                  })
                 }}
               />
             ) : null}

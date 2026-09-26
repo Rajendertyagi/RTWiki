@@ -181,10 +181,6 @@
   background: var(--mantine-color-body);
 }
 
-.templateSelect {
-  max-width: 100%;
-}
-
 .editActions {
   display: flex;
   gap: var(--mantine-spacing-xs);

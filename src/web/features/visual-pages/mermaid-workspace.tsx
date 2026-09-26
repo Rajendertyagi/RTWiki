@@ -23,9 +23,9 @@ import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
 import type { CSSVars } from '../../style-props.js'
+import { DiagramTemplateBar } from '../rich-editor/blocks/diagram-template-bar.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
-import { DiagramTemplateBar } from './diagram-template-bar.js'
 import classes from './mermaid-workspace.module.css'
 
 /**

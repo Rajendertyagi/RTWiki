@@ -44,7 +44,19 @@ inferred from the Tauri configuration, not observed.
 
 **Next step:** run it on a machine with the Rust toolchain, or accept it as unverified.
 
-### 4. Eleven `!important` declarations in the page-tree stylesheet
+### 4. The template bar is cramped inside a diagram block's split editor
+
+**Impact: low, but it is a usability trade-off rather than an oversight.** The bar's buttons are
+48px, chosen deliberately when the bar was only used on a full-width Diagram page. A diagram
+block inside a Rich Note is a split editor and much narrower, so at typical widths only the first
+few templates sit on the row and the rest are reached through the trailing `⋮`. That works and is
+tested, but it is not the comfortable arrangement the page gets.
+
+**Next step:** either a smaller icon size for the block context, or a compact variant of the bar.
+Deliberately not done here: it is a design choice, and shrinking the icons is the exact thing that
+made the bar unreadable when it was last tried at 15px.
+
+### 5. Eleven `!important` declarations in the page-tree stylesheet
 
 **Impact: low — a warning, not an error.** `lint/complexity/noImportantStyles` fires 11 times in
 `src/web/features/sidebar/page-tree.module.css`. Each overrides a third-party stylesheet

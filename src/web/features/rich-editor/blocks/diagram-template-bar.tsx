@@ -25,10 +25,10 @@ import {
   type Icon as TablerIcon
 } from '@tabler/icons-react'
 import { isValidElement, type ReactNode, useState } from 'react'
-import { UI_TEXT } from '../../config/index.js'
-import { useToolbarOverflow } from '../../hooks/use-toolbar-overflow.js'
-import { DIAGRAM_TEMPLATES } from '../rich-editor/insert-blocks.js'
-import classes from './mermaid-workspace.module.css'
+import { UI_TEXT } from '../../../config/index.js'
+import { useToolbarOverflow } from '../../../hooks/use-toolbar-overflow.js'
+import { DIAGRAM_TEMPLATES } from '../insert-blocks.js'
+import classes from './diagram-template-bar.module.css'
 
 /**
  * Flat diagram-template bar.

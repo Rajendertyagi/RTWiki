@@ -45,6 +45,25 @@ async function openNote(page: Page, title: string): Promise<void> {
   await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 }
 
+/** Picks a diagram template from wherever the bar currently holds it.
+ *
+ * The block's split editor is much narrower than a Diagram page, so at these
+ * widths only the first few templates sit on the row and the rest are in the
+ * trailing "more" dropdown. Addressing the row directly would make these
+ * assertions depend on the current width, which is not what they are about. */
+async function pickTemplate(page: Page, id: string): Promise<void> {
+  const onBar = page.getByTestId(`template-${id}`)
+  if ((await onBar.count()) > 0) {
+    await onBar.click()
+    return
+  }
+  await page.getByTestId('template-more').click()
+  const row = page.getByTestId(`template-row-${id}`)
+  await row.waitFor({ state: 'visible', timeout: 5_000 })
+  await row.click()
+  await expect(page.getByTestId('template-more')).toHaveAttribute('aria-expanded', 'false')
+}
+
 /** Inserts a block through its persistent toolbar control (one compact
  * icon per entry; the former Insert dropdown was removed).
  *
@@ -545,10 +564,32 @@ test.describe('visual knowledge blocks', () => {
     await expectRendered(page, 'diagram')
 
     await page.getByTestId('diagram-edit-button').click()
-    await page.getByTestId('diagram-template').click()
-    await page.getByText('Sequence', { exact: true }).click()
+    // The block uses the same flat template bar as the Diagram page, not a
+    // separate dropdown. The block's split editor is narrow, so most templates
+    // sit in the trailing "more" dropdown rather than on the row - the same
+    // arrangement the rich toolbar's own tests already handle.
+    await pickTemplate(page, 'sequence')
     await expect(page.getByTestId('diagram-source-input')).toHaveValue(/sequenceDiagram/)
     await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
+    await page.getByTestId('diagram-cancel').click()
+  })
+
+  test('diagram: the block offers template variants, as the page does', async ({
+    page,
+    request
+  }) => {
+    // The point of sharing the bar rather than keeping a dropdown: the block
+    // gains the variants too. Flowchart is the case that matters, because
+    // Mermaid offers it in four directions.
+    const title = uniqueTitle('VB DiagramVariant')
+    await seedRich(request, title, [{ id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' }])
+    await openNote(page, title)
+    await expectRendered(page, 'diagram')
+
+    await page.getByTestId('diagram-edit-button').click()
+    await pickTemplate(page, 'flowchart')
+    await page.getByTestId('template-variant-flowchart-Left-to-right').click()
+    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/^flowchart LR/)
     await page.getByTestId('diagram-cancel').click()
   })
 

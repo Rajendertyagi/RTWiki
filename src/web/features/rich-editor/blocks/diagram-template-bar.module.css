@@ -1,0 +1,87 @@
+/* Flat diagram-template bar: one row, never wrapping, never scrolling. Whatever
+   does not fit is split off by the shared useToolbarOverflow hook into a
+   trailing dropdown, so the row is the same shape as the rich document toolbar.
+
+   Owned by the diagram block module rather than the diagram page, because both
+   surfaces use this bar: a whole Diagram page and a diagram block inside a Rich
+   Note. See ADR-012. */
+
+.templateBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.templateSlot {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.templateSep {
+  width: 1px;
+  height: 24px;
+  background: var(--mantine-color-default-border);
+  margin: 0 6px;
+  flex: 0 0 auto;
+}
+
+/* Colour carries the family, so a glance tells you the kind of diagram before
+   you hover for the name. Outline icons were tried first and read badly at
+   this length; filled shapes plus colour is what makes the row legible. */
+.templateButton[data-family="flow"] {
+  color: var(--rtwiki-tpl-flow, #4c8dff);
+}
+
+.templateButton[data-family="structures"] {
+  color: var(--rtwiki-tpl-structures, #9d7bff);
+}
+
+.templateButton[data-family="timing"] {
+  color: var(--rtwiki-tpl-timing, #2fb87a);
+}
+
+.templateButton[data-family="thinking"] {
+  color: var(--rtwiki-tpl-thinking, #d9a13a);
+}
+
+.templateButton[data-family="analysis"] {
+  color: var(--rtwiki-tpl-analysis, #e0648c);
+}
+
+.templateButton[data-family="data"] {
+  color: var(--rtwiki-tpl-data, #35b8c4);
+}
+
+.templateButton:hover,
+.templateButton[data-expanded] {
+  background: var(--mantine-color-default-hover);
+}
+
+.moreButton {
+  flex: 0 0 auto;
+}
+
+/* The trailing dropdown holds real menu rows - a plain template is a Menu.Item,
+   a template with variants a Menu.Sub - so it is a single column of text rows,
+   not the wrapped grid of icon buttons this replaced. Mantine gives its items
+   width:100%, which only lines up as a column if the container is one. */
+.moreMenu {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--mantine-spacing-xs);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* The short mark at the left of a variant row - a direction arrow, or a syntax
+   version. Fixed width so the labels that follow line up. */
+.variantMark {
+  display: inline-block;
+  width: 1.2em;
+  text-align: center;
+  opacity: 0.8;
+}
