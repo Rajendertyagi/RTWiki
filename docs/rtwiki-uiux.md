@@ -1373,6 +1373,60 @@ earlier version of the F20 fix *did* break that, by testing `tabs.length === 0`
 as "nothing to restore" and wiping a session that held only an expanded subtree.
 The guard now tests tabs **and** expansion, with a comment saying why.
 
+### F22 — The URL keeps naming a page after the last tab is closed — **RESOLVED** ✅
+
+Found while verifying F20, and carried through a plan that was reviewed by
+another agent before implementation.
+
+```
+url after closing all tabs: /?page=e9923150-…   <-- unchanged
+session after closing:      openPageIds: [], activePageId: null
+```
+
+The session was written correctly; the URL was not. `buildPageUrl(null)` already
+deletes the parameter and `syncHistory` already takes the active id — the call
+simply was not made on this path.
+
+**The interesting part is how many paths there were.** The obvious reading is
+"add one call in `handleTabClose`". Reading the *call sites of `selectPage`*
+rather than the call sites of `syncHistory` showed **seven** selection changes
+and only one URL sync. Four were unsynced:
+
+| Site | Symptom |
+|---|---|
+| `handleHome` | Go Home, reload, and the page is **back** |
+| `handleTabClose` | Close the last tab, reload, and it is back |
+| `handleDeleteConfirm` | Delete the open page; the address bar names a page that no longer exists |
+| `handleOpenHtmlSource` | Open a sub-file of another page; the URL keeps the old page |
+
+`handleHome` is the worst of them and was invisible because five spec files call
+it and none of them reload afterwards. **Searching for the wrong symbol is what
+hid this** — the plan was written by grepping `syncHistory`'s callers, which
+returned exactly one, and looked like a complete answer.
+
+All four are fixed. The plan proposed routing closes through `handleSelectPage`;
+that was rejected because it would re-run a flush that already happened and
+`recordRecentPage` for a page the user *closed*.
+
+One consequence recorded honestly: closing a tab now pushes a history entry, and
+the Back button cannot undo a tab close — `popstate` only ever changes the
+selection, and selection never closes tabs. That was already true for Home; the
+fix makes it reachable for closes too. No test drives Back/Forward anywhere.
+
+### F23 — An empty tab strip collapsed to zero height — **RESOLVED** ✅
+
+A regression from `5f24a21`, found by the first full-suite run of this cycle.
+
+`role="tablist"` was moved from the outer strip onto `Reorder.Group`, which is
+the semantically correct home for it — it is the element containing the tabs. The
+strip's `min-height` did not move with it, so with **zero tabs open** the
+tablist collapsed to 0px and read as hidden, and `window-chrome.pwspec.ts` timed
+out. The scroller now carries the same floor the strip had.
+
+Safe against the layout: `flex: 1` sizes the main axis (width); `min-height` is
+the cross axis, which `align-items: flex-end` already sizes to content — the same
+40px a tab reaches via `.tabActive`.
+
 ## 8. Ordered work plan
 
 The agreed sequence, with reasoning for the order:
@@ -1442,7 +1496,7 @@ in a browser. The items below are the ones verified by actually running the app.
 - `bun run typecheck` — 0 errors
 - `bun run format:check` — 0 errors
 - `tests/browser/rich-workspace.pwspec.ts` "Rich document surface" — 3/3 pass
-- `tests/browser/window-chrome.pwspec.ts` — 8/8 pass
+- `tests/browser/window-chrome.pwspec.ts` — **8/8 pass.** This line read "8/8" throughout, and was **stale**: `5f24a21` (the tab-reorder commit) moved `role="tablist"` from the outer strip onto the scroller, which has no `min-height`, so with zero tabs open the tablist collapsed to 0px and the native-chrome test timed out. Found by the first full-suite run of this cycle, not by that commit's own verification, which listed 55 passing tests and did not include this spec. Fixed by giving the scroller the same floor the strip had. **A recorded finding expires; this one had.** |
 - `tests/browser/html-editor.pwspec.ts` — **15 pass / 0 fail** (was 9 / 5)
 - A pending HTML/CSS/JavaScript edit reports "Unsaved changes" rather than "Saved" before the debounce elapses — asserted in both light and dark
 - CSS typed into a child file reaches the stored record and applies in the rendered preview (verified `color: rgb(1, 2, 3)`, `font-size: 40px` inside the frame) — measured

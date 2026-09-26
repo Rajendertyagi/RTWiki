@@ -493,6 +493,10 @@ export function App(): JSX.Element {
     setTrashOpen(false)
     setFavoritesOpen(false)
     controller.selectPage(null)
+    // The URL must follow the selection. Going Home without this left
+    // `?page=<id>` in the address bar, and since a deep link is honoured on
+    // load, reloading then brought the page you had left back again.
+    syncHistory(null, isPopstateRef.current)
   }
 
   // Resets persisted layout preferences and re-applies the defaults live.
@@ -593,6 +597,7 @@ export function App(): JSX.Element {
       const ok = await flushQuietly()
       if (!ok) return
       controller.selectPage(pageId)
+      syncHistory(pageId, isPopstateRef.current)
     } else if (!(await flushQuietly())) {
       return
     }
@@ -647,6 +652,8 @@ export function App(): JSX.Element {
     setOpenTabs(tabResult.tabs)
     if (tabResult.activatePageId !== (controller.selectedPage?.id ?? null)) {
       controller.selectPage(tabResult.activatePageId)
+      // Deleting the open page must not leave the address bar naming it.
+      syncHistory(tabResult.activatePageId, isPopstateRef.current)
     }
     setDeleteTarget(null)
   }
@@ -666,6 +673,10 @@ export function App(): JSX.Element {
     setOpenTabs(result.tabs)
     if (isActive) {
       controller.selectPage(result.activatePageId)
+      // Closing a tab is a navigation and the URL must follow it. Without
+      // this, closing the last tab left `?page=<id>` in the address bar and a
+      // reload brought the closed page straight back.
+      syncHistory(result.activatePageId, isPopstateRef.current)
     }
   }
 

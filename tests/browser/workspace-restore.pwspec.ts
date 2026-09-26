@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 
 /**
  * Reload must not discard open tabs.
@@ -118,4 +118,99 @@ test('an unknown ?page= id falls back to the session rather than to nothing', as
   // The bogus id resolves to nothing, so the session stands.
   await expect(page.getByRole('tab')).toHaveCount(1)
   await expect(page.getByRole('tab')).toContainText(keep)
+})
+
+/**
+ * The address bar must describe the workspace that is actually open.
+ *
+ * Four separate actions change the selected page without going through the
+ * navigation handler: closing a tab, going Home, deleting the open page, and
+ * opening a source sub-file of another page. Each left `?page=<id>` in the URL,
+ * and because a deep link is honoured on load, a reload then brought a page the
+ * user had deliberately left back again. These cover all four.
+ */
+const deepLinkInUrl = (page: Page) => new URL(page.url()).searchParams.get('page')
+
+test('closing the last tab clears the page from the URL', async ({ page, request }) => {
+  const stamp = Date.now()
+  const only = `CloseLast${stamp}`
+  await request.post('/api/pages', { data: { title: only, pageType: 'rich', content: '' } })
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+  await openByRow(page, only)
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  // Precondition: the app does name the page while it is open.
+  expect(await deepLinkInUrl(page)).toBeTruthy()
+
+  await page
+    .getByRole('tab')
+    .first()
+    .getByRole('button', { name: /^Close tab/ })
+    .click()
+  await expect(page.getByRole('tab')).toHaveCount(0)
+  expect(await deepLinkInUrl(page), 'the URL must not keep naming a closed page').toBeNull()
+
+  // And a reload must not resurrect it.
+  await page.reload()
+  await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByRole('tab')).toHaveCount(0)
+})
+
+test('going Home clears the page from the URL', async ({ page, request }) => {
+  const stamp = Date.now()
+  const title = `GoHome${stamp}`
+  await request.post('/api/pages', { data: { title, pageType: 'rich', content: '' } })
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+  await openByRow(page, title)
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  expect(await deepLinkInUrl(page)).toBeTruthy()
+
+  await page.locator('nav[aria-label="RTWiki"] button[aria-label="Home"]').click()
+  await expect(page.getByText('Pages', { exact: true }).first()).toBeVisible()
+  expect(await deepLinkInUrl(page), 'Home is not a page, so the URL must not name one').toBeNull()
+
+  // Going Home does NOT close your tabs - that is deliberate and matches a
+  // browser, so the tab is still there after a reload and the restore makes it
+  // the active one, which is correct for a workspace holding a single tab. What
+  // must not survive is the URL naming a page, because that is what used to
+  // drag a page back as a deep link.
+  await page.reload()
+  await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+  expect(await deepLinkInUrl(page), 'a reload must not reintroduce the deep link').toBeNull()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+})
+
+test('closing a background tab leaves the URL and the active tab alone', async ({
+  page,
+  request
+}) => {
+  const stamp = Date.now()
+  const first = `BgA${stamp}`
+  const second = `BgB${stamp}`
+  for (const title of [first, second]) {
+    await request.post('/api/pages', { data: { title, pageType: 'rich', content: '' } })
+  }
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+  await openByRow(page, first)
+  await openByRow(page, second)
+  await expect(page.getByRole('tab')).toHaveCount(2)
+
+  const urlBefore = await deepLinkInUrl(page)
+  // Close the first tab while the second is active.
+  await page
+    .getByRole('tab')
+    .first()
+    .getByRole('button', { name: /^Close tab/ })
+    .click()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  expect(await deepLinkInUrl(page), 'a background close is not a navigation').toBe(urlBefore)
+  await expect(page.getByRole('tab').filter({ hasText: second })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  )
 })

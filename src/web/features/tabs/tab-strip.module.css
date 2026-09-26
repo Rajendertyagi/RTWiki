@@ -48,6 +48,19 @@
   gap: 2px;
   flex: 1;
   min-width: 0;
+  /* The band keeps its height when no tab is open.
+   *
+   * `role="tablist"` moved from the outer strip onto this element, which is the
+   * correct home for it - it is what contains the tabs. But the strip's
+   * `min-height` did not come with it, so with zero tabs the tablist collapsed
+   * to 0px and read as hidden. In native mode the band is always rendered and
+   * must reserve the strip's height whether or not a tab is open.
+   *
+   * Safe against the flex layout: `flex: 1` sizes the main axis (width), and
+   * `min-height` is the cross axis, which `align-items: flex-end` already sizes
+   * to content - the same 40px a tab reaches through `.tabActive`.
+   */
+  min-height: var(--rtwiki-tab-height);
   overflow-x: auto;
   overflow-y: hidden;
   /* Tabs scroll by wheel/drag; a permanent scrollbar would read as a defect
