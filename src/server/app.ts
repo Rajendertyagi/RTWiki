@@ -18,7 +18,13 @@ export type AppVariables = SecureHeadersVariables & {
 }
 
 /**
- * Security headers via Hono's official secureHeaders middleware.
+ * The app's Content-Security-Policy, exported so it can be asserted directly.
+ *
+ * `styleSrc` carries `'unsafe-inline'` because Mermaid injects a `<style>`
+ * element into the SVG of every diagram it renders. That is a real dependency,
+ * not a leftover: drop `'unsafe-inline'` and every diagram silently loses its
+ * styling, with nothing failing and no error on the page. `tests/security-headers.test.ts`
+ * pins it so that regression cannot land unnoticed.
  *
  * The per-request CSP nonce (NONCE) is generated with crypto.getRandomValues
  * inside the middleware before handlers run and is exposed to HTML-serving
@@ -27,19 +33,22 @@ export type AppVariables = SecureHeadersVariables & {
  * request. Preview bootstrap/user scripts inside sandboxed srcdoc frames
  * inherit this policy and therefore must carry this exact nonce.
  */
+export const APP_CONTENT_SECURITY_POLICY = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'", NONCE],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  imgSrc: ["'self'", 'data:'],
+  // KaTeX (official math integration) ships its fonts inline as data: URIs;
+  // data: fonts are inert content and cannot execute.
+  fontSrc: ["'self'", 'data:'],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  frameAncestors: ["'none'"]
+}
+
+/** Security headers via Hono's official secureHeaders middleware. */
 const securityHeaders = secureHeaders({
-  contentSecurityPolicy: {
-    defaultSrc: ["'self'"],
-    scriptSrc: ["'self'", NONCE],
-    styleSrc: ["'self'", "'unsafe-inline'"],
-    imgSrc: ["'self'", 'data:'],
-    // KaTeX (official math integration) ships its fonts inline as data: URIs;
-    // data: fonts are inert content and cannot execute.
-    fontSrc: ["'self'", 'data:'],
-    objectSrc: ["'none'"],
-    baseUri: ["'self'"],
-    frameAncestors: ["'none'"]
-  },
+  contentSecurityPolicy: APP_CONTENT_SECURITY_POLICY,
   xFrameOptions: 'DENY',
   referrerPolicy: 'no-referrer',
   permissionsPolicy: {
