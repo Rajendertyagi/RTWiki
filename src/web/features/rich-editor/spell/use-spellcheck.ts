@@ -2,7 +2,8 @@ import type { EditorView } from 'prosemirror-view'
 import { useEffect } from 'react'
 import { loadNspellEngine } from './nspell-adapter.js'
 import { loadSpellChecker, resetSpellCheckerCache } from './spell-checker.js'
-import { installSpellcheck, removeSpellcheck } from './spellcheck-plugin.js'
+import { refreshSpellcheckDecorations } from './spellcheck-decorations.js'
+import type { SpellcheckHolder } from './spellcheck-extension.js'
 
 /**
  * The part of BlockNote's editor this hook needs.
@@ -14,33 +15,43 @@ import { installSpellcheck, removeSpellcheck } from './spellcheck-plugin.js'
  */
 interface SpellcheckTarget {
   readonly prosemirrorView: EditorView | null
-  /**
-   * BlockNote's post-mount hook. Optional so a bare view holder still works, and
-   * because it is genuinely optional: the view may already exist.
-   */
-  onMount?: (callback: () => void) => () => void
+}
+
+/** Ceiling on how long the load may be deferred waiting for idle time. */
+const IDLE_FALLBACK_MS = 2000
+
+/**
+ * Runs `task` when the browser is idle, or after the fallback, whichever is
+ * first.
+ *
+ * `requestIdleCallback` is Chromium-only and absent in some embedded webviews, so
+ * the timeout path is not optional: without it a browser lacking the API would
+ * never load the dictionary and the feature would silently do nothing. The
+ * timeout also bounds how long the underlines can be delayed on a busy thread.
+ */
+function runWhenIdle(task: () => void): void {
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => task(), { timeout: IDLE_FALLBACK_MS })
+    return
+  }
+  setTimeout(task, 200)
 }
 
 /**
- * Keeps the spell-check plugin in step with the editor and the user's settings.
+ * Loads the dictionary and hands it to the extension's holder.
  *
- * Two facts about the lifecycle drive the shape of this:
+ * The hook owns the loading; the extension owns the decorations. Nothing here
+ * mutates the editor's view props, which is what cost the caret in the first
+ * attempt - see the note in `spellcheck-extension.ts`.
  *
- * 1. The ProseMirror view does not exist until the editor mounts, so installing
- *    from an effect alone can run against a view that is not there yet. Hence
- *    `onMount`, which BlockNote documents for exactly this ("useful for plugins
- *    to initialize themselves after the editor has been mounted"). The immediate
- *    attempt covers the case where the editor is already mounted.
- *
- * 2. The dictionary is fetched asynchronously, so there is a window where the
- *    editor is live and the underlines are not yet there. Rather than blocking
- *    the editor on a 552 kB fetch, the plugin is installed when the load
- *    resolves and the view is nudged to redraw - otherwise the underlines would
- *    not appear until the reader's next keystroke, which reads as "it did
- *    nothing".
+ * The whole job waits for idle time. Measured, not assumed: the engine is built
+ * from a 552 kB dictionary and that build blocks the main thread, so doing it
+ * during startup starved the editor's own post-mount focus work and left the
+ * document unfocused when an existing note was opened.
  */
 export function useSpellcheck(
   editor: SpellcheckTarget | null,
+  holder: SpellcheckHolder,
   enabled: boolean,
   personalWords: readonly string[]
 ): void {
@@ -50,7 +61,14 @@ export function useSpellcheck(
   const wordsKey = personalWords.join('\n')
 
   useEffect(() => {
-    if (!enabled || !editor) return
+    // Switching the feature off must also take the underlines away, not merely
+    // stop loading: the plugin is already in the editor state for the life of the
+    // page, so the holder is emptied instead.
+    if (!enabled) {
+      holder.checker = null
+      return
+    }
+    if (!editor) return
     let cancelled = false
 
     const words = wordsKey.length > 0 ? wordsKey.split('\n') : []
@@ -58,35 +76,20 @@ export function useSpellcheck(
     // what it has learned and offers no way to unlearn a word.
     if (wordsKey.length > 0) resetSpellCheckerCache()
 
-    const attach = (): void => {
+    runWhenIdle(() => {
       if (cancelled) return
       void loadSpellChecker(words, loadNspellEngine).then((checker) => {
         if (cancelled || !checker) return
-        // Re-read the view: the load is async and the editor may have been
-        // replaced or unmounted while the dictionary was in flight.
+        holder.checker = checker
+        // The plugin reads the holder on every decoration pass, so a metadata-only
+        // transaction is all it takes to make the underlines appear.
         const view = editor.prosemirrorView
-        if (!view || !view.dom.isConnected) return
-        installSpellcheck(view, checker)
-        // Force the view to re-read its state so decorations are recomputed.
-        //
-        // Dispatching an empty transaction does not work: BlockNote installs its
-        // own `dispatchTransaction`, which is free to ignore a transaction with
-        // no steps, and it does. `updateState` is the documented way to make a
-        // view re-read the state it already holds, and it cannot be filtered
-        // because it is not a transaction at all. Nothing changes and no history
-        // entry is created, which a transaction would risk.
-        view.updateState(view.state)
+        if (view && view.dom.isConnected) refreshSpellcheckDecorations(view)
       })
-    }
-
-    const unsubscribe = editor.onMount ? editor.onMount(attach) : undefined
-    attach()
+    })
 
     return () => {
       cancelled = true
-      unsubscribe?.()
-      const view = editor.prosemirrorView
-      if (view && view.dom.isConnected) removeSpellcheck(view)
     }
-  }, [editor, enabled, wordsKey])
+  }, [editor, holder, enabled, wordsKey])
 }

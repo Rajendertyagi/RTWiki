@@ -14,13 +14,20 @@ export interface BacklinkEntryView {
 }
 
 interface RightSidebarProps {
-  outline: DocumentOutlineEntry[]
+  /**
+   * Heading outline, or omitted for a page type that has no headings.
+   *
+   * Optional rather than always-passed-and-empty because "this page has no
+   * outline" and "this page does not have the concept of one" are different
+   * things, and rendering an empty "Outline" heading on a diagram page is noise.
+   */
+  outline?: DocumentOutlineEntry[]
   pageTypeLabel: string
   createdDate: string
   updatedDate: string
   /** Page whose backlinks are listed; omitted on legacy callers. */
   pageId?: string
-  onNavigateToHeading: (blockId: string) => void
+  onNavigateToHeading?: (blockId: string) => void
   /** Opens a backlink source through the controller/tab flow. */
   onOpenPage?: (pageId: string) => void
   onCollapse: () => void
@@ -33,8 +40,8 @@ interface RightSidebarProps {
 }
 
 /**
- * Contextual right sidebar for an open Rich Note: heading outline,
- * ID-exact backlinks, and basic page information. Collapsible; the
+ * Contextual right sidebar for an open page: heading outline where the page type
+ * has headings, ID-exact backlinks, and basic page information. Collapsible; the
  * document expands when hidden.
  */
 export function RightSidebar({
@@ -102,32 +109,38 @@ export function RightSidebar({
       </div>
 
       <div className={classes.scrollArea}>
-        <Text size="xs" fw={600} c="dimmed" className={classes.sectionTitle}>
-          {UI_TEXT.outlineTitle}
-        </Text>
-        {outline.length === 0 ? (
-          <Text size="xs" c="dimmed" className={classes.emptyOutline}>
-            {UI_TEXT.outlineEmpty}
-          </Text>
-        ) : (
-          <Stack gap={2}>
-            {outline.map((entry) => (
-              <button
-                key={entry.blockId}
-                type="button"
-                className={classes.outlineEntry}
-                // Indent depth is data, so it arrives as a custom property and
-                // the spacing rule stays in the stylesheet.
-                style={{ '--rtwiki-indent-level': entry.level } as CSSVars}
-                onClick={() => onNavigateToHeading(entry.blockId)}
-              >
-                {entry.text || UI_TEXT.untitledPage}
-              </button>
-            ))}
-          </Stack>
-        )}
-
-        <Divider my="sm" />
+        {/* The outline section is omitted entirely for a page type with no
+            headings. Passing an empty list instead would render an "Outline"
+            heading over "no headings", which is noise on a diagram page. */}
+        {outline ? (
+          <>
+            <Text size="xs" fw={600} c="dimmed" className={classes.sectionTitle}>
+              {UI_TEXT.outlineTitle}
+            </Text>
+            {outline.length === 0 ? (
+              <Text size="xs" c="dimmed" className={classes.emptyOutline}>
+                {UI_TEXT.outlineEmpty}
+              </Text>
+            ) : (
+              <Stack gap={2}>
+                {outline.map((entry) => (
+                  <button
+                    key={entry.blockId}
+                    type="button"
+                    className={classes.outlineEntry}
+                    // Indent depth is data, so it arrives as a custom property and
+                    // the spacing rule stays in the stylesheet.
+                    style={{ '--rtwiki-indent-level': entry.level } as CSSVars}
+                    onClick={() => onNavigateToHeading?.(entry.blockId)}
+                  >
+                    {entry.text || UI_TEXT.untitledPage}
+                  </button>
+                ))}
+              </Stack>
+            )}
+            <Divider my="sm" />
+          </>
+        ) : null}
 
         <Text size="xs" fw={600} c="dimmed" className={classes.sectionTitle}>
           {UI_TEXT.backlinksHeading}

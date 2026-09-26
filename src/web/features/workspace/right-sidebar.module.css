@@ -69,3 +69,17 @@
 .infoBlock {
   color: var(--mantine-color-dimmed);
 }
+
+/* The collapsed-state affordance that brings the pane back. Lives here rather
+   than in the Rich editor's stylesheet because the region that owns it is now
+   shared by every page type, and a shared component must not borrow a feature
+   module's private class. */
+.expandButton {
+  align-self: flex-start;
+  margin-top: 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+  cursor: pointer;
+  padding: 6px;
+}

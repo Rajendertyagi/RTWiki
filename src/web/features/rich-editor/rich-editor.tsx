@@ -11,12 +11,9 @@ import { IconAlertCircle, IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
-import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
-import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
 import { useEditorPreferences } from '../workspace/editor-preferences.js'
-import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
-import { RightSidebar } from '../workspace/right-sidebar.js'
+import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
 import { mapAutosaveStatus } from '../workspace/save-state.js'
 import { LinkedPageContext, type LinkedPageContextValue } from './blocks/linked-page-block.js'
@@ -38,6 +35,10 @@ import {
 } from './schema.js'
 import { RTSideMenu } from './side-menu.js'
 import { RTSuggestionMenu, RTWikiLinkMenu } from './slash-menu.js'
+import {
+  createSpellcheckExtensionFactory,
+  createSpellcheckHolder
+} from './spell/spellcheck-extension.js'
 import { useSpellcheck } from './spell/use-spellcheck.js'
 import { useAutosave } from './use-autosave.js'
 import type { LinkablePage } from './wiki-link.js'
@@ -74,9 +75,6 @@ function countBlockWords(document: ReadonlyArray<{ content?: unknown }>): number
  * added again). Session-only: never persisted; the saved explicit choice is
  * restored automatically when space returns. (Currently 919px.)
  */
-const TEMP_COLLAPSE_MAX_WIDTH_PX =
-  LAYOUT.treePaneMinWidth + LAYOUT.workspaceMinWidth + LAYOUT.rightSidebarMinWidth - 1
-
 interface RichEditorProps {
   pageId: string
   storedContent: string
@@ -309,8 +307,17 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     linkablePages = [],
     onOpenPage
   } = props
+  // Stable across renders: it is read by a ProseMirror plugin that lives in the
+  // editor state for the life of the page, so it must keep the same identity.
+  const spellcheckHolderRef = useRef(createSpellcheckHolder())
+  const spellcheckExtension = useMemo(
+    () => createSpellcheckExtensionFactory(spellcheckHolderRef.current),
+    []
+  )
+
   const editor = useCreateBlockNote(
     {
+      extensions: [spellcheckExtension],
       schema: rtwikiBlockSchema,
       initialContent: initialDocument as unknown as RTWikiPartialBlock[],
       dictionary: {
@@ -327,61 +334,19 @@ function RichEditorInner(props: InnerProps): JSX.Element {
   const blocknoteTheme = useComputedColorScheme('light')
   // Spell check is a user preference and its personal dictionary belongs to the
   // reader, so both come from the versioned editor preference store rather than
-  // being hard-coded here. The hook installs the ProseMirror plugin and removes
-  // it again when the editor unmounts or the setting is switched off.
+  // being hard-coded here. The hook loads the dictionary into the holder the
+  // extension's plugin reads; it never mutates the editor view.
   const editorPrefs = useEditorPreferences()
-  useSpellcheck(editor, editorPrefs.spellCheck, editorPrefs.personalWords)
+  useSpellcheck(
+    editor,
+    spellcheckHolderRef.current,
+    editorPrefs.spellCheck,
+    editorPrefs.personalWords
+  )
   const [outline, setOutline] = useState<DocumentOutlineEntry[]>(() =>
     extractOutline(initialDocument)
   )
   const [, setWordCount] = useState(() => countBlockWords(initialDocument))
-  // Right-sidebar geometry (Slice 2): the explicit width/collapse are the
-  // user's persisted preference; the temporary narrow-window collapse is
-  // derived from the viewport and never persisted. Effective visibility is
-  // explicit OR temporary; the saved explicit choice restores automatically
-  // when space returns.
-  const [sidebarWidth, setSidebarWidth] = useState(() => loadLayoutPreferences().rightSidebarWidth)
-  const [explicitCollapsed, setExplicitCollapsed] = useState(
-    () => loadLayoutPreferences().rightSidebarCollapsed
-  )
-  const narrowCollapse = useMediaQueryBelow(TEMP_COLLAPSE_MAX_WIDTH_PX)
-  // Session-only restore of a temporarily collapsed sidebar: shows the
-  // sidebar for the current narrow-window state without reading or writing
-  // the saved preference. Dropped as soon as the viewport leaves the narrow
-  // state so the derived rule governs fresh afterwards.
-  const [narrowOverride, setNarrowOverride] = useState(false)
-  useEffect(() => {
-    if (!narrowCollapse) setNarrowOverride(false)
-  }, [narrowCollapse])
-  const sidebarCollapsed = explicitCollapsed || (narrowCollapse && !narrowOverride)
-
-  const persistSidebarPrefs = (patch: {
-    rightSidebarWidth?: number
-    rightSidebarCollapsed?: boolean
-  }): void => {
-    saveLayoutPreferences({ ...loadLayoutPreferences(), ...patch })
-  }
-
-  const handleSidebarCollapse = (): void => {
-    setExplicitCollapsed(true)
-    persistSidebarPrefs({ rightSidebarCollapsed: true })
-  }
-
-  const handleSidebarExpand = (): void => {
-    // Explicit collapse control: clears the saved choice. A temporary
-    // collapse instead restores visibility for the current narrow-window
-    // state only and never changes or persists rightSidebarCollapsed.
-    if (explicitCollapsed) {
-      setExplicitCollapsed(false)
-      persistSidebarPrefs({ rightSidebarCollapsed: false })
-    } else {
-      setNarrowOverride(true)
-    }
-  }
-
-  const handleSidebarWidthCommit = (width: number): void => {
-    persistSidebarPrefs({ rightSidebarWidth: width })
-  }
 
   // Hand the live editor instance to the parent so an externally hosted
   // toolbar can bind to it; cleared on unmount/editor replacement.
@@ -580,48 +545,15 @@ function RichEditorInner(props: InnerProps): JSX.Element {
           </div>
         </Stack>
 
-        {sidebarCollapsed ? (
-          <Tooltip
-            label={explicitCollapsed ? UI_TEXT.rightSidebarLabel : UI_TEXT.restoreSidebarLabel}
-            position="left"
-          >
-            <button
-              type="button"
-              className={classes.sidebarExpand}
-              aria-label={
-                explicitCollapsed ? UI_TEXT.rightSidebarLabel : UI_TEXT.restoreSidebarLabel
-              }
-              onClick={handleSidebarExpand}
-            >
-              <IconLayoutSidebar size={16} />
-            </button>
-          </Tooltip>
-        ) : (
-          <>
-            <PaneDivider
-              value={sidebarWidth}
-              min={LAYOUT.rightSidebarMinWidth}
-              max={LAYOUT.rightSidebarMaxWidth}
-              direction={-1}
-              onChange={setSidebarWidth}
-              onCommit={handleSidebarWidthCommit}
-              ariaLabel={UI_TEXT.resizeSidebarLabel}
-              testId="sidebar-divider"
-            />
-            <RightSidebar
-              key={pageId}
-              width={sidebarWidth}
-              outline={outline}
-              pageTypeLabel={UI_TEXT.richNote}
-              createdDate={createdDate ?? ''}
-              updatedDate={updatedDate ?? ''}
-              pageId={pageId}
-              onNavigateToHeading={navigateToHeading}
-              onOpenPage={onOpenPage}
-              onCollapse={handleSidebarCollapse}
-            />
-          </>
-        )}
+        <RightSidebarRegion
+          pageId={pageId}
+          outline={outline}
+          pageTypeLabel={UI_TEXT.richNote}
+          createdDate={createdDate ?? ''}
+          updatedDate={updatedDate ?? ''}
+          onNavigateToHeading={navigateToHeading}
+          onOpenPage={onOpenPage}
+        />
       </div>
     </div>
   )

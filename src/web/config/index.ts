@@ -287,6 +287,8 @@ export const UI_TEXT = {
   // Right sidebar
   rightSidebarLabel: 'Page details',
   collapseSidebarLabel: 'Collapse sidebar',
+  /** Brings a collapsed right sidebar back. */
+  expandSidebarLabel: 'Expand sidebar',
   outlineTitle: 'Outline',
   outlineEmpty: 'No headings yet. Add a heading to build the outline.',
   pageInfoTitle: 'Page info',
