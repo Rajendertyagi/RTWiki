@@ -228,6 +228,50 @@ test.describe('Rich Note toolbar controls', () => {
     await expect(more).toHaveAttribute('aria-expanded', 'false')
   })
 
+  test('the overflow panel is reachable by keyboard', async ({ page }) => {
+    // Known bug: the overflow was a Mantine `Menu`, which renders role="menu" and
+    // moves focus by querying `[data-menu-item]`. The controls moved into it are
+    // bare `ActionIcon`s carrying neither, so a keyboard user could not get into
+    // the panel at all. It is a `Popover` now, so Tab reaches the controls the
+    // ordinary way, and the panel says what it is instead of claiming to be a menu.
+    await newRichNote(page)
+    const more = page.getByTestId('toolbar-more')
+    await expect(more).toBeVisible()
+    await more.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+
+    const panel = page.getByTestId('toolbar-overflow-panel')
+    await expect(panel).toBeVisible()
+    // The panel is a dialog, not a menu: its contents are ordinary controls with
+    // no `menuitem` role, and Mantine no longer claims otherwise.
+    await expect(panel).toHaveAttribute('role', 'dialog')
+    await expect(more).toHaveAttribute('aria-haspopup', 'dialog')
+
+    // Opening the panel must move focus inside it. The panel is portalled, so Tab
+    // from the trigger would never reach it, and Mantine leaves `trapFocus` false
+    // by default - without it a keyboard user cannot get in at all.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const active = document.activeElement
+            const panelNode = document.querySelector('[data-testid="toolbar-overflow-panel"]')
+            return Boolean(active && panelNode && panelNode.contains(active))
+          }),
+        { message: 'focus must move into the panel when it opens' }
+      )
+      .toBe(true)
+
+    // And Tab must then move between the controls it holds.
+    await page.keyboard.press('Tab')
+    const afterTab = await page.evaluate(() => {
+      const active = document.activeElement
+      const panelNode = document.querySelector('[data-testid="toolbar-overflow-panel"]')
+      return Boolean(active && panelNode && panelNode.contains(active))
+    })
+    expect(afterTab, 'Tab must stay within the panel').toBe(true)
+  })
+
   test('typing into a block inserted from the more menu lands in that block', async ({ page }) => {
     // The user-visible consequence of the menu staying open. Insert from the
     // menu, then click the block and type: with the menu still open the first
@@ -277,9 +321,11 @@ test.describe('Rich Note toolbar controls', () => {
     await page.waitForTimeout(600)
     const more = page.getByTestId('toolbar-more')
     await more.click()
-    // `toolbarButton()` scopes to the bar, so it can never match a portalled menu
-    // child; the dropdown is addressed directly.
-    const inMenu = page.locator('[data-menu-dropdown]')
+    // `toolbarButton()` scopes to the bar, so it can never match a portalled panel
+    // child; the panel is addressed directly. It used to be found by
+    // `[data-menu-dropdown]`, which is a Mantine `Menu` attribute; the panel is a
+    // `Popover`, which carries no data attribute, hence the testid.
+    const inMenu = page.getByTestId('toolbar-overflow-panel')
     await inMenu.getByLabel('Highlight', { exact: true }).click()
     // The menu must survive the click. Without the guard the control is torn down
     // with it: measured, the grid was still in the DOM for a few milliseconds —

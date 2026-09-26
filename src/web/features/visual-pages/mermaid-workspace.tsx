@@ -100,7 +100,7 @@ export default function MermaidPageWorkspace({
     await updatePage(pid, { content })
   }
 
-  const { status, error, isDirty, notifyEdit, retry, flush } = useAutosave({
+  const { status, error, isDirty, notifyEdit, flush } = useAutosave({
     pageId,
     onSave: handleSave
   })

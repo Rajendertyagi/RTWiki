@@ -1,5 +1,4 @@
 import { ActionIcon, Menu, Tooltip } from '@mantine/core'
-import type { Icon as TablerIcon } from '@tabler/icons-react'
 import {
   IconArrowsExchange,
   IconBinaryTree,
@@ -7,7 +6,6 @@ import {
   IconCalendarEventFilled,
   IconChartAreaFilled,
   IconChartAreaLineFilled,
-  IconChartGridDotsFilled,
   IconChartPieFilled,
   IconColumns3Filled,
   IconDatabaseFilled,
@@ -23,9 +21,10 @@ import {
   IconStack2Filled,
   IconStackFilled,
   IconTableFilled,
-  IconTimelineEventFilled
+  IconTimelineEventFilled,
+  type Icon as TablerIcon
 } from '@tabler/icons-react'
-import { type ReactNode, useState } from 'react'
+import { isValidElement, type ReactNode, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { useToolbarOverflow } from '../../hooks/use-toolbar-overflow.js'
 import { DIAGRAM_TEMPLATES } from '../rich-editor/insert-blocks.js'
@@ -52,6 +51,8 @@ import classes from './mermaid-workspace.module.css'
 /** Deliberately large. These are the primary control on the page. */
 const ICON_SIZE = 36
 const BUTTON_SIZE = ICON_SIZE + 12
+/** Icons inside menu rows sit at text scale, not toolbar scale. */
+const ROW_ICON_SIZE = 18
 
 type Family = 'flow' | 'structures' | 'timing' | 'thinking' | 'analysis' | 'data'
 
@@ -59,18 +60,29 @@ interface Variant {
   /** Short mark shown at the left of the menu row, e.g. a direction arrow. */
   mark: string
   label: string
-  source: string
+  /**
+   * Omitted on the first row of a template's variants, which then uses the
+   * template's own `source` from `DIAGRAM_TEMPLATES`.
+   *
+   * That row is the default form, so restating its source here would give the
+   * same diagram two definitions that can drift apart - which is exactly what
+   * had happened: the copy here had lost a line the canonical one still had.
+   */
+  source?: string
 }
 
 interface Presentation {
   /** Tabler icon component. */
   Icon: TablerIcon
   family: Family
-  /** Present only where Mermaid genuinely offers more than one form. */
+  /**
+   * Present only where Mermaid genuinely offers more than one form. Ordered with
+   * the default form first, reusing the template's own source.
+   */
   variants?: Variant[]
 }
 
-/** Family order also fixes the order of the separators. */
+/** Family order also fixes where the separators fall. */
 const FAMILY_ORDER: Family[] = ['flow', 'structures', 'timing', 'thinking', 'analysis', 'data']
 
 const PRESENTATION: Record<string, Presentation> = {
@@ -78,12 +90,7 @@ const PRESENTATION: Record<string, Presentation> = {
     Icon: IconSitemapFilled,
     family: 'flow',
     variants: [
-      {
-        mark: '↓',
-        label: 'Top to bottom',
-        source:
-          'flowchart TD\n    A[Start] --> B{Decision}\n    B -->|Yes| C[Do thing]\n    B -->|No| D[Other thing]'
-      },
+      { mark: '↓', label: 'Top to bottom' },
       { mark: '↑', label: 'Bottom to top', source: 'flowchart BT\n    A[Start] --> B[End]' },
       { mark: '←', label: 'Right to left', source: 'flowchart RL\n    A[Start] --> B[End]' },
       { mark: '→', label: 'Left to right', source: 'flowchart LR\n    A[Start] --> B[End]' }
@@ -93,12 +100,7 @@ const PRESENTATION: Record<string, Presentation> = {
     Icon: IconPlayerPlayFilled,
     family: 'flow',
     variants: [
-      {
-        mark: 'v2',
-        label: 'State diagram',
-        source:
-          'stateDiagram-v2\n    [*] --> Idle\n    Idle --> Active: start\n    Active --> Idle: stop'
-      },
+      { mark: 'v2', label: 'State diagram' },
       {
         mark: 'v1',
         label: 'State (older syntax)',
@@ -124,39 +126,45 @@ const PRESENTATION: Record<string, Presentation> = {
   packet: { Icon: IconStackFilled, family: 'data' },
   requirement: { Icon: IconTableFilled, family: 'data' },
   c4: { Icon: IconBuildingBridge2Filled, family: 'data' },
-  treemap: { Icon: IconChartGridDotsFilled, family: 'data' },
   info: { Icon: IconInfoCircleFilled, family: 'data' }
 }
 
 /** Fallback so a template added without an entry here still renders something. */
 const FALLBACK: Presentation = { Icon: IconArrowsExchange, family: 'data' }
 
+const presentationFor = (id: string): Presentation => PRESENTATION[id] ?? FALLBACK
+const hasVariants = (id: string): boolean => (presentationFor(id).variants?.length ?? 0) > 1
+
 export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => void }): JSX.Element {
   const [moreOpen, setMoreOpen] = useState(false)
 
-  const buttonFor = (id: string, onClick?: () => void, nativeTitle = false): ReactNode => {
+  const pickDefault = (id: string): void => onPick(DIAGRAM_TEMPLATES[id].source)
+
+  /**
+   * The toolbar button. A template with variants opens a menu instead, so it
+   * gets no click handler; one without loads its source on a single click.
+   */
+  const barButton = (id: string): ReactNode => {
     const def = DIAGRAM_TEMPLATES[id]
-    const p = PRESENTATION[id] ?? FALLBACK
-    const Icon = p.Icon
+    const { Icon } = presentationFor(id)
     const button = (
       <ActionIcon
         variant="subtle"
         size={BUTTON_SIZE}
         className={classes.templateButton}
-        data-family={p.family}
+        data-family={presentationFor(id).family}
         aria-label={def.label}
-        // Native title rather than a Mantine Tooltip when this button is a
-        // Menu.Target: Menu.Target attaches its ref to its child, and a Mantine
-        // Toolotip in between swallows it, so the menu never opened. `title`
-        // needs no ref and still names the button on hover.
-        title={nativeTitle ? def.label : undefined}
+        // A native title rather than a Mantine Tooltip when this button is a
+        // Menu.Target: the Tooltip sits between the target and the DOM node and
+        // takes the ref, so the menu never opened. `title` needs no ref.
+        title={hasVariants(id) ? def.label : undefined}
         data-testid={`template-${id}`}
-        onClick={onClick}
+        onClick={hasVariants(id) ? undefined : () => pickDefault(id)}
       >
         <Icon size={ICON_SIZE} />
       </ActionIcon>
     )
-    if (nativeTitle) return button
+    if (hasVariants(id)) return button
     return (
       <Tooltip key={id} label={def.label} position="bottom" openDelay={200}>
         {button}
@@ -164,74 +172,123 @@ export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => voi
     )
   }
 
-  // A type with real variants gets its own menu; one without loads straight away.
-  // The click handler lives on the ActionIcon itself rather than a wrapper, so it
-  // is a real button and reachable by keyboard.
-  const controlFor = (id: string): ReactNode => {
-    const p = PRESENTATION[id] ?? FALLBACK
-    if (!p.variants || p.variants.length < 2) {
-      return buttonFor(id, () => onPick(DIAGRAM_TEMPLATES[id].source))
+  /**
+   * The source a variant row loads: its own, or the template's canonical source
+   * when the row is the default form. One definition per diagram, never two.
+   */
+  const variantSource = (id: string, variant: Variant): string =>
+    variant.source ?? DIAGRAM_TEMPLATES[id].source
+
+  /** One row inside the trailing dropdown, as a real menu item. */
+  const menuRow = (id: string): ReactNode => {
+    const def = DIAGRAM_TEMPLATES[id]
+    const { Icon, variants } = presentationFor(id)
+    const section = <Icon size={ROW_ICON_SIZE} />
+    if (!variants || variants.length < 2) {
+      return (
+        <Menu.Item
+          key={id}
+          leftSection={section}
+          data-testid={`template-row-${id}`}
+          onClick={() => pickDefault(id)}
+        >
+          {def.label}
+        </Menu.Item>
+      )
     }
+    // Mantine documents Menu.Sub as the supported nesting mechanism. A Menu
+    // inside a Menu.Dropdown does not work: the outer dropdown's focus handling
+    // fights the inner one and the submenu never opens.
     return (
-      <Menu
-        key={id}
-        position="bottom-end"
-        withinPortal
-        returnFocus={false}
-        // Mantine's Popover default is already false; Menu raises it, and the
-        // automatic return-focus on unmount runs after the browser's own focus
-        // step, which moved DOM focus to the trigger and sent the following
-        // keystrokes to the button instead of the editor. See the rich toolbar.
-      >
-        <Menu.Target>{buttonFor(id, undefined, true)}</Menu.Target>
-        {/* Real Menu.Items so Mantine dismisses the menu itself. Plain buttons
-            would leave it open and the next click anywhere would be consumed
-            closing it — the same fault the rich toolbar's menu had. */}
-        <Menu.Dropdown className={classes.moreMenu}>
-          {p.variants.map((v) => (
+      <Menu.Sub key={id} openDelay={120} closeDelay={150}>
+        <Menu.Sub.Target>
+          <Menu.Sub.Item leftSection={section} data-testid={`template-row-${id}`}>
+            {def.label}
+          </Menu.Sub.Item>
+        </Menu.Sub.Target>
+        <Menu.Sub.Dropdown>
+          {variants.map((v) => (
             <Menu.Item
               key={v.label}
-              className={classes.variantRow}
               leftSection={<span className={classes.variantMark}>{v.mark}</span>}
               data-testid={`template-variant-${id}-${v.label.replace(/\s+/g, '-')}`}
-              onClick={() => onPick(v.source)}
+              onClick={() => onPick(variantSource(id, v))}
             >
               {v.label}
             </Menu.Item>
           ))}
-        </Menu.Dropdown>
-      </Menu>
+        </Menu.Sub.Dropdown>
+      </Menu.Sub>
     )
   }
 
-  // Entries, ordered by family, with a separator wherever the family changes.
-  // Separators are part of the measured list so the fit calculation accounts for
-  // their width rather than silently overflowing.
+  // Ordered by family, with a separator wherever the family changes. Separators
+  // take part in the measurement so the fit calculation accounts for them.
   const ordered = Object.keys(DIAGRAM_TEMPLATES).sort((a, b) => {
-    const fa = FAMILY_ORDER.indexOf((PRESENTATION[a] ?? FALLBACK).family)
-    const fb = FAMILY_ORDER.indexOf((PRESENTATION[b] ?? FALLBACK).family)
+    const fa = FAMILY_ORDER.indexOf(presentationFor(a).family)
+    const fb = FAMILY_ORDER.indexOf(presentationFor(b).family)
     return fa - fb
   })
 
+  // `slots[i]` records what item i is, so the overflow dropdown can be rebuilt
+  // as real menu rows instead of the nodes that overflowed.
+  const slots: Array<{ kind: 'template'; id: string } | { kind: 'separator'; family: Family }> = []
   const items: ReactNode[] = []
   let lastFamily: Family | null = null
   for (const id of ordered) {
-    const family = (PRESENTATION[id] ?? FALLBACK).family
+    const family = presentationFor(id).family
     if (lastFamily !== null && family !== lastFamily) {
+      slots.push({ kind: 'separator', family })
       items.push(<span className={classes.templateSep} key={`sep-${family}`} aria-hidden="true" />)
     }
     lastFamily = family
-    items.push(controlFor(id))
+    slots.push({ kind: 'template', id })
+    if (hasVariants(id)) {
+      items.push(
+        <Menu key={id} position="bottom-end" withinPortal returnFocus={false}>
+          <Menu.Target>{barButton(id)}</Menu.Target>
+          <Menu.Dropdown className={classes.moreMenu}>
+            {presentationFor(id).variants?.map((v) => (
+              <Menu.Item
+                key={v.label}
+                leftSection={<span className={classes.variantMark}>{v.mark}</span>}
+                data-testid={`template-variant-${id}-${v.label.replace(/\s+/g, '-')}`}
+                onClick={() => onPick(variantSource(id, v))}
+              >
+                {v.label}
+              </Menu.Item>
+            ))}
+          </Menu.Dropdown>
+        </Menu>
+      )
+    } else {
+      items.push(barButton(id))
+    }
   }
 
   const { split, barRef, slotProps } = useToolbarOverflow(items, {
     // The trailing button here is 48px, not the hook's 28px default. Left at the
-    // default the fit calculation budgets too little room, and the row overflowed
+    // default the fit calculation budgets too little room and the row overflowed
     // by 13px instead of splitting.
-    moreButtonWidth: BUTTON_SIZE
+    moreButtonWidth: BUTTON_SIZE,
+    // Without this the split can land immediately after a separator, and the
+    // dropdown then opens on a divider with no family above it.
+    isDivider: (node) =>
+      isValidElement(node) &&
+      (node.props as { className?: string }).className === classes.templateSep
   })
+
   const visible = split === null ? items : items.slice(0, split)
-  const overflowed = split === null ? [] : items.slice(split)
+  const overflowedSlots = split === null ? [] : slots.slice(split)
+
+  /**
+   * A control's stable identity, for the wrapper that carries its measured width.
+   * Every node pushed into `items` above is keyed by its template id, so this
+   * keeps a button's DOM node across a resize instead of rebuilding it, which
+   * would drop the tooltip's open state and the menu's own open state with it.
+   */
+  const keyFor = (item: ReactNode): string =>
+    isValidElement(item) && item.key !== null ? String(item.key) : ''
 
   return (
     <div
@@ -242,11 +299,11 @@ export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => voi
       aria-label={UI_TEXT.diagramTemplateLabel}
     >
       {visible.map((item, index) => (
-        <span className={classes.templateSlot} key={index} {...slotProps(index)}>
+        <span className={classes.templateSlot} key={keyFor(item)} {...slotProps(index)}>
           {item}
         </span>
       ))}
-      {overflowed.length > 0 ? (
+      {overflowedSlots.length > 0 ? (
         <Menu
           position="bottom-end"
           withinPortal
@@ -266,17 +323,20 @@ export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => voi
               <IconDotsVertical size={ICON_SIZE} />
             </ActionIcon>
           </Menu.Target>
-          <Menu.Dropdown
-            className={classes.moreMenu}
-            onClick={(event) => {
-              if ((event.target as HTMLElement).closest('button')) setMoreOpen(false)
-            }}
-          >
-            {overflowed.map((item, index) => (
-              <span className={classes.moreItem} key={index}>
-                {item}
-              </span>
-            ))}
+          {/* Real Menu.Items and Menu.Subs rather than the nodes that overflowed.
+              As well as making the submenus open, this is what makes the
+              dropdown reachable by keyboard: Mantine moves focus with the arrow
+              keys and gives each row role="menuitem". */}
+          <Menu.Dropdown className={classes.moreMenu}>
+            {overflowedSlots.map((slot) =>
+              slot.kind === 'separator' ? (
+                // Each family appears once in the ordered list, so the family
+                // names the separator uniquely - no array index needed.
+                <Menu.Divider key={`sep-${slot.family}`} />
+              ) : (
+                menuRow(slot.id)
+              )
+            )}
           </Menu.Dropdown>
         </Menu>
       ) : null}

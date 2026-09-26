@@ -117,17 +117,31 @@ test.describe('diagram templates', () => {
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1)
     expect(metrics.height, 'the bar stays one row').toBeLessThan(60)
 
-    // Every template is reachable: on the row, or in the trailing dropdown.
+    // Every template is reachable: on the row, or as a row in the trailing
+    // dropdown. Overflowed templates are no longer the moved toolbar button -
+    // they are rebuilt as real menu items, which is what makes the submenu open
+    // and the dropdown keyboard-reachable - so the two are different testids.
     const ids = Object.keys(DIAGRAM_TEMPLATES)
-    const onRow = await bar.locator('[data-testid^="template-"]').count()
+    // The trailing "more" button also starts with `template-`, so exclude it:
+    // it is not a template and would put the count one over.
+    const onRow = await bar
+      .locator('[data-testid^="template-"]:not([data-testid="template-more"])')
+      .count()
     expect(onRow).toBeGreaterThan(0)
 
     if ((await page.getByTestId('template-more').count()) > 0) {
       await page.getByTestId('template-more').click()
       await expect(page.getByTestId('template-more')).toHaveAttribute('aria-expanded', 'true')
       for (const id of ids) {
-        await expect(page.getByTestId(`template-${id}`), `${id} must be reachable`).toBeVisible()
+        await expect(
+          page.getByTestId(`template-${id}`).or(page.getByTestId(`template-row-${id}`)),
+          `${id} must be on the bar or in the dropdown`
+        ).toBeVisible()
       }
+      // Nothing may be lost in the move: bar buttons plus dropdown rows must
+      // account for every template exactly once.
+      const inMenu = await page.locator('[data-testid^="template-row-"]').count()
+      expect(onRow + inMenu, 'every template is accounted for').toBe(ids.length)
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('template-more')).toHaveAttribute('aria-expanded', 'false')
     } else {
@@ -191,6 +205,97 @@ test.describe('diagram templates', () => {
         new RegExp(`^${expected.replace(' ', '\\s')}`)
       )
     }
+  })
+
+  test('a template in the overflow dropdown still opens its variants', async ({ page }) => {
+    // The reported fault: a template pushed into the trailing "more" dropdown had a
+    // submenu that would not open, because a Menu nested inside a Menu.Dropdown
+    // is not how Mantine does nesting. Mantine documents Menu.Sub for this, and
+    // rendering real menu rows also makes the dropdown keyboard-reachable.
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(`Overflow ${Date.now()}`)
+    await dialog.getByTestId('new-page-type-diagram').click()
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
+    await page.getByTestId('diagram-edit-button').click()
+
+    // A variant-bearing type is the only thing that can prove this, and the bar is
+    // ordered by family, so those types sit at the front and only reach the
+    // dropdown when the bar is genuinely starved. Shrinking the window does not
+    // do it: the page layout clamps its own minimum, so the bar keeps its width.
+    // Constrain the bar itself instead - this is the component's overflow
+    // behaviour under test, and the product code is untouched.
+    const bar = page.getByTestId('template-bar')
+    await bar.evaluate((el) => {
+      el.style.width = '120px'
+    })
+    await page.waitForTimeout(400)
+
+    const more = page.getByTestId('template-more')
+    await expect(more, 'the bar must overflow at 120px').toBeVisible()
+    await more.click()
+
+    // Flowchart leads the row, so with room for one control it is the next family
+    // member - state - that has to move into the dropdown.
+    const id = 'state'
+    await expect(
+      page.getByTestId(`template-row-${id}`),
+      'a variant-bearing type must reach the dropdown'
+    ).toBeVisible()
+
+    // Rows are real menu items, so the dropdown is keyboard-navigable.
+    const rows = page.locator('[data-testid^="template-row-"]')
+    await expect(rows.first()).toBeVisible()
+    const itemRoles = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('role')))
+    expect(
+      itemRoles.every((r) => r === 'menuitem'),
+      `roles were ${itemRoles}`
+    ).toBe(true)
+
+    // And the submenu itself opens, which is what the moved-whole node could not do.
+    await page.getByTestId(`template-row-${id}`).click()
+    const sub = page.getByTestId(`template-variant-${id}-State-diagram`)
+    await expect(sub, `${id} in the dropdown must offer its variants`).toBeVisible({
+      timeout: 5_000
+    })
+    await sub.click()
+    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/^stateDiagram-v2/)
+  })
+
+  test('the overflow dropdown is reachable by keyboard', async ({ page }) => {
+    // Known bug: the dropdown used to hold loose ActionIcons, so arrow keys did
+    // nothing and the rows were not menu items. Real Menu.Items fix both.
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(`Keyboard ${Date.now()}`)
+    await dialog.getByTestId('new-page-type-diagram').click()
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
+    await page.getByTestId('diagram-edit-button').click()
+
+    // Force the overflow by constraining the bar itself. Shrinking the window
+    // does not do it: the page layout clamps its own minimum, so the bar keeps
+    // its width and no trailing button ever appears. Same approach, and the same
+    // reasoning, as the submenu test above.
+    await page.getByTestId('template-bar').evaluate((el) => {
+      el.style.width = '300px'
+    })
+    await page.waitForTimeout(400)
+    const more = page.getByTestId('template-more')
+    await expect(more, 'the bar must overflow at 300px').toBeVisible()
+    await more.focus()
+    await page.keyboard.press('Enter')
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+
+    // Arrow down must move focus into the dropdown rather than leaving it on the
+    // trigger. Mantine does that by querying `[data-menu-item]`, which only real
+    // Menu.Items carry - the loose ActionIcons it used to hold carried neither.
+    await page.keyboard.press('ArrowDown')
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))
+    expect(focused, 'focus must land on a menu row').toMatch(/^template-(row|variant)-/)
   })
 
   test('the template list has no duplicate labels', async () => {

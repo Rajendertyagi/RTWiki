@@ -136,18 +136,17 @@
   flex: 0 0 auto;
 }
 
-/* Overflowed templates keep their own identity and handlers - they are moved,
-     not reimplemented - so the dropdown shows the same icon buttons. */
+/* The trailing dropdown holds real menu rows - a plain template is a Menu.Item,
+   a template with variants a Menu.Sub - so it is a single column of text rows,
+   not the wrapped grid of icon buttons this replaced. Mantine gives its items
+   width:100%, which only lines up as a column if the container is one. */
 .moreMenu {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
+  flex-direction: column;
+  align-items: stretch;
   padding: var(--mantine-spacing-xs);
-}
-
-.moreItem {
-  display: inline-flex;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 /* Template bar: one row, never wrapping, never scrolling. What does not fit is
@@ -211,20 +210,8 @@
   flex: 0 0 auto;
 }
 
-/* Overflowed templates keep their own identity and handlers - they are moved,
-     not reimplemented - so the dropdown shows the same icon buttons. */
-.moreMenu {
-  padding: var(--mantine-spacing-xs);
-}
-
-.moreItem {
-  display: inline-flex;
-}
-
-.variantRow {
-  min-width: 180px;
-}
-
+/* The short mark at the left of a variant row - a direction arrow, or a syntax
+     version. Fixed width so the labels that follow line up. */
 .variantMark {
   display: inline-block;
   width: 1.2em;

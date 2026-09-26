@@ -1,5 +1,5 @@
 import { useEditorState } from '@blocknote/react'
-import { ActionIcon, Button, Menu, Popover, TextInput, Tooltip } from '@mantine/core'
+import { ActionIcon, Button, Popover, TextInput, Tooltip } from '@mantine/core'
 import {
   IconAlertOctagon,
   IconAlertTriangle,
@@ -145,9 +145,10 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
   const [linkOpened, setLinkOpened] = useState(false)
   const [textColorOpened, setTextColorOpened] = useState(false)
   const [highlightOpened, setHighlightOpened] = useState(false)
-  // The overflow menu is controlled so it can be dismissed on use. Left
-  // uncontrolled, Mantine only closes it for its own `Menu.Item` children, and
-  // these controls are bare `ActionIcon`s — see the Menu.Dropdown handler.
+  // The overflow panel is controlled so it can be dismissed on use. A Popover
+  // does not close itself when a child is activated, and these controls are bare
+  // `ActionIcon`s rather than anything Popover recognises — see the
+  // Popover.Dropdown click handler.
   const [moreOpen, setMoreOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
 
@@ -537,8 +538,9 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
       {/* Insertion controls live directly on the persistent toolbar — one
           compact icon per entry, grouped with separators. Nothing is hidden
           behind an Insert dropdown; the slash menu remains as an alternative
-          surface. The row scrolls horizontally on narrow screens instead of
-          wrapping or collapsing into menus. */}
+          surface. The row neither wraps nor scrolls: `useToolbarOverflow`
+          measures it and moves whatever does not fit into the trailing "more"
+          dropdown, so a control is never sliced off mid-icon. */}
       {(['insert-formula', 'insert-diagram', 'insert-mind-map', 'insert-linked-page'] as const).map(
         (key) => {
           const entry = getInsertEntries(editor).find((candidate) => candidate.key === key)
@@ -591,52 +593,89 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
   const visible = split === null ? items : items.slice(0, split)
   const overflowed = split === null ? [] : withoutDividers(items.slice(split))
 
+  /**
+   * A control's stable identity, for the wrapper that carries its measured width.
+   *
+   * `Children.toArray` above assigns a key to every child, so each control
+   * already has one. Keying the wrapper by that rather than by array position
+   * means a control keeps its DOM node when the split moves — which is what
+   * stops a control being torn down and rebuilt, losing its own state, every
+   * time the window is resized.
+   */
+  const keyFor = (item: ReactNode): string =>
+    isValidElement(item) && item.key !== null ? String(item.key) : ''
+
   return (
     <div className={classes.bar} role="toolbar" aria-label={UI_TEXT.richToolbarLabel} ref={barRef}>
       {visible.map((item, index) => (
-        <span className={classes.slot} key={index} {...slotProps(index)}>
+        <span className={classes.slot} key={keyFor(item)} {...slotProps(index)}>
           {item}
         </span>
       ))}
       {overflowed.length > 0 ? (
-        <Menu
+        // A Popover, not a Menu. What overflows here is a grid of ordinary editor
+        // controls - some of which own their own popovers - not a list of menu
+        // items. `Menu` imposed menu semantics that were never true: it renders
+        // role="menu" around children with no `menuitem` role, and it moves focus
+        // by querying `[data-menu-item]`, which none of these controls carry. The
+        // result was a dropdown no keyboard user could navigate. `Popover` makes
+        // no such promise, so Tab reaches each control the ordinary way, and the
+        // `role="group"` below states plainly what the panel contains.
+        <Popover
           position="bottom-end"
           withinPortal
           opened={moreOpen}
           onChange={setMoreOpen}
-          // Mantine's Popover default is already `false`; `Menu` is what raises
+          // Mantine's Popover default is already `false`; `Menu` was what raised
           // it, and the automatic return-focus on unmount runs after the
           // browser's own focus step, so it moved DOM focus to this trigger
           // button and the keystrokes that followed never reached the block the
-          // menu had just inserted. Escape and a trigger click still return
+          // panel had just inserted. Escape and a trigger click still return
           // focus by design; only the automatic outside-dismissal no longer does.
           returnFocus={false}
+          // Mantine gives the panel role="dialog" but leaves `trapFocus` false,
+          // so opening it would not move focus inside. A dialog the keyboard
+          // cannot enter is not reachable at all, and the panel is portalled, so
+          // Tab from the trigger never lands in it. Trapping focus is what makes
+          // the controls usable; Escape still closes, and `returnFocus={false}`
+          // above still stops the dismissal stealing the caret.
+          trapFocus
         >
-          <Menu.Target>
+          <Popover.Target>
             <ActionIcon
               variant="subtle"
               className={classes.moreButton}
               data-testid="toolbar-more"
               aria-label={UI_TEXT.toolbarMoreLabel}
+              // A controlled Popover does not toggle itself: Mantine attaches the
+              // target's onClick only when the component is uncontrolled
+              // (`...!ctx.controlled ? { onClick: ... }` in PopoverTarget). `Menu`
+              // always did, so with the Menu version this handler was absent and
+              // the panel opened on its own. Without it the trigger did nothing.
+              onClick={() => setMoreOpen((v) => !v)}
             >
               <IconDotsVertical size={16} />
             </ActionIcon>
-          </Menu.Target>
-          <Menu.Dropdown
+          </Popover.Target>
+          {/* Mantine gives the panel role="dialog" and labels it from the trigger
+              (PopoverDropdown's accessibleProps), which is honest: it is a popup
+              holding controls, not a list of menu items. */}
+          <Popover.Dropdown
             className={classes.moreMenu}
+            // A stable hook for the tests. Mantine's Popover dropdown carries no
+            // data attribute of its own, and `role="dialog"` is not specific
+            // enough - the new-page dialog has that role too.
+            data-testid="toolbar-overflow-panel"
             onClick={(event) => {
-              // Close when a control is actually used. Mantine only auto-closes
-              // for its own `Menu.Item` children, and the controls here are moved
-              // in whole — bare `ActionIcon`s — so nothing closed the menu. Left
-              // open, the very next click anywhere in the document was consumed
-              // dismissing it, and the block just inserted silently ignored the
-              // user's typing.
+              // Close when a control is actually used. Left open, the very next
+              // click anywhere in the document was consumed dismissing it, and the
+              // block just inserted silently ignored the user's typing.
               //
               // The exception is a control that owns its own overlay (a colour
-              // grid, a link field). Closing the menu unmounts that control, which
-              // tears down the popover it just opened, so the click would land on
-              // a dropdown that no longer exists. Those triggers carry
-              // OVERLAY_OWNER_ATTR and the menu stays open until the next click
+              // grid, a link field). Closing the panel unmounts that control,
+              // which tears down the popover it just opened, so the click would
+              // land on a dropdown that no longer exists. Those triggers carry
+              // OVERLAY_OWNER_ATTR and the panel stays open until the next click
               // lands outside it.
               if (!(event.target as HTMLElement).closest(`[${OVERLAY_OWNER_ATTR}]`))
                 setMoreOpen(false)
@@ -644,13 +683,13 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
           >
             {/* The same controls, moved whole. Nothing is re-implemented, so a
                 popover-backed or stateful control behaves identically here. */}
-            {overflowed.map((item, index) => (
-              <span className={classes.moreItem} key={index}>
+            {overflowed.map((item) => (
+              <span className={classes.moreItem} key={keyFor(item)}>
                 {item}
               </span>
             ))}
-          </Menu.Dropdown>
-        </Menu>
+          </Popover.Dropdown>
+        </Popover>
       ) : null}
     </div>
   )

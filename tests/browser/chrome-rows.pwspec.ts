@@ -163,7 +163,10 @@ test.describe('Toolbar overflow', () => {
       .getByLabel(/clear formatting/i)
       .count()
     await more.click()
-    const dropdown = page.locator('[class*="Menu-dropdown"]')
+    // The overflow panel is a `Popover`, not a `Menu`, so Mantine's
+    // `Menu-dropdown` class no longer applies. `toolbar-overflow-panel` is our own
+    // stable hook on it.
+    const dropdown = page.getByTestId('toolbar-overflow-panel')
     await expect(dropdown).toBeVisible()
     if (inBar === 0) {
       // The same control, moved rather than reimplemented: still the same
