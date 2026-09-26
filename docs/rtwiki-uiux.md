@@ -1340,6 +1340,39 @@ Bar height is 36px (Trilium's is 39px). F21 above came out of this measurement.
 **The grouping and labelling were added in an earlier cycle and F6 was never
 re-measured** — a recorded finding going stale, the same failure mode as F2.
 
+### F22 — The URL keeps naming a page after the last tab is closed — **OPEN** 🟡
+
+Found while verifying F20, and **not yet fixed**. Measured end to end:
+
+```
+url with tab open:          /?page=e9923150-…
+url after closing all tabs: /?page=e9923150-…     <-- unchanged
+session after closing:      {"openPageIds":[],"activePageId":null,"expandedTreeIds":["2327…"]}
+url after reload:           /?page=e9923150-…
+tabs after reload:          1
+```
+
+The session is written correctly — no open tabs, no active page. The **URL is
+not**. `buildPageUrl(null)` already deletes the parameter and `syncHistory` is
+already called with the active id, so the mechanism exists; the call simply does
+not happen (or does not fire) when the last tab closes. `selectPage(null)` does
+clear the selection, so the gap is between that and the URL sync.
+
+Consequences: the address bar claims a page is open when none is; and because the
+deep link is now honoured additively (F20), a reload faithfully reopens a page
+the user had deliberately closed — which is the correct deep-link behaviour
+applied to a URL that should never have been left behind.
+
+`tree-foundation-spike.pwspec.ts` "restores expansion with zero open tabs after
+reload" fails for exactly this reason, and **was failing before this cycle's
+changes for the same underlying reason** — the old deep-link branch also reopened
+the page, so the symptom was identical and merely masked.
+
+Expansion itself is fine: `parent aria-expanded: true` after the reload. An
+earlier version of the F20 fix *did* break that, by testing `tabs.length === 0`
+as "nothing to restore" and wiping a session that held only an expanded subtree.
+The guard now tests tabs **and** expansion, with a comment saying why.
+
 ## 8. Ordered work plan
 
 The agreed sequence, with reasoning for the order:

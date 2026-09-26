@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { railHome } from './utils/shell.js'
 
 /**
  * Dashboard card opening must work across the whole visible card surface,
@@ -42,7 +43,7 @@ test.describe('Dashboard card opening', () => {
       const title = uniqueTitle('Coord')
       await page.goto('/')
       await createNoteViaDialog(page, title)
-      await page.getByRole('button', { name: 'Home' }).click()
+      await railHome(page).click()
 
       const card = await cardLocator(page, title).boundingBox()
       expect(card, 'card should be visible on the dashboard').not.toBeNull()
@@ -62,7 +63,7 @@ test.describe('Dashboard card opening', () => {
     const title = uniqueTitle('MenuOnly')
     await page.goto('/')
     await createNoteViaDialog(page, title)
-    await page.getByRole('button', { name: 'Home' }).click()
+    await railHome(page).click()
 
     cardLocator(page, title).getByLabel(`Actions for ${title}`).click()
     // Menu open: duplicate/delete visible in the portal dropdown.
@@ -79,7 +80,7 @@ test.describe('Dashboard card opening', () => {
     const title = uniqueTitle('KbdCard')
     await page.goto('/')
     await createNoteViaDialog(page, title)
-    await page.getByRole('button', { name: 'Home' }).click()
+    await railHome(page).click()
 
     // Focus the card's open control directly and activate it.
     await page.getByRole('button', { name: `Open ${title}` }).focus()

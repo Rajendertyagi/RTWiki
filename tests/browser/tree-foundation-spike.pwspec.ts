@@ -1,5 +1,6 @@
 import { type APIRequestContext, test as baseTest, expect, type Page } from '@playwright/test'
 import { waitForRow } from './utils/row-visibility.js'
+import { railHome } from './utils/shell.js'
 
 /**
  * Wunderbaum tree foundation — integration spike proof (Phase 1).
@@ -208,7 +209,7 @@ test.describe('Wunderbaum tree foundation (spike)', () => {
     await page.getByTestId('page-tree').waitFor()
     await expect(page.locator('.wunderbaum')).toHaveCount(1)
     // Remount the whole tree through a dashboard round-trip.
-    await page.getByLabel('Home').click()
+    await railHome(page).click()
     await page.getByTestId('page-tree').waitFor()
     await expect(page.locator('.wunderbaum')).toHaveCount(1)
     // Full reload still leaves exactly one instance.

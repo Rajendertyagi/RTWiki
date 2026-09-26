@@ -166,11 +166,13 @@ export function App(): JSX.Element {
     let activePageId: string | null = null
     let tabs: OpenTab[] = []
     let restoredField: 'preview' | 'html' | 'css' | 'javascript' = 'preview'
+    let restoredExpansion = 0
     if (session) {
       const resolved = resolveRestorableWorkspace(session, controller.pages)
       if (resolved) {
         tabs = resolved.tabs
         activePageId = resolved.activePageId
+        restoredExpansion = resolved.expandedTreeIds.length
         if (resolved.htmlSource) {
           restoredField = resolved.htmlSource.field
           setHtmlSource(resolved.htmlSource)
@@ -205,7 +207,13 @@ export function App(): JSX.Element {
       )
     }
 
-    if (tabs.length === 0) {
+    // "Nothing to restore" means neither tabs nor expansion. A session holding
+    // only an expanded subtree - every tab closed, the tree still open where you
+    // left it - is a real state and must be kept. An earlier version of this
+    // block tested `tabs.length === 0` alone, which wiped that expansion: the
+    // check conflated "no pages" with "nothing", and closing every tab then
+    // reloading lost the tree shape.
+    if (tabs.length === 0 && restoredExpansion === 0) {
       debugLog('navigation', 'nav_session_invalid_discarded', { code: 'no_valid_pages' })
       saveWorkspaceSession(storage, {
         version: 1,
