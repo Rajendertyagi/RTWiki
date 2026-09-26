@@ -105,20 +105,26 @@ export function MermaidBlockView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderSeq is the manual Retry trigger and is intentionally not read inside the effect
   useEffect(() => {
     const gen = ++committedGenRef.current
+    const ac = new AbortController()
     setErrorCode(null)
     void renderMermaidSvg(source, {
       theme: colorScheme === 'dark' ? 'dark' : 'default',
       blockId,
-      blockType
+      blockType,
+      signal: ac.signal
     }).then((result) => {
       if (gen !== committedGenRef.current) return
       if (result.ok) {
         setCommittedSvg(result.svg)
       } else {
+        // A cancelled render was superseded or unmounted: it is not a failure
+        // and must not blank the diagram or raise an error.
+        if (result.code === 'cancelled') return
         setCommittedSvg(null)
         setErrorCode(result.code)
       }
     })
+    return () => ac.abort()
   }, [source, colorScheme, renderSeq, blockId, blockType])
 
   // Debounce the live draft so typing never re-renders per keystroke.
@@ -131,20 +137,25 @@ export function MermaidBlockView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderSeq is the manual Retry trigger and is intentionally not read inside the effect
   useEffect(() => {
     const gen = ++liveGenRef.current
+    const ac = new AbortController()
     setLiveError(null)
     void renderMermaidSvg(debouncedDraft, {
       theme: colorScheme === 'dark' ? 'dark' : 'default',
       blockId,
-      blockType
+      blockType,
+      signal: ac.signal
     }).then((result) => {
       if (gen !== liveGenRef.current) return
       if (result.ok) {
         setLiveSvg(result.svg)
       } else {
+        // Superseded or unmounted: not a failure, so keep whatever is shown.
+        if (result.code === 'cancelled') return
         setLiveSvg(null)
         setLiveError(result.code)
       }
     })
+    return () => ac.abort()
   }, [debouncedDraft, colorScheme, renderSeq, blockId, blockType])
 
   const startEditing = (): void => {

@@ -125,19 +125,24 @@ export default function MermaidPageWorkspace({
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderSeq is the manual Refresh trigger and is intentionally not read inside the effect
   useEffect(() => {
     const gen = ++committedGenRef.current
+    const ac = new AbortController()
     setErrorCode(null)
     void renderMermaidSvg(committedSource, {
       theme: colorScheme === 'dark' ? 'dark' : 'default',
       blockId: pageId,
-      blockType: mermaidBlockType
+      blockType: mermaidBlockType,
+      signal: ac.signal
     }).then((result) => {
       if (gen !== committedGenRef.current) return
       if (result.ok) setSvg(result.svg)
       else {
+        // Superseded or unmounted: not a failure, so keep the current diagram.
+        if (result.code === 'cancelled') return
         setSvg(null)
         setErrorCode(result.code)
       }
     })
+    return () => ac.abort()
   }, [committedSource, colorScheme, renderSeq, pageId, mermaidBlockType])
 
   // Debounced live draft for edit mode.
@@ -150,19 +155,24 @@ export default function MermaidPageWorkspace({
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderSeq is the manual Refresh trigger and is intentionally not read inside the effect
   useEffect(() => {
     const gen = ++liveGenRef.current
+    const ac = new AbortController()
     setLiveError(null)
     void renderMermaidSvg(debouncedDraft, {
       theme: colorScheme === 'dark' ? 'dark' : 'default',
       blockId: pageId,
-      blockType: mermaidBlockType
+      blockType: mermaidBlockType,
+      signal: ac.signal
     }).then((result) => {
       if (gen !== liveGenRef.current) return
       if (result.ok) setLiveSvg(result.svg)
       else {
+        // Superseded or unmounted: not a failure, so keep the current diagram.
+        if (result.code === 'cancelled') return
         setLiveSvg(null)
         setLiveError(result.code)
       }
     })
+    return () => ac.abort()
   }, [debouncedDraft, colorScheme, renderSeq, pageId, mermaidBlockType])
 
   const startEditing = (): void => {

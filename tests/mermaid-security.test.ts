@@ -11,7 +11,25 @@ describe('mermaid security configuration', () => {
     expect(MERMAID_CONFIG.securityLevel).toBe('strict')
     expect(MERMAID_CONFIG.suppressErrorRendering).toBe(true)
     expect(MERMAID_CONFIG.deterministicIds).toBe(true)
-    expect(MERMAID_CONFIG.deterministicIdSeed).toBe('rtwiki')
+    // The schema's own spelling, capital D. This key was previously written
+    // `deterministicIdSeed`, which Mermaid has never read — the misspelling sat
+    // in the config AND in this assertion, so the test passed on a key that did
+    // nothing. See the note on MERMAID_CONFIG.
+    expect(MERMAID_CONFIG.deterministicIDSeed).toBe('rtwiki')
+  })
+
+  it('does not carry a misspelled id-seed key', () => {
+    // Guards the specific regression: a lowercase-d `deterministicIdSeed` is
+    // silently ignored by Mermaid, so it would pass unnoticed forever.
+    expect('deterministicIdSeed' in MERMAID_CONFIG).toBe(false)
+  })
+
+  it('pins the diagram size caps to our values, not the schema defaults', () => {
+    // These are deliberately raised above Mermaid's defaults (maxTextSize
+    // defaults to 50_000). An upgrade that dropped them would silently quarter
+    // the largest diagram RTWiki accepts, so they are asserted explicitly.
+    expect(MERMAID_CONFIG.maxTextSize).toBe(200_000)
+    expect(MERMAID_CONFIG.maxEdges).toBe(500)
   })
 
   it('is frozen: neither content nor integrations can mutate it', () => {
