@@ -34,6 +34,31 @@ const toolbarButton = (page: Page, label: string) =>
     .getByRole('button', { name: label, exact: true })
     .or(page.getByRole('toolbar').getByLabel(label, { exact: true }))
 
+/**
+ * Clicks a toolbar control wherever it currently lives.
+ *
+ * The bar holds 28 controls and its own row is about 920px, so the tail of it -
+ * code block, quote, the callouts and Clear formatting - does not fit and moves
+ * into a trailing "more" menu. That is the designed behaviour, measured rather
+ * than assumed: opening the menu shows all eight, still labelled.
+ *
+ * These tests predate that change and looked for every control on the bar
+ * itself, so four of them failed on a control that had not gone missing - it had
+ * moved. Rather than pick a side, this helper uses the real arrangement and the
+ * assertions stay about *what the control does*, not where it is filed.
+ */
+async function useControl(page: Page, testId: string): Promise<void> {
+  const onBar = page.getByTestId(testId)
+  if ((await onBar.count()) > 0) {
+    await onBar.click()
+    return
+  }
+  await page.getByTestId('toolbar-more').click()
+  const inMenu = page.getByTestId(testId)
+  await inMenu.waitFor({ state: 'visible', timeout: 5_000 })
+  await inMenu.click()
+}
+
 test.describe('Rich Note toolbar controls', () => {
   test.beforeAll(async ({ request }) => {
     await purgeUntitledPages(request)
@@ -59,7 +84,7 @@ test.describe('Rich Note toolbar controls', () => {
     await expect(page.locator(`${EDITABLE} strong`)).toBeVisible()
     await expect(bold).toHaveAttribute('aria-pressed', 'true')
 
-    await toolbarButton(page, 'Clear formatting').click()
+    await useControl(page, 'clear-formatting')
     await expect(page.locator(`${EDITABLE} strong`)).toHaveCount(0)
   })
 
@@ -130,9 +155,9 @@ test.describe('Rich Note toolbar controls', () => {
   test('quote and code blocks apply via their toolbar controls', async ({ page }) => {
     await newRichNote(page)
     // Every insertion control is a direct toolbar button (no Insert dropdown).
-    await page.getByTestId('insert-quote').click()
+    await useControl(page, 'insert-quote')
     await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
-    await page.getByTestId('insert-code-block').click()
+    await useControl(page, 'insert-code-block')
     await expect(page.locator(`${EDITABLE} pre`).first()).toBeVisible()
   })
 
@@ -158,18 +183,22 @@ test.describe('Rich Note toolbar controls', () => {
       'insert-quote',
       'insert-code-block'
     ]
+    // Every control must exist and be usable - on the bar, or in the more menu
+    // when the row has run out of width. Asserting "on the bar" is what these
+    // tests used to do, and it is why four of them failed against a deliberate
+    // change rather than a fault.
+    await page.getByTestId('toolbar-more').click()
+    await page.waitForTimeout(400)
     for (const key of keys) {
       const control = page.getByTestId(key)
-      await expect(control).toBeVisible()
-      await expect(control).toBeEnabled()
+      await expect(control, `${key} must be reachable`).toBeVisible()
+      await expect(control, `${key} must be enabled`).toBeEnabled()
     }
     // The former Insert dropdown is gone.
     await expect(page.getByTestId('insert-menu-button')).toHaveCount(0)
   })
 
-  test('every insertion control remains visible at narrow width (scroll, no menu)', async ({
-    page
-  }) => {
+  test('every insertion control stays reachable at narrow width', async ({ page }) => {
     const title = uniqueTitle('NarrowInsert')
     await page.goto('/')
     await page.locator('[aria-label="New page"]').first().click()
@@ -178,13 +207,28 @@ test.describe('Rich Note toolbar controls', () => {
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.locator(EDITABLE)).toBeVisible()
     await page.setViewportSize({ width: 480, height: 800 })
+    // The bar must not scroll or wrap; what does not fit goes to the more menu.
+    const bar = page.getByRole('toolbar')
+    const metrics = await bar.evaluate((el) => ({
+      overflowX: getComputedStyle(el).overflowX,
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      height: el.getBoundingClientRect().height
+    }))
+    expect(metrics.overflowX).toBe('hidden')
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1)
+    expect(metrics.height, 'the bar must stay one row').toBeLessThan(80)
+
+    // Everything that did not fit is still reachable through the more menu.
     const keys = ['insert-formula', 'insert-diagram', 'insert-mind-map', 'insert-callout-danger']
+    await page.getByTestId('toolbar-more').click()
+    await page.waitForTimeout(400)
     for (const key of keys) {
-      await expect(page.getByTestId(key)).toBeVisible()
+      await expect(page.getByTestId(key), `${key} must stay reachable`).toBeVisible()
     }
     await expect(page.getByTestId('insert-menu-button')).toHaveCount(0)
     // Narrow screens scroll the row; controls stay usable.
-    await page.getByTestId('insert-quote').click()
+    await useControl(page, 'insert-quote')
     await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
   })
 

@@ -46,9 +46,22 @@ async function openNote(page: Page, title: string): Promise<void> {
 }
 
 /** Inserts a block through its persistent toolbar control (one compact
- * icon per entry; the former Insert dropdown was removed). */
+ * icon per entry; the former Insert dropdown was removed).
+ *
+ * The bar cannot fit all 28 controls in its ~920px row, so the tail of it -
+ * which is where the callouts live - moves into the trailing "more" menu. This
+ * helper uses the control wherever it currently is, so the assertions stay about
+ * what inserting a callout does rather than where the button is filed. */
 async function insertViaMenu(page: Page, key: string): Promise<void> {
-  await page.getByTestId(key).click()
+  const onBar = page.getByTestId(key)
+  if ((await onBar.count()) > 0) {
+    await onBar.click()
+    return
+  }
+  await page.getByTestId('toolbar-more').click()
+  const inMenu = page.getByTestId(key)
+  await inMenu.waitFor({ state: 'visible', timeout: 5_000 })
+  await inMenu.click()
 }
 
 function nextSave(page: Page): {

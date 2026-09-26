@@ -648,6 +648,10 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
         <ActionIcon
           variant="subtle"
           aria-label={UI_TEXT.clearFormattingLabel}
+          // Every other control on this bar carries a test id, including the
+          // ones that move into the more menu when the row runs out of width.
+          // This one had only a label, so it could not be addressed by either.
+          data-testid="clear-formatting"
           onClick={clearFormatting}
         >
           <IconClearFormatting size={16} />
