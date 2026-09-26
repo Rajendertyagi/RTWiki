@@ -258,6 +258,23 @@ test.describe('stability regressions', () => {
       await expect(editor).not.toBeVisible()
     }
 
+    /** Reads one page's server-side title, authoritatively and by id.
+     *
+     * Not a scan of `GET /api/pages`: that endpoint is paginated and returns
+     * only the first 50 rows by default, so a page outside that window is
+     * simply absent and the lookup silently returns undefined. The failure
+     * looked like a rename bug — "the title never changed" — when the rename
+     * was correct and the verification could not see the page. */
+    async function serverTitle(
+      request: APIRequestContext,
+      id: string
+    ): Promise<string | undefined> {
+      const res = await request.get(`/api/pages/${id}`)
+      if (!res.ok()) return undefined
+      const body = (await res.json()) as { page?: { title: string } }
+      return body.page?.title
+    }
+
     async function expectTitleEverywhere(
       page: Page,
       request: APIRequestContext,
@@ -265,13 +282,7 @@ test.describe('stability regressions', () => {
       title: string
     ) {
       // Server truth first (authoritative).
-      await expect
-        .poll(async () => {
-          const res = await request.get('/api/pages')
-          const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
-          return list.pages.find((p) => p.id === id)?.title
-        })
-        .toBe(title)
+      await expect.poll(() => serverTitle(request, id)).toBe(title)
       const row = page.locator(`[role="treeitem"][data-page-id="${id}"]`)
       await waitForRow(page, id)
       await expect(row).toBeVisible()
@@ -320,9 +331,7 @@ test.describe('stability regressions', () => {
       await expandRow(page, parent.id)
       await expectTitleEverywhere(page, request, child.id, childRenamed)
       // The parent's title is untouched by the child rename.
-      const res = await request.get('/api/pages')
-      const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
-      expect(list.pages.find((p) => p.id === parent.id)?.title).toBe(parentTitle)
+      expect(await serverTitle(request, parent.id)).toBe(parentTitle)
     })
 
     test('nested HTML parent rename', async ({ page, request }) => {
