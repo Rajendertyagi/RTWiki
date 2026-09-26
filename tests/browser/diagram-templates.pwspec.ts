@@ -148,10 +148,49 @@ test.describe('diagram templates', () => {
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
     await page.getByTestId('diagram-edit-button').click()
 
-    // A type that is always near the front of the row, so this does not depend
-    // on how the split falls at the current width.
+    // A type with no variants loads on one click.
+    await page.getByTestId('template-sequence').click()
+    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/sequenceDiagram/i)
+
+    // A type WITH variants opens its menu instead, and picking a variant loads it.
+    // Flowchart is the case that matters: Mermaid offers it in four directions.
     await page.getByTestId('template-flowchart').click()
-    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/flowchart/i)
+    await expect(page.getByTestId('template-variant-flowchart-Left-to-right')).toBeVisible()
+    await page.getByTestId('template-variant-flowchart-Left-to-right').click()
+    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/^flowchart LR/)
+  })
+
+  test('a template that offers variants opens them; one that does not, loads', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(`Variants ${Date.now()}`)
+    await dialog.getByTestId('new-page-type-diagram').click()
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
+    await page.getByTestId('diagram-edit-button').click()
+
+    // Flowchart: four directions, each a real source.
+    await page.getByTestId('template-flowchart').click()
+    for (const dir of ['Top-to-bottom', 'Bottom-to-top', 'Right-to-left', 'Left-to-right']) {
+      await expect(
+        page.getByTestId(`template-variant-flowchart-${dir}`),
+        `${dir} must be offered`
+      ).toBeVisible()
+    }
+    await page.keyboard.press('Escape')
+
+    // Each direction really is that direction.
+    for (const [dir, expected] of [
+      ['Top-to-bottom', 'flowchart TD'],
+      ['Left-to-right', 'flowchart LR']
+    ] as const) {
+      await page.getByTestId('template-flowchart').click()
+      await page.getByTestId(`template-variant-flowchart-${dir}`).click()
+      await expect(page.getByTestId('diagram-source-input')).toHaveValue(
+        new RegExp(`^${expected.replace(' ', '\\s')}`)
+      )
+    }
   })
 
   test('the template list has no duplicate labels', async () => {

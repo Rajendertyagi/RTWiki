@@ -97,12 +97,14 @@ test.describe('dedicated diagram and mind map pages', () => {
     await input.fill('sequenceDiagram\n    Alice->>Bob: Hi')
     await expect(page.getByTestId('diagram-live-preview').locator('svg')).toBeVisible()
 
-    // The flat template bar loads a starter into the source with one click.
-    // This used to drive a `Select` dropdown at `diagram-template`; that picker
-    // is gone, replaced by the bar, so the test was clicking a testid that no
-    // longer exists.
+    // The flat template bar loads a starter into the source. This used to drive a
+    // `Select` dropdown at `diagram-template`; that picker is gone, replaced by
+    // the bar, so the test was clicking a testid that no longer exists. Flowchart
+    // now also opens a direction menu rather than loading directly, because
+    // Mermaid offers it four ways — so pick one explicitly.
     await page.getByTestId('template-flowchart').click()
-    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/graph|flowchart/)
+    await page.getByTestId('template-variant-flowchart-Top-to-bottom').click()
+    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/flowchart TD|graph TD/)
 
     // Cancel restores the applied source; then apply a real change.
     await page.getByTestId('diagram-cancel').click()
