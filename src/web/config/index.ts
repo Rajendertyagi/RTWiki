@@ -359,6 +359,8 @@ export const UI_TEXT = {
   ideOutdentLabel: 'Outdent selection',
   ideSelectAllLabel: 'Select all',
   ideFormatErrorLabel: 'Cannot format: the source has a syntax error.',
+  /** Accessible name for the source editor's parent-chain breadcrumb. */
+  ideBreadcrumbLabel: 'Page location',
   // Find / replace floating dialog
   findDialogFindTitle: 'Find',
   findDialogReplaceTitle: 'Find and replace',

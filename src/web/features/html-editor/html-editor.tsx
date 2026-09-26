@@ -26,7 +26,7 @@ import { formatSource } from './format-source.js'
 import classes from './html-editor.module.css'
 import { SourceFindDialog } from './source-find-dialog.js'
 import { SourceToolbar } from './source-toolbar.js'
-import type { EditorStatus } from './use-codemirror.js'
+import { caretPositionLabel, type EditorStatus, selectionCountLabel } from './use-codemirror.js'
 
 export interface HtmlEditorWorkspaceProps {
   pageId: string
@@ -59,6 +59,8 @@ export interface HtmlEditorWorkspaceProps {
 
 type ContentField = 'html' | 'css' | 'javascript'
 
+const BREADCRUMB_SEPARATOR = '/'
+
 const FIELD_LABELS: Record<ContentField, keyof typeof UI_TEXT> = {
   html: 'editorPaneLabelHtml',
   css: 'editorPaneLabelCss',
@@ -87,7 +89,7 @@ export default function HtmlEditorWorkspace({
   onExitSource,
   onSourceFieldChange,
   onSaveContent,
-  breadcrumbLabels: _breadcrumbLabels = [],
+  breadcrumbLabels = [],
   onFlushRef,
   onSaveStateChange,
   onEditorStatusChange,
@@ -359,6 +361,37 @@ export default function HtmlEditorWorkspace({
     })
   }, [pageId, sourceField])
 
+  // Null when the rendered preview is showing rather than a source subfile.
+  // Declared above the toolbar memo because the breadcrumb's final crumb uses
+  // it, and that memo is evaluated before the preview early-return, so this has
+  // to tolerate the null case rather than assume a subfile is open.
+  const fieldLabel = sourceField === null ? null : UI_TEXT[FIELD_LABELS[sourceField]]
+
+  // Stable identity for the breadcrumb chain across renders, so it can be a memo
+  // dependency without the memo rebuilding on every pass.
+  const breadcrumbKey = breadcrumbLabels.join(BREADCRUMB_SEPARATOR)
+
+  /**
+   * Ancestor crumbs, memoised on the chain's *content*.
+   *
+   * Depending on the `breadcrumbLabels` array itself does not work: the default
+   * `= []` yields a fresh array identity every render, which made the toolbar
+   * memo rebuild every render, hand the parent a new toolbar node every render,
+   * and the parent render it twice. Keying on the joined content gives a stable
+   * identity that still changes when the chain actually does.
+   */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `breadcrumbKey` is the chain's content, which is what should invalidate this. Depending on the array itself is what broke it — see the note above.
+  const ancestorCrumbs = useMemo(
+    () =>
+      breadcrumbLabels.map((label, index) => ({
+        label,
+        // Unique per position without depending on array order, so a repeated
+        // ancestor name ("Notes / Notes") still gets a distinct key.
+        key: breadcrumbLabels.slice(0, index + 1).join(BREADCRUMB_SEPARATOR)
+      })),
+    [breadcrumbKey]
+  )
+
   // Expose the page-level toolbar to the parent so it renders in the shared
   // toolbar row directly under the tab strip (matching the Rich page layout),
   // above the file/header bar. Built here because every piece of IDE state it
@@ -407,6 +440,45 @@ export default function HtmlEditorWorkspace({
     return (
       <Group w="100%" justify="space-between" gap="sm" wrap="nowrap">
         <Group gap="sm" wrap="nowrap">
+          {/* Where you are: the parent chain, then the active subfile. A
+              subfile is a virtual child of the page rather than a page of its
+              own, so without this the tree selection and the open editor give no
+              indication that they refer to the same thing.
+
+              Renders whenever a subfile is open, including for a top-level page
+              with no parent chain, where it shows just the subfile name. Gating
+              it on a non-empty chain made it invisible in exactly the simplest
+              case. */}
+          {fieldLabel !== null ? (
+            <nav
+              className={classes.breadcrumb}
+              aria-label={UI_TEXT.ideBreadcrumbLabel}
+              data-testid="source-breadcrumb"
+            >
+              <ol className={classes.breadcrumbList}>
+                {ancestorCrumbs.map((crumb, index) => (
+                  <li className={classes.breadcrumbItem} key={crumb.key}>
+                    {index > 0 ? (
+                      <span className={classes.breadcrumbSep} aria-hidden="true">
+                        {BREADCRUMB_SEPARATOR}
+                      </span>
+                    ) : null}
+                    <span>{crumb.label}</span>
+                  </li>
+                ))}
+                <li className={classes.breadcrumbItem}>
+                  {ancestorCrumbs.length > 0 ? (
+                    <span className={classes.breadcrumbSep} aria-hidden="true">
+                      {BREADCRUMB_SEPARATOR}
+                    </span>
+                  ) : null}
+                  <span aria-current="page" className={classes.breadcrumbCurrent}>
+                    {fieldLabel}
+                  </span>
+                </li>
+              </ol>
+            </nav>
+          ) : null}
           {switcher}
           <SourceToolbar
             getView={() => getViewRef.current?.() ?? null}
@@ -462,13 +534,28 @@ export default function HtmlEditorWorkspace({
     content.jsEnabled,
     toggleJs,
     openFind,
-    pageId
+    pageId,
+    // The breadcrumb reads the chain, so the memo must rebuild when it changes
+    // or the trail would go stale after a rename or a subfile switch.
+    //
+    // Joined into a string rather than depending on the array itself: the
+    // default `= []` produces a fresh array identity on every render, which made
+    // the memo rebuild every render, which handed the parent a new toolbar node
+    // every render, and the parent rendered it twice.
+    ancestorCrumbs,
+    fieldLabel
   ])
 
   useEffect(() => {
-    onToolbarReady?.(toolbarNode)
+    // In fullscreen this component draws its own toolbar across the whole
+    // viewport (the `fullscreen ? <SourceToolbar/>` in the JSX below), because
+    // the shared toolbar row sits outside the full-screen surface and would be
+    // covered. The parent must therefore NOT also render one: two identical
+    // toolbars stacked is a visual defect, and it makes every control ambiguous
+    // to both a reader and a test.
+    onToolbarReady?.(fullscreen ? null : toolbarNode)
     return () => onToolbarReady?.(null)
-  }, [toolbarNode, onToolbarReady])
+  }, [toolbarNode, onToolbarReady, fullscreen])
 
   // Keyboard shortcuts (Shift+Alt+F format, F11 full-screen) attach to the
   // source view container via a ref listener so the static wrapper element
@@ -541,7 +628,6 @@ export default function HtmlEditorWorkspace({
   // Source subfile view: an IDE-style workspace — breadcrumb, source
   // toolbar, large editor area and a compact status row. The preview-JS gate
   // lives ONLY in the JavaScript subfile.
-  const fieldLabel = UI_TEXT[FIELD_LABELS[sourceField]]
   return (
     <div
       ref={sourceViewRef}
@@ -582,7 +668,7 @@ export default function HtmlEditorWorkspace({
           value={content[sourceField]}
           onChange={(value) => updateField(sourceField, value)}
           language={sourceField}
-          label={fieldLabel}
+          label={UI_TEXT[FIELD_LABELS[sourceField]]}
           wordWrap={wordWrap}
           fontSize={fontSize}
           onStatsChange={(s) => setStats((prev) => ({ ...prev, ...s }))}
@@ -591,6 +677,22 @@ export default function HtmlEditorWorkspace({
           }}
           extraKeys={modSaveKeys}
         />
+        {/* The editor's own status row.
+            The same caret numbers also reach the application status bar at the
+            bottom of the window, but a code editor that shows them only in
+            another region leaves the reader hunting. Both render the same shared
+            `caretPositionLabel`, so they cannot drift apart. */}
+        <div className={classes.statusRow} data-testid="ide-status-row">
+          <span className={classes.statusLanguage}>{fieldLabel}</span>
+          <span className={classes.statusCaret} data-testid="ide-caret-position">
+            {caretPositionLabel(stats)}
+          </span>
+          {stats.selectedChars > 0 ? (
+            <span className={classes.statusSelection} data-testid="ide-selection-count">
+              {selectionCountLabel(stats.selectedChars)}
+            </span>
+          ) : null}
+        </div>
       </Box>
     </div>
   )

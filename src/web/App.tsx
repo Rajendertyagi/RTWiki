@@ -14,7 +14,11 @@ import { Calendar } from './features/calendar/calendar.js'
 import { ScheduleNotifierHost } from './features/calendar/schedule-notifications.js'
 import { Dashboard } from './features/dashboard/dashboard.js'
 import { QuickFinder } from './features/finder/quick-finder.js'
-import type { EditorStatus } from './features/html-editor/use-codemirror.js'
+import {
+  caretPositionLabel,
+  type EditorStatus,
+  selectionCountLabel
+} from './features/html-editor/use-codemirror.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
@@ -767,11 +771,11 @@ export function App(): JSX.Element {
       {editorStatus ? (
         <>
           <Text size="xs" c="dimmed" data-testid="status-caret-position">
-            Ln {editorStatus.line}, Col {editorStatus.column}
+            {caretPositionLabel(editorStatus)}
           </Text>
           {editorStatus.selectedChars > 0 ? (
             <Text size="xs" c="dimmed" data-testid="status-selection-count">
-              {editorStatus.selectedChars} selected
+              {selectionCountLabel(editorStatus.selectedChars)}
             </Text>
           ) : null}
           {editorStatus.formatError !== null ? (

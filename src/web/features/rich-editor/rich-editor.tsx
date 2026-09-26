@@ -14,6 +14,7 @@ import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
 import { PaneDivider } from '../../layout/pane-divider.js'
 import { updatePage } from '../../services/pages-api.js'
+import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { loadLayoutPreferences, saveLayoutPreferences } from '../workspace/layout-preferences.js'
 import { RightSidebar } from '../workspace/right-sidebar.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
@@ -37,6 +38,7 @@ import {
 } from './schema.js'
 import { RTSideMenu } from './side-menu.js'
 import { RTSuggestionMenu, RTWikiLinkMenu } from './slash-menu.js'
+import { useSpellcheck } from './spell/use-spellcheck.js'
 import { useAutosave } from './use-autosave.js'
 import type { LinkablePage } from './wiki-link.js'
 
@@ -323,6 +325,12 @@ function RichEditorInner(props: InnerProps): JSX.Element {
   )
 
   const blocknoteTheme = useComputedColorScheme('light')
+  // Spell check is a user preference and its personal dictionary belongs to the
+  // reader, so both come from the versioned editor preference store rather than
+  // being hard-coded here. The hook installs the ProseMirror plugin and removes
+  // it again when the editor unmounts or the setting is switched off.
+  const editorPrefs = useEditorPreferences()
+  useSpellcheck(editor, editorPrefs.spellCheck, editorPrefs.personalWords)
   const [outline, setOutline] = useState<DocumentOutlineEntry[]>(() =>
     extractOutline(initialDocument)
   )

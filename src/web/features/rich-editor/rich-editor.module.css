@@ -139,3 +139,19 @@
   color: var(--mantine-color-red-filled);
   cursor: not-allowed;
 }
+
+/* Spell-check underlines. The spans are injected by a ProseMirror decoration, so
+   they sit inside `.bn-editor` rather than in React's tree, hence `:global`.
+
+   A wavy underline rather than a text colour change: it survives a high-contrast
+   theme, reads the same in light and dark, and does not rely on colour alone to
+   convey anything. The offset keeps it clear of a KaTeX overbar. */
+.blockNoteWrapper :global(.rtwiki-spellcheck-misspelling) {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--rtwiki-spellcheck-underline, #d9534f);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-skip-ink: none;
+  cursor: help;
+}

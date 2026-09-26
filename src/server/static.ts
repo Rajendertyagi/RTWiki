@@ -11,6 +11,12 @@ const CONTENT_TYPES: Record<string, string> = {
   '.cjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  // Hunspell dictionary parts, served so spell check works with no network
+  // access at all. Both are plain UTF-8 text and must not fall through to
+  // `application/octet-stream`: the editor fetches them with `res.text()`, and an
+  // octet-stream content type is at best a download prompt in some contexts.
+  '.aff': 'text/plain; charset=utf-8',
+  '.dic': 'text/plain; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',

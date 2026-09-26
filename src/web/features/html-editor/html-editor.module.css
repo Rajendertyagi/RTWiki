@@ -82,3 +82,62 @@
   border-top-left-radius: var(--mantine-radius-md);
   border-top-right-radius: var(--mantine-radius-md);
 }
+
+/* Parent-chain breadcrumb, shown beside the source subfile switcher. A subfile
+   is a virtual child of its page rather than a page of its own, so this is what
+   connects the selected tree row to the editor that is open. */
+.breadcrumb {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.breadcrumbList {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.breadcrumbItem {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.breadcrumbSep {
+  padding: 0 var(--mantine-spacing-xs);
+  opacity: 0.6;
+}
+
+/* The active subfile is the end of the trail, so it is the one full-strength
+   label; its ancestors are context and stay dimmed. */
+.breadcrumbCurrent {
+  color: var(--mantine-color-text);
+  font-weight: 500;
+}
+
+/* Status row under the source editor. A compact row in the editor's own pane,
+   the way a code editor reports where the caret is, rather than making the
+   reader look at the window's status bar. */
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.statusLanguage {
+  font-weight: 500;
+  color: var(--mantine-color-text);
+}
+
+.statusCaret,
+.statusSelection {
+  font-variant-numeric: tabular-nums;
+}

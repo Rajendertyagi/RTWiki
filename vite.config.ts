@@ -25,6 +25,12 @@ const repoRoot = findRepoRoot(dirname(fileURLToPath(import.meta.url)))
 export default defineConfig({
   plugins: [react()],
   root: resolve(repoRoot, 'src/web'),
+  // Stated explicitly because the web root is src/web, which would otherwise
+  // make Vite look for src/web/public. Static assets that ship with the app
+  // live at the repository root: currently the vendored Hunspell dictionary
+  // that spell check fetches, so it is served by RTWiki itself and nothing is
+  // ever requested from the internet.
+  publicDir: resolve(repoRoot, 'public'),
   build: {
     outDir: resolve(repoRoot, 'build/web'),
     emptyOutDir: true,

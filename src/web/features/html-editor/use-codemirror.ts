@@ -38,6 +38,23 @@ export interface EditorStatus extends EditorStats {
   formatError: string | null
 }
 
+/**
+ * Formats a caret position for display, e.g. `Ln 12, Col 4`.
+ *
+ * Shared deliberately. The same numbers are shown twice: in the application
+ * status bar at the bottom of the window, and in the source editor's own status
+ * row. Two independent format strings would eventually disagree, and the
+ * discrepancy would look like a bug in one of them rather than duplicated code.
+ */
+export function caretPositionLabel(stats: Pick<EditorStats, 'line' | 'column'>): string {
+  return `Ln ${stats.line}, Col ${stats.column}`
+}
+
+/** Formats a selection size for display, e.g. `42 selected`. */
+export function selectionCountLabel(count: number): string {
+  return `${count} selected`
+}
+
 function languageExtension(language: CodeEditorLanguage): Extension {
   switch (language) {
     case 'html':
