@@ -15,7 +15,9 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-007](ADR-007-sandboxed-custom-content.md) | Sandboxed Custom HTML/CSS/JS | **Accepted** |
 | [ADR-008](ADR-008-page-hierarchy-and-workspace-tree.md) | Page Hierarchy and the Workspace Tree | **Accepted** |
 | [ADR-009](ADR-009-study-scheduler-notifications.md) | Study Scheduler Notification Engine and Settings | **Accepted** |
+| [ADR-010](ADR-010-chart-block.md) | Rich Note Chart Block (Future Feature) | **Accepted** |
 | [ADR-011](ADR-011-tauri-desktop-wrapper.md) | Tauri Desktop Wrapper (Native App with Browser Mode) | **Accepted** |
+| [ADR-012](ADR-012-diagram-rendering-and-sanitisation.md) | Diagram Rendering and Sanitisation Contract | **Accepted** |
 
 ## How to Read an ADR
 
