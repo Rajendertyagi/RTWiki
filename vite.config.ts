@@ -28,6 +28,12 @@ export default defineConfig({
   build: {
     outDir: resolve(repoRoot, 'build/web'),
     emptyOutDir: true,
+    // Mermaid 12 is built to ES2024 and declares Safari 17.4+ as its floor, so
+    // the target is stated rather than inherited from Vite's default. Stating it
+    // keeps our own output aligned with the dependency we cannot transpile:
+    // node_modules is not downlevelled, so a lower target here would only widen
+    // the gap between our code and the library it ships with.
+    target: 'es2024',
     rollupOptions: {
       input: resolve(repoRoot, 'src/web/index.html')
     }

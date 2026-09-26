@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { safeHash } from '../src/web/diagnostics/debug-log.js'
 import {
   MERMAID_CONFIG,
@@ -30,6 +31,38 @@ describe('mermaid security configuration', () => {
     // the largest diagram RTWiki accepts, so they are asserted explicitly.
     expect(MERMAID_CONFIG.maxTextSize).toBe(200_000)
     expect(MERMAID_CONFIG.maxEdges).toBe(500)
+  })
+
+  it('holds Mermaid 12 appearance defaults in place', () => {
+    // Mermaid 12 makes ELK the default layout and `redux-color`/`neo` the
+    // default appearance. Each of these keys is load-bearing: drop one and every
+    // stored diagram silently re-lays out or recolours. Asserted so a refactor
+    // cannot remove them as "unused" — `look` in particular does nothing on
+    // Mermaid 11, so it looks like dead config until 12 arrives.
+    expect(MERMAID_CONFIG.layout).toBe('dagre')
+    expect(MERMAID_CONFIG.look).toBe('classic')
+  })
+
+  it('pins the mindmap layout, which the global dagre default would capture', () => {
+    // The subtlest of the three. Since Mermaid 11 the mindmap renderer resolves
+    // its layout through the registry instead of hardcoding `cose-bilkent`, so
+    // the global `dagre` above would otherwise apply to mindmaps as well. This
+    // is the one pin that cannot be justified by inspection alone — it was
+    // verified by rendering a mindmap under each version and comparing the SVG.
+    expect(MERMAID_CONFIG.mindmap).toEqual({ layout: 'cose-bilkent' })
+  })
+
+  it('imports Mermaid by package specifier, never a dist path', () => {
+    // Mermaid 12's `dist/mermaid.esm.min.mjs` contains syntax Vite's
+    // es-module-lexer rejects ("content contains invalid JS syntax"). Importing
+    // the specifier resolves to the core build and is safe; pointing the import
+    // at that file would break the build in a way that is hard to diagnose.
+    const source = readFileSync(
+      new URL('../src/web/features/rich-editor/blocks/mermaid-render.ts', import.meta.url),
+      'utf8'
+    )
+    expect(source).toContain("import('mermaid')")
+    expect(source).not.toMatch(/from\s+'mermaid\/dist|import\('mermaid\/dist/)
   })
 
   it('is frozen: neither content nor integrations can mutate it', () => {

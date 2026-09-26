@@ -42,6 +42,28 @@ import { sanitizeDiagramSvg } from './svg-sanitize.js'
  * Mermaid's `config.schema.yaml`, in both 10.9.3 and 12.0.0. The previous
  * `deterministicIdSeed` was never read by Mermaid at all; see the note above on
  * why that had no visible effect.
+ *
+ * The three appearance keys below exist ONLY because of Mermaid 12, and each one
+ * is load-bearing. They are asserted in `tests/mermaid-security.test.ts` so a
+ * tidy-up cannot drop them silently and re-lay-out or recolour every diagram in
+ * the database.
+ *
+ * - `layout: 'dagre'` — 12 makes ELK the bundled default layout. Without this,
+ *   flowchart/state/class/ER/requirement diagrams re-lay out. ELK is a separate
+ *   chunk, so pinning dagre also keeps it out of what we fetch.
+ * - `look: 'classic'` — 12 ships `redux-color`/`neo` as the default appearance.
+ *   Without this every diagram recolours, which would also break our dark mode's
+ *   agreement with the rest of the app. `look` does not exist before 12, so it
+ *   could not be set during the 11.17.2 step.
+ * - `mindmap: { layout: 'cose-bilkent' }` — MANDATORY, and the subtlest of the
+ *   three. Until 11, the mindmap renderer hardcoded `cose-bilkent` and ignored
+ *   config. From 11 it resolves through the layout registry, so the top-level
+ *   `dagre` above would otherwise capture mindmaps too. Measured, not assumed:
+ *   with the global default in place on 11.17.2, mindmap still resolved to
+ *   `cose-bilkent` (identical rendered SVG), because 12's `layout` is derived
+ *   from `class.layout`, which is unset. 12's global default is `elk`, and an
+ *   explicit per-diagram value is the only way to be certain rather than
+ *   dependent on that derivation.
  */
 export const MERMAID_CONFIG = Object.freeze({
   startOnLoad: false,
@@ -51,7 +73,10 @@ export const MERMAID_CONFIG = Object.freeze({
   deterministicIDSeed: 'rtwiki',
   maxTextSize: 200_000,
   maxEdges: 500,
-  fontFamily: 'inherit'
+  fontFamily: 'inherit',
+  layout: 'dagre',
+  look: 'classic',
+  mindmap: { layout: 'cose-bilkent' }
 })
 
 export type MermaidTheme = 'default' | 'dark'
