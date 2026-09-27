@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { updatePage } from '../../services/pages-api.js'
+import { richBlocksPlainText } from '../../util/page-preview-text.js'
 import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
@@ -45,26 +46,36 @@ import { useAutosave } from './use-autosave.js'
 import type { LinkablePage } from './wiki-link.js'
 
 /**
- * Cheap word count over a BlockNote document. Walks block inline content only
- * (no deep recursion into nested structures beyond one level); runs on every
- * change but stays O(n) over visible text, so it never lags editing.
+ * Word count over a BlockNote document.
+ *
+ * **Aligned deliberately with the dashboard preview and the status bar.** This
+ * used to be a third convention: it read only top-level blocks' inline content,
+ * so a word typed in a sub-list or a table cell counted here but not in the
+ * status bar for the same page — one document, two different numbers, both on
+ * screen. An undocumented third behaviour is worse than a slightly slower one,
+ * so this now calls the same reduction `pagePlainText` uses.
+ *
+ * The cost was measured rather than assumed, because this runs on every change.
+ * Per call, against the top-level-only version it replaced:
+ *
+ * | Document                          | was  | now   |
+ * |-----------------------------------|------|-------|
+ * | 150 blocks (19 kB)                | 0.02 | 0.08  |
+ * | 800 blocks (100 kB)               | 0.03 | 0.20  |
+ * | 2,500 blocks (314 kB)             | 0.20 | 1.87  |
+ * | 12,000 blocks (1.5 MB)            | 0.98 | 11.67 |
+ *
+ * (ms, Bun 1.4.2, 200 runs after warm-up.) Sub-millisecond for any realistic
+ * study note. The worst row is a 1.5 MB document, and the same handler already
+ * spends 5.1 ms there on `JSON.stringify(editor.document)` for autosave — the
+ * walk is not what makes such a page slow, and it stays inside a 16 ms frame
+ * until roughly 10,000 blocks, which is a document no person writes.
  */
-function countBlockWords(document: ReadonlyArray<{ content?: unknown }>): number {
-  let words = 0
-  for (const block of document) {
-    const inline = block.content
-    if (!Array.isArray(inline)) continue
-    for (const node of inline as ReadonlyArray<unknown>) {
-      const text =
-        typeof node === 'object' && node !== null && 'text' in node
-          ? (node as { text?: unknown }).text
-          : undefined
-      if (typeof text !== 'string') continue
-      const matches = text.trim().match(/\S+/g)
-      if (matches) words += matches.length
-    }
-  }
-  return words
+function countBlockWords(document: ReadonlyArray<unknown>): number {
+  const text = richBlocksPlainText(document)
+  if (text.length === 0) return 0
+  const matches = text.match(/\S+/g)
+  return matches ? matches.length : 0
 }
 
 /**

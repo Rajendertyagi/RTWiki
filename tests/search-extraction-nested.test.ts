@@ -4,6 +4,7 @@ import {
   SEARCH_EXTRACTION_MAX_CHARS,
   SEARCH_MAX_BLOCK_DEPTH
 } from '../src/server/services/search-extraction.js'
+import { UNSUPPORTED_BLOCK_MARKER } from '../src/shared/constants/index.js'
 import { pagePreviewText } from '../src/web/util/page-preview-text.js'
 
 /**
@@ -433,23 +434,30 @@ describe('rich search text: empty input and the depth guard', () => {
 })
 
 /**
- * Deliberate, measured divergences between the two implementations. They are
- * NOT recursion, so this task does not change them; they are pinned here so
- * that reconciling either one has to be a conscious decision with its own
- * test, rather than a side effect of an unrelated edit.
+ * The three divergences this suite previously pinned as "reported not
+ * reconciled" are now **reconciled**. They were the same page disagreeing with
+ * itself, in three different ways:
  *
- * 1. `page-preview-text.ts:28,36-43` indexes `props.caption`; search does not.
- *    A page whose only prose is image captions is visible on a card and
- *    unfindable by search.
- * 2. `page-preview-text.ts:44-46` descends into `content` only when it is an
- *    array, so a table (whose content is the `tableContent` object) and a
- *    `codeBlock`/`mathBlock` written in their stored `PlainContent` array form
- *    are invisible to the preview, while search indexes table cells. Search
- *    deliberately withholds formula/diagram/mind-map source
- *    (search-extraction.ts, `collectOwnBlockText`).
+ * 1. `page-preview-text.ts:44-46` descended into `content` only when it was an
+ *    array, so a table (whose `content` is the `tableContent` object) was
+ *    invisible to the preview while search indexed its cells. A page whose only
+ *    content is a table rendered an **empty dashboard card** and was perfectly
+ *    searchable.
+ * 2. `page-preview-text.ts:28,36-43` indexed `props.caption`; search did not. A
+ *    page whose only prose is captions was visible on a card and unfindable.
+ * 3. A stored `codeBlock`/`mathBlock` uses the `PlainContent` array form, but
+ *    `collectOwnBlockText` only accepted `typeof content === 'string'`. Search
+ *    returned '' where the preview returned the text. The test below only ever
+ *    used the partial string form, which is why it was never caught.
+ *
+ * The two now agree, and the agreement is asserted in
+ * `tests/search-preview-equality.test.ts` over one document exercising every
+ * block type, so a future divergence fails a test rather than reaching a
+ * dashboard. These cases are kept here as the *positive* statement of what each
+ * one does now.
  */
-describe('rich search text: known divergences from the preview, reported not reconciled', () => {
-  it('does not index an image caption, which the preview does', () => {
+describe('rich search text: the three reconciled cases, stated positively', () => {
+  it('indexes an image caption, so a captioned page is findable', () => {
     const doc = [
       {
         id: 'i1',
@@ -458,10 +466,12 @@ describe('rich search text: known divergences from the preview, reported not rec
         children: []
       }
     ]
-    expect(extractSearchableRich(JSON.stringify(doc))).toBe('')
+    expect(extractSearchableRich(JSON.stringify(doc))).toBe('Revenue by quarter, 2024')
+    // The URL is still never indexed: a caption is prose, an href is not.
+    expect(extractSearchableRich(JSON.stringify(doc))).not.toContain('attachments')
   })
 
-  it('does not index code or formula held in the stored PlainContent array form', () => {
+  it('indexes a code block stored in the PlainContent array form', () => {
     const doc = [
       {
         id: 'c1',
@@ -469,9 +479,33 @@ describe('rich search text: known divergences from the preview, reported not rec
         props: { language: 'ts' },
         content: [textNode('const real = 1')],
         children: []
-      },
+      }
+    ]
+    expect(extractSearchableRich(JSON.stringify(doc))).toBe('const real = 1')
+  })
+
+  it('still withholds formula source held in the array form', () => {
+    // Distinct from the codeBlock case above, and deliberately so: LaTeX is not
+    // readable prose. The preview withholds it too, for the same reason.
+    const doc = [
       { id: 'm1', type: 'mathBlock', props: {}, content: [textNode('E=mc^2')], children: [] }
     ]
     expect(extractSearchableRich(JSON.stringify(doc))).toBe('')
+  })
+
+  it('still withholds a preservation-marker payload in the array form', () => {
+    const doc = [
+      { type: 'paragraph', props: {}, content: [textNode('Real prose.')], children: [] },
+      {
+        id: 'u1',
+        type: 'codeBlock',
+        props: { language: 'json' },
+        content: [textNode(`${UNSUPPORTED_BLOCK_MARKER}\n{"type":"futureBlock"}`)],
+        children: []
+      }
+    ]
+    const text = extractSearchableRich(JSON.stringify(doc))
+    expect(text).toBe('Real prose.')
+    expect(text).not.toContain('futureBlock')
   })
 })

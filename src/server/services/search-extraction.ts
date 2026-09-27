@@ -166,6 +166,32 @@ function collectOwnBlockText(block: RichBlock, out: string[], depth: number): vo
   const type = block.type
   if (typeof type !== 'string') return
 
+  // Authored prose carried in props — currently an image's `caption`. Read for
+  // every type, because a caption can hang off any block that accepts one, and
+  // the dashboard preview already indexes it. Without this the same page is
+  // visible on a card and unfindable.
+  //
+  // The preservation marker is checked FIRST, before any text is emitted, and it
+  // returns outright: a codeBlock holding the marker is `containUnknownBlocks()`
+  // output, and none of its payload is prose. Checking the joined text after the
+  // fact let a payload through whenever the marker and the JSON arrived as
+  // separate inline nodes, which is exactly how a stored codeBlock serialises.
+  if (typeof block.content === 'string' && block.content.startsWith(UNSUPPORTED_BLOCK_MARKER)) {
+    return
+  }
+  if (Array.isArray(block.content)) {
+    const inline: string[] = []
+    collectInline(block.content, inline, depth)
+    if (inline.join(' ').startsWith(UNSUPPORTED_BLOCK_MARKER)) return
+  }
+
+  if (block.props) {
+    for (const name of PROSE_PROP_NAMES) {
+      const value = block.props[name]
+      if (typeof value === 'string' && value.length > 0) out.push(value)
+    }
+  }
+
   switch (type) {
     case 'paragraph':
     case 'heading':
@@ -177,7 +203,18 @@ function collectOwnBlockText(block: RichBlock, out: string[], depth: number): vo
       collectInline(block.content, out, depth)
       return
     case 'codeBlock': {
-      const text = typeof block.content === 'string' ? block.content : ''
+      // A stored codeBlock's `content` is `PlainContent[]`; the bare string is
+      // the partial shape BlockNote also accepts on insert. Both are read, so a
+      // real stored code block is findable. Only the string form was read
+      // before, which is why the pre-existing test missed it -- it only ever
+      // exercised the partial form.
+      const inline: string[] = []
+      if (typeof block.content === 'string') {
+        if (block.content) inline.push(block.content)
+      } else if (Array.isArray(block.content)) {
+        collectInline(block.content, inline, depth)
+      }
+      const text = inline.join(' ')
       // Never index the unsupported-block preservation payload.
       if (text.startsWith(UNSUPPORTED_BLOCK_MARKER)) return
       if (text) out.push(text)
@@ -216,6 +253,17 @@ function collectOwnBlockText(block: RichBlock, out: string[], depth: number): vo
       return
   }
 }
+
+/**
+ * Prop names that are authored prose and therefore belong in the index.
+ *
+ * A caption is the author's own description of a picture. Excluding it made a
+ * page whose only words are captions visible on its dashboard card and
+ * unfindable by search — the same page disagreeing with itself, in the opposite
+ * direction to the table defect. Only `caption` is read; every other prop is a
+ * URL or a style value and must stay out of the index.
+ */
+const PROSE_PROP_NAMES = ['caption'] as const
 
 /** Descends into a block's child blocks: sub-lists and any other nesting. */
 function collectChildBlocks(children: unknown, out: string[], depth: number): void {

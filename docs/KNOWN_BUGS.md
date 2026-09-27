@@ -281,6 +281,102 @@ Two specific traps found here:
 test must assert the SVG overlay and a resolved font. See `docs/evidence/markdown-math-zoom.png` for
 what correct output looks like.
 
+### A page closed while a save had failed loses the pending content
+
+**Not silent at the time — and the work is still gone.** The status bar does show "Save failed" in
+red, so the user is not misled while the page is open. What is unhandled is *leaving*: the pending
+content does not survive the remount, and it behaves this way in every editor rather than in one
+workspace, so it is not a diagram-page bug. The failure is visible only for as long as the page
+stays mounted; closing it turns a visible error into a silent loss.
+
+**Found and deliberately not fixed** in the same pass as the stale-state and status-mapping defects
+below. The fix belongs in the autosave controller (hold the content for a retry that outlives the
+page) or in the close/switch confirmation, which is where `isAutosaveDirty` already feeds the prompt
+for the ordinary unsaved case. The failed-save case is the one that never reaches it.
+
+### `isDirty` now means two different things, and only one of them is read
+
+The visual workspace uses `useAutosave`'s own `isDirty` — `dirty || error`,
+`src/web/features/rich-editor/use-autosave.ts:98` — while the markdown workspace
+(`markdown-workspace.tsx:99`) and the HTML editor (`html-editor.tsx:154`) use `isAutosaveDirty` —
+`dirty || saving`, `src/web/features/workspace/save-state.ts:51`. The only difference is a save in
+flight, which the shared helper counts as dirty and the hook's own value does not.
+
+**Inert downstream today, and left alone deliberately.** The consumer of that `isDirty` reads only
+`state.saveState` and `state.error` (`App.tsx:973-976`), so changing either convention is a no-op and
+"tidying" it would be a change with no observable effect. But it is a third convention waiting to
+matter, and the place it will matter is the close confirmation above — where a save in flight is
+precisely the case that must not be dismissed.
+
+### A page whose only content is a table rendered an empty dashboard card
+
+**Measured.** A table block's text lives at `content.rows[].cells[].content` — a nested *object*, not an
+array. `page-preview-text.ts` descended into `content` only when it was an array, so it never saw a single
+cell. On a page containing nothing but a two-row table:
+
+| Consumer | Before | After |
+|---|---|---|
+| search extraction | `Header A Header B Cell one Cell two` | unchanged |
+| dashboard card | `""` | `Header A Header B Cell one Cell two` |
+
+The result was a page that showed an **empty card** on the dashboard while being perfectly searchable. To a
+user that reads as a broken or empty page, and it is the mirror image of the search-recursion defect
+fixed in `934f151`: search walked into tables, the preview did not.
+
+**Two further divergences surfaced while fixing it**, both in the same direction — the page and its own
+search index disagreeing:
+
+- **Image captions.** The preview indexed `props.caption`; search did not. A page whose only prose is
+  captions was visible on a card and unfindable.
+- **The stored `PlainContent` array form.** A stored `codeBlock`/`mathBlock` serialises its text as an
+  inline array, but `collectOwnBlockText` accepted only `typeof content === 'string'`. Search returned
+  `""` where the preview returned the text. The pre-existing test used only the partial string form, which
+  is exactly why it was never caught.
+
+**All three are reconciled**, and `tests/search-preview-equality.test.ts` walks one document covering every
+block type through both consumers and asserts the strings are **equal** — so a future divergence is a red
+test rather than a user's dashboard. A fourth defect was found on the way: the preservation-marker payload
+(`containUnknownBlocks()` output) reached the card, putting
+`[unsupported block preserved below] {"type":"futureBlock"}` in plain sight. Both consumers now check the
+marker *before* emitting anything, and the check covers the inline-array form, which is how a stored
+codeBlock actually serialises.
+
+### Three places decided what text a page contains, and all three disagreed
+
+| Consumer | Before | Now |
+|---|---|---|
+| `search-extraction.ts` | recursed into `children` and table cells (fixed in `934f151`) | unchanged |
+| `page-preview-text.ts` | recursed, but missed table cells, the array code form, and it **leaked** marker payloads | one shared reduction |
+| `rich-editor.tsx:52-68` word count | **top-level blocks only**, with a comment calling that deliberate | one shared reduction |
+
+The word count was the quiet one: the Rich Note's own count and the status bar's count — both on screen,
+both for the same document — could report different numbers, because one walked nested content and the
+other did not. Its comment claimed the shallowness was deliberate. It was not deliberate, it was
+inconvenient, and it was the same defect in a third place.
+
+**Decision: aligned, with the cost measured rather than assumed.** `richBlocksPlainText` is now exported
+from `page-preview-text.ts` and the editor's `countBlockWords` calls it, so all three consumers share one
+reduction. It runs on every keystroke, so the numbers were measured (Bun 1.4.2, 200 runs after warm-up):
+
+| Document | was | now |
+|---|---|---|
+| 150 blocks (19 kB) | 0.02 ms | 0.08 ms |
+| 800 blocks (100 kB) | 0.03 ms | 0.20 ms |
+| 2,500 blocks (314 kB) | 0.20 ms | 1.87 ms |
+| 12,000 blocks (1.5 MB) | 0.98 ms | 11.67 ms |
+
+Sub-millisecond for any realistic study note. The last row is a 1.5 MB document, in a handler that
+**already** spends 5.1 ms there on `JSON.stringify(editor.document)` for autosave — the walk is not what
+makes such a page slow, and it stays inside a 16 ms frame to roughly 10,000 blocks, which is a document
+nobody writes. The trade was worth it: a slightly slower count that is right, over a fast one that
+disagrees with the number printed beside it.
+
+The preview walk also gained its own depth guard, `PREVIEW_MAX_BLOCK_DEPTH = 64`, deliberately equal to
+the server's `SEARCH_MAX_BLOCK_DEPTH` and with the same defined behaviour — read to the cap, keep
+everything already collected, stop, never throw. The client cannot import the server constant, so the
+equality is asserted by a test rather than assumed. Without it, a hand-edited document nested without
+bound would exhaust the stack while the dashboard was merely drawing a card.
+
 ## Recently fixed
 
 ### Two amounts in one paragraph became maths
@@ -542,6 +638,32 @@ light mode Mermaid emits `.label { color: #333 }` on a white page; in dark mode 
 `.label { color: #ccc }` on `rgb(36, 36, 36)`. The theme is applied per render and agrees with
 the rest of the application. There was no defect here.
 
+### A narrowing cast turned a failed save into a display of "Saved"
+
+**The kind of failure that removes the alarm along with the bug.**
+`src/web/features/visual-pages/mermaid-workspace.tsx` cast `AutosaveStatus` to the narrower
+`StatusSaveState` union instead of mapping it. `'dirty'` therefore reached the status bar as a value
+it does not recognise and fell through to the **saved** branch, so a diagram page sitting mid-debounce
+displayed "Saved" while the edit existed only in memory.
+
+**It was the second, independent cause of a reported symptom whose primary cause was a stale state
+list** — the content was being lost *and* the UI was asserting it had been saved. A single-cause
+reading of that report would have fixed the data and left the indicator lying to the user, which is
+the worse of the two to leave in place.
+
+**The general trap: a cast that narrows a union converts a type error into a lie.** A cast is an
+assertion to the compiler and a no-op at runtime, so an unrecognised value has nowhere to fail. The
+same missing case in an ordinary mapping is a visible gap; reached through the cast it lands in a
+*default* branch, and a default branch is precisely where a reassuring label goes. The compiler was
+asked to believe something and it obliged.
+
+**Fixed** by calling the shared `mapAutosaveStatus` from
+`src/web/features/workspace/save-state.ts`, which was the last editor still carrying its own copy of
+that mapping — the rich editor, the markdown workspace and the HTML editor all call it now. That also
+closes the loop: `mapAutosaveStatus` switches exhaustively over `AutosaveStatus` with no default
+branch, so adding a case to `AutosaveStatus` without handling it there is a **compile** error. A new
+state cannot be added and silently un-mapped, which is exactly the failure the cast was suppressing.
+
 ---
 
 ## Harness traps that cost real time
@@ -573,6 +695,20 @@ Kept because each one produced a confidently wrong conclusion.
   order, so it agreed with the code *and* with the opposite of the code. Nothing about the test
   looked wrong. **Check a regression test by breaking the code it guards** — if the suite still
   passes, the test is decoration and the claim that the fix is verified is false.
+- **Breaking the code is necessary but not sufficient: a test can go red for a reason unrelated to
+  the defect.** A test written for the stale diagram-workspace state awaited a block count *between*
+  two rapid Add presses. Against the unfixed code it failed — but for the wrong reason. On the
+  unfixed code the count only rises once the save lands, so that intervening wait handed the second
+  press a freshly refreshed prop and the two actions stopped being a rapid sequence at all. The
+  assertion's *result* was correct while the test was still failing for a third cause, which would
+  have been "fixed" by changing the thing that was actually broken. **Await nothing between the
+  actions under test and assert once at the end** — here the write count is what proves the debounce
+  window was still open, not the block count. Then **confirm the red is red *for the intended
+  reason*, not merely red**: read what the failure says, not just that a failure exists.
+- **Two dispatches fired from a single `page.evaluate` share one pre-commit closure.** The second
+  action then reads state React has not committed yet, so it exercises neither the fixed nor the
+  unfixed code and a fix cannot possibly appear to work. **Each dispatch must be its own browser
+  task** — two `dispatchEvent` calls in a row, nothing awaited between them.
 - **Starting the built application opens a browser tab on the user's screen.** `bootstrap` launches
   a browser unless `--no-open` is passed. The end-to-end script omitted it and opened a tab on every
   run, dozens of times. The script now passes the flag.
