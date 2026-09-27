@@ -54,8 +54,8 @@ Before writing or changing anything, every agent must:
 - Do **not** silently replace an accepted library or architecture decision.
 - Record any legitimate architecture change through a new ADR.
 - Treat rich AI-generated content as a core capability: native custom blocks, a versioned `rt-*` HTML vocabulary, and sandboxed custom HTML/CSS/JS. Custom JavaScript runs only in an isolated sandbox, never in the main application context.
-- Route every content import (paste, drop, file, or localhost API) through one shared, centralized import pipeline; do not add parallel import paths.
-- Never silently lose content during import. Preserve unknown blocks and store the original rich-HTML source as a `richHtml` block inside `pages.content` when conversion is not lossless; surface warnings instead of dropping data.
+- Route every content import (paste, drop, file, or localhost API) through one shared, centralized import pipeline; do not add parallel import paths. This rule stands; no such pipeline is implemented yet.
+- Never silently lose content during import; surface warnings instead of dropping data. Preserve unknown blocks. This rule is **already met** by `containUnknownBlocks()`, which rewrites each unknown block into a `codeBlock` holding its exact JSON behind `UNSUPPORTED_BLOCK_MARKER`, so the original survives every autosave round-trip. The `richHtml` block previously mandated here **was never implemented** — do not write code against it.
 
 ## 5. Define Once, Reuse Everywhere
 
@@ -83,13 +83,14 @@ RTWiki is a **modular monolith** built on the accepted architecture ([ADR-002](d
 
 - Runtime: **Bun**
 - Backend: **Hono**
-- Database: **Bun SQLite** (`bun:sqlite`)
-- ORM: **Drizzle ORM**
+- Database: **Bun SQLite** (`bun:sqlite`), accessed through hand-written parameterised SQL. **There is no ORM.** Drizzle ORM was named in [ADR-002](docs/adr/ADR-002-bun-hono-sqlite.md) and never adopted.
 - Frontend: **React** + **Vite**
-- Editor: **BlockNote** with `@blocknote/math-block` and `@blocknote/diagram-block`
+- Editor: **BlockNote** with `@blocknote/math-block`. The diagram, mind-map, callout, linked-page and document blocks are **first-party**, under `src/web/features/rich-editor/blocks/`. `@blocknote/diagram-block` was named in [ADR-003](docs/adr/ADR-003-react-blocknote-mantine.md) and never adopted.
 - UI: **Mantine**
 - HTML sanitization: **DOMPurify**
-- Search: **SQLite FTS5**
+- Search: `GET /api/pages?q=`, matching the `search_index` table with `LIKE`. The FTS5 virtual table exists (`src/server/database/migrations.ts:37`) and is **never queried**. Do not describe search as FTS5-backed.
+
+Architecture claims are reconciled under [ADR-018](docs/adr/ADR-018-documented-vs-built.md). **Where this file or any other document disagrees with the code, the code is authoritative** — read the source, and report the discrepancy instead of trusting the prose. Work that is required but unbuilt is labelled `Planned — not implemented.`
 
 The agent must:
 
@@ -97,7 +98,7 @@ The agent must:
 - Keep clear **frontend, API, service, and persistence** boundaries.
 - Share schemas and types between frontend and backend.
 - Treat **BlockNote JSON** as the canonical page storage; HTML and Markdown are conversion formats only (see [ADR-004](docs/adr/ADR-004-canonical-block-json-format.md)).
-- Use a **modular block architecture**: each rich block type is owned by its own module (type id, schema, editor, viewer, parser, serializer) registered in a block registry. A single composition root wires the registries together; avoid central switch statements over block types (see [ADR-006](docs/adr/ADR-006-rich-content-and-import-contract.md)).
+- Use a **modular block architecture**: each rich block type is owned by its own module (type id, schema, editor, viewer, parser, serializer) registered in a block registry. A single composition root wires the registries together; avoid central switch statements over block types (see [ADR-006](docs/adr/ADR-006-rich-content-and-import-contract.md)). **This requirement is not yet met.** `src/web/features/rich-editor/schema.ts` is a hand-maintained six-spec list, which is the central registration this rule forbids. That file is known debt, not the pattern to copy: a new block belongs in its own module, and the registry is owed.
 - Lazy-load heavy diagram/math features.
 - Add no unnecessary framework or infrastructure.
 - Pin **stable, compatible** dependency versions in the lockfile; **no floating major versions** (see [Development standards](docs/DEVELOPMENT_STANDARDS.md)).
@@ -126,7 +127,7 @@ Mandatory rules:
 - Create missing directories at startup.
 - Check write access and show a clear error if the folder is protected.
 - Keep SQLite **WAL** and **SHM** files inside `data/`.
-- Include the database and attachments in backups; **exclude logs** from backups.
+- Include the database and attachments in backups; **exclude logs** from backups. This rule stands; no backup or restore feature is implemented yet. The `data/backups/` directory is created at startup and stays empty, so an agent must not assume a backup exists or that `VACUUM INTO` is in use.
 - Rotate and limit logs; never log private page or pasted content.
 
 ## 8. Coding Standards
@@ -144,7 +145,7 @@ Mandatory rules:
 - Comments that explain **decisions**, not obvious syntax; no swallowed exceptions.
 - No runtime CDN dependency; no secrets in source control.
 
-The `2000 ms` autosave debounce and `50 MB` attachment limit are **provisional centralized defaults** — define them once in configuration and never repeat the values across the codebase.
+The `2000 ms` autosave debounce and `50 MB` attachment limit are **provisional centralized defaults** — define them once in configuration and never repeat the values across the codebase. Both are real: `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` and `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` in `src/shared/constants/index.ts`. The `50 MB` figure is the **attachment** limit only; the configuration defines no import-package size cap, and an agent must not invent one.
 
 ## 9. Security Protocol
 
