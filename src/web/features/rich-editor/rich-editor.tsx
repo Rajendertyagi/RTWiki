@@ -25,7 +25,7 @@ import {
   extractOutline,
   parseStoredDocument
 } from './document.js'
-import { EditorErrorBoundary } from './editor-error-boundary.js'
+import { EditorErrorBoundary, ResetConfirmation } from './editor-error-boundary.js'
 import classes from './rich-editor.module.css'
 import { RichToolbar } from './rich-toolbar.js'
 import {
@@ -185,6 +185,9 @@ export function RichEditor({
   }, [status, pageId])
 
   // Handle reset after malformed content or a contained editor failure.
+  // The only place stored content is replaced. Both recovery screens route here,
+  // and neither reaches it until the user has confirmed `ResetConfirmation` —
+  // RTWiki keeps no backup copy, so an unconfirmed reset would be unrecoverable.
   const handleReset = (): void => {
     setShowResetConfirm(false)
     setHasReset(true)
@@ -206,7 +209,7 @@ export function RichEditor({
             {parseResult.errorMessage}
           </Text>
           <Text size="xs" c="dimmed" mt="xs">
-            {UI_TEXT.richEditorPreserveNotice}
+            {UI_TEXT.richEditorParseRecoveryNotice}
           </Text>
         </Alert>
 
@@ -215,21 +218,16 @@ export function RichEditor({
         </Text>
 
         {!showResetConfirm ? (
-          <Button variant="light" color="red" onClick={() => setShowResetConfirm(true)}>
+          <Button
+            variant="light"
+            color="red"
+            onClick={() => setShowResetConfirm(true)}
+            data-testid="reset-request"
+          >
             {UI_TEXT.richEditorResetButton}
           </Button>
         ) : (
-          <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              Are you sure? This will replace the stored content with an empty document.
-            </Text>
-            <Button color="red" onClick={handleReset}>
-              Confirm reset
-            </Button>
-            <Button variant="subtle" onClick={() => setShowResetConfirm(false)}>
-              {UI_TEXT.cancelButton}
-            </Button>
-          </Stack>
+          <ResetConfirmation onConfirm={handleReset} onCancel={() => setShowResetConfirm(false)} />
         )}
 
         {status === 'error' ? (
@@ -256,6 +254,9 @@ export function RichEditor({
 
   return (
     <div className={classes.editorRoot} data-testid="rich-editor">
+      {/* `onReset` is the same destructive action the malformed-content screen
+          above guards, reached here only through the boundary's own
+          `ResetConfirmation`. */}
       <EditorErrorBoundary onReset={handleReset} onRetry={handleRetry} onBack={onBack}>
         <RichEditorInner
           key={`${pageId}-${resetSeq}`}

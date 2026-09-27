@@ -7,7 +7,11 @@ import classes from './rich-editor.module.css'
 
 interface EditorErrorBoundaryProps {
   children: ReactNode
-  /** Called when the owner chooses recovery; parent resets to a valid document. */
+  /**
+   * Called only after the user confirms the reset. It replaces the page's stored
+   * content, and RTWiki keeps no backup copy of it, so it must never be reachable
+   * from the first click of the reset control.
+   */
   onReset: () => void
   /** Remounts the editor with the same stored content (Retry). */
   onRetry?: () => void
@@ -18,6 +22,45 @@ interface EditorErrorBoundaryProps {
 interface EditorErrorBoundaryState {
   errored: boolean
   diagnosticId: string | null
+  /**
+   * Set by the first press of the reset control and cleared by every exit from
+   * the recovery screen. `onReset` is reachable only while this is true, which
+   * is what makes the reset a two-step action.
+   */
+  resetArmed: boolean
+}
+
+/**
+ * The confirmation that stands in front of the Rich Note's only destructive
+ * action: replacing the page's stored content with an empty document. RTWiki
+ * keeps no backup copy of page content, so a reset cannot be undone.
+ *
+ * Rendered by *both* recovery screens — the contained-crash screen below and the
+ * malformed-content screen in `rich-editor.tsx` — so the two paths cannot drift
+ * apart again. It holds no state of its own: the owner arms it and supplies the
+ * callbacks, and only the explicit confirm button is wired to the destructive
+ * one.
+ */
+export function ResetConfirmation({
+  onConfirm,
+  onCancel
+}: {
+  onConfirm: () => void
+  onCancel: () => void
+}): JSX.Element {
+  return (
+    <Stack gap="xs" data-testid="reset-confirmation">
+      <Text size="sm" fw={500}>
+        {UI_TEXT.richEditorResetConfirmWarning}
+      </Text>
+      <Button color="red" onClick={onConfirm} data-testid="reset-confirm-apply">
+        {UI_TEXT.richEditorResetConfirmButton}
+      </Button>
+      <Button variant="subtle" onClick={onCancel} data-testid="reset-confirm-cancel">
+        {UI_TEXT.cancelButton}
+      </Button>
+    </Stack>
+  )
 }
 
 /**
@@ -30,7 +73,11 @@ export class EditorErrorBoundary extends Component<
   EditorErrorBoundaryProps,
   EditorErrorBoundaryState
 > {
-  override state: EditorErrorBoundaryState = { errored: false, diagnosticId: null }
+  override state: EditorErrorBoundaryState = {
+    errored: false,
+    diagnosticId: null,
+    resetArmed: false
+  }
 
   static getDerivedStateFromError(): Partial<EditorErrorBoundaryState> {
     return { errored: true }
@@ -44,17 +91,34 @@ export class EditorErrorBoundary extends Component<
       component: 'RichEditorInner',
       error
     })
-    this.setState({ errored: true, diagnosticId })
+    this.setState({ errored: true, diagnosticId, resetArmed: false })
   }
 
-  private readonly handleReset = (): void => {
-    this.setState({ errored: false, diagnosticId: null })
+  /**
+   * First press of the reset control. Arms the confirmation and nothing else:
+   * `onReset` is deliberately not reachable from here.
+   */
+  private readonly handleResetRequest = (): void => {
+    this.setState({ resetArmed: true })
+  }
+
+  private readonly handleResetCancel = (): void => {
+    this.setState({ resetArmed: false })
+  }
+
+  private readonly handleResetConfirm = (): void => {
+    this.setState({ errored: false, diagnosticId: null, resetArmed: false })
     this.props.onReset()
   }
 
   private readonly handleRetry = (): void => {
-    this.setState({ errored: false, diagnosticId: null })
+    this.setState({ errored: false, diagnosticId: null, resetArmed: false })
     this.props.onRetry?.()
+  }
+
+  private readonly handleBack = (): void => {
+    this.setState({ resetArmed: false })
+    this.props.onBack?.()
   }
 
   override render(): ReactNode {
@@ -72,7 +136,7 @@ export class EditorErrorBoundary extends Component<
         >
           <Text size="sm">{UI_TEXT.richEditorCrashMessage}</Text>
           <Text size="xs" c="dimmed" mt="xs">
-            {UI_TEXT.richEditorPreserveNotice}
+            {UI_TEXT.richEditorCrashRecoveryNotice}
           </Text>
         </Alert>
         <Stack gap="xs">
@@ -80,13 +144,25 @@ export class EditorErrorBoundary extends Component<
             {UI_TEXT.retry}
           </Button>
           {this.props.onBack ? (
-            <Button variant="subtle" color="gray" onClick={this.props.onBack}>
+            <Button variant="subtle" color="gray" onClick={this.handleBack}>
               {UI_TEXT.backToDashboard}
             </Button>
           ) : null}
-          <Button variant="light" color="red" onClick={this.handleReset}>
-            {UI_TEXT.richEditorResetButton}
-          </Button>
+          {this.state.resetArmed ? (
+            <ResetConfirmation
+              onConfirm={this.handleResetConfirm}
+              onCancel={this.handleResetCancel}
+            />
+          ) : (
+            <Button
+              variant="light"
+              color="red"
+              onClick={this.handleResetRequest}
+              data-testid="reset-request"
+            >
+              {UI_TEXT.richEditorResetButton}
+            </Button>
+          )}
         </Stack>
         <Text size="xs" c="dimmed">
           {UI_TEXT.richEditorLogLocation}

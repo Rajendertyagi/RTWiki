@@ -199,10 +199,26 @@ export const UI_TEXT = {
   richEditorLoadError:
     'This Rich Note could not be loaded. The stored content appears to be corrupted.',
   richEditorCrashTitle: 'The editor encountered a problem',
-  richEditorCrashMessage: 'The rich text editor stopped unexpectedly. Your saved content is safe.',
-  richEditorPreserveNotice:
-    'Original content has been preserved. Reset the document to start fresh.',
+  richEditorCrashMessage: 'The rich text editor stopped unexpectedly.',
+  /*
+   * Both Rich Note recovery screens sit directly above a control that replaces
+   * the page's stored content with an empty document, and RTWiki keeps no backup
+   * copy of page content (ADR-018), so a reset is unrecoverable. These two
+   * notices therefore state what has actually happened and what the control will
+   * do. They must never claim the content is "safe" or "preserved": a crash
+   * screen saying that, directly above the control that deletes it, is a false
+   * assurance. Distinct plain strings rather than one templated string, because
+   * the two screens offer different alternatives.
+   */
+  richEditorParseRecoveryNotice:
+    'Nothing has been changed or deleted. "Reset document" replaces the stored content of this page with an empty document, and RTWiki keeps no backup copy, so the original content cannot be recovered.',
+  richEditorCrashRecoveryNotice:
+    'Nothing has been changed or deleted. "Reset document" replaces the stored content of this page with an empty document, and RTWiki keeps no backup copy, so the original content cannot be recovered. Use Retry first if you only want to try opening the page again.',
   richEditorResetButton: 'Reset document',
+  /** Spoken by the confirmation that guards the reset on both recovery screens. */
+  richEditorResetConfirmWarning:
+    'This replaces the stored content of this page with an empty document. The original content cannot be recovered: RTWiki keeps no backup copy of it.',
+  richEditorResetConfirmButton: 'Confirm reset',
   richEditorLogLocation: 'Technical details are written to logs\\rtwiki.log',
   richEditorReferenceLabel: 'Diagnostic reference',
   appCrashTitle: 'Something went wrong',
