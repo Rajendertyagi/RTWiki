@@ -11,6 +11,9 @@ several diagrams (content v2, ordered blocks, 50-block cap), but the workspace s
 diagram at a time and there is no reordering UI yet. The storage and parsing half is done and
 tested; the view and the drag-to-reorder are the remaining work.
 
+**Likewise for documents:** the whole backend exists, is tested, and **cannot be reached from the
+interface** — there is no control that attaches one. See item 8.
+
 ---
 
 ## Open
