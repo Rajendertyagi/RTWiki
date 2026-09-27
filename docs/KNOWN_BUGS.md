@@ -66,9 +66,88 @@ appearance. The rule is a warning, so the lint gate is green.
 **Next step:** leave them, or add a file-level suppression with the reason. Do not remove them
 one at a time without looking at the tree.
 
+### 6. Uploaded images are not associated with a page, so they are never cleaned up
+
+**Impact: low now, and it grows silently.** An `image` block stores a URL; the `attachments` table
+records the file but has no foreign key to `pages` (see [ADR-013](adr/ADR-013-image-attachments.md)).
+Consequences: deleting a note leaves its image files on disk as orphans, and there is no
+"images on this page" list because there is no page to scope one by. `GET /api/pages/:id/attachments`
+is listed in [ARCHITECTURE.md](ARCHITECTURE.md) as **not implemented** for this reason.
+
+**Why it is this way:** an attachment may legitimately be uploaded before it is referenced, and a
+note may be deleted while its images are still wanted — a page foreign key with a delete cascade
+would destroy files that are still in use elsewhere.
+
+**Next step:** a retention pass over the `attachments` table that reclaims rows unreferenced by any
+document, plus a "referenced by" check before reclaiming. This needs a deliberate policy decision
+(age threshold, and what "referenced" means for a note in the recycle bin) rather than a default.
+
+### 7. The right-hand panel is only on the Rich workspace
+
+**Impact: low, but it is an inconsistency the user can see.** The shared panel
+(`src/web/features/workspace/right-sidebar-region.tsx`) was extracted so one implementation serves
+every page type, and its outline section is optional so a page type without headings does not show
+an empty "Outline". Only the Rich workspace renders it. `markdown-workspace.tsx` and
+`mermaid-workspace.tsx` do not, so those pages have no page-info panel at all.
+
+**Not claimed as done.** This entry exists so the gap is recorded rather than assumed away.
+
+**Next step:** mount the same region in both workspaces. Markdown can derive a heading outline from
+its `#` source; Diagram and Mind Map have no outline to show, so those get backlinks and page info
+only. This needs `createdDate` / `updatedDate` threaded through `page-workspace.tsx` for the
+page-info section.
+
+### 8. Only images are supported as attachments — PDF and documents are not implemented
+
+**Impact: low, but it contradicts a documented requirement.** [R-024](../docs/PRODUCT_REQUIREMENTS.md)
+in `PRODUCT_REQUIREMENTS.md` says the application must support attaching "images, PDFs, and
+documents", and `AC-030` / `AC-031` in [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) cover PDF
+and DOCX/ODT/TXT/MD uploads. Only the image half exists. `AC-029` (PNG, JPG, GIF) is satisfied, and
+WebP and BMP work too.
+
+**Why the gap is worth naming:** the upload endpoint and storage are format-agnostic apart from the
+detector, so the remaining formats are an allowlist addition rather than new plumbing. What they do
+*not* get for free is the security reasoning — see [ADR-013](adr/ADR-013-image-attachments.md) for
+why documents are a different problem from images (they must never be served inline, and they need
+range requests to be viewable at all).
+
+**Next step:** treat documents as a separate decision, not an allowlist edit. Serve them as
+`Content-Disposition: attachment` with a detected type, and decide whether they are previewable
+before anything is built.
+
 ---
 
 ## Recently fixed
+
+### The toolbar silently hid a newly added insert control
+
+**The kind of failure that looks like "the feature I asked for isn't there."** The Insert-menu
+entries are defined once in `getInsertEntries`, but the rich toolbar rendered them from a
+*hand-maintained list of entry keys* written out in the toolbar. Adding a correct, working Image
+entry made it appear in the slash menu and nowhere else on the toolbar — with no error, no type
+failure, and no failing test.
+
+**Fixed** by having each entry declare which toolbar run it belongs to (`INSERT_RUNS`), and having
+the toolbar group by that instead of naming keys. A key list fails silently; a declaration on the
+entry cannot drift from the entry. The browser test that caught this asserts the control by
+`data-testid`, so the same omission now fails the build.
+
+**Also removed:** the same file used a `group` field that the slash menu read and the toolbar
+filtered on, with the run boundaries written out separately. One field, one meaning.
+
+### BlockNote picks the file block, not the image block, and it works by accident
+
+Worth recording because the reasoning is not visible in the code. When a file is pasted or dropped,
+BlockNote picks a target block by scanning the schema's `fileBlockAccept` lists, and the `file`
+block accepts `*/*` — a superset of the image block's `image/*`. The scan does not stop at the
+first match: the inner `break` exits only the accept-list loop, so the outer loop keeps going and
+the **last** match wins. It works because `file` happens to be ordered before `image` (the spec map
+is alphabetical), so `image` overwrites it.
+
+**Not changed** — it is BlockNote's behaviour and the outcome is correct. Verified in the browser
+rather than assumed: `tests/browser/images.pwspec.ts` asserts a dropped PNG becomes a rendered
+image. If a future BlockNote version changes that loop to break on first match, this test is what
+will notice.
 
 Kept because the *reason* is not obvious from the code, and each was found by measurement rather
 than reported.

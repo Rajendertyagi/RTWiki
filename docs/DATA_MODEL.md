@@ -122,15 +122,19 @@ Both are junction tables that enforce referential integrity at the database leve
 
 ### 3.5 Attachments
 
-Each attachment row records metadata about a file stored on disk. The actual file is stored at a generated path derived from the `stored_filename` column. The mapping is:
+Each attachment row records metadata about a file stored on disk. The actual file is stored at a generated path derived from the `stored_name` column. The mapping is:
 
 ```
-<data_directory>/attachments/<stored_filename>
+<data_directory>/attachments/<stored_name>
 ```
 
-**Ownership:** Attachments are optionally owned by a page (`page_id`). If `page_id` is `NULL`, the attachment exists independently (e.g., a file the user wants to keep in the library but not yet attached to any page). When a page is soft-deleted, its owned attachments are also soft-deleted.
+**Addressing:** The browser addresses an attachment by `id`, never by filename. `GET /api/attachments/:id` looks the row up and serves the `stored_name` the *server* generated, so no user-supplied string ever reaches the filesystem. See [ADR-013](adr/ADR-013-image-attachments.md).
 
-**Filename generation:** Stored filenames are generated as `<UUID>_<original_filename>` to prevent collisions while preserving the original name for display.
+**Filename generation:** Stored names are `<UUID>.<extension>`, where the extension is chosen from the file's own detected type — never from the uploader's filename or its declared `Content-Type`. The original filename is kept in `original_name` for display only, with path separators and control characters removed. A request naming `../../../etc/passwd` therefore produces an ordinary UUID name like any other upload; there is no traversal to defend against, because no part of the request becomes a path.
+
+**Type and size:** `mime_type` and `byte_size` are recorded from the bytes, never from the request. Accepted formats are PNG, JPEG, GIF, WebP and BMP. SVG is deliberately not accepted (see [ADR-013](adr/ADR-013-image-attachments.md)).
+
+**Ownership:** There is no foreign key to `pages`. An attachment may be uploaded before it is referenced, and a note may be deleted while its images are still on disk. The consequence is that deleting a page does not delete its images: the files become orphans, reclaimable from this table but not yet reclaimed automatically. This is tracked as an open item in [KNOWN_BUGS.md](KNOWN_BUGS.md).
 
 ### 3.6 Search Index (FTS5)
 

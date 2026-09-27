@@ -18,6 +18,7 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-010](ADR-010-chart-block.md) | Rich Note Chart Block (Future Feature) | **Accepted** |
 | [ADR-011](ADR-011-tauri-desktop-wrapper.md) | Tauri Desktop Wrapper (Native App with Browser Mode) | **Accepted** |
 | [ADR-012](ADR-012-diagram-rendering-and-sanitisation.md) | Diagram Rendering and Sanitisation Contract | **Accepted** |
+| [ADR-013](ADR-013-image-attachments.md) | Image Attachments — Content-Based Validation and Id-Addressed Serving | **Accepted** |
 
 ## How to Read an ADR
 

@@ -68,8 +68,10 @@ Each layer has a single responsibility and communicates only with its adjacent l
   - `PATCH /api/pages/:id` — update page
   - `DELETE /api/pages/:id` — soft-delete page
   - `POST /api/pages/:id/move` — transactional hierarchy move (parent + sibling index) with authoritative reconciliation payload
-  - `GET /api/pages/:id/attachments` — list attachments
-  - `POST /api/pages/:id/attachments` — upload attachment
+  - `POST /api/attachments` — upload an image (type decided from the bytes)
+  - `GET /api/attachments/:id` — serve an image by catalogue id
+  - `DELETE /api/attachments/:id` — remove an image
+  - `GET /api/pages/:id/attachments` — **not implemented.** Attachments are not yet associated with a page, so there is nothing to list per page. Tracked in [KNOWN_BUGS.md](KNOWN_BUGS.md)
   - `GET /api/search?q=...` — full-text search
   - `POST /api/backup/create` — create backup archive
   - `POST /api/backup/restore` — restore from archive
@@ -102,9 +104,15 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 ### 3.7 Attachments
 
-- **Technology:** Filesystem storage managed by `AttachmentService`
-- **Responsibility:** Accept uploads, validate extension / MIME type / size, store under a safe generated filename, and serve them back on request. During import, referenced images are localized here under `data/attachments/`.
-- **Constraint:** Uploaded files are never executed. Only read and served. Path traversal is prevented by resolving the canonical path and verifying it is within the data directory.
+- **Technology:** Filesystem storage under `data/attachments/`, catalogued by the `attachments` table
+- **Modules:** `src/shared/attachments/image-formats.ts` (content-based format detection, shared by client and server), `src/server/attachments/attachment-repository.ts` (catalogue), `src/server/attachments/attachment-routes.ts` (endpoints)
+- **Endpoints:**
+  - `POST /api/attachments` — multipart upload; type decided from the bytes, size capped by `bodyLimit` before the body is parsed
+  - `GET /api/attachments/:id` — serves the file at the type recorded from its bytes, with `X-Content-Type-Options: nosniff`
+  - `DELETE /api/attachments/:id` — removes the row, then the file
+- **Responsibility:** Accept image uploads, decide the type from content, store under a server-generated name, and serve them back by catalogue id.
+- **Constraint:** Uploaded files are never executed. SVG is not accepted, because serving it inline is document execution. Requests address an attachment by id, so no user-supplied string reaches the filesystem — there is no traversal to prevent, rather than a traversal that is prevented. See [ADR-013](adr/ADR-013-image-attachments.md).
+- **Client:** BlockNote's `uploadFile` hook is the single entry point, so the file picker, paste and drop all take this one path. The image block stores the returned URL, keeping the document canonical BlockNote JSON with no bytes inlined.
 
 ### 3.8 Backup and Restore
 

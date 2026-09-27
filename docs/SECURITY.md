@@ -64,14 +64,21 @@ The localhost import API (`POST /api/v1/import/pages`) is bound to the loopback 
 
 ## 3. Attachment Safety
 
+Implemented by `src/server/attachments/` and `src/shared/attachments/image-formats.ts`; the contract is recorded in [ADR-013](adr/ADR-013-image-attachments.md).
+
 | Check | Implementation |
 |-------|---------------|
-| **Extension allowlist** | Only extensions listed in `config.attachments.allowedExtensions` are accepted |
-| **MIME type validation** | The detected MIME type must match the extension's expected type |
-| **Size limit** | Enforced by `config.attachments.maxFileSizeBytes` (default: 50 MB) |
-| **Safe filename generation** | Stored as `<UUID>_<originalFilename>` to prevent injection and collisions |
-| **Path traversal prevention** | The resolved canonical path of every attachment is verified to be within the data directory before serving |
+| **Content-based type detection** | The type is decided by the file's leading bytes. The declared `Content-Type` is never consulted — it is attacker-controlled, and trusting it is how an image endpoint becomes an XSS vector |
+| **Format allowlist** | PNG, JPEG, GIF, WebP, BMP. Anything else is rejected, including a RIFF container that is not WEBP |
+| **SVG refused** | SVG is XML that can carry `<script>`, event handlers and external references. Serving one inline is document execution, which this model forbids for uploaded content. Refusing it is simpler and safer than sanitising arbitrary SVG |
+| **Size limit** | `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` (50 MB), enforced by Hono's `bodyLimit` middleware *before* the body is parsed, so an oversized upload is never buffered |
+| **Id-addressed serving** | Requests name an opaque `id`. The server looks up the row and serves the `stored_name` it generated, so no user-supplied string reaches the filesystem. A traversal attempt has nothing to traverse — stronger than sanitising a filename and re-checking the resolved path |
+| **Generated filenames** | `<UUID>.<ext>`, with the extension chosen from the detected type. The uploader's filename is recorded for display only, with separators and control characters removed |
+| **Type pinning on serve** | The `Content-Type` sent is the recorded, detected type. `X-Content-Type-Options: nosniff` stops a browser second-guessing it and reinterpreting the bytes |
 | **No execution** | Uploaded files are stored and served as static content only. No script interpretation occurs |
+| **Cross-origin uploads** | `POST` and `DELETE` require a same-origin request; `GET` does not, because an `<img>` tag sends no `Origin` header |
+
+The CSP already allows these images: `img-src 'self' data:` permits a same-origin `/api/attachments/...` URL.
 
 ## 4. Server Binding
 
