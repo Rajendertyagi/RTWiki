@@ -1,5 +1,9 @@
 # ADR-008: Page Hierarchy and the Workspace Tree
 
+> **Partially superseded by [ADR-018](ADR-018-documented-vs-built.md).** The
+> `@atlaskit/pragmatic-drag-and-drop` claims in this record were never implemented. The body is
+> retained as the historical decision.
+
 | Field | Value |
 |-------|-------|
 | **Status** | **Accepted** |
