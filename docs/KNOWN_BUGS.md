@@ -4,7 +4,7 @@ A running list of defects found and left unfixed, so they are not rediscovered l
 Every entry records what was **measured**, what remains unproven is said plainly, and an
 entry inherited from an earlier pass is marked as such rather than presented as freshly checked.
 
-Last reviewed: 2026-09-27, on branch `docs/trilium-uiux-spec`.
+Last reviewed: 2026-09-27, on branch `feat/document-attachments`.
 
 **Not yet built, and recorded here so it is not mistaken for done:** a visual page can now *store*
 several diagrams (content v2, ordered blocks, 50-block cap), but the workspace still edits one
@@ -120,14 +120,6 @@ its own threat model, not an allowlist edit.
 
 ## Recently fixed
 
-### An image was accepted because it started with the right bytes
-
-**Also fixed:** `pixelCount` returned a subtly wrong number for an image declaring dimensions near
-2^32, because the product exceeds `Number.MAX_SAFE_INTEGER` and a JavaScript number silently loses
-its low digits. It now reports a value too large to represent as `Infinity` rather than a figure
-that is not the truth. The pixel limit was never at risk — the imprecision only appears far above it
-— but a function that reports a wrong number is a trap for whoever uses it next.
-
 ### Storage settings that failed silently
 
 **The kind of failure that looks like it worked.** `PRAGMA page_size` is ignored entirely once a
@@ -151,6 +143,12 @@ sequence and requires a well-formed 13-byte `IHDR`, and it caps chunk count and 
 crafted file cannot make the parser walk indefinitely. The accepted-format list stayed ours and stayed
 dependency-free; only the byte inspection moved server-side. A regression test now covers the
 signature-then-garbage case at both the unit and the route level.
+
+**Also fixed:** `pixelCount` returned a subtly wrong number for an image declaring dimensions near
+2^32, because the product exceeds `Number.MAX_SAFE_INTEGER` and a JavaScript number silently loses
+its low digits. It now reports a value too large to represent as `Infinity` rather than a figure
+that is not the truth. The pixel limit was never at risk — the imprecision only appears far above it
+— but a function that reports a wrong number is a trap for whoever uses it next.
 
 ### The toolbar silently hid a newly added insert control
 
