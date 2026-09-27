@@ -1,6 +1,14 @@
-import { APP_NAME, APP_VERSION, DEFAULT_PORT, HEALTH_PATH } from '@rtwiki/shared/constants'
+import {
+  APP_NAME,
+  APP_VERSION,
+  ATTACHMENTS_DIR,
+  DEFAULT_PORT,
+  HEALTH_PATH
+} from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { NONCE, type SecureHeadersVariables, secureHeaders } from 'hono/secure-headers'
+import { createAttachmentRoutes } from './attachments/attachment-routes.js'
+import { joinPaths } from './config/index.js'
 import { checkIntegrity, getDb } from './database/index.js'
 import { createConsoleLogger, type Logger } from './logging/index.js'
 import { createClientDebugEventRoutes, type DebugEventSink } from './routes/client-debug-events.js'
@@ -132,6 +140,19 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   app.route('/api/pages', createPageRoutes(deps.getDb))
   app.route('/api/schedule', createScheduleRoutes(deps.getDb))
   app.route('/api/schedule/presets', createSchedulePresetRoutes(deps.getDb))
+  // Uploaded images. The directory name comes from the shared constant rather than
+  // being written out again, so the layout ADR-005 defines has exactly one owner.
+  // With no data directory (the default test instance) the routes report
+  // unavailability instead of writing anywhere.
+  app.route(
+    '/api/attachments',
+    createAttachmentRoutes({
+      attachmentsDir: deps.dataDir ? joinPaths(deps.dataDir, ATTACHMENTS_DIR) : '',
+      getDb: deps.getDb,
+      logger: deps.logger,
+      available: Boolean(deps.dataDir)
+    })
+  )
   app.route(
     '/api/shutdown',
     createShutdownRoutes({

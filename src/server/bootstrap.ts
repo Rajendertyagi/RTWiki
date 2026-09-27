@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import {
   APP_VERSION,
+  ATTACHMENTS_DIR,
   DEBUG_LOG_FILENAME,
   DEBUG_LOG_MAX_BYTES,
   DEBUG_LOG_MAX_ROTATED_FILES
@@ -125,7 +126,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   // persisted data/server.json value, which beats the compiled default.
   const port = options.port ?? readServerPort(dataDir)
   let boundPort = port
-  const attachmentsDir = joinPaths(dataDir, 'attachments')
+  const attachmentsDir = joinPaths(dataDir, ATTACHMENTS_DIR)
   const backupsDir = joinPaths(dataDir, 'backups')
 
   // ADR-005 portable layout: every runtime directory must exist after launch.

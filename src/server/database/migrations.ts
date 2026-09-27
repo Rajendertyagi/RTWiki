@@ -133,6 +133,40 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
     db.run('CREATE INDEX idx_schedule_entries_enabled ON schedule_entries(enabled)')
     db.run('CREATE INDEX idx_reminders_enabled ON reminders(enabled)')
   })
+
+  await applyMigration(db, '006_attachments', (db) => {
+    // Uploaded images, stored as files under data/attachments (ADR-005) and
+    // catalogued here.
+    //
+    // The row is the only thing the browser ever names. Requests address an
+    // attachment by `id`, never by a filename, so no user-supplied string ever
+    // reaches the filesystem: a traversal attempt has nothing to traverse.
+    //
+    // `mime_type` and `extension` are recorded from our own signature detection
+    // (see shared/attachments/image-formats.ts) and never from the upload's
+    // declared Content-Type, which is attacker-controlled. The stored file is
+    // therefore always served as the type its bytes actually are.
+    //
+    // No foreign key to pages: an attachment may be uploaded before it is
+    // referenced, and a note may be deleted while its images are still on disk.
+    // Orphan files are reclaimable from this table, which is the point of having
+    // it; without a table there would be no way to tell an orphan from a
+    // referenced file.
+    db.run(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY,
+        stored_name TEXT NOT NULL UNIQUE,
+        mime_type TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        original_name TEXT,
+        checksum TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `)
+    // Reclaim walks the whole table, but deletion and retention both look rows up
+    // by id and list them by age, so both are indexed.
+    db.run('CREATE INDEX idx_attachments_created_at ON attachments(created_at)')
+  })
 }
 
 async function applyMigration(
