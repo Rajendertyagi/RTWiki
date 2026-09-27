@@ -7,6 +7,7 @@
  */
 
 import type { PageType } from '@rtwiki/shared/contracts/pages'
+import { reorderByIds } from '../../util/reorder.js'
 
 export interface OpenTab {
   pageId: string
@@ -103,32 +104,11 @@ export function moveInTabs(tabs: OpenTab[], from: number, to: number): OpenTab[]
 /**
  * Reorders tabs to match an externally supplied list of ids.
  *
- * This is what the drag reports: Motion computes the new order during the drag
- * and hands it over whole. Ids that are not currently open are ignored, and
- * tabs the caller left out are **appended in their existing order** rather than
- * dropped, so a partial or stale list can never silently discard an open tab.
+ * A thin wrapper over the shared `reorderByIds`, so the tab strip and the
+ * diagram blocks it will join cannot drift apart on the two rules that matter:
+ * an id the caller omitted is appended rather than dropped, and an id listed
+ * twice does not clone anything.
  */
 export function reorderInTabs(tabs: OpenTab[], orderedIds: readonly string[]): OpenTab[] {
-  const byId = new Map(tabs.map((tab) => [tab.pageId, tab]))
-  const next: OpenTab[] = []
-  const taken = new Set<string>()
-  for (const id of orderedIds) {
-    const tab = byId.get(id)
-    // Guard duplicates too: an id listed twice must not clone the tab.
-    if (tab && !taken.has(id)) {
-      next.push(tab)
-      taken.add(id)
-    }
-  }
-  if (next.length === tabs.length) {
-    // Every tab was accounted for, so nothing needs appending. Return the
-    // original array when the order is also unchanged, so React can skip the
-    // re-render - length alone is not enough, the order may still have moved.
-    const unchanged = next.every((tab, i) => tabs[i] === tab)
-    return unchanged ? tabs : next
-  }
-  for (const tab of tabs) {
-    if (!taken.has(tab.pageId)) next.push(tab)
-  }
-  return next
+  return reorderByIds(tabs, orderedIds, (tab) => tab.pageId)
 }
