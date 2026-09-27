@@ -169,6 +169,26 @@ export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderP
         onKeyDown={handleKeyDown}
         data-testid="quick-finder-input"
         aria-label={UI_TEXT.quickFinderSearchPlaceholder}
+        // BOTH are required, and `autoFocus` alone is not sufficient.
+        //
+        // Mantine's `Modal` wraps its content in a focus trap
+        // (`useFocusTrap`, node_modules/@mantine/hooks) that picks an initial
+        // target on a `setTimeout(0)`, i.e. one macrotask AFTER React has
+        // already applied `autoFocus`. Its selection is: an element carrying
+        // `data-autofocus`, else the first tabbable descendant. This Modal
+        // renders a title, so `withCloseButton` defaults to true and the close
+        // button precedes the body in DOM order - it was therefore first
+        // tabbable, and the trap moved focus onto the CLOSE BUTTON.
+        //
+        // That is not cosmetic. The search box then never received keystrokes,
+        // a Space in a search term activated the focused close button (a
+        // `<button>` is activated by Space), which called `onClose` and
+        // unmounted the finder mid-word; the rest of the word was typed into
+        // the document behind it and autosaved. `data-autofocus` is Mantine's
+        // documented way to state the intended target, and it makes the trap
+        // agree with `autoFocus` instead of overriding it. `autoFocus` stays as
+        // the fallback for the (unused) no-trap case.
+        data-autofocus
         autoFocus
       />
       <div

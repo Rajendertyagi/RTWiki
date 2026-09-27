@@ -277,14 +277,30 @@ test.describe('connect and find', () => {
     await openNote(page, rich)
     await page.keyboard.press('Control+k')
     await expect(page.getByTestId('quick-finder-input')).toBeVisible()
+    // Focus, not just visibility. The modal's focus trap resolves its initial
+    // target one macrotask AFTER React applies `autoFocus`, so the input is
+    // visible for a beat before it is actually the focused element. Typing
+    // through that window is what let keystrokes reach the document instead,
+    // so wait for the invariant the user relies on rather than the paint.
+    await expect(page.getByTestId('quick-finder-input')).toBeFocused()
     await page.keyboard.type(needle)
+    await expect(page.getByTestId('quick-finder-input')).toHaveValue(needle)
     await expect(page.getByTestId('quick-finder-results')).toContainText(needle)
+    // The harm this test exists for: the open note must be untouched. Without
+    // this the suite can pass on a run that still wrote the needle into the
+    // page, because `quick-finder-results` keeps listing every page while the
+    // query is empty.
+    await expect(page.getByTestId('rich-editor')).not.toContainText(needle)
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('quick-finder-input')).toHaveCount(0)
 
     // Content match: searching for body text finds the page too.
     await page.keyboard.press('Control+k')
-    await page.getByTestId('quick-finder-input').fill('quantum haystack')
+    await expect(page.getByTestId('quick-finder-input')).toBeFocused()
+    // Typed, not filled: `fill()` assigns the value directly and so exercises
+    // no key events at all. Every real user path here is keystrokes.
+    await page.keyboard.type('quantum haystack')
+    await expect(page.getByTestId('quick-finder-input')).toHaveValue('quantum haystack')
     await expect(page.getByTestId('quick-finder-results')).toContainText(needle)
     // Arrow to it and open.
     await page.keyboard.press('ArrowDown')
@@ -309,14 +325,63 @@ test.describe('connect and find', () => {
     await htmlCard.click()
     await expect(page.getByTestId('html-preview-view')).toBeVisible({ timeout: 20_000 })
     await page.keyboard.press('Control+k')
-    await expect(page.getByTestId('quick-finder-input')).toBeVisible()
+    await expect(page.getByTestId('quick-finder-input')).toBeFocused()
     await page.keyboard.press('Escape')
 
     await page.goto('/')
     await page.keyboard.press('Control+k')
-    await expect(page.getByTestId('quick-finder-input')).toBeVisible()
+    await expect(page.getByTestId('quick-finder-input')).toBeFocused()
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('quick-finder-input')).toHaveCount(0)
+  })
+
+  test('Ctrl+K typing never reaches the open document, whatever the needle contains', async ({
+    page,
+    request
+  }) => {
+    // A regression pin for a data-corrupting focus race, not a finder-search
+    // test. The finder used to hand initial focus to the modal's own close
+    // button instead of the search box, so:
+    //   - the rich editor's post-mount focus poll (which deliberately reclaims
+    //     focus from buttons) pulled the caret into the document, and
+    //   - a Space in the needle activated that close button, which called
+    //     onClose and unmounted the finder mid-word.
+    // Either way the rest of the word was typed into the user's page and
+    // autosaved. Both the needle below and the previous one contain spaces, so
+    // both paths are reachable from ordinary typing.
+    const rich = uniqueTitle('Focus Victim')
+    const stored = await seedRich(request, rich, [
+      {
+        id: 'p',
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'untouched body', styles: {} }]
+      }
+    ])
+    const needle = uniqueTitle('Corrupt Needle')
+
+    await openNote(page, rich)
+    await expect(page.getByTestId('rich-editor')).toBeVisible()
+    // The status bar's word/char tally is the cheapest witness that the
+    // document itself did not change, and unlike a text match it cannot be
+    // fooled by a needle that happens to render oddly.
+    const before = await page.getByTestId('status-word-count').textContent()
+
+    await page.keyboard.press('Control+k')
+    await expect(page.getByTestId('quick-finder-input')).toBeFocused()
+    await page.keyboard.type(needle)
+
+    // Both halves: the finder kept every character, and the document kept none.
+    await expect(page.getByTestId('quick-finder-input')).toHaveValue(needle)
+    await expect(page.getByTestId('rich-editor')).not.toContainText(needle)
+    expect(await page.getByTestId('status-word-count').textContent()).toBe(before)
+
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('quick-finder-input')).toHaveCount(0)
+
+    // An unchanged document schedules no autosave, so the stored copy is
+    // already final here; the check pins that nothing reached the server.
+    expect(await getStoredContent(request, stored.id)).toContain('untouched body')
+    expect(await getStoredContent(request, stored.id)).not.toContain(needle)
   })
 
   test('recent pages persist across reload and respect the 20-item bound', async ({

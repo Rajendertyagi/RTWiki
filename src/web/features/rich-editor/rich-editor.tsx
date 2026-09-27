@@ -409,7 +409,18 @@ function RichEditorInner(props: InnerProps): JSX.Element {
           // then the caret jumped into the document. Buttons are deliberately
           // NOT listed: reclaiming focus from a button is the whole point of
           // this effect, since a Mantine Modal restores focus to its trigger.
-          'input, textarea, [contenteditable="true"], [role="tree"], [role="tab"], [role="tablist"]'
+          //
+          // `role="dialog"` closes the gap that made that last rule dangerous.
+          // A button is only reclaimable when it belongs to the page the user
+          // came from; a button INSIDE an open dialog (Mantine renders the
+          // modal content as `<section role="dialog">`) is a deliberate target
+          // and this effect used to yank focus straight out of the dialog into
+          // the document. Press Ctrl+K and type and the words landed in the
+          // open note, not the search box. Reclaiming from the dialog's
+          // trigger still works: Mantine's `useFocusReturn` moves focus back
+          // out of the dialog ~10ms after it closes, so by the time this
+          // effect sees the trigger the dialog is no longer an ancestor.
+          'input, textarea, [contenteditable="true"], [role="tree"], [role="tab"], [role="tablist"], [role="dialog"]'
         ) !== null ||
           active === editorEl)
       if (editorEl && !editorHasFocus && !focusOnOtherInput) {
