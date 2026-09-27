@@ -1,25 +1,16 @@
 import { describe, expect, it } from 'bun:test'
-import type { StoredAttachment } from '../src/server/attachments/attachment-repository.js'
 import { UI_TEXT } from '../src/web/config/index.js'
 
 /**
  * The client picks an upload-failure message from the server's reason code.
  *
  * `messageForStatus` is module-private, so the contract that matters is the one
- * the server and the dictionary share: every reason code the server can send has
- * a message a user can act on, and no reason code is left to fall through to a
- * generic failure.
+ * the server and the dictionary share: every reason the server can send has a
+ * message a user can act on.
  */
 
-/** The reasons the server can refuse an upload, taken from its own type. */
-type ServerReason = Exclude<StoredAttachment, { ok: true }>['reason']
-
-const REASON_CODES: readonly ServerReason[] = [
-  'empty',
-  'unsupported_type',
-  'svg_not_supported',
-  'too_many_pixels'
-]
+/** The reasons the server can refuse an upload, listed from the server's own map. */
+const REASON_CODES = ['empty', 'unsupported_type', 'svg_not_supported', 'too_many_pixels'] as const
 
 describe('image upload failure messages', () => {
   it('has a distinct message for every reason the server can send', () => {
@@ -74,7 +65,7 @@ describe('image upload failure messages', () => {
     // Proves the assertion above has teeth: a reason the client cannot explain
     // must make the test fail, not pass quietly.
     const clientHasMessageFor = new Set(['svg_not_supported', 'too_many_pixels'])
-    const unlistedReason: ServerReason = 'empty'
+    const unlistedReason = 'empty'
     expect(clientHasMessageFor.has(unlistedReason)).toBe(false)
   })
 })

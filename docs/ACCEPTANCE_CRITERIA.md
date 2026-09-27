@@ -64,7 +64,12 @@ This document defines measurable, observable pass/fail criteria for the MVP. Eac
 | AC-029b | An uploaded image is identified from its own structure, not from the request's declared type or its name. | A file that merely begins with a valid image signature is rejected; a real image sent under a false name and a false `Content-Type` is stored and served at its true type. |
 | AC-029c | An image declaring more than 50 megapixels in its header is rejected. | The application shows a message naming the pixel limit and the file is not stored. |
 | AC-029d | A rejected SVG upload is reported as an SVG. | The message names SVG as the reason, so the user is not told only that "something" is unsupported. |
-| AC-030 | A user can upload a PDF file. | The PDF appears as an attachable file in the page with a download link. |
+| AC-030 | A user can upload a PDF file. | The PDF is stored, its text is searchable, and it downloads rather than opening in the app. |
+| AC-030a | A user can upload a document file (DOCX, XLSX, PPTX, ODT, ODS, ODP, RTF, EPUB). | The document is stored and its text is searchable. |
+| AC-030b | A user can upload a plain text, Markdown or HTML file. | The text becomes part of the note's own content and is searchable; the file itself is not offered for download, because its type can never be established from its bytes. |
+| AC-030c | A document is never rendered in the application's origin. | Downloading a PDF or office file sets `Content-Disposition: attachment`, a `default-src 'none'` content security policy, and `X-Content-Type-Options: nosniff`. |
+| AC-030d | A document's identity comes from its bytes, not from its name or declared type. | A PDF renamed `.txt` is stored and served as a PDF, and its contents are not read as note text. |
+| AC-030e | A download filename cannot alter the response headers. | A filename containing CR, LF, a quote or a path separator produces a well-formed header with none of those characters able to terminate it. |
 | AC-031 | A user can upload a document file (DOCX, ODT, TXT, MD). | The file appears as an attachable file in the page with a download link. |
 | AC-032 | An upload of a file with a disallowed extension is rejected. | The application shows an error message and the file is not stored. |
 | AC-033 | An upload of a file exceeding the size limit is rejected. | The application shows an error message and the file is not stored. |

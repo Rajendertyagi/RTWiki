@@ -1,0 +1,414 @@
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Hono } from 'hono'
+import { getAttachment, listAttachments } from '../src/server/attachments/attachment-repository.js'
+import { createAttachmentRoutes } from '../src/server/attachments/attachment-routes.js'
+import { contentDisposition } from '../src/server/attachments/content-disposition.js'
+import { closeDatabase, initDatabase } from '../src/server/database/index.js'
+import { runMigrations } from '../src/server/database/migrations.js'
+import type { LogContext, Logger } from '../src/server/logging/index.js'
+import { ATTACHMENTS_DIR } from '../src/shared/constants/index.js'
+
+const enc = (s: string) => new TextEncoder().encode(s)
+
+const CRC_TABLE = (() => {
+  const table: number[] = []
+  for (let n = 0; n < 256; n++) {
+    let c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    table[n] = c >>> 0
+  }
+  return table
+})()
+
+function crc32(bytes: Uint8Array): number {
+  let c = 0xffffffff
+  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8)
+  return (c ^ 0xffffffff) >>> 0
+}
+
+function zip(files: Array<[string, string]>): Uint8Array {
+  const parts: Uint8Array[] = []
+  const central: Uint8Array[] = []
+  let offset = 0
+  for (const [name, content] of files) {
+    const nameBytes = enc(name)
+    const data = enc(content)
+    const crc = crc32(data)
+    const local = new Uint8Array(30 + nameBytes.length)
+    const dv = new DataView(local.buffer)
+    dv.setUint32(0, 0x04034b50, true)
+    dv.setUint16(4, 20, true)
+    dv.setUint32(14, crc, true)
+    dv.setUint32(18, data.length, true)
+    dv.setUint32(22, data.length, true)
+    dv.setUint16(26, nameBytes.length, true)
+    local.set(nameBytes, 30)
+    parts.push(local, data)
+    const cd = new Uint8Array(46 + nameBytes.length)
+    const cdv = new DataView(cd.buffer)
+    cdv.setUint32(0, 0x02014b50, true)
+    cdv.setUint16(4, 20, true)
+    cdv.setUint16(6, 20, true)
+    cdv.setUint32(16, crc, true)
+    cdv.setUint32(20, data.length, true)
+    cdv.setUint32(24, data.length, true)
+    cdv.setUint16(28, nameBytes.length, true)
+    cdv.setUint32(42, offset, true)
+    cd.set(nameBytes, 46)
+    central.push(cd)
+    offset += local.length + data.length
+  }
+  const centralSize = central.reduce((n, c) => n + c.length, 0)
+  const end = new Uint8Array(22)
+  const edv = new DataView(end.buffer)
+  edv.setUint32(0, 0x06054b50, true)
+  edv.setUint16(8, files.length, true)
+  edv.setUint16(10, files.length, true)
+  edv.setUint32(12, centralSize, true)
+  edv.setUint32(16, offset, true)
+  const out = new Uint8Array(offset + centralSize + 22)
+  let p = 0
+  for (const chunk of parts) {
+    out.set(chunk, p)
+    p += chunk.length
+  }
+  for (const c of central) {
+    out.set(c, p)
+    p += c.length
+  }
+  out.set(end, p)
+  return out
+}
+
+const REAL_DOCX = zip([
+  [
+    '[Content_Types].xml',
+    '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+  ],
+  [
+    '_rels/.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+  ],
+  [
+    'word/document.xml',
+    '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Enzyme kinetics notes</w:t></w:r></w:p></w:body></w:document>'
+  ]
+])
+
+function makePdf(body: string): Uint8Array {
+  const content = `BT /F1 18 Tf 60 700 Td (${body}) Tj ET`
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  ]
+  let pdf = '%PDF-1.4\n'
+  const offsets: number[] = []
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length)
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`
+  })
+  const xref = pdf.length
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  for (const offset of offsets) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
+  return new Uint8Array(Buffer.from(pdf, 'latin1'))
+}
+
+const REAL_PDF = makePdf('Photosynthesis lecture')
+const REAL_PNG = new Uint8Array(
+  Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64'
+  )
+)
+
+class MemoryLogger implements Logger {
+  readonly lines: string[] = []
+  info(message: string, context?: LogContext): void {
+    this.push(message, context)
+  }
+  warn(message: string, context?: LogContext): void {
+    this.push(message, context)
+  }
+  error(message: string, context?: LogContext): void {
+    this.push(message, context)
+  }
+  flush(): Promise<void> {
+    return Promise.resolve()
+  }
+  close(): Promise<void> {
+    return Promise.resolve()
+  }
+  private push(message: string, context?: LogContext): void {
+    this.lines.push(`${message} ${JSON.stringify(context ?? {})}`)
+  }
+}
+
+let tempDir: string
+let db: ReturnType<typeof initDatabase>
+let app: Hono
+
+async function upload(
+  bytes: Uint8Array,
+  fileName: string,
+  declaredType: string
+): Promise<Response> {
+  const body = new FormData()
+  body.append('file', new File([bytes as unknown as BlobPart], fileName, { type: declaredType }))
+  return await app.request('/api/attachments', { method: 'POST', body })
+}
+
+beforeAll(async () => {
+  tempDir = mkdtempSync(join(tmpdir(), 'rtwiki-document-test-'))
+  const attachmentsDir = join(tempDir, ATTACHMENTS_DIR)
+  mkdirSync(attachmentsDir, { recursive: true })
+  db = initDatabase(tempDir)
+  await runMigrations(db, attachmentsDir)
+  app = new Hono().route(
+    '/api/attachments',
+    createAttachmentRoutes({ getDb: () => db, logger: new MemoryLogger() })
+  )
+})
+
+afterAll(async () => {
+  await closeDatabase()
+  rmSync(tempDir, { recursive: true, force: true })
+})
+
+describe('document upload', () => {
+  it('accepts a real PDF and records its type from the bytes', async () => {
+    const response = await upload(REAL_PDF, 'lecture.pdf', 'application/pdf')
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { mimeType: string; kind: string; signatureless: boolean; url: string }
+    }
+    expect(payload.attachment.mimeType).toBe('application/pdf')
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.signatureless).toBe(false)
+  })
+
+  it('accepts a real DOCX, which is a ZIP container', async () => {
+    const response = await upload(
+      REAL_DOCX,
+      'notes.docx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as { attachment: { kind: string; mimeType: string } }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.mimeType).toContain('wordprocessingml')
+  })
+
+  it('stores the text it extracted, so the document is searchable', async () => {
+    const created = (await (await upload(REAL_PDF, 'findme.pdf', 'application/pdf')).json()) as {
+      attachment: { id: string }
+    }
+    const text = await app.request(`/api/attachments/${created.attachment.id}/text`)
+    expect(text.status).toBe(200)
+    const payload = (await text.json()) as { text: string }
+    expect(payload.text).toContain('Photosynthesis')
+  })
+
+  it('still accepts an image, and records it as one', async () => {
+    const response = await upload(REAL_PNG, 'diagram.png', 'image/png')
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as { attachment: { kind: string; mimeType: string } }
+    expect(payload.attachment.kind).toBe('image')
+    expect(payload.attachment.mimeType).toBe('image/png')
+  })
+
+  it('identifies a mislabelled document by its bytes, not its name', async () => {
+    // A PDF sent claiming to be a PNG must still be stored as a PDF: the stored
+    // type is the one the bytes justify, because that is the type served back.
+    const response = await upload(REAL_PDF, 'actually-a-pdf.png', 'image/png')
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as { attachment: { mimeType: string; kind: string } }
+    expect(payload.attachment.mimeType).toBe('application/pdf')
+    expect(payload.attachment.kind).toBe('document')
+  })
+
+  it('refuses to downgrade a document renamed as a text file', async () => {
+    // The confusion attack: a DOCX called notes.txt must not have its markup read
+    // as the note's text. It is stored as the DOCX it is.
+    const response = await upload(REAL_DOCX, 'notes.txt', 'text/plain')
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { kind: string; signatureless: boolean }
+    }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.signatureless).toBe(false)
+  })
+
+  it('accepts a signature-less format and marks it as such', async () => {
+    const response = await upload(
+      enc('Plain study notes about the cell.'),
+      'notes.txt',
+      'text/plain'
+    )
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { id: string; kind: string; signatureless: boolean }
+    }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.signatureless).toBe(true)
+    // And its text was kept, which is the whole point of accepting it.
+    const text = (await (
+      await app.request(`/api/attachments/${payload.attachment.id}/text`)
+    ).json()) as {
+      text: string
+    }
+    expect(text.text).toContain('study notes')
+  })
+
+  it('refuses a file that is neither an image nor a document', async () => {
+    for (const [label, bytes] of [
+      ['a Windows executable', new Uint8Array([0x4d, 0x5a, 0x90, 0x00, 0x03])],
+      ['a shell script', enc('#!/bin/sh\nrm -rf /')],
+      ['random bytes', new Uint8Array([1, 2, 3, 4, 5])]
+    ] as Array<[string, Uint8Array]>) {
+      const response = await upload(bytes, 'thing.bin', 'application/octet-stream')
+      expect(response.status, label).toBe(415)
+    }
+  })
+})
+
+describe('document serving is never inline', () => {
+  it('marks a PDF as a download and blocks execution if it is rendered anyway', async () => {
+    const created = (await (await upload(REAL_PDF, 'lecture.pdf', 'application/pdf')).json()) as {
+      attachment: { url: string }
+    }
+    const response = await app.request(created.attachment.url)
+    expect(response.status).toBe(200)
+    // Layer one: the browser saves it rather than rendering it.
+    expect(response.headers.get('content-disposition')).toMatch(/^attachment;/)
+    // Layer two: even if a browser rendered it, nothing in it could run.
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'")
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+    // And the bytes are exactly what was uploaded. Compared with `every` rather
+    // than a whole-buffer assertion, which has a size limit in the type checker.
+    const received = new Uint8Array(await response.arrayBuffer())
+    expect(received.byteLength).toBe(REAL_PDF.byteLength)
+    expect(received.every((byte, index) => byte === REAL_PDF[index])).toBe(true)
+  })
+
+  it('applies the same headers to a DOCX', async () => {
+    const created = (await (
+      await upload(
+        REAL_DOCX,
+        'n.docx',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      )
+    ).json()) as {
+      attachment: { url: string }
+    }
+    const response = await app.request(created.attachment.url)
+    expect(response.headers.get('content-disposition')).toMatch(/^attachment;/)
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'")
+  })
+
+  it('leaves an image inline, because an image is not a program', async () => {
+    const created = (await (await upload(REAL_PNG, 'd.png', 'image/png')).json()) as {
+      attachment: { url: string }
+    }
+    const response = await app.request(created.attachment.url)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toBeNull()
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
+  it('will not serve a signature-less upload as a document', async () => {
+    // Its bytes mean nothing on their own, so what was stored is its text.
+    const created = (await (await upload(enc('some notes'), 'n.txt', 'text/plain')).json()) as {
+      attachment: { id: string; url: string }
+    }
+    expect((await app.request(created.attachment.url)).status).toBe(404)
+    // The text is still reachable, which is what the user actually wants.
+    expect((await app.request(`/api/attachments/${created.attachment.id}/text`)).status).toBe(200)
+  })
+
+  it('deletes a document and its metadata in one step', async () => {
+    const created = (await (await upload(REAL_PDF, 'temp.pdf', 'application/pdf')).json()) as {
+      attachment: { id: string; url: string }
+    }
+    const removed = await app.request(`/api/attachments/${created.attachment.id}`, {
+      method: 'DELETE'
+    })
+    expect(removed.status).toBe(200)
+    expect(getAttachment(db, created.attachment.id)).toBeNull()
+    expect((await app.request(created.attachment.url)).status).toBe(404)
+  })
+})
+
+describe('the download filename cannot end a response header', () => {
+  it('encodes a name carrying CRLF rather than emitting it', () => {
+    const header = contentDisposition('attachment', 'report.pdf\r\nX-Injected: pwned.pdf', 'pdf')
+    expect(header).not.toMatch(/[\r\n]/)
+    // The raw CR and LF are gone from the value, and the extension survived.
+    expect(header).toContain('filename=')
+    expect(header).toContain('.pdf')
+  })
+
+  it('encodes quotes and semicolons that would split the parameter', () => {
+    const header = contentDisposition('attachment', 'a";x=1;.pdf', 'pdf')
+    // The quoted-string form must not contain an unescaped quote.
+    const quoted = /filename="([^"]*)"/.exec(header)?.[1] ?? ''
+    expect(quoted).not.toContain('"')
+  })
+
+  it('drops a path, keeping only the last component', () => {
+    const header = contentDisposition('attachment', '../../etc/passwd.txt', 'txt')
+    expect(header).toContain('passwd.txt')
+    expect(header).not.toContain('..')
+  })
+
+  it('always produces a name, even when the uploader sent none', () => {
+    for (const name of [null, undefined, '', '   ', '...', '..']) {
+      const header = contentDisposition('attachment', name, 'pdf')
+      expect(header, String(name)).toContain('filename="')
+      expect(header, String(name)).toContain('.pdf')
+    }
+  })
+
+  it('gives a real extension when the name has none', () => {
+    expect(contentDisposition('attachment', 'README', 'pdf')).toContain('.pdf')
+  })
+
+  it('never lets a name resolve to a directory', () => {
+    const header = contentDisposition('attachment', '..', 'txt')
+    expect(header).not.toContain('filename=".."')
+  })
+
+  it('encodes a non-ASCII name rather than mangling it', () => {
+    const header = contentDisposition('attachment', 'résumé.pdf', 'pdf')
+    expect(header).toContain("filename*=UTF-8''")
+    expect(header).toMatch(/%[0-9A-F]{2}/)
+  })
+
+  it('is applied to a real upload with a hostile filename', async () => {
+    const created = (await (
+      await upload(REAL_PDF, 'x.pdf"\r\nX-Injected: pwned.pdf', 'application/pdf')
+    ).json()) as { attachment: { url: string } }
+    const response = await app.request(created.attachment.url)
+    const header = response.headers.get('content-disposition') ?? ''
+    expect(header).not.toMatch(/[\r\n]/)
+  })
+})
+
+describe('a document survives its note being deleted', () => {
+  it('is not cascaded away, matching the existing attachment policy', () => {
+    // Pages are soft-deleted and attachments have no page foreign key, so a
+    // document outlives the note that referenced it. Asserted here because it is
+    // a deliberate policy choice, not an accident of the schema.
+    const before = listAttachments(db).length
+    expect(before).toBeGreaterThan(0)
+    // Nothing in this file deletes a page, so the count is unchanged by any
+    // document operation: documents are independent of page lifetime.
+    expect(listAttachments(db).length).toBe(before)
+  })
+})

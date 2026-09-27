@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   BLOB_STREAM_CHUNK_BYTES,
+  checksumOf,
   getAttachment,
   getAttachmentByteSize,
   insertAttachment,
   listAttachments,
-  planStorage,
   streamAttachmentBytes
 } from '../src/server/attachments/attachment-repository.js'
 import { inspectImageUpload } from '../src/server/attachments/image-detect.js'
@@ -49,8 +49,10 @@ async function store(bytes: Uint8Array, name = 'image.png'): Promise<string> {
     id,
     mimeType: inspection.format.mime,
     byteSize: bytes.length,
+    kind: 'image',
+    extractedText: null,
     originalName: name,
-    // Left null deliberately: the checksum is computed by planStorage, not by
+    // Left null deliberately: the checksum is computed by the route, not by
     // insertAttachment, so this helper must pass one to test the route's path.
     checksum: null,
     data: bytes
@@ -73,6 +75,8 @@ function storeBlobOfSize(byteSize: number): string {
     id,
     mimeType: 'image/png',
     byteSize,
+    kind: 'image',
+    extractedText: null,
     originalName: 'large.png',
     checksum: null,
     data: bytes
@@ -127,20 +131,26 @@ describe('blobs live in the row', () => {
 
   it('records a checksum, which used to be permanently null', async () => {
     await runMigrations(db, attachmentsDir)
-    // planStorage is what computes the checksum, so the route's own path is what
-    // has to be exercised. insertAttachment stores whatever it is handed.
-    const inspection = await inspectImageUpload(REAL_PNG)
-    const planned = planStorage(REAL_PNG, {
-      id: 'checksum-test',
-      originalName: 'x.png',
-      inspection
-    })
-    expect(planned.ok).toBe(true)
-    if (!planned.ok) return
-    expect(planned.record.checksum).toMatch(/^[0-9a-f]{32}$/)
+    // The route computes the checksum while the bytes are in hand; this asserts
+    // the function it uses, since insertAttachment stores what it is handed.
+    const digest = checksumOf(REAL_PNG)
+    expect(digest).toMatch(/^[0-9a-f]{32}$/)
+    // Stable for the same bytes, different for different bytes - the two
+    // properties deduplication would rely on.
+    expect(checksumOf(REAL_PNG)).toBe(digest)
+    expect(checksumOf(new Uint8Array([1, 2, 3]))).not.toBe(digest)
 
-    insertAttachment(db, { ...planned.record, data: REAL_PNG })
-    expect(getAttachment(db, 'checksum-test')?.checksum).toBe(planned.record.checksum)
+    insertAttachment(db, {
+      id: 'checksum-test',
+      mimeType: 'image/png',
+      byteSize: REAL_PNG.byteLength,
+      kind: 'image',
+      extractedText: null,
+      originalName: 'x.png',
+      checksum: digest,
+      data: REAL_PNG
+    })
+    expect(getAttachment(db, 'checksum-test')?.checksum).toBe(digest)
   })
 })
 

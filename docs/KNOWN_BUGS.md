@@ -99,26 +99,24 @@ images still in use elsewhere.
 document, plus a "referenced by" check before reclaiming. This needs a deliberate policy decision
 (age threshold, and what "referenced" means for a note in the recycle bin) rather than a default.
 
-### 7. Only images are supported as attachments — PDF and documents are not implemented
+### 7. Documents are stored and searchable, but cannot be previewed in the app
 
-**Impact: low, but it contradicts a documented requirement.** [R-024](../docs/PRODUCT_REQUIREMENTS.md)
-in `PRODUCT_REQUIREMENTS.md` says the application must support attaching "images, PDFs, and
-documents", and `AC-030` / `AC-031` in [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) cover PDF
-and DOCX/ODT/TXT/MD uploads. Only the image half exists. `AC-029` (PNG, JPG, GIF) is satisfied, and
-WebP and BMP work too.
+**Resolved for storage; preview remains open.** [R-024](PRODUCT_REQUIREMENTS.md) requires attaching
+"images, PDFs, and documents", and [AC-031](ACCEPTANCE_CRITERIA.md) names DOCX, ODT, TXT and MD. All of
+those are now accepted, stored in the database beside the images, and their text is extracted into the
+search index — so a PDF you imported becomes findable by what is in it. See
+[ADR-015](adr/ADR-015-document-attachments.md).
 
-**Why the gap is worth naming:** the upload endpoint and storage are format-agnostic apart from the
-detector, so the remaining formats are an allowlist addition rather than new plumbing. What they do
-*not* get for free is the security reasoning — see [ADR-013](adr/ADR-013-image-attachments.md) for
-why documents are a different problem from images (they must never be served inline, and they need
-range requests to be viewable at all). Note also that `.txt` and `.md` have no magic number at all, so
-they cannot be identified from their bytes and need a different trust model from images.
+**What is still missing:** a document downloads rather than opening in a tab. That is deliberate rather
+than unfinished — a document is a program, and serving one inline means executing it in RTWiki's own
+origin — so the download is protected twice, by `Content-Disposition: attachment` and by a per-response
+`default-src 'none'` policy. Two known gaps remain inside that: **legacy binary `.doc`/`.xls` are
+refused** (they are OLE compound files this parser does not handle; AC-031 names DOCX and ODT, not
+DOC), and **a scanned PDF yields no searchable text**, because it has no text layer and there is no OCR.
 
-**Next step:** treat documents as a separate decision, not an allowlist edit. Serve them as
-`Content-Disposition: attachment` with a detected type, and decide whether they are previewable
-before anything is built.
-
----
+**Next step:** an inline preview, if it is wanted at all, would reuse the sandboxed-iframe treatment
+[ADR-007](adr/ADR-007-sandboxed-custom-content.md) gives custom content. That is a separate decision with
+its own threat model, not an allowlist edit.
 
 ## Recently fixed
 

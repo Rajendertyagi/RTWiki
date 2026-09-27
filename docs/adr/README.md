@@ -20,6 +20,7 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-012](ADR-012-diagram-rendering-and-sanitisation.md) | Diagram Rendering and Sanitisation Contract | **Accepted** |
 | [ADR-013](ADR-013-image-attachments.md) | Image Attachments — Content-Based Validation and Id-Addressed Serving | **Accepted** (§4 storage location superseded by ADR-014) |
 | [ADR-014](ADR-014-blob-stored-image-bytes.md) | Image Bytes Stored in the Database | **Accepted** |
+| [ADR-015](ADR-015-document-attachments.md) | Document Attachments — Forced Download and Extracted Text | **Accepted** |
 
 ## How to Read an ADR
 

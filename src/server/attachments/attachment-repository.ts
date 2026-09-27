@@ -1,8 +1,10 @@
 import type { Database } from 'bun:sqlite'
-import type { ImageInspection } from './image-detect.js'
+
+/** What an attachment holds. Derived from the stored type, and stored too. */
+export type AttachmentKind = 'image' | 'document'
 
 /**
- * Catalogue of uploaded images, and the bytes themselves (ADR-014).
+ * Catalogue of uploaded files and their bytes (ADR-014, ADR-015).
  *
  * The row is the authority: `id` is what the browser names, and `mime_type` is
  * the only type ever served. Both are ours - neither is a value the uploader
@@ -12,11 +14,17 @@ import type { ImageInspection } from './image-detect.js'
  * `data/attachments/`, which meant writing a file and inserting a row were two
  * separate steps that could disagree; here the bytes and their metadata are one
  * row, so that state cannot be reached.
+ *
+ * Images and documents share this table, and so share storage, the upload
+ * endpoint and the streaming path. `kind` is what tells them apart.
  */
 export interface AttachmentRecord {
   id: string
   mimeType: string
   byteSize: number
+  kind: AttachmentKind
+  /** Readable text extracted from a document, so its content is searchable. */
+  extractedText: string | null
   originalName: string | null
   checksum: string | null
   createdAt: string
@@ -26,16 +34,29 @@ interface AttachmentRow {
   id: string
   mime_type: string
   byte_size: number
+  kind: string
+  extracted_text: string | null
   original_name: string | null
   checksum: string | null
   created_at: string
 }
+
+/**
+ * The columns a metadata read needs.
+ *
+ * Deliberately excludes `data`, so listing or fetching an attachment's details
+ * never pulls a 40 MB document into memory to read its filename.
+ */
+const METADATA_COLUMNS =
+  'id, mime_type, byte_size, kind, extracted_text, original_name, checksum, created_at'
 
 function toRecord(row: AttachmentRow): AttachmentRecord {
   return {
     id: row.id,
     mimeType: row.mime_type,
     byteSize: row.byte_size,
+    kind: row.kind === 'document' ? 'document' : 'image',
+    extractedText: row.extracted_text,
     originalName: row.original_name,
     checksum: row.checksum,
     createdAt: row.created_at
@@ -47,14 +68,25 @@ export type AttachmentSummary = AttachmentRecord
 
 export function insertAttachment(
   db: Database,
-  record: Omit<AttachmentRecord, 'createdAt'> & { data: Uint8Array }
+  record: Omit<AttachmentRecord, 'createdAt'> & { data: Uint8Array | null }
 ): AttachmentRecord {
   // The bytes and the metadata go in as one statement, so an attachment can
-  // never exist as one without the other.
+  // never exist as one without the other. `data` is nullable only for a
+  // signature-less document, whose text is stored but whose bytes are never
+  // served because they could never be identified.
   db.run(
-    `INSERT INTO attachments (id, mime_type, byte_size, original_name, checksum, data)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [record.id, record.mimeType, record.byteSize, record.originalName, record.checksum, record.data]
+    `INSERT INTO attachments (id, mime_type, byte_size, kind, extracted_text, original_name, checksum, data)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      record.id,
+      record.mimeType,
+      record.byteSize,
+      record.kind,
+      record.extractedText,
+      record.originalName,
+      record.checksum,
+      record.data
+    ]
   )
   const stored = getAttachment(db, record.id)
   if (!stored) throw new Error('Attachment row missing immediately after insert')
@@ -63,18 +95,14 @@ export function insertAttachment(
 
 export function getAttachment(db: Database, id: string): AttachmentRecord | null {
   const row = db
-    .query(
-      'SELECT id, mime_type, byte_size, original_name, checksum, created_at FROM attachments WHERE id = ?'
-    )
+    .query(`SELECT ${METADATA_COLUMNS} FROM attachments WHERE id = ?`)
     .get(id) as AttachmentRow | null
   return row ? toRecord(row) : null
 }
 
 export function listAttachments(db: Database): AttachmentSummary[] {
   const rows = db
-    .query(
-      'SELECT id, mime_type, byte_size, original_name, checksum, created_at FROM attachments ORDER BY created_at DESC'
-    )
+    .query(`SELECT ${METADATA_COLUMNS} FROM attachments ORDER BY created_at DESC`)
     .all() as AttachmentRow[]
   return rows.map(toRecord)
 }
@@ -144,56 +172,6 @@ export function streamAttachmentBytes(db: Database, id: string): ReadableStream<
   })
 }
 
-/** What the storage layer decided about an upload. */
-export type StoredAttachment =
-  | { ok: true; record: AttachmentRecord }
-  | { ok: false; reason: 'unsupported_type' | 'svg_not_supported' | 'too_many_pixels' | 'empty' }
-
-/**
- * Decides the stored identity of an upload from its content.
- *
- * Returns the decisions, not the bytes: writing them is the caller's job, so
- * this stays testable without a database and so the rejection paths are
- * exercised directly.
- *
- * `inspection` is the verdict from `inspectImageUpload`, which read the file's
- * own bytes. This function never inspects anything itself - it only records what
- * that verdict decided, so there is exactly one place in the codebase where a
- * file's identity is established.
- *
- * The uploader's filename is recorded for display and nothing else. Since the
- * bytes live in the database there is no path to build, so a request naming
- * `../../../etc/passwd` is simply a string in a column.
- */
-export function planStorage(
-  bytes: Uint8Array,
-  options: {
-    id: string
-    originalName?: string | null
-    checksum?: string | null
-    inspection: ImageInspection
-  }
-): StoredAttachment {
-  if (bytes.length === 0) return { ok: false, reason: 'empty' }
-  if (!options.inspection.ok) return { ok: false, reason: options.inspection.reason }
-
-  const { format } = options.inspection
-  const original = normaliseOriginalName(options.originalName)
-  return {
-    ok: true,
-    record: {
-      id: options.id,
-      mimeType: format.mime,
-      byteSize: bytes.length,
-      originalName: original,
-      // Computed now rather than left NULL: it is what makes content-addressed
-      // deduplication possible later, and it is free while the bytes are in hand.
-      checksum: options.checksum ?? checksumOf(bytes),
-      createdAt: ''
-    }
-  }
-}
-
 /**
  * A content hash for an upload, used to recognise a repeated image.
  *
@@ -202,9 +180,8 @@ export function planStorage(
  * it is not a security boundary, and the stored type is established by
  * inspecting the bytes rather than by trusting a hash.
  */
-function checksumOf(bytes: Uint8Array): string {
-  const digest = new Bun.CryptoHasher('sha256').update(bytes).digest('hex')
-  return digest.slice(0, 32)
+export function checksumOf(bytes: Uint8Array): string {
+  return new Bun.CryptoHasher('sha256').update(bytes).digest('hex').slice(0, 32)
 }
 
 /** C0 control characters and DEL, none of which belong in a name a human reads. */

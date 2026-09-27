@@ -104,15 +104,16 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 ### 3.7 Attachments
 
-- **Technology:** Image bytes stored in the `attachments` table, catalogued by the same row ([ADR-014](adr/ADR-014-blob-stored-image-bytes.md))
-- **Modules:** `src/shared/attachments/image-formats.ts` (the accepted-format allowlist, dependency-free and shared by client and server), `src/server/attachments/image-detect.ts` (content-based detection and header dimension reading), `src/server/attachments/attachment-repository.ts` (catalogue and blob streaming), `src/server/attachments/attachment-routes.ts` (endpoints)
+- **Technology:** Image and document bytes stored in the `attachments` table, catalogued by the same row ([ADR-014](adr/ADR-014-blob-stored-image-bytes.md), [ADR-015](adr/ADR-015-document-attachments.md))
+- **Modules:** `src/shared/attachments/image-formats.ts` (the accepted-image allowlist, dependency-free and shared by client and server), `src/shared/attachments/document-formats.ts` (the accepted-document allowlist, same shape), `src/server/attachments/image-detect.ts` (image detection and header dimension reading), `src/server/attachments/document-detect.ts` (document identification and text extraction via `officeparser`), `src/server/attachments/content-disposition.ts` (RFC 5987 download filenames), `src/server/attachments/attachment-repository.ts` (catalogue and blob streaming), `src/server/attachments/attachment-routes.ts` (endpoints)
 - **Endpoints:**
-  - `POST /api/attachments` — multipart upload; type decided by reading the file's structure, size capped by `bodyLimit` before the body is parsed, pixel count capped from the header
-  - `GET /api/attachments/:id` — streams the stored bytes at the type recorded from them, with `X-Content-Type-Options: nosniff` and a `content-length` taken from the stored size
+  - `POST /api/attachments` — upload an image or a document; type decided from the bytes, size capped by `bodyLimit` before the body is parsed, pixel count capped from the header
+  - `GET /api/attachments/:id` — streams the stored bytes at the type recorded from them, with `X-Content-Type-Options: nosniff` and a `content-length` taken from the stored size. A **document** additionally gets `Content-Disposition: attachment` and a per-response `default-src 'none'` policy, so it downloads rather than rendering in the application's origin ([ADR-015](adr/ADR-015-document-attachments.md))
+  - `GET /api/attachments/:id/text` — the text extracted from a document, for a search preview
   - `DELETE /api/attachments/:id` — removes the bytes and their metadata in one statement
   - A refused upload answers with a reason code (`unsupported_type`, `svg_not_supported`, `too_many_pixels`) beside the user-facing message, so the client can give actionable words without parsing English
 - **Responsibility:** Accept image uploads, decide the type from content, store under a server-generated name, and serve them back by catalogue id.
-- **Constraint:** Uploaded files are never executed. SVG is not accepted, because serving it inline is document execution, and a refused SVG says so. Requests address an attachment by id, and the bytes live in the database, so no user-supplied string reaches the filesystem at all. See [ADR-013](adr/ADR-013-image-attachments.md) and [ADR-014](adr/ADR-014-blob-stored-image-bytes.md).
+- **Constraint:** Uploaded files are never executed. SVG is not accepted, because serving it inline is document execution, and a refused SVG says so. A document is never served inline at all: it is offered as a download behind a per-response `default-src 'none'` policy, so neither the disposition nor the policy alone is the guard. Requests address an attachment by id, and the bytes live in the database, so no user-supplied string reaches the filesystem at all. See [ADR-013](adr/ADR-013-image-attachments.md), [ADR-014](adr/ADR-014-blob-stored-image-bytes.md) and [ADR-015](adr/ADR-015-document-attachments.md).
 - **Client:** BlockNote's `uploadFile` hook is the single entry point, so the file picker, paste and drop all take this one path. The image block stores the returned URL, keeping the document canonical BlockNote JSON with no bytes inlined.
 
 ### 3.8 Backup and Restore

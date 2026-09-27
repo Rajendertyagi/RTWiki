@@ -124,6 +124,8 @@ Both are junction tables that enforce referential integrity at the database leve
 
 Image bytes are stored in the `attachments.data` column, not as files in a directory (see [ADR-014](adr/ADR-014-blob-stored-image-bytes.md)). The row is written as a single statement, so an attachment cannot exist as bytes without metadata or the reverse. Files left behind by a database created before that change are read once by the migration and then left on disk untouched; removing them is a separate retention decision.
 
+**Documents share this table** ([ADR-015](adr/ADR-015-document-attachments.md)). `kind` distinguishes an image from a document, and `extracted_text` holds the readable text a document yielded so its content is searchable. A `.txt`, `.md` or `.html` upload has its text stored and **no servable bytes**, because those formats carry no signature and the application will not serve a file whose type was never established.
+
 **Addressing:** The browser addresses an attachment by `id`, never by filename. `GET /api/attachments/:id` looks the row up and streams its bytes, so no user-supplied string ever reaches the filesystem — there is no path to reach. See [ADR-013](adr/ADR-013-image-attachments.md).
 
 **Filename generation:** Stored names are `<UUID>.<extension>`, where the extension is chosen from the file's own detected type — never from the uploader's filename or its declared `Content-Type`. The original filename is kept in `original_name` for display only, with path separators and control characters removed. A request naming `../../../etc/passwd` therefore produces an ordinary UUID name like any other upload; there is no traversal to defend against, because no part of the request becomes a path.

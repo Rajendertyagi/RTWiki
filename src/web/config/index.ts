@@ -293,6 +293,12 @@ export const UI_TEXT = {
     'SVG images are not supported, because an SVG can carry scripts. Try a PNG, JPEG, GIF, WebP, AVIF or BMP file.',
   imageTooManyPixels:
     'That image has more pixels than the 50 megapixel limit. Try a smaller image.',
+  attachmentUnsupportedType:
+    'That file type is not supported. Try an image, a PDF, or a Word, PowerPoint, Excel, OpenDocument or RTF file.',
+  // Documents
+  documentLabel: 'Document',
+  documentUploadFailedTitle: 'Document not added',
+  documentUploadFailed: 'That document could not be added.',
   // Right sidebar
   rightSidebarLabel: 'Page details',
   collapseSidebarLabel: 'Collapse sidebar',

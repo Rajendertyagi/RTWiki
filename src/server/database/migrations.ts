@@ -178,6 +178,24 @@ export async function runMigrations(
   // belongs inside a synchronous schema transaction, and its safety depends on
   // being able to stop and report rather than roll back.
   await migrateAttachmentBytesToBlobs(db, attachmentsDir)
+
+  await applyMigration(db, '009_document_attachments', (db) => {
+    // Documents share the attachments table and therefore the same storage,
+    // upload endpoint and streaming path as images (ADR-015).
+    //
+    // `kind` is what tells the two apart. It is derived from the stored MIME at
+    // read time as well, so it is not the authority on its own; it exists so a
+    // listing can answer "images" or "documents" without re-deriving, and so a
+    // signature-less document (see document-formats.ts) can be marked as text
+    // rather than as something to be rendered.
+    //
+    // `extracted_text` holds the readable text a document yielded, so its content
+    // can be found by search. It is NOT the document: the bytes stay in `data`
+    // and are what gets served. A signature-less upload stores its text here and
+    // no servable bytes, because its bytes could never be identified.
+    db.run("ALTER TABLE attachments ADD COLUMN kind TEXT NOT NULL DEFAULT 'image'")
+    db.run('ALTER TABLE attachments ADD COLUMN extracted_text TEXT')
+  })
 }
 
 /**
