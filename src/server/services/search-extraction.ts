@@ -86,7 +86,8 @@ export function extractSearchableHtml(html: string): string {
  * - HTML pages: readable text extracted from the authored HTML source.
  * - Rich pages: the canonical BlockNote JSON is parsed and only the visible
  *   readable text is indexed — paragraph/heading/list/callout/table text and
- *   ordinary code (never the preservation-marker payload). Formula, Diagram
+ *   ordinary code (never the preservation-marker payload), at EVERY nesting
+ *   level, not just the top one. Formula, Diagram
  *   and Mind Map source are intentionally NOT indexed: their raw Mermaid/LaTeX
  *   is not readable prose and would pollute results, so only their visible
  *   rendered output (if any) is searchable. JSON punctuation, internal props
@@ -102,8 +103,31 @@ interface RichInline {
   content?: RichInline[]
 }
 
+/**
+ * Depth cap for the recursive block walk over stored page JSON.
+ *
+ * The walk follows `children` and a table's own `rows[].cells[]` structure,
+ * and both come from stored page content, which is untrusted input as far as
+ * this function is concerned. The walk is recursive, so a corrupt or
+ * hand-edited document nested without bound would otherwise exhaust the stack
+ * and take down the request that merely tried to index a page.
+ *
+ * Defined behaviour once the cap is reached: nothing deeper is read, and
+ * everything already collected is kept and indexed. BlockNote nesting that a
+ * person can actually produce is a handful of levels (a list inside a list
+ * inside a list), so the cap is far beyond any real document; it exists so
+ * that hostile input degrades to partial text rather than to an exception.
+ */
+export const SEARCH_MAX_BLOCK_DEPTH = 64 as const
+
+/** True once `depth` has passed {@link SEARCH_MAX_BLOCK_DEPTH}. */
+function beyondDepthCap(depth: number): boolean {
+  return depth > SEARCH_MAX_BLOCK_DEPTH
+}
+
 /** Recursively collects readable text from an inline-content array. */
-function collectInline(items: unknown, out: string[]): void {
+function collectInline(items: unknown, out: string[], depth: number): void {
+  if (beyondDepthCap(depth)) return
   if (!Array.isArray(items)) return
   for (const item of items as RichInline[]) {
     // Inline arrays may contain plain strings or styled/link node objects.
@@ -116,7 +140,7 @@ function collectInline(items: unknown, out: string[]): void {
       out.push(item.text)
     }
     if (Array.isArray(item.content)) {
-      collectInline(item.content, out)
+      collectInline(item.content, out, depth + 1)
     }
   }
 }
@@ -125,15 +149,20 @@ function collectInline(items: unknown, out: string[]): void {
 interface RichBlock {
   type?: string
   content?: unknown
+  children?: unknown
   props?: Record<string, unknown>
 }
 
 /**
- * Emits readable text for one block, or '' when the block carries no readable
- * prose (formula/diagram/mindmap source, unknown types, the preservation
- * marker, or structurally empty blocks).
+ * Emits the readable text a block carries in its own `content`, applying the
+ * per-type policy. Contributes nothing for formula/diagram/mindmap source,
+ * unknown types, the preservation marker, or structurally empty blocks.
+ *
+ * This decides the policy for ONE level only; descending into nested blocks is
+ * {@link collectBlockText}'s job, so the policy is applied identically at
+ * every depth.
  */
-function collectBlockText(block: RichBlock, out: string[]): void {
+function collectOwnBlockText(block: RichBlock, out: string[], depth: number): void {
   const type = block.type
   if (typeof type !== 'string') return
 
@@ -145,7 +174,7 @@ function collectBlockText(block: RichBlock, out: string[]): void {
     case 'numberedListItem':
     case 'checkListItem':
     case 'callout':
-      collectInline(block.content, out)
+      collectInline(block.content, out, depth)
       return
     case 'codeBlock': {
       const text = typeof block.content === 'string' ? block.content : ''
@@ -155,6 +184,12 @@ function collectBlockText(block: RichBlock, out: string[]): void {
       return
     }
     case 'table': {
+      // A table keeps its text in its OWN structure — `content.rows[].cells[]`
+      // — not in a `children` array, so the cell walk below is the only way in.
+      // The stored cell shape (@blocknote/core 0.54 `TableCell`) is
+      // `{ type: 'tableCell', props, content: InlineContent[] }`; the plain
+      // string and bare-inline-array forms are the partial/insert shapes
+      // BlockNote also accepts, so all three are read.
       const rows = (block.content as { rows?: unknown[] } | undefined)?.rows
       if (!Array.isArray(rows)) return
       for (const row of rows) {
@@ -164,13 +199,13 @@ function collectBlockText(block: RichBlock, out: string[]): void {
           if (typeof cell === 'string') {
             out.push(cell)
           } else if (Array.isArray(cell)) {
-            collectInline(cell, out)
+            collectInline(cell, out, depth + 1)
           } else if (
             cell &&
             typeof cell === 'object' &&
             Array.isArray((cell as RichBlock).content)
           ) {
-            collectInline((cell as RichBlock).content, out)
+            collectInline((cell as RichBlock).content, out, depth + 1)
           }
         }
       }
@@ -180,6 +215,37 @@ function collectBlockText(block: RichBlock, out: string[]): void {
     default:
       return
   }
+}
+
+/** Descends into a block's child blocks: sub-lists and any other nesting. */
+function collectChildBlocks(children: unknown, out: string[], depth: number): void {
+  if (!Array.isArray(children)) return
+  for (const child of children as RichBlock[]) {
+    if (child && typeof child === 'object') {
+      collectBlockText(child, out, depth)
+    }
+  }
+}
+
+/**
+ * Emits readable text for one block AND everything nested inside it.
+ *
+ * The traversal deliberately mirrors the dashboard preview's
+ * `textFromBlocks` (`src/web/util/page-preview-text.ts:30-52`): a block
+ * contributes its own readable text, and the walk then continues into
+ * `children` and into a table's own cell structure. Before this, only
+ * top-level blocks were read, so a word typed inside a sub-list was shown on
+ * the dashboard card and could not be found by search — the same page
+ * disagreeing with itself.
+ *
+ * The preview applies no per-type policy (it must not leak a URL, so it reads
+ * a caption allowlist instead), which is why the per-type decision stays here
+ * in `collectOwnBlockText` rather than being folded into one uniform walk.
+ */
+function collectBlockText(block: RichBlock, out: string[], depth: number): void {
+  if (beyondDepthCap(depth)) return
+  collectOwnBlockText(block, out, depth)
+  collectChildBlocks(block.children, out, depth + 1)
 }
 
 /**
@@ -204,7 +270,7 @@ export function extractSearchableRich(storedContent: string): string {
   const chunks: string[] = []
   for (const block of blocks as RichBlock[]) {
     if (block && typeof block === 'object') {
-      collectBlockText(block, chunks)
+      collectBlockText(block, chunks, 0)
     }
   }
   return chunks.join(' ').replace(/\s+/g, ' ').trim().slice(0, SEARCH_EXTRACTION_MAX_CHARS)
