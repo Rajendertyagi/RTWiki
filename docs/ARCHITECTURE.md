@@ -68,9 +68,11 @@ Each layer has a single responsibility and communicates only with its adjacent l
   - `PATCH /api/pages/:id` — update page
   - `DELETE /api/pages/:id` — soft-delete page
   - `POST /api/pages/:id/move` — transactional hierarchy move (parent + sibling index) with authoritative reconciliation payload
-  - `POST /api/attachments` — upload an image (type decided from the bytes)
-  - `GET /api/attachments/:id` — serve an image by catalogue id
-  - `DELETE /api/attachments/:id` — remove an image
+  - `POST /api/attachments` — upload an image or a document (type decided from the bytes; see [ADR-013](adr/ADR-013-image-attachments.md) and [ADR-015](adr/ADR-015-document-attachments.md))
+  - `GET /api/attachments/:id` — serve an image by catalogue id. A **document** is served as a forced download: `Content-Disposition: attachment` plus a per-response `default-src 'none'; sandbox` policy, because a document is a program and inline rendering would execute it in RTWiki's own origin. Images carry no disposition and are drawn by the browser. See [ADR-015](adr/ADR-015-document-attachments.md).
+  - `GET /api/attachments/:id/view` — serve a document **inline**, so the browser draws it in a new tab. A separate route, so the download above stays the default and inline is opt-in per request. Same `default-src 'none'; sandbox` policy, applied to this response only. Owner-authorised; see [ADR-016](adr/ADR-016-inline-document-viewing.md), which states the residual same-origin risk.
+  - `GET /api/attachments/:id/text` — a document's extracted text, as JSON. Never markup, so document contents can never become a rendering surface.
+  - `DELETE /api/attachments/:id` — remove an image or document
   - `GET /api/pages/:id/attachments` — **not implemented.** Attachments are not yet associated with a page, so there is nothing to list per page. Tracked in [KNOWN_BUGS.md](KNOWN_BUGS.md)
   - `GET /api/search?q=...` — full-text search
   - `POST /api/backup/create` — create backup archive

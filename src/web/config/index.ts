@@ -307,6 +307,22 @@ export const UI_TEXT = {
   documentLabel: 'Document',
   documentUploadFailedTitle: 'Document not added',
   documentUploadFailed: 'That document could not be added.',
+  documentTooLarge: 'That document is larger than the 50 MB limit.',
+  /** The three ways to open an attached document. Visible text, not icon-only. */
+  documentViewTextLabel: 'View text',
+  documentViewLabel: 'View',
+  documentDownloadLabel: 'Download',
+  documentTextLoading: 'Reading the text…',
+  /**
+   * Said when a document yielded no text. A scanned PDF is the common case, and an
+   * empty box would read as a defect rather than as an answer.
+   */
+  documentNoText:
+    'No text could be read from this document. A scanned PDF has no text to read — use View or Download to see it.',
+  documentTextUnavailable: 'The text of this document could not be read right now.',
+  documentTextPanelLabel: 'Extracted document text',
+  documentUnnamedLabel: 'Attached document',
+  documentMissingLabel: 'This document attachment is no longer available.',
   // Right sidebar
   rightSidebarLabel: 'Page details',
   collapseSidebarLabel: 'Collapse sidebar',

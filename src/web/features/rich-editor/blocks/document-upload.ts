@@ -34,7 +34,7 @@ export async function uploadDocument(file: File): Promise<string> {
 
 async function postDocument(file: File): Promise<string> {
   if (file.size > PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES) {
-    throw new Error(UI_TEXT.imageTooLarge)
+    throw new Error(UI_TEXT.documentTooLarge)
   }
 
   const body = new FormData()
@@ -62,12 +62,18 @@ async function postDocument(file: File): Promise<string> {
   return url
 }
 
-/** Picks the message for a failed upload, from the server's reason code. */
+/**
+ * Picks the message for a failed upload, from the server's reason code.
+ *
+ * Only codes a document can actually produce are handled. `svg_not_supported` and
+ * `too_many_pixels` are image verdicts: a document is identified from a real
+ * container, so it is never refused for either. They were mapped here, which
+ * meant a user attaching a document could in principle have been told an image
+ * was too large. An unmapped code falls through to the generic document message.
+ */
 function messageForStatus(status: number, code: string | null): string {
-  if (code === 'svg_not_supported') return UI_TEXT.imageSvgNotSupported
-  if (code === 'too_many_pixels') return UI_TEXT.imageTooManyPixels
   if (code === 'unsupported_type') return UI_TEXT.attachmentUnsupportedType
-  if (status === 413) return UI_TEXT.imageTooLarge
+  if (status === 413) return UI_TEXT.documentTooLarge
   return UI_TEXT.documentUploadFailed
 }
 

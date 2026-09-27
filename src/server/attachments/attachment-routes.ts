@@ -19,7 +19,11 @@ import {
   normaliseOriginalName,
   streamAttachmentBytes
 } from './attachment-repository.js'
-import { contentDisposition, DOCUMENT_CONTENT_SECURITY_POLICY } from './content-disposition.js'
+import {
+  contentDisposition,
+  DOCUMENT_CONTENT_SECURITY_POLICY,
+  DOCUMENT_VIEW_CONTENT_SECURITY_POLICY
+} from './content-disposition.js'
 import { inspectDocumentUpload } from './document-detect.js'
 import { inspectImageUpload, pixelCount } from './image-detect.js'
 
@@ -75,6 +79,8 @@ interface AcceptedUpload {
  *
  *   - `POST   /api/attachments`        - upload an image or a document
  *   - `GET    /api/attachments/:id`    - serve it, addressed by catalogue id
+ *   - `GET    /api/attachments/:id/view` - serve a document inline, for the
+ *                                          browser to draw in a new tab
  *   - `GET    /api/attachments/:id/text` - its extracted text
  *   - `DELETE /api/attachments/:id`    - remove the bytes and the metadata
  *
@@ -84,14 +90,20 @@ interface AcceptedUpload {
  * serves what the *server* stored. Since ADR-014 there is no path at all, so a
  * traversal attempt has nothing to traverse.
  *
- * ## Why a document is never served inline
+ * ## Download and view are separate routes on purpose
  *
- * An image is bytes the browser will draw. A document is a program: a PDF can
- * carry JavaScript and an office file can carry macros. Served inline, either
- * executes in RTWiki's own origin. So a document response is always
- * `Content-Disposition: attachment`, which tells the browser to save rather than
- * render, and carries a per-response `default-src 'none'` policy as a second,
- * independent layer. See ADR-015.
+ * `GET /:id` is a forced download: a document is a program, so the default is
+ * `Content-Disposition: attachment` and a per-response `default-src 'none';
+ * sandbox` policy (ADR-015). `GET /:id/view` serves the same bytes inline, which
+ * the owner authorised on 2026-09-27 (ADR-016).
+ *
+ * They are separate routes rather than one route with a parameter so the default
+ * cannot become inline by accident, and so a test can assert the download
+ * disposition without also asserting the view one. In both, Content-Disposition
+ * is the control and the CSP is defence in depth.
+ *
+ * An image is unaffected by either: it is bytes the browser will draw, so it is
+ * served inline from the download route with no disposition at all.
  */
 /**
  * The context this route's own Hono instance carries.
@@ -220,6 +232,68 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
       // overwrite a header written here. See `DOCUMENT_CSP_KEY`.
       c.set(DOCUMENT_CSP_KEY, DOCUMENT_CONTENT_SECURITY_POLICY)
     }
+
+    return new Response(stream, { headers })
+  })
+
+  /**
+   * Serve a document **inline**, so the browser draws it in a new tab.
+   *
+   * A separate route from the download above, deliberately, so the two cannot be
+   * confused: the default stays a forced download and inline serving is opt-in per
+   * request. Authorised by the owner on 2026-09-27; see ADR-016, which supersedes
+   * ADR-015 §3 and states the residual same-origin risk in full.
+   *
+   * ## Content-Disposition is the control, not the CSP
+   *
+   * `inline` is what permits rendering. The policy narrows what the document may
+   * do once rendered; it is defence in depth, and it is not what makes the route
+   * safe. The policy is the same `default-src 'none'; sandbox` the download route
+   * sends, because it was measured that the viewer works under it — see
+   * `DOCUMENT_VIEW_CONTENT_SECURITY_POLICY` for the measurement and its controls.
+   */
+  routes.get('/:id/view', async (c) => {
+    if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+    const db = getDb()
+    const id = c.req.param('id')
+    const record = getAttachment(db, id)
+    if (!record) return c.json({ error: 'Not found' }, 404)
+
+    // Only a document may be rendered. An image is bytes the browser already
+    // draws inline from the download route, so this route has nothing to add for
+    // one, and refusing it keeps a single answer to "what can be rendered here".
+    if (record.kind !== 'document') return c.json({ error: 'Not a document' }, 400)
+    // A signature-less document has no servable bytes: what was stored is its text,
+    // because those bytes could never be identified as a document.
+    if (!isServableDocument(record.mimeType)) return c.json({ error: 'Not found' }, 404)
+
+    // Streamed, for the same reason and with the same chunking as the download
+    // route: an in-flight response holds one chunk, not the whole file.
+    const stream = streamAttachmentBytes(db, id)
+    if (!stream) return c.json({ error: 'Not found' }, 404)
+
+    // The type is the recorded one, decided from the bytes at upload. Nothing in
+    // this handler reads a client-supplied type, and nothing here can make an
+    // unverified file renderable: a renamed PDF is still `application/pdf`, and an
+    // unrecognised file never became a row.
+    const headers: Record<string, string> = {
+      'content-type': record.mimeType,
+      'x-content-type-options': 'nosniff',
+      'cache-control': 'private, no-cache',
+      etag: `"${record.id}"`,
+      'content-length': String(record.byteSize),
+      'content-disposition': contentDisposition(
+        'inline',
+        record.originalName,
+        acceptedDocumentFormatFor(record.mimeType)?.ext ?? 'bin'
+      )
+    }
+
+    // Requested through the context for the same reason as the download route: the
+    // app-wide `secureHeaders` middleware runs after this handler and would
+    // overwrite a header written here. Narrower than the app-wide policy, and
+    // applied to this response only — `app.ts` is not modified.
+    c.set(DOCUMENT_CSP_KEY, DOCUMENT_VIEW_CONTENT_SECURITY_POLICY)
 
     return new Response(stream, { headers })
   })

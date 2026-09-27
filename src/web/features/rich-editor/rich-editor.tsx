@@ -16,8 +16,8 @@ import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
 import { mapAutosaveStatus } from '../workspace/save-state.js'
-import { uploadImage } from './blocks/image-upload.js'
 import { LinkedPageContext, type LinkedPageContextValue } from './blocks/linked-page-block.js'
+import { uploadAttachment } from './blocks/upload-attachment.js'
 import {
   containUnknownBlocks,
   createDefaultDocument,
@@ -320,11 +320,22 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     {
       extensions: [spellcheckExtension],
       schema: rtwikiBlockSchema,
-      // BlockNote routes the file picker, paste and drop through this one hook,
-      // so images take a single code path. The returned URL is what gets stored
-      // in the block, which keeps the document canonical BlockNote JSON (ADR-004)
-      // with the attachment catalogue - not the file - as the source of truth.
-      uploadFile: uploadImage,
+      // BlockNote routes the file picker, paste and drop through this one hook.
+      // It dispatches on the browser's reported type purely to decide *which
+      // uploader's failure message* the user should see; the server identifies
+      // the file from its own bytes either way, so this cannot make an
+      // unacceptable file acceptable.
+      //
+      // It has to dispatch rather than call one uploader: a single `uploadImage`
+      // meant a dropped PDF was reported as "That image could not be added",
+      // which is both wrong and unactionable. Two uploaders remain - the request
+      // shape and the size check are shared by `uploadDocument` - so there is no
+      // second request path to keep in step.
+      //
+      // The returned URL is what gets stored in the block, which keeps the
+      // document canonical BlockNote JSON (ADR-004) with the attachment
+      // catalogue - not the file - as the source of truth.
+      uploadFile: uploadAttachment,
       initialContent: initialDocument as unknown as RTWikiPartialBlock[],
       dictionary: {
         ...en,

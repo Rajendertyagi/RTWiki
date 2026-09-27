@@ -295,15 +295,23 @@ async function main(): Promise<void> {
     console.log('=== documents, through the COMPILED server ===')
     const pdf = await upload(REAL_PDF, 'lecture.pdf', 'application/pdf')
     check('PDF accepted', pdf.status === 201, `status ${pdf.status}`)
-    const pdfAttachment = pdf.body?.attachment as Record<string, unknown> | undefined
+    // Declared once, near the upload that produced it, and used by every later
+    // block. An earlier version declared it a second time beside the view checks,
+    // which Biome rejected as a redeclaration - and removing the first one instead
+    // broke a later reference. One declaration, at the source.
+    const pdfAttachment = pdf.body?.attachment as Record<string, unknown>
     check(
       'stored as application/pdf',
       pdfAttachment?.mimeType === 'application/pdf',
       String(pdfAttachment?.mimeType)
     )
-    check('recorded as a document', pdfAttachment?.kind === 'document', String(pdfAttachment?.kind))
+    check(
+      'recorded as a document',
+      pdf.body?.attachment?.kind === 'document',
+      String(pdf.body?.attachment?.kind)
+    )
 
-    const pdfRes = await fetch(`${BASE}${String(pdfAttachment?.url)}`)
+    const pdfRes = await fetch(`${BASE}${String(pdf.body?.attachment?.url)}`)
     const pdfBytes = new Uint8Array(await pdfRes.arrayBuffer())
     check('PDF served', pdfRes.status === 200, `status ${pdfRes.status}`)
     check(
@@ -340,6 +348,54 @@ async function main(): Promise<void> {
       (docxRes.headers.get('content-security-policy') ?? '').includes("default-src 'none'")
     )
 
+    /**
+     * The inline view route, over HTTP against the compiled executable.
+     *
+     * Header assertions only. Whether the PDF actually *renders* cannot be
+     * answered from here — that needs a real browser, and the browser suite
+     * (`tests/browser/documents.pwspec.ts`) is where that observation is recorded.
+     * Claiming a render from a header check would be exactly the kind of inference
+     * this repository has been bitten by.
+     */
+    console.log('\n=== the inline view route ===')
+    const pdfId = String(pdf.body?.attachment?.id)
+    const viewRes = await fetch(`${BASE}/api/attachments/${pdfId}/view`)
+    check('view served', viewRes.status === 200, `status ${viewRes.status}`)
+    check(
+      'view is inline, not a download',
+      (viewRes.headers.get('content-disposition') ?? '').startsWith('inline;'),
+      viewRes.headers.get('content-disposition') ?? '(none)'
+    )
+    check(
+      'view keeps the byte-detected type',
+      (viewRes.headers.get('content-type') ?? '').includes('application/pdf'),
+      viewRes.headers.get('content-type') ?? '(none)'
+    )
+    check('view is nosniff', viewRes.headers.get('x-content-type-options') === 'nosniff')
+    const viewCsp = viewRes.headers.get('content-security-policy') ?? ''
+    check(
+      "view policy blocks the document's own script",
+      viewCsp.includes("default-src 'none'"),
+      viewCsp
+    )
+    check(
+      "view policy does not inherit the app's script-src",
+      !viewCsp.includes('script-src'),
+      viewCsp
+    )
+    // `sandbox` was expected to stop Chrome rendering the PDF and does not - measured
+    // in real Chrome, with controls, and recorded in ADR-016. The stricter policy
+    // turned out to be free, so both directives are asserted here.
+    check('view keeps the full sandbox', viewCsp.includes('sandbox'), viewCsp)
+    // The download route must be untouched by the view route's existence.
+    const stillDownload = await fetch(`${BASE}/api/attachments/${pdfId}`)
+    check(
+      'download is still a forced download',
+      (stillDownload.headers.get('content-disposition') ?? '').startsWith('attachment;')
+    )
+    const stillCsp = stillDownload.headers.get('content-security-policy') ?? ''
+    check('download still sandboxes', stillCsp.includes('sandbox'), stillCsp)
+
     console.log('\n=== images still work, and stay inline ===')
     const png = await upload(REAL_PNG, 'diagram.png', 'image/png')
     check('PNG accepted', png.status === 201, `status ${png.status}`)
@@ -355,6 +411,14 @@ async function main(): Promise<void> {
     check(
       'PNG keeps its image type',
       (pngRes.headers.get('content-type') ?? '').startsWith('image/png')
+    )
+    // An image is already drawn inline by the download route, so the view route
+    // refuses it. One answer to "what can be rendered here", not two.
+    const imageView = await fetch(`${BASE}${String(pngAttachment?.url)}/view`)
+    check(
+      'an image is refused by the view route',
+      imageView.status === 400,
+      `status ${imageView.status}`
     )
 
     console.log('\n=== type confusion: a PDF renamed .txt ===')

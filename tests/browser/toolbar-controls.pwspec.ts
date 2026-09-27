@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { clickControl } from './utils/toolbar.js'
 
 /**
  * Persistent Rich Document toolbar: every implemented control is exercised
@@ -34,39 +35,10 @@ const toolbarButton = (page: Page, label: string) =>
     .getByRole('button', { name: label, exact: true })
     .or(page.getByRole('toolbar').getByLabel(label, { exact: true }))
 
-/**
- * Clicks a toolbar control wherever it currently lives.
- *
- * The bar holds 28 controls and its own row is about 920px, so the tail of it -
- * code block, quote, the callouts and Clear formatting - does not fit and moves
- * into a trailing "more" menu. That is the designed behaviour, measured rather
- * than assumed: opening the menu shows all eight, still labelled.
- *
- * These tests predate that change and looked for every control on the bar
- * itself, so four of them failed on a control that had not gone missing - it had
- * moved. Rather than pick a side, this helper uses the real arrangement and the
- * assertions stay about *what the control does*, not where it is filed.
- */
-async function useControl(page: Page, testId: string): Promise<void> {
-  // Scope the on-bar lookup to the toolbar. An unscoped `getByTestId` also
-  // matches a menu item that is portalled outside the toolbar — and, worse,
-  // matches one that is still present while the menu animates closed. Both
-  // mistakes end in a click on a detached element.
-  const onBar = page.getByRole('toolbar').getByTestId(testId)
-  if ((await onBar.count()) > 0) {
-    await onBar.click()
-    return
-  }
-  const more = page.getByTestId('toolbar-more')
-  await more.click()
-  const inMenu = page.getByTestId(testId)
-  await inMenu.waitFor({ state: 'visible', timeout: 5_000 })
-  await inMenu.click()
-  // The menu closes itself when one of its controls is used, so wait for that
-  // to settle. Without this, the next helper call can find the control in the
-  // DOM during the dismissal and click it as it detaches.
-  await expect(more).toHaveAttribute('aria-expanded', 'false')
-}
+// `clickControl` lives in `utils/toolbar.ts` because the document specs need it
+// too. It was local here first, and the Document control pushed `insert-image`
+// into the overflow menu — which is exactly the failure a second copy of this
+// helper invites.
 
 test.describe('Rich Note toolbar controls', () => {
   test.beforeAll(async ({ request }) => {
@@ -93,7 +65,7 @@ test.describe('Rich Note toolbar controls', () => {
     await expect(page.locator(`${EDITABLE} strong`)).toBeVisible()
     await expect(bold).toHaveAttribute('aria-pressed', 'true')
 
-    await useControl(page, 'clear-formatting')
+    await clickControl(page, 'clear-formatting')
     await expect(page.locator(`${EDITABLE} strong`)).toHaveCount(0)
   })
 
@@ -164,18 +136,18 @@ test.describe('Rich Note toolbar controls', () => {
   test('quote and code blocks apply via their toolbar controls', async ({ page }) => {
     await newRichNote(page)
     // Every insertion control is a direct toolbar button (no Insert dropdown).
-    await useControl(page, 'insert-quote')
+    await clickControl(page, 'insert-quote')
     await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
-    await useControl(page, 'insert-code-block')
+    await clickControl(page, 'insert-code-block')
     await expect(page.locator(`${EDITABLE} pre`).first()).toBeVisible()
   })
 
   test('table insertion creates a table via its toolbar control', async ({ page }) => {
     await newRichNote(page)
-    // `useControl`, not a bare lookup: the bar is one control wider now that
+    // `clickControl`, not a bare lookup: the bar is one control wider now that
     // image insertion is on it, so at this width the table control can legitimately
     // sit in the "more" panel. The assertion is unchanged - a table appears.
-    await useControl(page, 'insert-table')
+    await clickControl(page, 'insert-table')
     await expect(page.locator(`${EDITABLE} table`).first()).toBeVisible()
     await expect(page.locator(`${EDITABLE} table td`).first()).toBeVisible()
   })
@@ -194,7 +166,8 @@ test.describe('Rich Note toolbar controls', () => {
       'insert-table',
       'insert-quote',
       'insert-code-block',
-      'insert-image'
+      'insert-image',
+      'insert-document'
     ]
     // Every control must exist and be usable - on the bar, or in the more menu
     // when the row has run out of width. Asserting "on the bar" is what these
@@ -409,7 +382,7 @@ test.describe('Rich Note toolbar controls', () => {
     }
     await expect(page.getByTestId('insert-menu-button')).toHaveCount(0)
     // Narrow screens scroll the row; controls stay usable.
-    await useControl(page, 'insert-quote')
+    await clickControl(page, 'insert-quote')
     await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
   })
 

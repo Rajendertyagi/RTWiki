@@ -1,4 +1,6 @@
 import { UI_TEXT } from '../../config/index.js'
+import { pickDocument } from './blocks/document-picker.js'
+import { uploadDocument } from './blocks/document-upload.js'
 import { pickImage } from './blocks/image-picker.js'
 import { uploadImage } from './blocks/image-upload.js'
 import type { AnyRichEditor, RTWikiPartialBlock } from './schema.js'
@@ -193,6 +195,7 @@ export interface InsertEntry {
     | 'mindMap'
     | 'linkedPage'
     | 'image'
+    | 'document'
     | 'table'
     | 'code'
     | 'quote'
@@ -329,6 +332,64 @@ function imageEntry(): InsertEntry {
   }
 }
 
+/**
+ * Document insertion from the Insert menu.
+ *
+ * Mirrors `imageEntry` deliberately, down to the shape of the promise chain: the
+ * cursor anchor is captured *before* the dialog opens, and the promise is not
+ * awaited, because the dialog outlives the call stack and the anchor is not
+ * dependable once the OS window has taken focus.
+ *
+ * ## Why RTWiki's own `documentBlock`, not the built-in `file`
+ *
+ * Reusing the built-in was the right call when the only requirement was that a
+ * document be *attached* and visible. It no longer is. The built-in renders the
+ * file's name inside a `div` rather than an anchor, so the attachment is not
+ * clickable at all, and it has nowhere to host the three actions a document now
+ * offers. A custom block that must be registered in the schema, or it is silently
+ * rewritten to a JSON `codeBlock` on every load.
+ */
+function documentEntry(): InsertEntry {
+  return {
+    key: 'insert-document',
+    label: UI_TEXT.documentLabel,
+    icon: 'document',
+    run: 'blocks',
+    insert: (editor) => {
+      const anchor = editor.getTextCursorPosition().block
+      const replaceAnchor = isEmptyParagraph(anchor)
+
+      void pickDocument()
+        // The name travels alongside the URL so the card shows the file the user
+        // chose. It is taken from the picked `File`, not from the server response,
+        // so `uploadDocument` keeps the single-value shape it shares with
+        // `uploadImage`.
+        .then((file) => (file ? uploadDocument(file).then((url) => ({ file, url })) : null))
+        .then((picked) => {
+          if (!picked) return
+          // RTWiki's own `documentBlock`, not BlockNote's built-in `file`: the
+          // built-in renders the name in a `div` rather than an anchor, so the
+          // attachment would not be clickable, and it has nowhere to put the three
+          // actions a document now offers.
+          const block = {
+            type: 'documentBlock',
+            props: { url: picked.url, name: picked.file.name }
+          } as never
+          if (replaceAnchor) editor.updateBlock(anchor, block)
+          else editor.insertBlocks([block], anchor, 'after')
+          editor.focus()
+        })
+        .catch(() => {
+          // The message is already on screen - uploadDocument owns it. All that
+          // is left is to hand the caret back, so the user can carry on typing
+          // where they left off. A cancelled dialog never reaches here: the
+          // picker resolves null instead of rejecting.
+          editor.focus()
+        })
+    }
+  }
+}
+
 /** Entries that exist regardless of optional blocks (always-available). */
 function baseEntries(editor: AnyEditor): InsertEntry[] {
   const entries: InsertEntry[] = [formulaEntry()]
@@ -347,6 +408,9 @@ function baseEntries(editor: AnyEditor): InsertEntry[] {
   }
   if ('image' in editor.schema.blockSchema) {
     entries.push(imageEntry())
+  }
+  if ('documentBlock' in editor.schema.blockSchema) {
+    entries.push(documentEntry())
   }
   return entries
 }

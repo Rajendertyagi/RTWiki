@@ -2,6 +2,7 @@ import { type BlockNoteEditor, BlockNoteSchema, type PartialBlock } from '@block
 import { createReactInlineMathSpec, createReactMathBlockSpec } from '@blocknote/math-block'
 import { createReactCalloutSpec } from './blocks/callout.js'
 import { createReactDiagramSpec } from './blocks/diagram.js'
+import { createReactDocumentSpec } from './blocks/document-block.js'
 import { createReactLinkedPageSpec } from './blocks/linked-page-block.js'
 import { createReactMindMapSpec } from './blocks/mindmap.js'
 
@@ -15,6 +16,11 @@ import { createReactMindMapSpec } from './blocks/mindmap.js'
  *   custom attributes and no migration.
  * - `callout`: official custom-block API with a stored `variant` prop and
  *   editable inline rich text.
+ * - `documentBlock`: an attached document, with three ways to open it — view the
+ *   text RTWiki extracted, view the file in a tab, or download it. It exists
+ *   because BlockNote's built-in `file` block renders the name in a `div` rather
+ *   than an anchor, so an attached document was not clickable at all. See ADR-016
+ *   for why the view route is separate and what it costs.
  *
  * Diagram, mind-map and linked-page blocks join this schema in their own
  * commits.
@@ -25,7 +31,8 @@ export const rtwikiBlockSchema = BlockNoteSchema.create().extend({
     callout: createReactCalloutSpec(),
     diagram: createReactDiagramSpec(),
     mindMap: createReactMindMapSpec(),
-    linkedPage: createReactLinkedPageSpec()
+    linkedPage: createReactLinkedPageSpec(),
+    documentBlock: createReactDocumentSpec()
   },
   inlineContentSpecs: {
     math: createReactInlineMathSpec()

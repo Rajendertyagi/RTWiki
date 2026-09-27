@@ -1,5 +1,5 @@
 /**
- * The policy a document response is served under.
+ * The policy a **downloaded** document is served under.
  *
  * `default-src 'none'` denies every fetch directive, so nothing in a rendered
  * document could load or execute; `sandbox` removes the same powers again at the
@@ -11,6 +11,48 @@
  * document is not the application and must not inherit its permissions.
  */
 export const DOCUMENT_CONTENT_SECURITY_POLICY = "default-src 'none'; sandbox"
+
+/**
+ * The policy a document served **inline** is served under.
+ *
+ * ## Measured, and the measurement contradicted the obvious assumption
+ *
+ * The expectation going in was that `sandbox` would have to be dropped, because
+ * Chrome's PDF viewer is a plugin document and a sandboxed response is supposed to
+ * refuse one. **That expectation was wrong.** Measured in real Chrome against the
+ * real route, with the response header rewritten between runs and a control case
+ * proving the rewrite could change the outcome at all:
+ *
+ * | Response | Result in Chrome |
+ * |---|---|
+ * | `inline` + `default-src 'none'` | PDF rendered, page visible |
+ * | `inline` + `default-src 'none'; sandbox` | **PDF rendered identically** |
+ * | `attachment` (control) | downloaded; no viewer |
+ * | `text/html` (control) | rendered as markup, not a PDF |
+ *
+ * Screenshots of the two `default-src` variants were byte-identical, and both
+ * showed the document's own text. The controls are what make this a result rather
+ * than an assumption: without them, "both rendered" would equally have meant "the
+ * harness cannot tell them apart".
+ *
+ * ## So this is the same policy as the download
+ *
+ * The stricter of the two options was available at no cost, so it was taken. The
+ * inline route therefore carries the identical `default-src 'none'; sandbox` as
+ * the download route, and the two constants are deliberately separate names for
+ * the same value so that a future measurement showing they must diverge can change
+ * one without silently changing the other.
+ *
+ * ## What it still does not do
+ *
+ * It does not make a memory-safety bug in the viewer's renderer impossible. A
+ * crafted PDF that exploits one can run script in the same origin as the user's
+ * notes. `sandbox` removes the document's own powers; it cannot undo native memory
+ * corruption. See ADR-016's residual-risk section, which is the honest statement
+ * of what was accepted, and which also records that Content-Disposition — not this
+ * policy — is the control that matters.
+ */
+export const DOCUMENT_VIEW_CONTENT_SECURITY_POLICY = DOCUMENT_CONTENT_SECURITY_POLICY
 
 /**
  * How a document's name is put into a `Content-Disposition` header.

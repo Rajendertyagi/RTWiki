@@ -155,6 +155,8 @@ class MemoryLogger implements Logger {
 let tempDir: string
 let db: ReturnType<typeof initDatabase>
 let app: Hono
+/** The route table under test, mounted at its real path by `app`. */
+const ROUTE = '/api/attachments'
 
 async function upload(
   bytes: Uint8Array,
@@ -280,7 +282,166 @@ describe('document upload', () => {
   })
 })
 
-describe('document serving is never inline', () => {
+/**
+ * The inline view route, authorised by the owner on 2026-09-27 (ADR-016).
+ *
+ * The download route above is unchanged and still `attachment`; these tests exist
+ * so that reversal is a recorded decision with a boundary, not a drift. Each test
+ * below names which layer it protects, because the whole point of ADR-016 is that
+ * Content-Disposition is the control and the CSP is defence in depth.
+ */
+describe('the inline view route serves a document for the browser to draw', () => {
+  it("marks a PDF inline and keeps a policy that blocks the document's own script", async () => {
+    const created = (await (await upload(REAL_PDF, 'lecture.pdf', 'application/pdf')).json()) as {
+      attachment: { id: string; url: string }
+    }
+    const response = await app.request(viewUrl(created.attachment.id))
+
+    expect(response.status).toBe(200)
+    // The control: the browser is permitted to render it, in place.
+    expect(response.headers.get('content-disposition')).toMatch(/^inline;/)
+    // The name is carried, and encoded by the same helper the download uses, so a
+    // hostile filename still cannot end the header.
+    expect(response.headers.get('content-disposition')).toContain("filename*=UTF-8''lecture.pdf")
+    // Defence in depth, and the *full* policy: `default-src 'none'` stops a
+    // document's own script, and `sandbox` removes its powers again.
+    //
+    // `sandbox` was expected to have to be dropped, on the theory that Chrome's PDF
+    // viewer is a plugin document a sandboxed response refuses. That was measured
+    // and it is **wrong** — the PDF renders identically under both. The stricter
+    // policy was therefore free, and is asserted here so a future change that
+    // weakens it to fix an imagined problem is caught.
+    const csp = response.headers.get('content-security-policy') ?? ''
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).toContain('sandbox')
+    expect(csp).not.toContain('script-src')
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+
+    // The bytes are the same ones the download route serves.
+    const received = new Uint8Array(await response.arrayBuffer())
+    expect(received.byteLength).toBe(REAL_PDF.byteLength)
+    expect(received.every((byte, index) => byte === REAL_PDF[index])).toBe(true)
+  })
+
+  it('serves the recorded, byte-detected type and never a client-supplied one', async () => {
+    const created = (await (await upload(REAL_PDF, 'disguised.txt', 'text/plain')).json()) as {
+      attachment: { id: string; mimeType: string; url: string }
+    }
+    // Stored as a PDF, because the bytes said so and the name was ignored.
+    expect(created.attachment.mimeType).toBe('application/pdf')
+
+    // Every way a client might try to talk the route into another type.
+    for (const attempt of ['', '?type=text/html', '?mime=text/html', '?contentType=text/html']) {
+      const response = await app.request(`${viewUrl(created.attachment.id)}${attempt}`, {
+        headers: { Accept: 'text/html', 'Content-Type': 'text/html' }
+      })
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toContain('application/pdf')
+      expect(response.headers.get('content-type')).not.toContain('text/html')
+    }
+  })
+
+  it('does not touch the app-wide policy', async () => {
+    const created = (await (await upload(REAL_PDF, 'app-wide.pdf', 'application/pdf')).json()) as {
+      attachment: { id: string }
+    }
+    // The same middleware arrangement `createApp` uses: override first,
+    // `secureHeaders` second, so Hono unwinds the override afterwards.
+    const mounted = new Hono<{ Variables: { [DOCUMENT_CSP_KEY]?: string } }>()
+    mounted.use('*', async (c, next) => {
+      await next()
+      const override = c.get(DOCUMENT_CSP_KEY)
+      if (typeof override === 'string') c.header('Content-Security-Policy', override)
+    })
+    mounted.use('*', secureHeaders({ contentSecurityPolicy: APP_CONTENT_SECURITY_POLICY }))
+    mounted.route(
+      '/api/attachments',
+      createAttachmentRoutes({ getDb: () => db, logger: null as unknown as Logger })
+    )
+
+    const viewed = await mounted.request(viewUrl(created.attachment.id))
+    // The view response carries its own policy, applied per response. It is the same
+    // value the download route sends, and it is neither the app-wide policy nor a
+    // widened version of it.
+    expect(viewed.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+
+    // And an ordinary page still gets the app-wide policy, untouched. This is the
+    // half that matters: widening the app-wide CSP to make the view work was
+    // explicitly rejected, and this is what proves it was not done.
+    const root = await mounted.request('/')
+    expect(root.headers.get('content-security-policy')).toContain("script-src 'self'")
+    expect(root.headers.get('content-security-policy')).toContain("default-src 'self'")
+  })
+
+  it('leaves the download route exactly as it was', async () => {
+    const created = (await (await upload(REAL_PDF, 'unchanged.pdf', 'application/pdf')).json()) as {
+      attachment: { id: string; url: string }
+    }
+    const download = await app.request(created.attachment.url)
+    expect(download.status).toBe(200)
+    // Still a forced download, with the full sandbox. The view route is additive.
+    expect(download.headers.get('content-disposition')).toMatch(/^attachment;/)
+    const csp = download.headers.get('content-security-policy') ?? ''
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).toContain('sandbox')
+    expect(download.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
+  it('refuses to render an image, which is already drawn by the download route', async () => {
+    const created = (await (await upload(REAL_PNG, 'p.png', 'image/png')).json()) as {
+      attachment: { id: string }
+    }
+    // One answer to "what can be rendered here", rather than two routes that do the
+    // same job for images.
+    expect((await app.request(viewUrl(created.attachment.id))).status).toBe(400)
+  })
+
+  it('will not render a signature-less upload, whose bytes mean nothing alone', async () => {
+    const created = (await (await upload(enc('some notes'), 'n.txt', 'text/plain')).json()) as {
+      attachment: { id: string }
+    }
+    expect((await app.request(viewUrl(created.attachment.id))).status).toBe(404)
+    // The text is still reachable, which is the point of that policy.
+    const text = await app.request(`/api/attachments/${created.attachment.id}/text`)
+    expect(text.status).toBe(200)
+  })
+
+  it('404s an unknown id rather than revealing whether it exists', async () => {
+    const response = await app.request(viewUrl('00000000-0000-4000-8000-000000000000'))
+    expect(response.status).toBe(404)
+  })
+
+  it('carries no filename in the path, so there is nothing to traverse', async () => {
+    // Addressing is by id everywhere. This asserts the route does not grow a
+    // filename-addressed sibling, which is the shape a traversal attempt needs.
+    const response = await app.request(`${ROUTE}/..%2F..%2Fetc%2Fpasswd/view`)
+    expect([400, 404]).toContain(response.status)
+  })
+
+  it('refuses a DOCX view with a policy, even though no browser draws it', async () => {
+    // Office formats have no mainstream browser renderer, so View on one will
+    // download it or show source. The route still serves it rather than pretending
+    // otherwise: refusing here would be RTWiki second-guessing the browser, and
+    // Download and View text are on the card for exactly this case.
+    const created = (await (await upload(REAL_DOCX, 'slides.docx', DOCX_MIME)).json()) as {
+      attachment: { id: string }
+    }
+    const response = await app.request(viewUrl(created.attachment.id))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toMatch(/^inline;/)
+    expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+  })
+})
+
+/** The DOCX media type, named once so the test and the type cannot drift. */
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+/** The view route for an id, named once because eight tests build it. */
+function viewUrl(id: string): string {
+  return `${ROUTE}/${id}/view`
+}
+
+describe('document serving is never inline on the download route', () => {
   it('marks a PDF as a download and blocks execution if it is rendered anyway', async () => {
     const created = (await (await upload(REAL_PDF, 'lecture.pdf', 'application/pdf')).json()) as {
       attachment: { url: string }

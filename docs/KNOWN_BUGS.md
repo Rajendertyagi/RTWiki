@@ -12,8 +12,10 @@ with its own render state, and each can be edited, moved up or down, or removed.
 see [ARCHITECTURE.md](ARCHITECTURE.md) for why, and for the fact that drag-to-reorder is *not*
 included.
 
-**Likewise for documents:** the whole backend exists, is tested, and **cannot be reached from the
-interface** — there is no control that attaches one. See item 8.
+**Likewise for documents:** the backend exists, is tested, and is now reachable - a Document control sits
+beside Image on the Rich Note toolbar. What is still missing is *viewing*: a document downloads rather
+than opening in a tab, and that is a deliberate security decision rather than unfinished work. See
+item 7.
 
 ---
 
@@ -103,7 +105,7 @@ images still in use elsewhere.
 document, plus a "referenced by" check before reclaiming. This needs a deliberate policy decision
 (age threshold, and what "referenced" means for a note in the recycle bin) rather than a default.
 
-### 7. Documents are stored and searchable, but cannot be previewed in the app
+### 7. Documents are attached, searchable, and viewable in place
 
 **Resolved for storage; preview remains open.** [R-024](PRODUCT_REQUIREMENTS.md) requires attaching
 "images, PDFs, and documents", and [AC-031](ACCEPTANCE_CRITERIA.md) names DOCX, ODT, TXT and MD. All of
@@ -111,36 +113,76 @@ those are now accepted, stored in the database beside the images, and their text
 search index — so a PDF you imported becomes findable by what is in it. See
 [ADR-015](adr/ADR-015-document-attachments.md).
 
-**What is still missing:** a document downloads rather than opening in a tab. That is deliberate rather
-than unfinished — a document is a program, and serving one inline means executing it in RTWiki's own
-origin — so the download is protected twice, by `Content-Disposition: attachment` and by a per-response
-`default-src 'none'` policy. Two known gaps remain inside that: **legacy binary `.doc`/`.xls` are
-refused** (they are OLE compound files this parser does not handle; AC-031 names DOCX and ODT, not
-DOC), and **a scanned PDF yields no searchable text**, because it has no text layer and there is no OCR.
+**Attaching is now reachable from the editor.** A Document control sits beside Image on the Rich Note
+toolbar and in the slash menu, opens a picker, and inserts a card carrying the file's own name. Drop and
+paste work too. This entry previously recorded the opposite — that the whole document half of the
+feature was unreachable — and that part is now wrong and has been corrected.
 
-**Next step:** an inline preview, if it is wanted at all, would reuse the sandboxed-iframe treatment
-[ADR-007](adr/ADR-007-sandboxed-custom-content.md) gives custom content. That is a separate decision with
-its own threat model, not an allowlist edit.
+**Viewing is now built, on a separate route.** The card offers three actions: **View text** (the text
+RTWiki already extracted, rendered in the app), **View** (opens in a new tab, the browser draws it),
+and **Download** (unchanged). The owner authorised inline serving on 2026-09-27; see
+[ADR-016](adr/ADR-016-inline-document-viewing.md), which supersedes ADR-015 §3 and records the
+residual same-origin risk plainly.
 
-### 8. There is no way to attach a document from the application
+The download route is untouched and still a forced download. Inline is opt-in per click, and the card
+embeds nothing — a browser test asserts there is no `iframe`, `embed` or `object` in it, so merely
+opening a note never renders a file.
 
-**Impact: high — the feature cannot be reached by a user.** Document upload works at every layer
-below the toolbar: the endpoint accepts the formats, the parser extracts text, the bytes are stored
-in the database, the search index picks the text up, and the download is protected. None of it is
-reachable. `uploadDocument` in
-`src/web/features/rich-editor/blocks/document-upload.ts` is exported and **imported nowhere** — it has
-no caller, no toolbar entry, and no menu item. (Measured: a repository-wide search for the symbol
-returns only its own definition.)
+**Measured, and it contradicted the obvious assumption:** `sandbox` was expected to block Chrome's PDF
+viewer, on the theory that the viewer is a plugin document a sandboxed response refuses. **It does
+not.** The PDF rendered identically with and without it, byte-for-byte identical screenshots, and the
+stricter policy turned out to be free. Had the plausible-sounding inference been trusted, `sandbox`
+would have been dropped from the inline route for no reason.
 
-So [R-024](PRODUCT_REQUIREMENTS.md)'s "images, PDFs, and documents" is satisfied for the API and not
-for the product. A user cannot attach a PDF today.
+**Two gaps remain, and neither is RTWiki's policy to fix:**
 
-**Next step:** add the insert entry beside the Image one, declaring its toolbar run through
-`INSERT_RUNS` rather than by adding a key to a list — the exact trap recorded under
-*The toolbar silently hid a newly added insert control* above, which is why the declaration
-mechanism is the thing to reuse here. Its `fileBlockAccept` list will collide with the `file` block's
-`*/*` in the way described under *BlockNote picks the file block, not the image block*, so the schema
-ordering has to be checked rather than assumed.
+- **Office formats will not render in a browser.** `DOCX`, `XLSX`, `PPTX` and `ODT` have no
+  mainstream browser renderer, so **View** on one downloads it or shows source. That is the browser's
+  behaviour, not a restriction RTWiki imposes, and it is why Download and View text are on the card.
+- **A scanned PDF has no text layer**, so there is no OCR and **View text** says so rather than showing
+  an empty box. **View** still works on a scanned PDF, because the browser reads the image.
+
+**Also still open:** **legacy binary `.doc`/`.xls` are refused** — OLE compound files this parser does
+not handle. AC-031 names DOCX and ODT, not DOC.
+
+### A document could be attached, and the user was told it was an image
+
+**The kind of failure that reads as "the feature is broken" and is actually two mistakes.** The document
+picker and uploader existed and were complete, but were **imported nowhere** — no toolbar control, no
+menu item, no caller at all. A user could not attach a document, while the API behind it was fully
+working and tested.
+
+Wiring it up exposed a second defect that had been invisible precisely because nothing called the code:
+a **dropped or pasted PDF was reported as an image failure** — "That image could not be added. Try a PNG,
+JPEG, GIF…". BlockNote routes paste, drop and its own picker through a *single* `uploadFile` hook with no
+per-block routing, and that hook pointed straight at the image uploader. So a document was not merely
+rejected on two of the three routes; it was rejected with wording that named no format which would have
+worked, and there was no way for a user to tell a refused document from a refused image.
+
+A third defect sat in the same function, in the path the toolbar uses: an oversized **document** was
+refused with the *image* size message, and the failure mapper handled two image-only reason codes
+(`svg_not_supported`, `too_many_pixels`) that a document can never produce — a document is identified
+from a real container, so it is never refused for either.
+
+**Fixed** by adding a Document insert entry beside Image, declaring its run through `INSERT_RUNS` rather
+than by naming it in a toolbar list — the exact trap recorded under *The toolbar silently hid a newly
+added insert control*, and reusing the declaration mechanism is what made it a non-issue. The upload hook
+now dispatches to the uploader that owns the right *message*; it does not decide acceptance, which stays
+with the server reading the bytes. A new `documentTooLarge` message was added, and the image-only
+branches removed.
+
+**Two traps hit while doing it, both recorded here because both would recur:**
+
+- **The `file` block is not a link.** BlockNote's built-in `file` block renders a card whose name is a
+  `div`, not an anchor, so a document is attached and visible but not clickable. Reusing it was still the
+  right call — it is already in the schema, and a custom block would have to be registered or it is
+  silently rewritten to a JSON `codeBlock` on every load — but "attached" and "viewable" are different
+  things, and only the first was built.
+- **A new control pushes an existing one off the bar.** Adding Document overflowed the row and moved
+  `insert-image` into the "more" menu, which failed a test asserting the image control was on the bar.
+  The helper that clicks a control wherever it lives is now shared in `tests/browser/utils/toolbar.ts`
+  rather than duplicated, and it is named `clickControl` because Biome's `useHookAtTopLevel` rule treats
+  a `use`-prefixed name in a `.ts` spec as a React hook and fails the lint gate.
 
 ## Recently fixed
 

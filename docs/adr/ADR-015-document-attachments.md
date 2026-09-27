@@ -51,6 +51,22 @@ This is deliberately stricter than the reference implementation, which serves PD
 
 Images are unaffected and remain served inline, because an image is not a program.
 
+**The editor card carries no link, and that is part of this decision.** A document is inserted as
+BlockNote's built-in `file` block, which renders the file's name inside a `div` — not an anchor. So
+there is no route from a note to an inline render, and the forced download is not merely the default
+that a future change could quietly reverse. A browser test asserts the card contains no `a`, `iframe`,
+`embed` or `object`, because BlockNote owns the card's internals and an upgrade could turn it into a
+link without anything in this repository changing.
+
+**Viewing was requested and is now built**, on a separate route, by owner decision on 2026-09-27.
+See [ADR-016](ADR-016-inline-document-viewing.md), which supersedes this section. In short: this rule
+still governs `GET /api/attachments/:id`, which remains a forced download; `GET
+/api/attachments/:id/view` serves the same bytes inline behind its own policy, and the default was
+never relaxed.
+
+The reasoning below is not withdrawn. It is why the two routes are separate, why the download route
+keeps `sandbox`, and why the card is not a link that renders anything on its own.
+
 ### 4. The parser is given the format as a hint, and this is not an optimisation
 
 `officeparser` is asked to parse with an explicit `fileType` hint, taken from RTWiki's own `file-type` detection.
