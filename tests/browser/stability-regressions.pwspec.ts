@@ -1,6 +1,7 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import { UI_TEXT } from '../../src/web/config/index.js'
 import { purgeUntitledPages } from './utils/cleanup.js'
+import { openPageViaFinder } from './utils/open-page.js'
 import { waitForRow } from './utils/row-visibility.js'
 import { railHome } from './utils/shell.js'
 
@@ -184,14 +185,18 @@ function nextSave(page: Page): {
 }
 
 async function openPageByRow(page: Page, title: string): Promise<void> {
-  // Find the page ID via API, then wait for the row to materialize.
-  const res = await page.evaluate(async (searchTitle: string) => {
-    const r = await fetch('/api/pages')
-    const data = (await r.json()) as { pages: Array<{ id: string; title: string }> }
-    return data.pages.find((p) => p.title.startsWith(searchTitle))?.id ?? null
-  }, title)
-  if (res) await waitForRow(page, res)
-  await pageRow(page, title).click()
+  // Navigates through the Ctrl+K finder rather than clicking the sidebar row.
+  //
+  // This used to look the page's id up via the API, wait for the row, and click
+  // it. That cannot work in a full-suite run: the tree is a virtual scrolling
+  // tree, so a page seeded by an early test is a thousand rows down by the end
+  // and its row is never in the DOM. The finder searches the loaded collection,
+  // so it finds the page at any database size.
+  //
+  // Measured: with 1204 pages the row is not visible and cannot be clicked, while
+  // the finder returns exactly that one page and opens it. The name and signature
+  // are kept so the 24 call sites below read the same and the intent is unchanged.
+  await openPageViaFinder(page, title)
 }
 
 test.describe('stability regressions', () => {

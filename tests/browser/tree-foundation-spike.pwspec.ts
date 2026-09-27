@@ -1,4 +1,5 @@
 import { type APIRequestContext, test as baseTest, expect, type Page } from '@playwright/test'
+import { purgeAllPages } from './utils/cleanup.js'
 import { waitForRow } from './utils/row-visibility.js'
 import { railHome } from './utils/shell.js'
 
@@ -200,6 +201,15 @@ async function closeAllTabs(page: Page): Promise<void> {
 }
 
 test.describe('Wunderbaum tree foundation (spike)', () => {
+  // Every test in this file is about the *tree row itself* — expanding it,
+  // right-clicking it, renaming it with F2. The tree is virtualised, so a page
+  // buried under the ~1200 pages a full-suite run accumulates has no row in the
+  // DOM and cannot be reached by scrolling. Opening a page by name is not the
+  // subject here, so the finder cannot stand in; the database has to start small.
+  test.beforeAll(async ({ request }) => {
+    await purgeAllPages(request)
+  })
+
   test('mounts exactly one tree instance that survives remounts', async ({
     page,
     seedOwnedPage
