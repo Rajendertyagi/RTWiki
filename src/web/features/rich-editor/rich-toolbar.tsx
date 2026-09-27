@@ -36,7 +36,7 @@ import {
   IconUnderline
 } from '@tabler/icons-react'
 import type { JSX, ReactNode } from 'react'
-import { Children, Fragment, isValidElement, useState } from 'react'
+import { Children, isValidElement, useState } from 'react'
 import { LAYOUT, OVERLAY_OWNER_ATTR, UI_TEXT } from '../../config/index.js'
 import { useToolbarOverflow } from '../../hooks/use-toolbar-overflow.js'
 import type { CSSVars } from '../../style-props.js'
@@ -555,14 +555,16 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
           the trailing "more" dropdown, so a control is never sliced off
           mid-icon. Naming the entry keys here instead would be a second list to
           keep in step, and a new entry would then silently never appear. */}
-      {insertRuns.map(({ run, entries }, runIndex) => (
-        <Fragment key={run}>
-          {runIndex > 0 && <span className={classes.divider} />}
-          {entries.map((entry) => (
-            <InsertButton key={entry.key} editor={editor} entry={entry} />
-          ))}
-        </Fragment>
-      ))}
+      {insertRuns.flatMap(({ run, entries }, runIndex) => [
+        // A flat list, deliberately: `Children.toArray` in the overflow hook
+        // treats a Fragment as one opaque child, so wrapping each run in a
+        // Fragment would make three units out of eleven controls and the measured
+        // split would be meaningless. One element per child, no grouping wrapper.
+        // The divider before the first run is the one above, so only the runs
+        // after it add their own.
+        ...(runIndex > 0 ? [<span key={`${run}-divider`} className={classes.divider} />] : []),
+        ...entries.map((entry) => <InsertButton key={entry.key} editor={editor} entry={entry} />)
+      ])}
 
       <span className={classes.divider} />
 

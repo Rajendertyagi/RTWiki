@@ -172,7 +172,10 @@ test.describe('Rich Note toolbar controls', () => {
 
   test('table insertion creates a table via its toolbar control', async ({ page }) => {
     await newRichNote(page)
-    await page.getByTestId('insert-table').click()
+    // `useControl`, not a bare lookup: the bar is one control wider now that
+    // image insertion is on it, so at this width the table control can legitimately
+    // sit in the "more" panel. The assertion is unchanged - a table appears.
+    await useControl(page, 'insert-table')
     await expect(page.locator(`${EDITABLE} table`).first()).toBeVisible()
     await expect(page.locator(`${EDITABLE} table td`).first()).toBeVisible()
   })
@@ -190,7 +193,8 @@ test.describe('Rich Note toolbar controls', () => {
       'insert-callout-danger',
       'insert-table',
       'insert-quote',
-      'insert-code-block'
+      'insert-code-block',
+      'insert-image'
     ]
     // Every control must exist and be usable - on the bar, or in the more menu
     // when the row has run out of width. Asserting "on the bar" is what these
