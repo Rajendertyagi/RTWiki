@@ -206,6 +206,14 @@ Rich content is implemented as a set of cooperating modules discovered through r
 - **Custom content isolation.** Custom HTML/CSS/JS (L3) is rendered only in a sandbox that has no same-origin, database, or filesystem access and no network egress. Active content is off by default. No custom script may run in the main application context.
 - **Import is centralized.** All entry paths (paste, drop, file, localhost API) go through one import pipeline; do not add parallel import code.
 
+## 15. Markdown and Sanitisation
+
+- **One engine, one grammar.** Markdown is parsed by `micromark` with `micromark-extension-gfm`, composed once at module scope in `markdown-render.ts`. The outline parses with `mdast-util-from-markdown`, which shares the grammar. Do not add a second Markdown parser, and do not parse headings with a regular expression — see [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+- **Never carry untrusted text in an attribute.** DOMPurify strips any attribute whose value matches `-->`, `]>`, or `</script`. Diagram and other source text is carried as element **text content**, never as a `data-` attribute, and the sanitiser is never weakened with `SAFE_FOR_XML: false` to accommodate one.
+- **Raw HTML in Markdown is inert by design.** The parser escapes it. Do not add an extension that re-enables raw HTML passthrough without a new ADR; it moves the whole security burden back onto the sanitiser.
+- **Extensions must not change unhandled output.** An extension that intercepts one construct must leave every other construct byte-identical to stock micromark, and a table-driven test must prove it.
+- **Sanitiser policy lives in one exported constant.** `MARKDOWN_SANITIZE_OPTIONS` is exported so it can be asserted directly: a profile change is a security change and must be covered by tests that feed it hostile markup, not only by tests that pass well-formed input through it.
+
 ## Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — layer boundaries these standards govern

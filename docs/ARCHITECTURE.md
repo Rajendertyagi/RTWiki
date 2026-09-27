@@ -215,6 +215,19 @@ When a page supplies optional custom HTML/CSS/JS, it is rendered only inside an 
 
 ## 4. Canonical Data Format
 
+### Markdown pages
+
+A Markdown page is rendered by one pure function in
+`src/web/features/markdown/markdown-render.ts`: **micromark** (composed with
+`micromark-extension-gfm`) → **DOMPurify** → injected as HTML. Raw HTML in Markdown is escaped by the
+parser, so it is inert at the source rather than relying on the sanitiser alone. The sanitiser profile
+includes MathML and SVG so that maths and diagrams survive it; the constraints that places on diagram
+source are recorded in [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+
+The heading outline for the right-hand panel is built from the same grammar via
+`mdast-util-from-markdown` (`markdown-outline.ts`), so the outline and the preview agree structurally
+about which lines are headings. Navigation is by index, not by heading text.
+
 BlockNote JSON is the canonical saved representation of page content. HTML and Markdown are import/export formats only — they are converted to and from BlockNote JSON at the API boundary, never stored directly in the database. See [ADR-004](adr/ADR-004-canonical-block-json-format.md) for the full rationale and [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) for the rich-content extension.
 
 The canonical format is a **versioned, RTWiki-extended BlockNote JSON schema**:

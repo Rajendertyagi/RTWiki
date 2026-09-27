@@ -66,6 +66,55 @@ test.describe('right-hand panel', () => {
     await expect(panel.getByRole('button', { name: 'Nested' })).toBeVisible()
   })
 
+  test('the Markdown outline resolves inline markup in a heading and accepts a setext heading', async ({
+    page,
+    request
+  }) => {
+    /**
+     * Heading text is the one thing the engine swap changed at the outline's surface.
+     *
+     * `marked.lexer` handed back the **raw source** of a heading, so `Sub *head*`
+     * had to be run back through an inline renderer and stripped of tags to
+     * recover `Sub head`. The mdast already holds the resolved value. If that
+     * resolution regressed, the outline would show a heading reading
+     * "A heading with *emphasis*" next to a preview reading "A heading with
+     * emphasis" — a visible mismatch, and one no other test here would catch.
+     *
+     * The setext case is here for the other direction: a heading with no leading
+     * `#` is a real heading, and a `^#{1,6}` scan misses it entirely.
+     */
+    const title = uniqueTitle('Panel Markdown Inline')
+    await seedPage(request, title, 'markdown', {
+      version: 1,
+      markdown: [
+        '# Top level',
+        '',
+        '## A heading with *emphasis* and `code`',
+        '',
+        '```',
+        '# not a heading',
+        '```',
+        '',
+        'Setext heading',
+        '==========='
+      ].join('\n')
+    })
+    await openPage(page, title)
+    await expect(page.getByTestId('markdown-workspace')).toBeVisible()
+
+    const panel = page.locator(PANEL)
+    await expect(panel).toBeVisible()
+    // Resolved, not raw: the source stars and backticks are gone.
+    await expect(
+      panel.getByRole('button', { name: 'A heading with emphasis and code' })
+    ).toBeVisible()
+    await expect(panel.getByRole('button', { name: 'Setext heading' })).toBeVisible()
+    // The fenced `#` is code. This is the case a regex gets wrong.
+    await expect(panel.getByText('not a heading')).toHaveCount(0)
+    // And the raw source is nowhere in the outline, which is the regression.
+    await expect(panel.getByText('*emphasis*')).toHaveCount(0)
+  })
+
   test('clicking an outline entry on a Markdown page shows and scrolls to that heading', async ({
     page,
     request

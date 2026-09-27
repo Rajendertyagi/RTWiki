@@ -184,6 +184,44 @@ branches removed.
   rather than duplicated, and it is named `clickControl` because Biome's `useHookAtTopLevel` rule treats
   a `use`-prefixed name in a `.ts` spec as a React hook and fails the lint gate.
 
+### A stylesheet rule that matched nothing, for the whole life of the feature
+
+**The kind of failure that cannot fail.** The task-list rule read
+`.previewPane :global(li.task-list-item)`. That class is emitted by **neither** Markdown engine the
+project has used: a task item is `<li><input type="checkbox" disabled checked>`, with no class on the
+`li` or anywhere else. Measured against both `marked` and micromark before changing anything. The
+checkbox styling worked, so the rule that was supposed to suppress the list bullet — the visible
+symptom — was dead code, and no test covered it because no assertion could fail.
+
+`marked`'s documented `task-list-item` class belongs to its GFM renderer output and was never produced
+by the configuration RTWiki used. The rule looked plausible enough that a reader would assume it had
+been verified.
+
+**Fixed** by selecting the structure both engines agree on, `li:has(> input[type='checkbox'])`, rather
+than by injecting a class in the renderer. The alternative would have meant a second pass over
+rendered HTML with a regular expression — a second parser to keep in step, and a new way for content to
+be mangled. A test now asserts the class is *absent* and that the structure the stylesheet targets is
+present, so the rule and the markup are checked against each other.
+
+### A sanitiser profile that silently deleted every equation
+
+`USE_PROFILES: { html: true }` removed **every** `<math>` and **every** `<svg>`. Measured: one of each
+in, zero of each out — while the surrounding `<span class="katex-html">` survived byte-identically.
+That is why it was invisible: a DOM snapshot of the output looked perfect, and the byte comparison used
+to check KaTeX passed. A KaTeX radical is a MathML `<msqrt>` with an SVG overlay, so `\sqrt{2}` was
+losing both and rendering as a bare `2`, and maths were entirely invisible to a screen reader.
+
+**Fixed** by widening the profile to include `mathMl`, `svg` and `svgFilters`. The widening was then
+checked against what it could plausibly admit rather than assumed safe: script inside `<math>` and
+inside `<svg>`, `<animate onbegin>`, `xlink:href="javascript:"`, and
+`<annotation-xml encoding="text/html">` are all still removed, and `FORBID_TAGS` still wins over the
+svg profile for `<style>`.
+
+**The widening is smaller than the profile diff looks, which is the part worth remembering.** Because
+the parser now escapes raw HTML, a user cannot put `<math>` or `<svg>` into the sanitiser at all — the
+characters arrive as text. The only MathML or SVG reaching the sanitiser is markup RTWiki generated
+itself. So this widens what our own output may contain, not what a user's keystrokes can.
+
 ## Recently fixed
 
 ### A document's own Content-Security-Policy was silently replaced by the app-wide one
@@ -314,11 +352,14 @@ wrong with anything under test.
 "Outline" heading over "no headings". Fullscreen drops the panel: an unobstructed canvas is the
 whole point of fullscreen, and a pane the reader cannot collapse from there would defeat it.
 
-**The outline is built from `marked.lexer`, not a regex**, because the outline and the preview must
-agree about which lines are headings or a click scrolls to the wrong place. A `^#{1,6}` scan
-disagrees three ways: a `#` line in a fenced block is code, a setext `===` heading has no leading
-`#`, and an indented line is a code block. Navigation is by index into the lexer's heading list, not
-by text, because `## **Bold**` reads as `**Bold**` in the source and `Bold` once rendered.
+**The outline is built from the same parser the preview uses**, not a regex, because the outline and
+the preview must agree about which lines are headings or a click scrolls to the wrong place. A
+`^#{1,6}` scan disagrees three ways: a `#` line in a fenced block is code, a setext `===` heading has no
+leading `#`, and an indented line is a code block. Navigation is by index into the parser's heading
+list, not by text, because `## **Bold**` reads as `**Bold**` in the source and `Bold` once rendered.
+The engine behind that changed from `marked` to micromark — see
+[ADR-017](adr/ADR-017-markdown-engine-micromark.md). The reasoning above is unchanged and is why the
+swap was low-risk.
 
 ### A `Fragment` around each toolbar run silently broke overflow measurement
 

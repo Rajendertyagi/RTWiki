@@ -211,7 +211,7 @@ export default function MarkdownPageWorkspace({
             ref={previewRef}
             className={classes.previewPane}
             data-testid="markdown-rendered"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized Markdown HTML via DOMPurify (marked + strict allowlist)
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized Markdown HTML via DOMPurify (micromark escapes raw HTML; strict allowlist on top)
             dangerouslySetInnerHTML={{ __html: html }}
           />
         )}

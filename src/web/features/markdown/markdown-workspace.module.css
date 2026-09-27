@@ -112,8 +112,22 @@
   color: var(--mantine-color-blue-filled);
 }
 
-/* GFM task-list checkboxes render as disabled inputs (sanitizer allows them). */
-.previewPane :global(li.task-list-item) {
+/*
+ * GFM task-list checkboxes render as disabled inputs (sanitizer allows them).
+ *
+ * `:has()` rather than `.task-list-item`, because that class is emitted by
+ * **neither** parser and the rule therefore matched nothing - it has been dead for
+ * the whole life of the feature. Measured against both engines: a task item is
+ * `<li><input type="checkbox" disabled checked>`, with no class on the `<li>` or
+ * anywhere else. `marked`'s documented `task-list-item` class belongs to its
+ * `gfm: true` renderer output and is not produced here.
+ *
+ * The structure is the only stable thing both parsers agree on, so the structure is
+ * what is selected. The alternative - injecting the class in the renderer - would
+ * mean a second pass over the rendered HTML with a regular expression, which is a
+ * second parser to keep in step and a new way for content to be mangled.
+ */
+.previewPane :global(li:has(> input[type="checkbox"])) {
   list-style: none;
 }
 

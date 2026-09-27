@@ -48,12 +48,33 @@ async function seedPage(
   pageType: 'html' | 'markdown',
   content: string
 ): Promise<string> {
+  /**
+   * `content` is stored as a JSON **string** in a TEXT column, and each page type
+   * parses it back into its own shape:
+   *
+   * - **Markdown** — a `{ version, markdown }` envelope. An empty string is *not*
+   *   a valid envelope, which is why the original test could seed `''` and get a
+   *   starter document.
+   * - **HTML** — a `strictObject` requiring `version`, `html`, `css`, `javascript`
+   *   and `jsEnabled`. Strict, so a partial envelope is rejected, and the field is
+   *   `jsEnabled` rather than `javascriptEnabled` — guessed wrong once here and
+   *   caught by the 400 rather than by a confusing render failure.
+   *
+   * Both used to be posted as a bare string. That happened to be accepted for an
+   * empty value and rejected with a 400 for anything else, which made this helper
+   * look like it worked while only ever being exercised with `''`. The envelopes
+   * are built here so callers pass the source text and nothing else.
+   */
+  const envelope =
+    pageType === 'markdown'
+      ? { version: 1, markdown: content }
+      : { version: 2, html: content, css: '', javascript: '', jsEnabled: false }
   const res = await request.post('/api/pages', {
-    data: { title, pageType, content }
+    data: { title, pageType, content: JSON.stringify(envelope) }
   })
   expect(res.status(), 'seed page should be created').toBe(201)
-  const body = (await res.json()) as { page?: { id: string }; id?: string }
-  const id = body.page?.id ?? body.id
+  const created = (await res.json()) as { page?: { id: string }; id?: string }
+  const id = created.page?.id ?? created.id
   expect(id).toBeTruthy()
   return id as string
 }
@@ -166,5 +187,68 @@ test.describe('Rendered content is a document, not a card', () => {
       expect(surface.radius, `markdown preview radius in ${scheme}`).toBe('0px')
       expect(surface.background, `markdown preview background in ${scheme}`).toBe('rgb(1, 2, 3)')
     }
+  })
+
+  test('a Markdown page renders real content, and nothing dangerous reaches the page', async ({
+    page,
+    request
+  }) => {
+    /**
+     * The unit tests prove `renderMarkdown` returns the right string. This proves
+     * the string reaches the browser intact, which is a different failure and the
+     * one a page swap actually causes: a module that throws at import, a bundle
+     * that failed to build, or a sanitiser with no DOM.
+     *
+     * It is here because a Markdown page that renders *nothing* still satisfies the
+     * test above — that one asserts a surface exists, not that it has content. A
+     * silently blank preview is the failure mode this covers.
+     */
+    const content = [
+      '# Study notes',
+      '',
+      '| Term | Meaning |',
+      '| - | - |',
+      '| photosynthesis | plants make sugar |',
+      '',
+      '- [x] read the chapter',
+      '- [ ] revise',
+      '',
+      '~~draft~~ and https://example.com',
+      '',
+      '<b>raw html</b>',
+      '<script>window.__markdownXss = true</script>',
+      '<img src="x" onerror="window.__markdownXss = true">'
+    ].join('\n')
+    const id = await seedPage(request, uniqueTitle('MarkdownContent'), 'markdown', content)
+    await page.goto(`/?page=${id}`)
+
+    const rendered = page.locator(MARKDOWN_RENDERED)
+    await expect(rendered).toBeVisible({ timeout: 20_000 })
+
+    // Real content, from each construct the swap had to keep working.
+    await expect(rendered.getByRole('heading', { name: 'Study notes' })).toBeVisible()
+    await expect(rendered.locator('table th').first()).toHaveText('Term')
+    await expect(rendered.locator('li input[type="checkbox"]')).toHaveCount(2)
+    await expect(rendered.locator('li input[type="checkbox"]').first()).toBeChecked()
+    await expect(rendered.locator('del')).toHaveText('draft')
+    await expect(rendered.getByRole('link', { name: 'https://example.com' })).toBeVisible()
+
+    // The task-list bullet suppression depends on the `:has()` rule. Asserted
+    // through the computed style, because the class the old rule selected never
+    // existed and this is the assertion that would catch its replacement failing.
+    const bullet = await rendered
+      .locator('li:has(> input[type="checkbox"])')
+      .first()
+      .evaluate((el) => getComputedStyle(el).listStyleType)
+    expect(bullet, 'a task-list item must not show a bullet').toBe('none')
+
+    // Nothing dangerous survived. Raw HTML now renders as visible text, which is
+    // the point of the engine swap.
+    await expect(rendered.locator('script')).toHaveCount(0)
+    await expect(rendered.locator('b')).toHaveCount(0)
+    expect(
+      await page.evaluate(() => (window as unknown as Record<string, unknown>).__markdownXss),
+      'no script from the document may have executed'
+    ).toBeUndefined()
   })
 })
