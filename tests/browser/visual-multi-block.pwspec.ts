@@ -14,8 +14,7 @@ import { purgeUntitledPages } from './utils/cleanup.js'
  * v1 document parses as exactly one block, so applying an edit to a page holding
  * several diagrams silently discarded all but one — with no error anywhere.
  *
- * Rendering every block in the view, and reordering them, is the next increment
- * and is not covered here yet.
+ * Rendering every block in the view, and reordering them, is covered below.
  */
 
 let titleSeq = 0
@@ -67,6 +66,126 @@ test.describe('multi-block diagram pages', () => {
     await purgeUntitledPages(request)
   })
 
+  test('a page with several diagrams renders them all, each labelled', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('Multi Block View')
+    await seedTwoBlockPage(request, title)
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
+
+    // Two canvases, not one: the page holds two diagrams and both are drawn.
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(2)
+    // Each says which diagram it is, so the controls are unambiguous.
+    await expect(page.getByTestId('diagram-block-title-0')).toHaveText('Diagram 1 of 2')
+    await expect(page.getByTestId('diagram-block-title-1')).toHaveText('Diagram 2 of 2')
+  })
+
+  test('Add diagram appends a third and the page keeps them in order', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('Multi Block Add')
+    const id = await seedTwoBlockPage(request, title)
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(2)
+
+    await page.getByTestId('diagram-add-block').click()
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(3)
+
+    await expect
+      .poll(async () => (await storedBlocks(request, id)).length, { timeout: 20_000 })
+      .toBe(3)
+    const blocks = await storedBlocks(request, id)
+    // Appended, not inserted: the two existing diagrams keep their order and
+    // their sources.
+    expect(blocks.slice(0, 2).map((b) => b.source)).toEqual([BLOCK_ONE, BLOCK_TWO])
+  })
+
+  test('Move down reorders the page and persists the new order', async ({ page, request }) => {
+    const title = uniqueTitle('Multi Block Reorder')
+    const id = await seedTwoBlockPage(request, title)
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(2)
+
+    // Move the first diagram down, so the order becomes second-then-first.
+    await page.getByTestId('diagram-block-down-0').click()
+
+    // The visible order changes immediately.
+    await expect(page.getByTestId('diagram-block-0')).toContainText('Diagram 1 of 2')
+    await expect
+      .poll(async () => (await storedBlocks(request, id)).map((b) => b.source), { timeout: 20_000 })
+      .toEqual([BLOCK_TWO, BLOCK_ONE])
+  })
+
+  test('the first diagram cannot move up and the last cannot move down', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('Multi Block Bounds')
+    await seedTwoBlockPage(request, title)
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(2)
+
+    // Disabled rather than silently doing nothing when pressed.
+    await expect(page.getByTestId('diagram-block-up-0')).toBeDisabled()
+    await expect(page.getByTestId('diagram-block-down-1')).toBeDisabled()
+    await expect(page.getByTestId('diagram-block-down-0')).toBeEnabled()
+    await expect(page.getByTestId('diagram-block-up-1')).toBeEnabled()
+  })
+
+  test('removing a diagram leaves the others, and the last one cannot go', async ({
+    page,
+    request
+  }) => {
+    const title = uniqueTitle('Multi Block Remove')
+    const id = await seedTwoBlockPage(request, title)
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(2)
+
+    // A page with no diagrams cannot be rendered at all, so the control is off
+    // while only one remains.
+    await expect(page.getByTestId('diagram-block-remove-0')).toBeEnabled()
+    await page.getByTestId('diagram-block-remove-0').click()
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(1)
+    await expect(page.getByTestId('diagram-block-remove-0')).toBeDisabled()
+
+    await expect
+      .poll(async () => (await storedBlocks(request, id)).map((b) => b.source), {
+        timeout: 20_000
+      })
+      .toEqual([BLOCK_TWO])
+  })
+
+  test('a diagram on a multi-block page can be edited on its own', async ({ page, request }) => {
+    const title = uniqueTitle('Multi Block Edit Second')
+    const id = await seedTwoBlockPage(request, title)
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.getByTestId('diagram-rendered')).toHaveCount(2)
+
+    // Edit the *second* block, not the first: the first must not even open.
+    await page.getByTestId('diagram-block-edit-1').click()
+    const input = page.getByTestId('diagram-source-input')
+    await expect(input).toHaveValue(BLOCK_TWO)
+    const edited = 'flowchart LR\n    R[Rewritten]'
+    await input.fill(edited)
+    await page.getByTestId('diagram-apply').click()
+
+    await expect
+      .poll(async () => (await storedBlocks(request, id))[1]?.source, { timeout: 20_000 })
+      .toBe(edited)
+    const blocks = await storedBlocks(request, id)
+    // Block one is untouched, and it is still first.
+    expect(blocks[0].source).toBe(BLOCK_ONE)
+  })
+
   test('editing one diagram leaves the others untouched', async ({ page, request }) => {
     const title = uniqueTitle('Multi Block Apply')
     const id = await seedTwoBlockPage(request, title)
@@ -74,7 +193,8 @@ test.describe('multi-block diagram pages', () => {
     await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
 
-    await page.getByTestId('diagram-edit-button').click()
+    // Editing is per block, so the control names which diagram it opens.
+    await page.getByTestId('diagram-block-edit-0').click()
     const input = page.getByTestId('diagram-source-input')
     await expect(input).toBeVisible()
     const edited = 'flowchart TD\n    X[Edited] --> Y[Done]'
@@ -99,7 +219,8 @@ test.describe('multi-block diagram pages', () => {
     await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
 
-    await page.getByTestId('diagram-edit-button').click()
+    // Editing is per block, so the control names which diagram it opens.
+    await page.getByTestId('diagram-block-edit-0').click()
     await page.getByTestId('diagram-source-input').fill('flowchart TD\n    Z[Discarded]')
     await page.getByTestId('diagram-cancel').click()
 
@@ -130,7 +251,8 @@ test.describe('multi-block diagram pages', () => {
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
     await expect(page.getByTestId('diagram-rendered')).toHaveCount(1)
 
-    await page.getByTestId('diagram-edit-button').click()
+    // Editing is per block, so the control names which diagram it opens.
+    await page.getByTestId('diagram-block-edit-0').click()
     await page.getByTestId('diagram-source-input').fill('flowchart TD\n    P[New] --> Q[End]')
     await page.getByTestId('diagram-apply').click()
 

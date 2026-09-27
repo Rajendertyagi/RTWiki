@@ -10,15 +10,20 @@ import {
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import {
+  MAX_VISUAL_PAGE_BLOCKS,
   parseVisualPageContent,
   serializeVisualPageBlocks,
   type VisualPageBlock
 } from '@rtwiki/shared/schemas/visual-page-content'
 import {
   IconAspectRatio,
+  IconChevronDown,
+  IconChevronUp,
   IconPencil,
   IconPlayerPlay,
+  IconPlus,
   IconRefresh,
+  IconTrash,
   IconZoomIn,
   IconZoomOut
 } from '@tabler/icons-react'
@@ -27,11 +32,14 @@ import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
 import type { CSSVars } from '../../style-props.js'
+import { reorderByIds } from '../../util/reorder.js'
 import { DiagramTemplateBar } from '../rich-editor/blocks/diagram-template-bar.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
+import { DiagramCanvas, type RenderErrorCode } from './diagram-canvas.js'
 import classes from './mermaid-workspace.module.css'
+import { starterSourceFor } from './starter-source.js'
 
 /**
  * Dedicated full-page workspace for the Diagram and Mind Map page types.
@@ -61,10 +69,7 @@ export interface MermaidPageWorkspaceProps {
   onOpenPage?: (pageId: string) => void
 }
 
-type RenderErrorCode = 'parse_error' | 'render_error'
-
 const ERROR_MESSAGE = UI_TEXT.diagramErrorTitle
-
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 2
 const ZOOM_STEP = 0.25
@@ -84,32 +89,28 @@ export default function MermaidPageWorkspace({
   // page type maps onto the pipeline's camelCase token.
   const mermaidBlockType: 'diagram' | 'mindMap' = pageType === 'mindmap' ? 'mindMap' : 'diagram'
   const parsed = parseVisualPageContent(storedContent)
-  // The workspace edits one diagram at a time, so it works against the block it
-  // was opened on. A v1 page reads as a single block, which is why this needs no
-  // special case.
-  // The page's blocks, as stored. A v1 page reads as a one-block page, so there is
-  // no special case here.
+  // The page's blocks, as stored. A v1 page reads as a one-block page, so a page
+  // written before the format gained a block list needs no special case here.
   const committedBlocks: VisualPageBlock[] = parsed.ok ? parsed.value.blocks : []
-  // Which block the editor is working on. Always the first until the multi-block
-  // view lands; named now so the apply path below is already block-aware.
-  const editingIndex = 0
-  const committedSource = committedBlocks[editingIndex]?.source ?? ''
   const parseFailed = !parsed.ok
 
   const colorScheme = useComputedColorScheme('light')
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(committedSource)
-  const [debouncedDraft, setDebouncedDraft] = useState(committedSource)
-  const [svg, setSvg] = useState<string | null>(null)
+  // Which block the source editor is open on, or null when viewing the page. A
+  // block index rather than a flag, because the editor edits one block at a time
+  // while the page can hold many.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+  const [debouncedDraft, setDebouncedDraft] = useState('')
   const [liveSvg, setLiveSvg] = useState<string | null>(null)
-  const [errorCode, setErrorCode] = useState<RenderErrorCode | null>(null)
   const [liveError, setLiveError] = useState<RenderErrorCode | null>(null)
+  // Bumped by the page-level Refresh. It reaches every block, so one press
+  // re-renders the whole page rather than only the block that happens to be
+  // failing.
   const [renderSeq, setRenderSeq] = useState(0)
   const [fit, setFit] = useState(true)
   const [zoom, setZoom] = useState(1)
   const [fullscreen, setFullscreen] = useState(false)
 
-  const committedGenRef = useRef(0)
   const liveGenRef = useRef(0)
 
   const handleSave = async (pid: string, content: string): Promise<void> => {
@@ -141,30 +142,6 @@ export default function MermaidPageWorkspace({
     }
   }, [flush, onFlushRef])
 
-  // Committed render (view mode) — generation token guards stale responses.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: renderSeq is the manual Refresh trigger and is intentionally not read inside the effect
-  useEffect(() => {
-    const gen = ++committedGenRef.current
-    const ac = new AbortController()
-    setErrorCode(null)
-    void renderMermaidSvg(committedSource, {
-      theme: colorScheme === 'dark' ? 'dark' : 'default',
-      blockId: pageId,
-      blockType: mermaidBlockType,
-      signal: ac.signal
-    }).then((result) => {
-      if (gen !== committedGenRef.current) return
-      if (result.ok) setSvg(result.svg)
-      else {
-        // Superseded or unmounted: not a failure, so keep the current diagram.
-        if (result.code === 'cancelled') return
-        setSvg(null)
-        setErrorCode(result.code)
-      }
-    })
-    return () => ac.abort()
-  }, [committedSource, colorScheme, renderSeq, pageId, mermaidBlockType])
-
   // Debounced live draft for edit mode.
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedDraft(draft), PREVIEW_REBUILD_DEBOUNCE_MS)
@@ -195,25 +172,37 @@ export default function MermaidPageWorkspace({
     return () => ac.abort()
   }, [debouncedDraft, colorScheme, renderSeq, pageId, mermaidBlockType])
 
-  const startEditing = (): void => {
-    setDraft(committedSource)
-    setEditing(true)
+  const startEditing = (index: number): void => {
+    const block = committedBlocks[index]
+    if (!block) return
+    setDraft(block.source)
+    setEditingIndex(index)
     debugLog('ui', 'ui_context_menu_action', { targetId: pageId, code: `${pageType}-page-edit` })
   }
 
   const apply = (): void => {
-    setEditing(false)
-    if (draft !== committedSource) {
-      // Written as v2 with the *whole* block list, replacing only the block being
-      // edited. Writing v1 here would look correct for a single-diagram page and
-      // silently collapse a multi-block page to one diagram, because a v1 document
-      // parses as exactly one block — the other diagrams would be discarded with
-      // no error anywhere.
-      const next = committedBlocks.map((block, index) =>
-        index === editingIndex ? { ...block, source: draft } : block
-      )
-      notifyEdit(serializeVisualPageBlocks(pageType, next))
+    const index = editingIndex
+    setEditingIndex(null)
+    if (index === null) return
+    const current = committedBlocks[index]
+    if (!current || draft === current.source) {
+      debugLog('ui', 'ui_context_menu_action', {
+        targetId: pageId,
+        code: `${pageType}-page-apply`,
+        len: draft.length,
+        hash: safeHash(draft)
+      })
+      return
     }
+    // Written as v2 with the *whole* block list, replacing only the block being
+    // edited. Writing v1 here would look correct for a single-diagram page and
+    // silently collapse a multi-block page to one diagram, because a v1 document
+    // parses as exactly one block — the other diagrams would be discarded with
+    // no error anywhere.
+    const next = committedBlocks.map((block, i) =>
+      i === index ? { ...block, source: draft } : block
+    )
+    notifyEdit(serializeVisualPageBlocks(pageType, next))
     debugLog('ui', 'ui_context_menu_action', {
       targetId: pageId,
       code: `${pageType}-page-apply`,
@@ -223,8 +212,50 @@ export default function MermaidPageWorkspace({
   }
 
   const cancel = (): void => {
-    setDraft(committedSource)
-    setEditing(false)
+    setEditingIndex(null)
+  }
+
+  /**
+   * Commits a structural change to the block list - add, remove or reorder.
+   *
+   * Every one of these writes the whole list, so there is a single write path for
+   * the page's shape rather than one per action.
+   */
+  const commitBlocks = (next: VisualPageBlock[], code: string): void => {
+    notifyEdit(serializeVisualPageBlocks(pageType, next))
+    debugLog('ui', 'ui_context_menu_action', { targetId: pageId, code, len: next.length })
+  }
+
+  const addBlock = (): void => {
+    // Capped in the schema as well; refusing here means the button explains itself
+    // instead of the save failing.
+    if (committedBlocks.length >= MAX_VISUAL_PAGE_BLOCKS) return
+    commitBlocks(
+      [...committedBlocks, { id: crypto.randomUUID(), source: starterSourceFor(pageType) }],
+      `${pageType}-block-add`
+    )
+  }
+
+  const removeBlock = (index: number): void => {
+    // The schema requires at least one block, so the last one cannot be removed.
+    // Deleting every diagram would leave a page that cannot be rendered at all.
+    if (committedBlocks.length <= 1) return
+    commitBlocks(
+      committedBlocks.filter((_, i) => i !== index),
+      `${pageType}-block-remove`
+    )
+  }
+
+  const moveBlock = (index: number, delta: -1 | 1): void => {
+    const target = index + delta
+    if (target < 0 || target >= committedBlocks.length) return
+    const ids = committedBlocks.map((block) => block.id)
+    const [moved] = ids.splice(index, 1)
+    ids.splice(target, 0, moved)
+    commitBlocks(
+      reorderByIds(committedBlocks, ids, (block) => block.id),
+      `${pageType}-block-move`
+    )
   }
 
   const zoomControls = (
@@ -310,6 +341,108 @@ export default function MermaidPageWorkspace({
     </div>
   )
 
+  /**
+   * One block's card in view mode: the diagram plus the actions that apply to
+   * that block alone.
+   *
+   * Reordering is offered as Move up / Move down rather than only as a drag. Both
+   * are legitimate, but buttons are reachable from the keyboard and name
+   * themselves to a screen reader, whereas a drag handle is neither. The order
+   * they produce is the same, and it goes through the shared `reorderByIds` rule
+   * the tab strip uses, so a block can never be dropped or duplicated by a
+   * malformed order.
+   */
+  /**
+   * "Diagram 2 of 3". Interpolated here rather than in the dictionary, because
+   * `UI_TEXT` holds plain strings - every consumer iterates its values - so a
+   * counted label is stored as a `{placeholder}` pattern and filled in at the call
+   * site, exactly as the status bar does it.
+   */
+  const blockLabel = (position: number, total: number): string =>
+    UI_TEXT.diagramBlockLabel
+      .replace('{position}', String(position))
+      .replace('{total}', String(total))
+
+  const blockCard = (block: VisualPageBlock, index: number): JSX.Element => (
+    <section
+      key={block.id}
+      className={classes.blockCard}
+      aria-label={blockLabel(index + 1, committedBlocks.length)}
+      data-testid={`${pageType}-block-${index}`}
+    >
+      <Group justify="space-between" wrap="nowrap" gap="xs" className={classes.blockBar}>
+        <Text size="xs" c="dimmed" data-testid={`${pageType}-block-title-${index}`}>
+          {blockLabel(index + 1, committedBlocks.length)}
+        </Text>
+        <Group gap={2} wrap="nowrap">
+          <Tooltip label={UI_TEXT.diagramEditBlockLabel}>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              aria-label={UI_TEXT.diagramEditBlockLabel}
+              onClick={() => startEditing(index)}
+              data-testid={`${pageType}-block-edit-${index}`}
+            >
+              <IconPencil size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={UI_TEXT.diagramMoveBlockUpLabel}>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              aria-label={UI_TEXT.diagramMoveBlockUpLabel}
+              // The first block cannot move up, so the control says so rather than
+              // doing nothing when pressed.
+              disabled={index === 0}
+              onClick={() => moveBlock(index, -1)}
+              data-testid={`${pageType}-block-up-${index}`}
+            >
+              <IconChevronUp size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={UI_TEXT.diagramMoveBlockDownLabel}>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              aria-label={UI_TEXT.diagramMoveBlockDownLabel}
+              disabled={index === committedBlocks.length - 1}
+              onClick={() => moveBlock(index, 1)}
+              data-testid={`${pageType}-block-down-${index}`}
+            >
+              <IconChevronDown size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={UI_TEXT.diagramRemoveBlockLabel}>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              aria-label={UI_TEXT.diagramRemoveBlockLabel}
+              // The last remaining diagram cannot be removed: a page with none
+              // cannot be rendered at all.
+              disabled={committedBlocks.length <= 1}
+              onClick={() => removeBlock(index)}
+              data-testid={`${pageType}-block-remove-${index}`}
+            >
+              <IconTrash size={14} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
+      </Group>
+      <div className={classes.blockCanvas} data-testid={`${pageType}-rendered`}>
+        <DiagramCanvas
+          source={block.source}
+          renderKey={`${pageId}-${block.id}`}
+          mermaidBlockType={mermaidBlockType}
+          colorScheme={colorScheme}
+          fit={fit}
+          zoom={zoom}
+          renderSeq={renderSeq}
+          testId={`${pageType}-block-${index}`}
+        />
+      </div>
+    </section>
+  )
+
   // A diagram or mind map has no headings, so the panel carries backlinks and
   // page information only - `outline` is omitted rather than passed empty, which
   // is what keeps an empty "Outline" heading off these pages.
@@ -330,13 +463,13 @@ export default function MermaidPageWorkspace({
     <div
       className={`${classes.root} ${fullscreen ? classes.fullscreen : ''}`}
       data-testid={`${pageType}-workspace`}
-      data-mode={editing ? 'edit' : 'view'}
+      data-mode={editingIndex === null ? 'view' : 'edit'}
     >
       {parseFailed ? (
         <Text size="sm" c="red" role="alert" data-testid={`${pageType}-parse-error`}>
           {parsed.error}
         </Text>
-      ) : editing ? (
+      ) : editingIndex !== null ? (
         <>
           <Group justify="space-between" wrap="nowrap" className={classes.editBar}>
             <Group gap="xs" wrap="nowrap">
@@ -413,46 +546,29 @@ export default function MermaidPageWorkspace({
         </>
       ) : (
         <>
-          <Group justify="flex-end" gap={4} wrap="nowrap" className={classes.viewBar}>
+          <Group justify="space-between" gap={4} wrap="nowrap" className={classes.viewBar}>
             <Button
               size="compact-xs"
               variant="light"
-              leftSection={<IconPencil size={12} />}
-              onClick={startEditing}
-              data-testid={`${pageType}-edit-button`}
+              leftSection={<IconPlus size={12} />}
+              onClick={addBlock}
+              // Disabled rather than failing on click: the cap is a real limit and
+              // the control should say so instead of doing nothing.
+              disabled={committedBlocks.length >= MAX_VISUAL_PAGE_BLOCKS}
+              data-testid={`${pageType}-add-block`}
             >
-              {UI_TEXT.diagramWorkspaceEditLabel}
+              {UI_TEXT.diagramAddBlockLabel}
             </Button>
-            {refreshButton}
-            {fitToggle}
-            {zoomControls}
-            {fullscreenToggle}
+            <Group gap={4} wrap="nowrap">
+              {refreshButton}
+              {fitToggle}
+              {zoomControls}
+              {fullscreenToggle}
+            </Group>
           </Group>
           <div className={classes.contentRow}>
-            <div className={classes.viewHost} data-testid={`${pageType}-rendered`}>
-              {errorCode !== null ? (
-                <div className={classes.errorBox} data-testid={`${pageType}-error`} role="alert">
-                  <Text size="sm" c="red">
-                    {ERROR_MESSAGE}
-                  </Text>
-                  <Button
-                    size="compact-xs"
-                    variant="light"
-                    mt="xs"
-                    leftSection={<IconRefresh size={12} />}
-                    onClick={() => setRenderSeq((seq) => seq + 1)}
-                    data-testid={`${pageType}-retry`}
-                  >
-                    {UI_TEXT.diagramRetryLabel}
-                  </Button>
-                </div>
-              ) : svg !== null ? (
-                renderSvgArea(svg)
-              ) : (
-                <Text size="xs" c="dimmed" role="status">
-                  …
-                </Text>
-              )}
+            <div className={classes.blockList} data-testid={`${pageType}-block-list`}>
+              {committedBlocks.map((block, index) => blockCard(block, index))}
             </div>
             {sidebar}
           </div>

@@ -34,6 +34,37 @@
   align-items: stretch;
 }
 
+/* The page's diagrams, stacked. A block list rather than one canvas, because a
+ * page can now hold several diagrams; each is its own card so the actions that
+ * apply to one diagram do not read as though they apply to all of them. */
+.blockList {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-sm);
+}
+
+.blockCard {
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-md);
+  background: var(--rtwiki-pane, var(--mantine-color-body));
+  overflow: hidden;
+}
+
+.blockBar {
+  padding: 4px var(--mantine-spacing-xs);
+  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+}
+
+.blockCanvas {
+  padding: var(--mantine-spacing-sm);
+  min-height: 0;
+}
+
 .editSplit {
   display: flex;
   flex-direction: row;

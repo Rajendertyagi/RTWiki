@@ -50,7 +50,7 @@ test.describe('diagram templates', () => {
     const failures: string[] = []
 
     for (const [id, def] of Object.entries(DIAGRAM_TEMPLATES)) {
-      await page.getByTestId('diagram-edit-button').click()
+      await page.getByTestId('diagram-block-edit-0').click()
       await page.getByTestId('diagram-source-input').fill(def.source)
       await page.getByTestId('diagram-apply').click()
 
@@ -96,7 +96,7 @@ test.describe('diagram templates', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
 
     const bar = page.getByTestId('template-bar')
     await expect(bar).toBeVisible()
@@ -160,7 +160,7 @@ test.describe('diagram templates', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
 
     // A type with no variants loads on one click.
     await page.getByTestId('template-sequence').click()
@@ -182,7 +182,7 @@ test.describe('diagram templates', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
 
     // Flowchart: four directions, each a real source.
     await page.getByTestId('template-flowchart').click()
@@ -219,7 +219,7 @@ test.describe('diagram templates', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
 
     // A variant-bearing type is the only thing that can prove this, and the bar is
     // ordered by family, so those types sit at the front and only reach the
@@ -274,7 +274,7 @@ test.describe('diagram templates', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
 
     // Force the overflow by constraining the bar itself. Shrinking the window
     // does not do it: the page layout clamps its own minimum, so the bar keeps
@@ -315,7 +315,7 @@ test.describe('diagram templates', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
 
     const cases: [string, string][] = [
       [

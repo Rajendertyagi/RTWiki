@@ -289,6 +289,14 @@ export const UI_TEXT = {
   imageUploadFailedTitle: 'Image not added',
   imageUploadFailed: 'That image could not be added. Try a PNG, JPEG, GIF, WebP, AVIF or BMP file.',
   imageTooLarge: 'That image is larger than the 50 MB limit.',
+  // Multi-block diagram pages
+  diagramAddBlockLabel: 'Add diagram',
+  diagramEditBlockLabel: 'Edit this diagram',
+  diagramRemoveBlockLabel: 'Remove this diagram',
+  diagramMoveBlockUpLabel: 'Move this diagram up',
+  diagramMoveBlockDownLabel: 'Move this diagram down',
+  /** Position of a diagram on its page, e.g. "Diagram 2 of 3". */
+  diagramBlockLabel: 'Diagram {position} of {total}',
   imageSvgNotSupported:
     'SVG images are not supported, because an SVG can carry scripts. Try a PNG, JPEG, GIF, WebP, AVIF or BMP file.',
   imageTooManyPixels:

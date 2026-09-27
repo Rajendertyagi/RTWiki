@@ -92,7 +92,7 @@ test.describe('dedicated diagram and mind map pages', () => {
     await expect(page.getByTestId('diagram-rendered').locator('svg')).toBeVisible()
 
     // Enter edit mode; live preview renders without Apply.
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
     const input = page.getByTestId('diagram-source-input')
     await input.fill('sequenceDiagram\n    Alice->>Bob: Hi')
     await expect(page.getByTestId('diagram-live-preview').locator('svg')).toBeVisible()
@@ -108,10 +108,38 @@ test.describe('dedicated diagram and mind map pages', () => {
 
     // Cancel restores the applied source; then apply a real change.
     await page.getByTestId('diagram-cancel').click()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
     await page.getByTestId('diagram-source-input').fill('stateDiagram-v2\n    [*] --> Idle')
     await page.getByTestId('diagram-apply').click()
     await expect(page.getByTestId('diagram-rendered').locator('svg')).toBeVisible()
+  })
+
+  test('a broken diagram does not take the rest of the page with it', async ({ page, request }) => {
+    const title = uniqueTitle('Bad Diagram Among Good')
+    const res = await request.post('/api/pages', {
+      data: {
+        title,
+        pageType: 'diagram',
+        content: JSON.stringify({
+          version: 2,
+          type: 'diagram',
+          blocks: [
+            { id: 'good', source: 'flowchart TD\n    A[Fine] --> B[Also fine]' },
+            { id: 'bad', source: 'graph TD\n  A [broken' }
+          ]
+        })
+      }
+    })
+    expect(res.status()).toBe(201)
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
+
+    // Only the broken block shows an error; the good one still draws. Before the
+    // block list, one failure replaced the single canvas for the whole page.
+    await expect(page.getByTestId('diagram-block-1-error')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('diagram-block-0-error')).toHaveCount(0)
+    await expect(page.getByTestId('diagram-block-0').locator('svg').first()).toBeVisible()
   })
 
   test('invalid diagram syntax stays contained with retry', async ({ page }) => {
@@ -123,11 +151,13 @@ test.describe('dedicated diagram and mind map pages', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
     await page.getByTestId('diagram-source-input').fill('graph TD\n  A [broken')
     await page.getByTestId('diagram-apply').click()
-    await expect(page.getByTestId('diagram-error')).toBeVisible()
-    await expect(page.getByTestId('diagram-retry')).toBeVisible()
+    // The error belongs to the block that failed, so the id is per block. A broken
+    // diagram no longer replaces the whole page's canvas.
+    await expect(page.getByTestId('diagram-block-0-error')).toBeVisible()
+    await expect(page.getByTestId('diagram-block-0-retry')).toBeVisible()
   })
 
   test('fit, zoom, refresh and full-screen controls work', async ({ page }) => {
@@ -158,7 +188,7 @@ test.describe('dedicated diagram and mind map pages', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-edit-button').click()
+    await page.getByTestId('diagram-block-edit-0').click()
     await page
       .getByTestId('diagram-source-input')
       .fill('erDiagram\n    CUSTOMER ||--o{ ORDER : places')
