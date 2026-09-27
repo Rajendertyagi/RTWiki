@@ -154,6 +154,21 @@ The Hono backend sets the following headers on every response via the official
 | `Referrer-Policy` | `no-referrer` | Prevent leaking internal paths |
 | `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` | Deny powerful web platform features |
 
+### 5.0 `Cache-Control` — partial coverage
+
+The table above lists what `secureHeaders` sets. **`Cache-Control` is not among them**, and the middleware sets none of its own — verified in `node_modules/hono/dist/middleware/secure-headers/secure-headers.js`, where the string does not appear in `HEADERS_MAP` or `DEFAULT_OPTIONS`. Every header in the table is therefore covered; `Cache-Control` is covered only where it is set by hand, at **exactly four sites**:
+
+| Site | Value | Why |
+|------|-------|-----|
+| `src/server/static.ts:113` | `no-store` | The SPA document. This is what stops a stored copy being paired with a later response's CSP nonce — see §5.1 |
+| `src/server/static.ts:204` | `public, max-age=31536000, immutable` | Hashed asset filenames, so the bytes at a URL cannot change |
+| `src/server/attachments/attachment-routes.ts:214` | `private, no-cache` | Attachments are addressed by id, so a shared cache must never hand one attachment's bytes to another URL |
+| `src/server/attachments/attachment-routes.ts:282` | `private, no-cache` | As above, for the second serving route |
+
+**Not covered: the entire JSON API.** `GET /api/pages` (titles), `GET /api/pages/:id` (full page JSON), `GET /api/pages?q=`, `GET /api/attachments/:id/text`, and the `onError` (`src/server/app.ts:213`) and `notFound` (`:218`) handlers all return page or error data with **no cache directives at all**. `src/server/routes/pages.ts` contains zero occurrences of the word `cache`.
+
+The requirement stands; this is unbuilt work. The concrete risk is private page content sitting in a shared cache. It is **latent** in the default configuration, because the server binds loopback only (§4) and so has no shared cache to leak into — and it becomes live the moment LAN binding is authorized ([ADR-001](adr/ADR-001-browser-first-local-application.md)). **It must be closed before that phase, not during it.**
+
 ### 5.1 Per-Response CSP Nonce (Phase 4A)
 
 Sandboxed HTML previews are delivered as `srcdoc` documents, and **srcdoc
@@ -210,7 +225,7 @@ The `Config Key` column names what the code actually reads. Several entries prev
 | Limit | Default Value | Enforced by | Status |
 |-------|--------------|-------------|--------|
 | Maximum attachment size | 50 MB | `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES`, `src/shared/constants/index.ts`; Hono `bodyLimit` at `src/server/attachments/attachment-routes.ts:6,144` — applied **before** the body is parsed, so an oversized upload is never buffered | Built |
-| Maximum request body size | 100 MB | `MAX_REQUEST_SIZE`, `src/shared/constants/index.ts:16` | Built |
+| Maximum request body size | 100 MB | `MAX_REQUEST_SIZE`, `src/shared/constants/index.ts:16` | **Defined but NOT enforced.** Declared at `:16`, imported at `src/server/config/index.ts:13`, typed at `:30`, assigned at `:53` — and read by nothing. No request path consults it, so no request is actually bounded by it. Do not cite it as a limit |
 | Maximum page JSON body (create/update) | 4 MB | `MAX_PAGE_JSON_BODY_BYTES`, `src/shared/constants/index.ts:20` | Built |
 | Maximum HTML pane per page | 2 MiB UTF-8 | `MAX_HTML_BYTES`, `src/shared/schemas/html-content.ts:29,46` | Built |
 | Maximum CSS pane per page | 512 KiB UTF-8 | `MAX_CSS_BYTES`, `src/shared/schemas/html-content.ts:30` | Built |
