@@ -21,6 +21,7 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "test:browser": "playwright test",
+    "test:compiled-images": "bun build --compile scripts/verify-compiled-image-detection.ts --outfile build/verify-images.exe && build/verify-images.exe",
     "db:migrate": "bun run src/server/database/migrations.ts"
   },
   "dependencies": {
@@ -48,7 +49,9 @@
     "codemirror": "6.0.2",
     "dayjs": "^1.11.23",
     "dompurify": "^3.4.15",
+    "file-type": "22.1.1",
     "hono": "4.13.3",
+    "image-size": "2.0.4",
     "marked": "^18.0.11",
     "mermaid": "12.0.0",
     "motion": "13.4.4",

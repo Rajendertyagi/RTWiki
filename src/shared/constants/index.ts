@@ -23,6 +23,13 @@ export const MAX_PAGE_JSON_BODY_BYTES = 4 * 1024 * 1024
 export const PREVIEW_REBUILD_DEBOUNCE_MS = 800 as const
 export const PROVISIONAL_AUTOSAVE_DEBOUNCE_MS = 2000 as const
 export const PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024
+// Ceiling on total pixels (width x height) of an uploaded image, enforced at
+// ingest from the file's own header. This bounds what the browser must decode
+// when the note is opened: 50 MP is about 8000x6000, which comfortably admits a
+// modern phone photo while refusing the deliberately-constructed images that
+// exist to exhaust a decoder. It is a limit on rendering cost, not on bytes -
+// the byte ceiling above is that. Provisional, like the limits around it.
+export const PROVISIONAL_MAX_IMAGE_PIXELS = 50_000_000
 export const SHUTDOWN_TOKEN_HEADER = 'x-rtwiki-shutdown-token' as const
 
 // Bounded log rotation: current file plus at most LOG_MAX_ROTATED_FILES rotated

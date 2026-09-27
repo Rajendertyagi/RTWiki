@@ -105,13 +105,14 @@ Each layer has a single responsibility and communicates only with its adjacent l
 ### 3.7 Attachments
 
 - **Technology:** Filesystem storage under `data/attachments/`, catalogued by the `attachments` table
-- **Modules:** `src/shared/attachments/image-formats.ts` (content-based format detection, shared by client and server), `src/server/attachments/attachment-repository.ts` (catalogue), `src/server/attachments/attachment-routes.ts` (endpoints)
+- **Modules:** `src/shared/attachments/image-formats.ts` (the accepted-format allowlist, dependency-free and shared by client and server), `src/server/attachments/image-detect.ts` (content-based detection and header dimension reading), `src/server/attachments/attachment-repository.ts` (catalogue), `src/server/attachments/attachment-routes.ts` (endpoints)
 - **Endpoints:**
-  - `POST /api/attachments` — multipart upload; type decided from the bytes, size capped by `bodyLimit` before the body is parsed
+  - `POST /api/attachments` — multipart upload; type decided by reading the file's structure, size capped by `bodyLimit` before the body is parsed, pixel count capped from the header
   - `GET /api/attachments/:id` — serves the file at the type recorded from its bytes, with `X-Content-Type-Options: nosniff`
   - `DELETE /api/attachments/:id` — removes the row, then the file
+  - A refused upload answers with a reason code (`unsupported_type`, `svg_not_supported`, `too_many_pixels`) beside the user-facing message, so the client can give actionable words without parsing English
 - **Responsibility:** Accept image uploads, decide the type from content, store under a server-generated name, and serve them back by catalogue id.
-- **Constraint:** Uploaded files are never executed. SVG is not accepted, because serving it inline is document execution. Requests address an attachment by id, so no user-supplied string reaches the filesystem — there is no traversal to prevent, rather than a traversal that is prevented. See [ADR-013](adr/ADR-013-image-attachments.md).
+- **Constraint:** Uploaded files are never executed. SVG is not accepted, because serving it inline is document execution, and a refused SVG says so. Requests address an attachment by id, so no user-supplied string reaches the filesystem — there is no traversal to prevent, rather than a traversal that is prevented. See [ADR-013](adr/ADR-013-image-attachments.md).
 - **Client:** BlockNote's `uploadFile` hook is the single entry point, so the file picker, paste and drop all take this one path. The image block stores the returned URL, keeping the document canonical BlockNote JSON with no bytes inlined.
 
 ### 3.8 Backup and Restore

@@ -60,6 +60,10 @@ This document defines measurable, observable pass/fail criteria for the MVP. Eac
 | ID | Criterion | Pass Condition |
 |----|----------|---------------|
 | AC-029 | A user can upload an image file (PNG, JPG, GIF). | The image appears in the page and can be viewed by clicking it. |
+| AC-029a | A user can upload a WebP, AVIF or BMP image. | The image appears in the page and is served at the type its bytes actually are. |
+| AC-029b | An uploaded image is identified from its own structure, not from the request's declared type or its name. | A file that merely begins with a valid image signature is rejected; a real image sent under a false name and a false `Content-Type` is stored and served at its true type. |
+| AC-029c | An image declaring more than 50 megapixels in its header is rejected. | The application shows a message naming the pixel limit and the file is not stored. |
+| AC-029d | A rejected SVG upload is reported as an SVG. | The message names SVG as the reason, so the user is not told only that "something" is unsupported. |
 | AC-030 | A user can upload a PDF file. | The PDF appears as an attachable file in the page with a download link. |
 | AC-031 | A user can upload a document file (DOCX, ODT, TXT, MD). | The file appears as an attachable file in the page with a download link. |
 | AC-032 | An upload of a file with a disallowed extension is rejected. | The application shows an error message and the file is not stored. |

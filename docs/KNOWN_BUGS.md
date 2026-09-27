@@ -99,7 +99,8 @@ WebP and BMP work too.
 detector, so the remaining formats are an allowlist addition rather than new plumbing. What they do
 *not* get for free is the security reasoning — see [ADR-013](adr/ADR-013-image-attachments.md) for
 why documents are a different problem from images (they must never be served inline, and they need
-range requests to be viewable at all).
+range requests to be viewable at all). Note also that `.txt` and `.md` have no magic number at all, so
+they cannot be identified from their bytes and need a different trust model from images.
 
 **Next step:** treat documents as a separate decision, not an allowlist edit. Serve them as
 `Content-Disposition: attachment` with a detected type, and decide whether they are previewable
@@ -108,6 +109,21 @@ before anything is built.
 ---
 
 ## Recently fixed
+
+### An image was accepted because it started with the right bytes
+
+**The kind of failure that only shows up to someone trying to break it.** `image-formats.ts`
+identified a format by comparing the file's leading bytes against a hand-written signature list. A
+PNG signature is eight bytes, so *any* file beginning with those eight bytes was accepted as a PNG —
+including a PNG header followed by attacker-chosen content — and then stored and served as
+`image/png`. The test suite covered SVG, HTML, a PDF, a PE executable and a shell script, but never a
+**valid signature followed by hostile content**, which is the one case the check got wrong.
+
+**Fixed** by detecting with `file-type`, which reads the container: for PNG it walks the chunk
+sequence and requires a well-formed 13-byte `IHDR`, and it caps chunk count and scan budget so a
+crafted file cannot make the parser walk indefinitely. The accepted-format list stayed ours and stayed
+dependency-free; only the byte inspection moved server-side. A regression test now covers the
+signature-then-garbage case at both the unit and the route level.
 
 ### The toolbar silently hid a newly added insert control
 

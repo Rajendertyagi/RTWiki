@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite'
-import { detectImageFormat } from '../../shared/attachments/image-formats.js'
+import type { ImageInspection } from './image-detect.js'
 
 /**
  * Catalogue of uploaded images.
@@ -81,7 +81,7 @@ export function deleteAttachment(db: Database, id: string): boolean {
 /** What the storage layer decided about an upload. */
 export type StoredAttachment =
   | { ok: true; record: AttachmentRecord }
-  | { ok: false; reason: 'unsupported_type' | 'empty' }
+  | { ok: false; reason: 'unsupported_type' | 'svg_not_supported' | 'too_many_pixels' | 'empty' }
 
 /**
  * Decides the stored identity of an upload from its content.
@@ -90,6 +90,11 @@ export type StoredAttachment =
  * this stays testable without a filesystem and so the rejection paths are
  * exercised directly.
  *
+ * `inspection` is the verdict from `inspectImageUpload`, which read the file's
+ * own bytes. This function never inspects anything itself - it only records what
+ * that verdict decided, so there is exactly one place in the codebase where a
+ * file's identity is established.
+ *
  * The uploader's filename never influences `storedName` beyond being recorded for
  * display. A request naming `../../../etc/passwd` produces an ordinary
  * `<uuid>.<ext>` like any other, so there is no traversal to defend against at
@@ -97,12 +102,17 @@ export type StoredAttachment =
  */
 export function planStorage(
   bytes: Uint8Array,
-  options: { id: string; originalName?: string | null; checksum?: string | null }
+  options: {
+    id: string
+    originalName?: string | null
+    checksum?: string | null
+    inspection: ImageInspection
+  }
 ): StoredAttachment {
   if (bytes.length === 0) return { ok: false, reason: 'empty' }
-  const format = detectImageFormat(bytes)
-  if (!format) return { ok: false, reason: 'unsupported_type' }
+  if (!options.inspection.ok) return { ok: false, reason: options.inspection.reason }
 
+  const { format } = options.inspection
   const original = normaliseOriginalName(options.originalName)
   return {
     ok: true,

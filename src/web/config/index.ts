@@ -287,8 +287,12 @@ export const UI_TEXT = {
   // Images
   imageLabel: 'Image',
   imageUploadFailedTitle: 'Image not added',
-  imageUploadFailed: 'That image could not be added. Try a PNG, JPEG, GIF, WebP or BMP file.',
+  imageUploadFailed: 'That image could not be added. Try a PNG, JPEG, GIF, WebP, AVIF or BMP file.',
   imageTooLarge: 'That image is larger than the 50 MB limit.',
+  imageSvgNotSupported:
+    'SVG images are not supported, because an SVG can carry scripts. Try a PNG, JPEG, GIF, WebP, AVIF or BMP file.',
+  imageTooManyPixels:
+    'That image has more pixels than the 50 megapixel limit. Try a smaller image.',
   // Right sidebar
   rightSidebarLabel: 'Page details',
   collapseSidebarLabel: 'Collapse sidebar',

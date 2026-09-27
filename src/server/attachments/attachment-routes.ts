@@ -1,6 +1,9 @@
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
-import { PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES } from '@rtwiki/shared/constants'
+import {
+  PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES,
+  PROVISIONAL_MAX_IMAGE_PIXELS
+} from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { getDb } from '../database/index.js'
@@ -11,8 +14,10 @@ import {
   deleteAttachment,
   getAttachment,
   insertAttachment,
-  planStorage
+  planStorage,
+  type StoredAttachment
 } from './attachment-repository.js'
+import { inspectImageUpload, pixelCount } from './image-detect.js'
 
 export interface AttachmentRouteOptions {
   /** Absolute path to `data/attachments` (ADR-005). */
@@ -23,8 +28,28 @@ export interface AttachmentRouteOptions {
   available?: boolean
 }
 
-/** A short, bounded reason code; never the uploader's text, never a stack. */
-const REJECTED = 'unsupported_type' as const
+/**
+ * The message a rejection produces.
+ *
+ * Each reason gets its own words because a user who pastes an SVG deserves to
+ * learn that SVG is the problem, not that "something" is. The mapping lives here
+ * so the code that refuses an upload and the words the user reads cannot drift.
+ */
+const REJECTION_MESSAGES: Record<
+  Exclude<StoredAttachment, { ok: true }>['reason'],
+  { status: 400 | 413 | 415; error: string }
+> = {
+  empty: { status: 400, error: 'Image is empty' },
+  unsupported_type: { status: 415, error: 'Unsupported image type' },
+  svg_not_supported: {
+    status: 415,
+    error: 'SVG images are not supported. Use a PNG, JPEG, GIF, WebP, AVIF or BMP file.'
+  },
+  too_many_pixels: {
+    status: 415,
+    error: `Image is larger than the ${PROVISIONAL_MAX_IMAGE_PIXELS / 1_000_000} megapixel limit.`
+  }
+}
 
 /**
  * Image upload and serving. Paths are relative to the `/api/attachments` mount,
@@ -65,19 +90,36 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     if (!(file instanceof File)) return c.json({ error: 'No file provided' }, 400)
     if (file.size === 0) return c.json({ error: 'Image is empty' }, 400)
 
-    // Read only as much as the signature needs plus a margin. The whole file is
-    // read anyway to store it, but the decision is made on real bytes rather than
-    // on the declared type.
+    // The whole file is read because it is stored whole, but every *decision*
+    // about it is made from its own bytes: the type comes from the file's
+    // container structure, and the dimensions from its header. The declared
+    // type is never read.
     const bytes = new Uint8Array(await file.arrayBuffer())
 
     const id = crypto.randomUUID()
-    const planned = planStorage(bytes, { id, originalName: file.name })
+    const inspection = await inspectImageUpload(bytes)
+
+    // The pixel ceiling is applied here rather than inside the detector so that
+    // detection and the limit stay separable: detection answers "what is this",
+    // the limit answers "is this too big to open". An unknown size is allowed
+    // through, because refusing a file whose header we could not parse would
+    // mean an accepted format depending on a second parser agreeing.
+    const pixels = inspection.ok ? pixelCount(inspection.width, inspection.height) : null
+    const planned: StoredAttachment =
+      inspection.ok && pixels !== null && pixels > PROVISIONAL_MAX_IMAGE_PIXELS
+        ? { ok: false, reason: 'too_many_pixels' }
+        : planStorage(bytes, { id, originalName: file.name, inspection })
+
     if (!planned.ok) {
+      const message = REJECTION_MESSAGES[planned.reason]
       logger?.warn('Attachment rejected', {
         event: 'attachment_rejected',
-        code: REJECTED
+        code: planned.reason
       })
-      return c.json({ error: 'Unsupported image type' }, 415)
+      // The reason code travels beside the human-readable message so the client
+      // can give an actionable message for the cases a user can fix, without
+      // parsing English.
+      return c.json({ error: message.error, code: planned.reason }, message.status)
     }
 
     // The generated name is the only path used. It cannot escape the directory

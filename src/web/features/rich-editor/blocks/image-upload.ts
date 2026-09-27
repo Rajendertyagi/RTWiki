@@ -62,7 +62,7 @@ async function postImage(file: File): Promise<string> {
   }
 
   if (!response.ok) {
-    throw new Error(response.status === 413 ? UI_TEXT.imageTooLarge : UI_TEXT.imageUploadFailed)
+    throw new Error(messageForStatus(response.status, await readErrorCode(response)))
   }
 
   // The response shape is the server's, so it is checked rather than assumed: an
@@ -71,6 +71,34 @@ async function postImage(file: File): Promise<string> {
   const url = readAttachmentUrl(payload)
   if (!url) throw new Error(UI_TEXT.imageUploadFailed)
   return url
+}
+
+/**
+ * Picks the message for a failed upload.
+ *
+ * The server distinguishes why it refused an upload, and the two reasons a user
+ * can actually act on - an SVG, and too many pixels - get their own words rather
+ * than a generic failure. A reason code is preferred over the status because the
+ * status alone cannot tell those two apart.
+ */
+function messageForStatus(status: number, code: string | null): string {
+  if (code === 'svg_not_supported') return UI_TEXT.imageSvgNotSupported
+  if (code === 'too_many_pixels') return UI_TEXT.imageTooManyPixels
+  if (status === 413) return UI_TEXT.imageTooLarge
+  return UI_TEXT.imageUploadFailed
+}
+
+/**
+ * Reads the server's reason code, if it sent one.
+ *
+ * The body is consumed here so the caller does not read it twice; a body that is
+ * absent or unreadable simply yields `null`, which falls back to the status.
+ */
+async function readErrorCode(response: Response): Promise<string | null> {
+  const payload: unknown = await response.json().catch(() => null)
+  if (typeof payload !== 'object' || payload === null) return null
+  const code = (payload as { code?: unknown }).code
+  return typeof code === 'string' ? code : null
 }
 
 /** Pulls the stored URL out of the upload response, or null if it is not there. */
