@@ -306,6 +306,17 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     closeLogger: logger.close.bind(logger)
   })
 
+  // The address the server actually binds. Named once and used in three places
+  // -- the app's Host allowlist, `Bun.serve`, and the startup log -- because the
+  // allowlist is only correct if it names the same address that is bound, and
+  // three copies of that string is how they would drift apart.
+  //
+  // Hardcoded to loopback, which is the documented default. Authorising LAN
+  // binding (ADR-001) means changing this ONE line to the configured host, and
+  // nothing else: the Host allowlist in `request-host.ts` already accepts
+  // whatever this is.
+  const bindHost = '127.0.0.1'
+
   // 2. Create a fresh Hono app with the coordinator injected.
   const app = createApp({
     coordinator,
@@ -315,14 +326,15 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     frontendDistDir: paths.frontendDistDir,
     dataDir,
     getCurrentPort: () => boundPort,
-    debugEventSink
+    debugEventSink,
+    host: bindHost
   })
 
   // 3. Start the Bun HTTP server.
   const server = await Bun.serve({
     fetch: app.fetch,
     port,
-    hostname: '127.0.0.1'
+    hostname: bindHost
   })
   boundPort = server.port ?? port
 
@@ -332,11 +344,11 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   //    synchronous call stack is still executing.
   serverRef = server
 
-  logger.info('HTTP server listening', { event: 'startup', host: '127.0.0.1', port: server.port })
+  logger.info('HTTP server listening', { event: 'startup', host: bindHost, port: server.port })
 
   if (openBrowser) {
     const launcher = options.launcher ?? launchBrowser
-    await launcher(`http://127.0.0.1:${server.port}/`)
+    await launcher(`http://${bindHost}:${server.port}/`)
   }
 
   return {

@@ -127,7 +127,31 @@ export function getDb(): Database {
  */
 export function checkIntegrity(): boolean {
   const db = getDb()
-  const rows = db.query('PRAGMA integrity_check').all() as Array<Record<string, string>>
+
+  // `PRAGMA integrity_check` does not always *answer* — it throws. Measured on
+  // SQLite 3.53.2: a database truncated to 60% raises
+  // `database disk image is malformed`, and a file that is not a database at all
+  // raises `file is not a database`. Both are corruption, so both are `false`.
+  //
+  // Without this, the worst corruption escaped as a raw SQLiteError instead of
+  // the intended result: at `bootstrap.ts` the log line and the human-readable
+  // message both sat after the call and so never ran, and the user saw a
+  // SQLite message rather than "your database could not be read".
+  //
+  // **Any future validator must treat a throw as failure**, not merely as
+  // "not ok" -- `integrity_check` alone is also not sufficient, because it does
+  // not check foreign keys; see SECURITY.md 8.1.
+  let rows: Array<Record<string, string>>
+  try {
+    rows = db.query('PRAGMA integrity_check').all() as Array<Record<string, string>>
+  } catch (error) {
+    databaseLog.error('Database integrity check failed', {
+      event: 'db_integrity',
+      detail: error instanceof Error ? error.message : String(error)
+    })
+    return false
+  }
+
   const ok = rows.length === 1 && rows[0]?.integrity_check === 'ok'
   if (!ok) {
     databaseLog.error('Database integrity check failed', {

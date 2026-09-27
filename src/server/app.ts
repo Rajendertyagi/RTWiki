@@ -1,4 +1,10 @@
-import { APP_NAME, APP_VERSION, DEFAULT_PORT, HEALTH_PATH } from '@rtwiki/shared/constants'
+import {
+  APP_NAME,
+  APP_VERSION,
+  DEFAULT_HOST,
+  DEFAULT_PORT,
+  HEALTH_PATH
+} from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { NONCE, type SecureHeadersVariables, secureHeaders } from 'hono/secure-headers'
 import { createAttachmentRoutes } from './attachments/attachment-routes.js'
@@ -13,6 +19,8 @@ import { createSettingsRoutes } from './routes/settings.js'
 import { createShutdownRoutes } from './routes/shutdown.js'
 import type { ShutdownCoordinator } from './shutdown-coordinator.js'
 import { serveStatic } from './static.js'
+import { isAllowedHost, isUnsafeMethod } from './utils/request-host.js'
+import { isSameOrigin } from './utils/request-origin.js'
 
 /**
  * Context key a route uses to ask for a stricter Content-Security-Policy than the
@@ -95,6 +103,13 @@ export interface AppDependencies {
    * in memory or drop events entirely.
    */
   debugEventSink: DebugEventSink
+  /**
+   * Host the server is bound to, added to the Host allowlist so an authorised LAN
+   * phase keeps working without revisiting the check. Optional so existing tests
+   * that build a dependency bag need no change; it defaults to loopback, which is
+   * the only value a default installation can produce.
+   */
+  host?: string
 }
 
 /**
@@ -126,6 +141,40 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   // Registered before all routes so the nonce exists in context by the time
   // HTML-serving handlers execute.
   app.use('*', securityHeaders)
+
+  // Cross-origin request rejection, for every request. Two independent checks,
+  // because they stop two different attacks and neither substitutes for the other:
+  //
+  //  1. Host allowlist, on EVERY request. This is the only check that stops DNS
+  //     rebinding, where the browser considers the request same-origin and so
+  //     sends no Origin and no Sec-Fetch-Site -- which is exactly the case
+  //     `isSameOrigin` accepts for the benefit of command-line clients.
+  //  2. `isSameOrigin`, on state-changing methods only. This stops the ordinary
+  //     case: a form or `fetch` POST from a page on another site. GET is left
+  //     alone so the health check and the desktop shell keep working.
+  //
+  // `isSameOrigin` already returns true when no browser headers are present, so
+  // the compiled-executable E2E script and any local automation keep working
+  // unchanged. That is deliberate, and it is also why check 1 cannot be skipped.
+  //
+  // Registered after `secureHeaders` so a rejection still carries the full set of
+  // security headers. See `src/server/utils/request-host.ts` for why each part is
+  // as permissive as it is, and `request-origin.ts` for the origin half.
+  app.use('*', async (c, next) => {
+    const allowedHost = deps.host ?? DEFAULT_HOST
+    if (!isAllowedHost(c.req.header('host') ?? null, allowedHost)) {
+      deps.logger.warn('Rejected request with an unrecognised Host header', {
+        event: 'request_host_rejected',
+        method: c.req.method,
+        host: c.req.header('host') ?? null
+      })
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    if (isUnsafeMethod(c.req.method) && !isSameOrigin(c.req.raw)) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    await next()
+  })
 
   app.get(HEALTH_PATH, (c) => {
     const timestamp = new Date().toISOString()
