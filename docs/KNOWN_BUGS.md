@@ -222,39 +222,43 @@ the parser now escapes raw HTML, a user cannot put `<math>` or `<svg>` into the 
 characters arrive as text. The only MathML or SVG reaching the sanitiser is markup RTWiki generated
 itself. So this widens what our own output may contain, not what a user's keystrokes can.
 
-### Two amounts in one paragraph become maths
+### Adjacent maths, `$a$$b$`, renders as a KaTeX error
 
-**Measured, documented, and a deliberate trade-off rather than a bug.** `micromark-extension-math` does
-**not** implement the pandoc/GitHub delimiter rule. Its actual boundary:
+**Measured, and inherited rather than introduced.** `$a$$b$` opens with a run of one `$` and the next run
+it meets has two, so the run sizes do not match; the scan continues and the final single `$` matches,
+leaving the TeX source `a$$b`. KaTeX cannot render that and shows the source in its error styling.
 
-| Source | Renders as |
-|---|---|
-| `Only $100.` · `Earn $5 million.` | text ✓ |
-| `It cost $20,000 and $30,000 won.` | **maths** ✗ |
-| `Pay $5 or $10 today.` | **maths** ✗ |
-| `Between $3 and $4.` | **maths** ✗ |
-| `Cost \$5 and \$6.` | text ✓ |
-| `` `$5` `` in code, or in a fence | text ✓ |
+The upstream package was measured against RTWiki's construct and produces **byte-identical** output for
+`$a$$b$`, `x $a$$b$ y`, `$a$$b$ $c$`, `$$x$$`, `$a$ $b$` and `$a$$b`. So this is a property of marker-run
+matching, not a cost of owning the tokenizer.
 
-One `$` in a paragraph is safe. **Two** is not, whatever is between them.
-
-**Why it is easy to miss:** a note containing a single amount renders perfectly, so the feature looks
-correct until one paragraph happens to name two. A range is the worst case, because `Between $3 and $4.`
-reads as one amount to a person and as a pair of delimiters to the parser. It was written into the
-"stays text" list in the test suite first and failed there, which is the cheapest possible warning.
-
-**The workaround is `\$`**, or putting the amounts in different paragraphs. Turning off
-`singleDollarTextMath` would remove the false positive and also remove inline maths, which is the
-commoner case in study notes — so the looser default is kept, deliberately, with the cost recorded here
-and asserted by a test. See [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+**The workaround is a space.** `$a$ $b$` is two expressions and renders correctly. Asserted both ways by
+`tests/markdown-render.test.ts` so that a future change to run matching is noticed. See
+[ADR-017](adr/ADR-017-markdown-engine-micromark.md).
 
 ### Display maths only works when `$$` is alone on its line
 
-`$$x$$` written on one line renders as **inline** maths, not display. The extension only reaches its
-flow construct when the opening `$$` sits on a line by itself, with the expression on the lines between
-and a closing `$$` after them. The expression is still rendered correctly; only the presentation
-differs, so nothing looks broken — it just does not do what the author expected. Measured across five
-shapes and asserted both ways.
+`$$x$$` written on one line renders as **inline** maths, not display. The flow construct is only reached
+when the opening `$$` sits on a line by itself, with the expression on the lines between and a closing `$$`
+after them. The expression is still rendered correctly; only the presentation differs, so nothing looks
+broken — it just does not do what the author expected.
+
+**This matches GitHub's documented syntax**, which specifies display maths as `$$` beginning a new line, so
+the one-line form is a reasonable superset rather than a defect. The multi-line form is the documented one:
+
+```markdown
+$$
+\frac{a}{b}
+$$
+```
+
+Measured across five shapes and asserted both ways.
+
+**`\$` is the escape hatch for a literal `$`.** It works everywhere — in prose, and it still composes with
+the adjacency rule, so `\$x$` is a literal `$` followed by real maths. RTWiki's inline maths is delimited by
+GitHub's adjacency rule (see [ADR-017](adr/ADR-017-markdown-engine-micromark.md)), so ordinary currency —
+`Only $100.`, `Pay $5 or $10 today.`, `Between $3 and $4.` — is text without any escaping. `\$` is only
+needed when the author genuinely wants a `$` that would otherwise open maths.
 
 ### KaTeX fonts: a silent failure that no test would have caught
 
@@ -278,6 +282,39 @@ test must assert the SVG overlay and a resolved font. See `docs/evidence/markdow
 what correct output looks like.
 
 ## Recently fixed
+
+### Two amounts in one paragraph became maths
+
+**This was recorded here for three commits as "a deliberate trade-off rather than a bug". That framing
+was wrong, and so was the reasoning behind it.** `micromark-extension-math@3.1.0` decides inline maths by
+marker count — one `$` opens maths and anything may sit between the delimiters. Its only option,
+`singleDollarTextMath`, governs marker count and nothing more, so **no configuration of that package can
+express GitHub's adjacency rule.** The absence of a fix had been read as a decision to accept the false
+positive.
+
+Measured, in a paragraph:
+
+| Source | Before | After |
+|---|---|---|
+| `Only $100.` · `Earn $5 million.` · `The fee is $100.` | text ✓ | text ✓ |
+| `Pay $5 or $10 today.` | **maths** ✗ | text ✓ |
+| `Between $3 and $4.` | **maths** ✗ | text ✓ |
+| `It cost $20,000 and $30,000 won.` | **maths** ✗ | text ✓ |
+| `Budget is $100 for food and rent.` | text ✓ | text ✓ |
+| `value $E=mc^2$ here` | maths ✓ | maths ✓ |
+
+RTWiki now owns the inline construct and implements GitHub's rule: the opening `$` is followed by a
+non-whitespace character, the closing `$` is preceded by a non-whitespace character, and the closing `$`
+is not followed by a digit. The package's `$$` handling and its KaTeX renderer are reused unchanged.
+
+**Why it mattered:** for a study-notes application, a sentence about money rendering as an equation is a
+visible, credibility-destroying failure, and it was invisible in testing because a note with one amount
+renders perfectly. `Between $3 and $4.` reads as a single amount to a person and as a pair of delimiters to
+the parser.
+
+**The cost, stated plainly:** RTWiki now owns this tokenizer instead of receiving it from a maintainer.
+That is a permanent, real trade, recorded in
+[ADR-017](adr/ADR-017-markdown-engine-micromark.md) along with the MIT attribution.
 
 ### A document's own Content-Security-Policy was silently replaced by the app-wide one
 

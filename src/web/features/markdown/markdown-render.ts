@@ -2,13 +2,34 @@ import DOMPurify, { type Config } from 'dompurify'
 import { micromark } from 'micromark'
 import { gfm, gfmHtml } from 'micromark-extension-gfm'
 import { math, mathHtml } from 'micromark-extension-math'
+import { codes } from 'micromark-util-symbol'
+import { mathTextGithubRule } from './math-inline-github-rule.js'
 
 /**
- * The extension set: GitHub-Flavored Markdown plus `$…$` / `$$…$$` maths.
+ * The extension set: GitHub-Flavored Markdown, plus `$…$` inline and `$$…$$`
+ * display maths.
  *
  * Each extension has two halves — the first parses the syntax, the second
  * serialises it — and both are composed here, once, at module scope, so every
  * render shares one configuration and none of them can drift.
+ *
+ * ## Why the inline construct is ours and the rest is the package's
+ *
+ * `micromark-extension-math` decides inline maths by **marker count**, not by
+ * character adjacency, and its only option is a boolean that governs marker count. It
+ * therefore cannot express GitHub's rule, and with the default setting two dollar
+ * amounts in a sentence became an equation — measured: `Pay $5 or $10 today.` and
+ * `It cost $20,000 and $30,000 won.` both rendered as maths.
+ *
+ * So the package's **`flow`** is reused unchanged (display maths, `$$`, is correct
+ * and is not the problem) and its **`text`** is replaced by
+ * {@link mathTextGithubRule}, which implements the three adjacency conditions. The
+ * serialiser, `mathHtml`, is the package's unchanged — it is the KaTeX renderer, it
+ * is correct, and it matches on the token names the replacement deliberately keeps.
+ *
+ * **We now own this tokenizer instead of receiving it from a maintainer.** That is the
+ * deliberate cost of correct behaviour and GitHub parity, and it is a real one: a bug
+ * in it is ours to fix. It is one construct in one file, not a fork.
  *
  * ## `trust: false` is pinned, not defaulted
  *
@@ -26,8 +47,17 @@ import { math, mathHtml } from 'micromark-extension-math'
  * renders the source in its error colour, so the reader sees what they wrote and
  * the rest of the page survives.
  */
+const baseMath = math()
+
 const MARKDOWN_OPTIONS = {
-  extensions: [gfm(), math()],
+  extensions: [
+    gfm(),
+    {
+      // `flow` is the package's `$$` handling, kept verbatim. `text` is replaced.
+      ...baseMath,
+      text: { [codes.dollarSign]: mathTextGithubRule() }
+    }
+  ],
   htmlExtensions: [gfmHtml(), mathHtml({ throwOnError: false, trust: false })]
 }
 

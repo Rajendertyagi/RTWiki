@@ -227,58 +227,132 @@ describe('maths render', () => {
   })
 })
 
-describe('the $ delimiter, and where it misfires', () => {
+describe('the $ delimiter follows GitHub’s adjacency rule', () => {
   /**
-   * **The prompt expected these to stay text. Measured, they do not.**
+   * `micromark-extension-math@3.1.0` decides inline maths by **marker count**: with
+   * `singleDollarTextMath` on, one `$` opens maths and anything may sit between the
+   * delimiters. It has no option for adjacency, so it cannot express the rule below.
    *
-   * `micromark-extension-math` does not implement the pandoc/GitHub delimiter rule
-   * (opener not followed by whitespace, closer not preceded by whitespace and not
-   * followed by a digit). Measured boundary, exhaustively:
+   * RTWiki now owns the inline construct (`math-inline-github-rule.ts`) and implements
+   * GitHub's documented rule: the opening `$` is followed by a non-whitespace
+   * character, the closing `$` is preceded by a non-whitespace character, and the
+   * closing `$` is not followed by a digit.
    *
-   *   one `$` in a paragraph            -> text          (correct)
-   *   two `$` anywhere in a paragraph  -> MATH          (a false positive)
-   *   `\$`                              -> text          (correct)
-   *   inside code                       -> text          (correct)
-   *
-   * So `It cost $20,000 and $30,000 won` becomes maths, and so does `Pay $5 or $10`.
-   * A single amount is fine, which is what makes the failure so easy to miss: most
-   * test notes contain one amount and render perfectly.
-   *
-   * This is asserted as measured behaviour rather than as desired behaviour, so that
-   * a future upgrade that changes it is noticed, and so `KNOWN_BUGS.md` has a test
-   * behind it. Turning `singleDollarTextMath` off would fix it and would also remove
-   * inline maths entirely, which is a worse trade; the choice is recorded in ADR-017.
+   * Every case below asserts the **rendered output**, not the parser's intent, and
+   * asserts on the DOM rather than by substring-matching the HTML.
    */
-  it('leaves a single amount as text', () => {
-    // One dollar and no partner. Every one of these has exactly one `$`.
-    for (const source of ['Only $100.', 'Only $100', 'Earn $5 million.']) {
+
+  it.each([
+    ['Only $100.'],
+    ['Earn $5 million.'],
+    ['The fee is $100.'],
+    ['Pay $5 or $10 today.'],
+    ['Between $3 and $4.'],
+    ['It cost $20,000 and $30,000 won.'],
+    ['Budget is $100 for food and rent.'],
+    ['costs \\$100 only'],
+    ['Use `$x$` in code']
+  ])('leaves %s as text', (source) => {
+    const doc = parse(renderMarkdown(source))
+    expect(doc.querySelector('.katex'), `"${source}" must not become maths`).toBeNull()
+  })
+
+  it.each([['value $E=mc^2$ here'], ['$a+b$'], ['($x$)'], ['$x$, then more']])(
+    'renders %s as maths',
+    (source) => {
       const doc = parse(renderMarkdown(source))
-      expect(doc.querySelector('.katex'), `"${source}" must stay text`).toBeNull()
+      expect(doc.querySelector('.katex'), `"${source}" must become maths`).not.toBeNull()
+    }
+  )
+
+  it('keeps the literal text of a rejected candidate intact', () => {
+    // The `$` characters must survive as text, not be swallowed along with the failed
+    // attempt. A construct that failed to match but consumed input would drop them.
+    expect(parse(renderMarkdown('Pay $5 or $10 today.')).body.textContent).toBe(
+      'Pay $5 or $10 today.'
+    )
+    expect(parse(renderMarkdown('Between $3 and $4.')).body.textContent).toBe('Between $3 and $4.')
+  })
+
+  it('leaves a lone unmatched $ as literal text', () => {
+    for (const source of ['costs $100', 'a $ b', 'trailing $']) {
+      const doc = parse(renderMarkdown(source))
+      expect(doc.querySelector('.katex'), `"${source}"`).toBeNull()
     }
   })
 
-  it('treats two amounts in one paragraph as maths — a known false positive', () => {
-    // A *range* is the case that surprises most, because "Between $3 and $4." reads
-    // like one amount to a person and like a pair of delimiters to the parser. It was
-    // written into the "stays text" list here first and failed, which is exactly how
-    // it would be mis-assumed in a note.
+  it('refuses a closer followed by a digit, per condition 3', () => {
+    // The one condition that needs a character *after* the closer, which is why the
+    // construct defers its verdict by one state.
+    const doc = parse(renderMarkdown('value $x$5'))
+    expect(doc.querySelector('.katex'), 'a closer followed by a digit is not a closer').toBeNull()
+  })
+
+  it('resolves $a$$b$ the same way the package did, and pins that', () => {
+    /**
+     * **Recorded resolution: one expression, and KaTeX cannot render it.**
+     *
+     * `$a$$b$` opens with a run of one `$` and the next run it meets has two, so the
+     * run sizes do not match. The construct then keeps scanning inside the same
+     * expression and the final single `$` matches, leaving the TeX source `a$$b`,
+     * which KaTeX reports as an error and shows the source for.
+     *
+     * This is **not** a regression introduced here. The upstream package was measured
+     * against this construct and produces byte-identical output for `$a$$b$`,
+     * `x $a$$b$ y`, `$a$$b$ $c$`, `$$x$$`, `$a$ $b$` and `$a$$b`, because the run
+     * matching and the `previous` guard are both carried over from it. It is pinned
+     * so that a future change to either is noticed, and it is written down in
+     * `KNOWN_BUGS.md`. Two expressions side by side need a space: `$a$ $b$` is two.
+     */
+    const doc = parse(renderMarkdown('$a$$b$'))
+    expect(doc.querySelectorAll('.math-display').length).toBe(0)
+    expect(doc.querySelectorAll('.math-inline').length, 'one expression, not two').toBe(1)
+    expect(doc.querySelectorAll('.katex-error').length, 'KaTeX rejects a$$b').toBe(1)
+    expect(doc.body.textContent).toBe('a$$b')
+
+    // The documented way to write two adjacent expressions.
+    const spaced = parse(renderMarkdown('$a$ $b$'))
+    expect(spaced.querySelectorAll('.katex').length, 'a space makes them two').toBe(2)
+  })
+
+  it('does not fire where the $ is not text content', () => {
+    // The negative cases that must survive the new construct. A `$` inside any of
+    // these is not free text, so the construct must never see it.
+    //
+    // Note what is *not* in this list: link **text**. Measured, `[link $x$](url)`
+    // does render maths, and that is the correct result rather than a leak — link text
+    // is ordinary inline text and GitHub renders maths in it too. What must stay
+    // inert is everything that is a URL or an attribute, which is asserted here.
     for (const source of [
-      'It cost $20,000 and $30,000 won.',
-      'Pay $5 or $10 today.',
-      'Between $3 and $4.'
+      '`$x$`',
+      '```\n$x$\n```',
+      '```latex\n$x$\n```',
+      '[link](https://example.com/$x$)',
+      '![alt $x$](https://example.com/i.png)',
+      '![alt](https://example.com/i.png "$x$")',
+      '<https://example.com/$x$>'
     ]) {
-      const doc = parse(renderMarkdown(source))
-      expect(
-        doc.querySelector('.katex'),
-        `"${source}" becomes maths — measured, see KNOWN_BUGS`
-      ).not.toBeNull()
+      expect(parse(renderMarkdown(source)).querySelector('.katex'), `"${source}"`).toBeNull()
     }
   })
 
-  it('leaves an escaped amount as text', () => {
-    const doc = parse(renderMarkdown('Cost \\$5 and \\$6.'))
-    expect(doc.querySelector('.katex')).toBeNull()
-    expect(doc.body.textContent).toBe('Cost $5 and $6.')
+  it('does render maths in link text, which is ordinary inline text', () => {
+    // The counterpart to the test above, pinned so the boundary is deliberate and not
+    // accidental: text content is parsed, attribute content is not.
+    const doc = parse(renderMarkdown('[link $x$](https://example.com)'))
+    expect(doc.querySelector('a .katex'), 'link text is inline text').not.toBeNull()
+  })
+
+  it('still renders a $$ display block unchanged', () => {
+    // The package's `flow` construct is reused verbatim, so display maths is untouched.
+    const block = parse(renderMarkdown('before\n\n$$\n\\frac{a}{b}\n$$\n\nafter'))
+    expect(block.querySelector('.math-display')).not.toBeNull()
+    expect(block.querySelector('.math-display mfrac')).not.toBeNull()
+    // And the one-line form keeps its commit-2 behaviour, which is left alone
+    // deliberately: it matches GitHub's documented syntax to require `$$` on its own line.
+    const oneLine = parse(renderMarkdown('$$\\frac{a}{b}$$'))
+    expect(oneLine.querySelector('.math-display')).toBeNull()
+    expect(oneLine.querySelector('.math-inline')).not.toBeNull()
   })
 })
 

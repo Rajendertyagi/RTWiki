@@ -228,10 +228,20 @@ The heading outline for the right-hand panel is built from the same grammar via
 `mdast-util-from-markdown` (`markdown-outline.ts`), so the outline and the preview agree structurally
 about which lines are headings. Navigation is by index, not by heading text.
 
-Maths in a Markdown page are rendered at parse time by **KaTeX**, via
-`micromark-extension-math`, into the same HTML string the sanitiser then processes. `$…$` is inline and
-`$$…$$` on its own line is display. KaTeX's `trust` is pinned to `false` and `throwOnError` to `false`;
-see [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+Maths in a Markdown page are rendered at parse time by **KaTeX**, into the same HTML string the sanitiser
+then processes. `$…$` is inline and `$$…$$` on its own line is display. KaTeX's `trust` is pinned to
+`false` and `throwOnError` to `false`; see [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+
+**Two sources are involved, not one**, and the split is deliberate:
+
+- `micromark-extension-math` provides the **`$$` display** construct, the KaTeX renderer (`mathHtml`), and
+  the marker-run matching the tokenizer needs.
+- RTWiki's own `math-inline-github-rule.ts` provides the **inline `$…$` construct**, because the package
+  decides inline maths by marker count and cannot express GitHub's adjacency rule — with it, two dollar
+  amounts in a sentence rendered as an equation. See [ADR-017](adr/ADR-017-markdown-engine-micromark.md)
+  for the rule, the measured boundary, and the MIT attribution.
+
+So a reader looking for "the maths extension" will find two files, and that is expected.
 
 **The KaTeX stylesheet is owned by the Markdown workspace**, which imports `katex/dist/katex.min.css`.
 `@blocknote/math-block` imports the same file, but only from the Rich Note's lazily-loaded chunk — a

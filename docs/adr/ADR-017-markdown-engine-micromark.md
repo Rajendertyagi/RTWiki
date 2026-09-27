@@ -116,27 +116,79 @@ rather than the flag: all six commands are fed through the real pipeline and the
 malformed expression makes the whole preview fail to render, so a single typo would blank a note.
 Disabled, KaTeX shows the source in its error colour and the rest of the page survives.
 
-### The `$` delimiter is looser than a reader expects
+### The inline `$` delimiter is RTWiki's own construct, on GitHub's rule
 
-**Measured, and this is the sharpest edge in the feature.** `micromark-extension-math` does not
-implement the pandoc/GitHub delimiter rule. Its behaviour is:
+`micromark-extension-math@3.1.0` decides inline maths by **marker count**, not by character adjacency.
+From `dev/lib/math-text.js`:
 
-| Source | Result |
-|---|---|
-| One `$` in a paragraph — `Only $100.`, `Earn $5 million.` | text ✓ |
-| **Two** `$` in a paragraph — `It cost $20,000 and $30,000 won.`, `Pay $5 or $10.`, `Between $3 and $4.` | **maths** ✗ |
-| `\$` escaped | text ✓ |
-| Inside inline code or a fence | text ✓ |
+```js
+let single = options_.singleDollarTextMath
+if (single === null || single === undefined) single = true
+// Not enough markers in the sequence.
+if (sizeOpen < 2 && !single) return nok(code)
+```
 
-So a paragraph with two amounts becomes maths. It is easy to miss because a note with one amount
-renders perfectly, and a range like `Between $3 and $4.` reads as a single amount to a person and as a
-pair of delimiters to the parser.
+So one `$` opens maths and **anything** may sit between the delimiters. Measured consequences:
 
-`math({ singleDollarTextMath: false })` removes the false positive entirely — and removes inline
-maths with it, so `$E=mc^2$` would stop working. That is a worse trade for a study-notes application
-where inline maths is the common case, so the looser default is kept and the boundary is documented in
-[KNOWN_BUGS.md](../KNOWN_BUGS.md) and asserted by a test. **This is a deliberate choice with a known
-cost, not an oversight.**
+| Source | Package's behaviour | GitHub's rule |
+|---|---|---|
+| `Only $100.` | text ✓ | text |
+| `Pay $5 or $10 today.` | **maths** ✗ | text |
+| `Between $3 and $4.` | **maths** ✗ | text |
+| `It cost $20,000 and $30,000 won.` | **maths** ✗ | text |
+| `value $E=mc^2$ here` | maths ✓ | maths |
+
+**There is no option for the correct rule.** The single boolean governs marker count; nothing in the
+package governs adjacency. The earlier note in this ADR recorded the false positive as "a deliberate
+choice with a known cost" — that was wrong. It is a **defect with no configuration that fixes it**, and
+the earlier framing mistook the absence of a fix for a decision. Correcting that framing is the purpose
+of this amendment.
+
+RTWiki therefore owns the inline construct, in
+[`math-inline-github-rule.ts`](../../src/web/features/markdown/math-inline-github-rule.ts). It implements
+GitHub's documented rule, which is three adjacency conditions:
+
+1. the opening `$` is followed by a **non-whitespace** character;
+2. the closing `$` is preceded by a **non-whitespace** character;
+3. the closing `$` is **not** followed immediately by a **digit**.
+
+Everything else stays with the package. `math()` returns `{ flow, text }`; its **`flow`** is reused
+unchanged, so `$$` handling is untouched, and only **`text`** is substituted. `mathHtml()` is the package's
+unchanged, because it is the KaTeX renderer and it is correct.
+
+**Two pieces of the package's tokenizer are carried over on purpose**, because they are correct and
+re-deriving them would mean re-deriving them wrongly: the marker-run matching (`sizeOpen`/`size`, without
+which the construct opened maths on an empty `$$` and silently lost the fraction inside) and the
+`previous` guard (a `$` directly after another `$` does not open inline maths; a `$` after a backslash
+escape does, so `\$x$` still works). Neither touches the adjacency decision.
+
+#### Attribution and licence
+
+The state-machine shape — `start` → `sequenceOpen` → `between` → `data` → `sequenceClose` — and the
+`effects.enter`/`consume`/`exit` protocol follow **`micromark-extension-math`**, which is MIT-licensed, by
+Titus Wormer (<https://github.com/micromark/micromark-extension-math>). The token names `mathText`,
+`mathTextSequence` and `mathTextData` are that package's, because `mathHtml` matches on them and they are
+its public serialisation contract. The delimiter logic is ours and is not copied. This is one construct in
+one file, not a fork or a vendored package.
+
+#### The maintenance trade, stated honestly
+
+**We now own this tokenizer instead of receiving it from a maintainer.** A bug in it is ours to fix, and a
+security or correctness fix upstream in the adjacency logic will not reach RTWiki. That is the deliberate,
+permanent cost of correct behaviour and GitHub parity, and it is paid for ~150 lines in one file whose
+entire surface is the table of delimiters above. The alternative was shipping prose that renders as an
+equation, which for a study-notes application is a worse and more visible failure.
+
+#### Measured boundary
+
+`$a$$b$` is **one** expression whose TeX source is `a$$b`, which KaTeX reports as an error and shows the
+source for. This is **not** a regression: the package was measured against this construct and produces
+byte-identical output for `$a$$b$`, `x $a$$b$ y`, `$a$$b$ $c$`, `$$x$$`, `$a$ $b$` and `$a$$b`. Two adjacent
+expressions need a space — `$a$ $b$` is two. Written up in [KNOWN_BUGS.md](../KNOWN_BUGS.md) and pinned
+by a test.
+
+`$x$` inside link **text** does render maths, matching GitHub. Link destinations, image alt text, image
+titles, autolinks, code spans and fences do not. Text content is parsed; attribute content is not.
 
 ### Display maths needs the multi-line form
 
