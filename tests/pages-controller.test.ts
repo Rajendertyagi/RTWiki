@@ -189,11 +189,12 @@ describe('page API integration', () => {
     })
     const { page } = (await createRes.json()) as { page: Page }
 
-    // Update title.
+    // Update title. The version the client read is part of the write: without it
+    // the server cannot tell a current write from a superseded one.
     const updateRes = await fetch(`${API()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Renamed Page' })
+      body: JSON.stringify({ title: 'Renamed Page', version: page.version })
     })
     expect(updateRes.status).toBe(200)
     const updated = (await updateRes.json()) as { page: Page }
@@ -329,7 +330,7 @@ describe('HTML-page content API validation', () => {
     const res = await fetch(`${API()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: 'not canonical json' })
+      body: JSON.stringify({ content: 'not canonical json', version: page.version })
     })
     expect(res.status).toBe(400)
     const body = (await res.json()) as { error: string }
@@ -343,7 +344,7 @@ describe('HTML-page content API validation', () => {
     const res = await fetch(`${API()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: next })
+      body: JSON.stringify({ content: next, version: page.version })
     })
     expect(res.status).toBe(200)
     const body = (await res.json()) as { page: Page }
@@ -355,7 +356,7 @@ describe('HTML-page content API validation', () => {
     const res = await fetch(`${API()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Renamed', pageType: 'rich' })
+      body: JSON.stringify({ title: 'Renamed', pageType: 'rich', version: page.version })
     })
     expect(res.status).toBe(400)
     const body = (await res.json()) as { error: string }

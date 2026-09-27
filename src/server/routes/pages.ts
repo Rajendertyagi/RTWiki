@@ -4,9 +4,32 @@ import { CreatePageSchema, UpdatePageSchema } from '@rtwiki/shared/schemas/pages
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { getDb } from '../database/index.js'
+// The version conflict is raised by the repository's guarded write, and the
+// service layer passes it through untranslated, so the route maps it to 409.
+// `page-service.ts` re-exports `HierarchyError` for the same reason; re-exporting
+// this class there would be the tidier home, but the route is the only layer that
+// turns repository errors into HTTP, and one mapping beats two that can disagree.
+import { PageVersionConflictError } from '../repositories/page-repository.js'
 import * as service from '../services/page-service.js'
 
 const requestTextEncoder = new TextEncoder()
+
+/**
+ * Ceiling on the `q` search term. Page search is a substring match over every
+ * indexed page, so an unbounded term asks for unbounded work; 200 characters is
+ * far beyond any real search phrase. Rejection mirrors the body ceiling below —
+ * an explicit check with a clear message — and is never a silent clamp, because
+ * results for a truncated term would answer a question the user never asked.
+ */
+const MAX_SEARCH_QUERY_LENGTH = 200
+
+/**
+ * What the user is told when a write is rejected because the page moved on.
+ * Nothing was stored, so the text they typed is still in the editor: say so, and
+ * tell them to take a copy before reloading.
+ */
+const PAGE_VERSION_CONFLICT_MESSAGE =
+  'This page was changed in another tab or window, so your changes were not saved. Copy your text, then reload the page and add it again.'
 
 type BodyResult = { ok: true; body: unknown } | { ok: false; handled: false }
 type HandledBodyResult = { ok: false; handled: true; response: Response }
@@ -55,6 +78,14 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     try {
       const db = getDbFn()
       const search = c.req.query('q') || undefined
+      if (search !== undefined && search.length > MAX_SEARCH_QUERY_LENGTH) {
+        return c.json(
+          {
+            error: `Search text is limited to ${MAX_SEARCH_QUERY_LENGTH} characters. Shorten your search.`
+          },
+          400
+        )
+      }
       const limit = Number(c.req.query('limit')) || 50
       const offset = Number(c.req.query('offset')) || 0
       const result = service.listPages(db, { search, limit, offset })
@@ -190,6 +221,9 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       }
       return c.json({ page })
     } catch (err) {
+      if (err instanceof PageVersionConflictError) {
+        return c.json({ error: PAGE_VERSION_CONFLICT_MESSAGE }, 409)
+      }
       if (err instanceof service.PageValidationError) {
         return c.json({ error: err.message }, 400)
       }

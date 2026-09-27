@@ -18,12 +18,14 @@ async function seedRich(
   request: APIRequestContext,
   title: string,
   blocks: Array<Record<string, unknown>> = []
-): Promise<{ id: string }> {
+): Promise<{ id: string; version: number }> {
   const res = await request.post('/api/pages', {
     data: { title, pageType: 'rich', content: JSON.stringify(blocks) }
   })
   expect(res.status(), 'seed page should be created').toBe(201)
-  const body = (await res.json()) as { page: { id: string } }
+  // `version` travels with the seed: a later PATCH must present the version it
+  // read, or the server rejects the write as superseded.
+  const body = (await res.json()) as { page: { id: string; version: number } }
   return body.page
 }
 
@@ -117,7 +119,9 @@ test.describe('connect and find', () => {
     ])
 
     // Rename the target via the API â€” the stored href keeps working.
-    await request.patch(`/api/pages/${targetPage.id}`, { data: { title: 'Renamed Target' } })
+    await request.patch(`/api/pages/${targetPage.id}`, {
+      data: { title: 'Renamed Target', version: targetPage.version }
+    })
 
     await openNote(page, source)
     const tabCountBefore = await page.locator('[role="tab"]').count()
@@ -196,7 +200,10 @@ test.describe('connect and find', () => {
     // Remove the link in the source â†’ server index empties â†’ revisiting the
     // target shows the explicit empty state.
     const removeRes = await request.patch(`/api/pages/${sourcePage.id}`, {
-      data: { content: JSON.stringify([{ id: 'p', type: 'paragraph' }]) }
+      data: {
+        content: JSON.stringify([{ id: 'p', type: 'paragraph' }]),
+        version: sourcePage.version
+      }
     })
     expect(removeRes.status()).toBe(200)
     await expect

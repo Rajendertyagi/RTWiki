@@ -26,6 +26,13 @@ export interface CreatePageRequest {
 export interface UpdatePageRequest {
   title?: string
   content?: string
+  /**
+   * The page version the caller last read. Optional only because the client API
+   * (`web/services/pages-api.ts`) tracks it per page and fills it in; when it is
+   * given it always wins. The SERVER requires it: the write is applied only if
+   * this is still the stored version, otherwise 409.
+   */
+  version?: number
   // pageType deliberately absent: conversion is not supported in Phase 4A.
 }
 

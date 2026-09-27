@@ -145,11 +145,17 @@ describe('page_links index maintenance', () => {
     expect(repo.listBacklinks(db, target.id).map((r) => r.id)).toEqual([source.id])
 
     // Update removing the link → row removed.
-    service.updatePage(db, source.id, { content: JSON.stringify([]) })
+    const cleared = service.updatePage(db, source.id, {
+      content: JSON.stringify([]),
+      version: source.version
+    })
     expect(repo.listBacklinks(db, target.id)).toEqual([])
 
     // Re-add, then duplicate the source → copy carries the same outgoing link.
-    service.updatePage(db, source.id, { content: sourceContent })
+    service.updatePage(db, source.id, {
+      content: sourceContent,
+      version: cleared?.version ?? source.version
+    })
     const copy = service.duplicatePage(db, source.id)
     expect(copy).not.toBeNull()
     const backlinks = repo.listBacklinks(db, target.id).map((r) => r.id)
@@ -185,7 +191,7 @@ describe('page_links index maintenance', () => {
     })
     // Overwrite with HTML-page-shaped content is impossible via PATCH (type
     // immutable), but a rich save without links must clear the set.
-    service.updatePage(db, source.id, { content: JSON.stringify([]) })
+    service.updatePage(db, source.id, { content: JSON.stringify([]), version: source.version })
     expect(repo.listBacklinks(db, target.id)).toEqual([])
   })
 

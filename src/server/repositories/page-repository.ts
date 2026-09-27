@@ -29,6 +29,28 @@ export class HierarchyError extends Error {
   }
 }
 
+/**
+ * Raised when a write carries a version that is no longer the stored one: the
+ * page changed after the writer read it (a second tab or window). The write is
+ * rejected whole — no field is stored and nothing is re-indexed — and the route
+ * layer answers 409 Conflict.
+ *
+ * Rejection, not a merge. A rejected write the user is told about is strictly
+ * better than a silent overwrite, and two divergent documents cannot be
+ * reconciled safely here.
+ */
+export class PageVersionConflictError extends Error {
+  constructor(
+    readonly expectedVersion: number,
+    readonly actualVersion: number
+  ) {
+    super(
+      `Page version conflict: write expected version ${expectedVersion}, stored version is ${actualVersion}`
+    )
+    this.name = 'PageVersionConflictError'
+  }
+}
+
 export function createPage(
   db: Database,
   id: string,
@@ -79,10 +101,30 @@ export function getPageOrThrow(db: Database, id: string): Page {
   return page
 }
 
+/**
+ * Applies a partial update, guarded by an optimistic lock.
+ *
+ * `fields.version` is the version the writer read. The write is one
+ * compare-and-swap statement — `WHERE id = ? AND version = ?` — so a writer
+ * whose read has been superseded matches no row, changes nothing, and is
+ * reported through `PageVersionConflictError` (409 at the route). That check is
+ * the ONLY gate: it lives in the single UPDATE rather than in a preceding read,
+ * so it cannot be skipped by a caller and cannot race a competing write.
+ *
+ * A request that changes no field is a no-op: it returns the stored page
+ * without writing or bumping the version, so there is nothing to conflict over.
+ */
 export function updatePage(
   db: Database,
   id: string,
-  fields: { title?: string; content?: string; pageType?: PageType; searchContent?: string }
+  fields: {
+    title?: string
+    content?: string
+    pageType?: PageType
+    searchContent?: string
+    /** The version this writer read. Required: there is no unguarded write. */
+    version: number
+  }
 ): Page | null {
   const existing = getPage(db, id)
   if (!existing) return null
@@ -109,8 +151,14 @@ export function updatePage(
   values.push(new Date().toISOString())
   sets.push('version = version + 1')
   values.push(id)
+  values.push(fields.version)
 
-  db.run(`UPDATE pages SET ${sets.join(', ')} WHERE id = ?`, values)
+  const result = db.run(`UPDATE pages SET ${sets.join(', ')} WHERE id = ? AND version = ?`, values)
+  if (result.changes === 0) {
+    // The row is still there (checked above and nothing else writes on this
+    // connection), so zero changes means the version moved on.
+    throw new PageVersionConflictError(fields.version, getPageOrThrow(db, id).version)
+  }
 
   const updated = getPageOrThrow(db, id)
   // The service layer resolves the searchable text for every write; falling

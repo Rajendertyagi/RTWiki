@@ -75,7 +75,7 @@ describe('page CRUD', () => {
 
   it('updates page title', () => {
     const page = service.createPage(db, { title: 'Original', pageType: 'rich', content: '' })
-    const updated = service.updatePage(db, page.id, { title: 'Updated' })
+    const updated = service.updatePage(db, page.id, { title: 'Updated', version: page.version })
     expect(updated).not.toBeNull()
     expect(updated?.title).toBe('Updated')
     expect(updated?.version).toBe(page.version + 1)
@@ -83,13 +83,13 @@ describe('page CRUD', () => {
 
   it('updates page content', () => {
     const page = service.createPage(db, { title: 'Content Test', pageType: 'rich', content: 'v1' })
-    const updated = service.updatePage(db, page.id, { content: 'v2' })
+    const updated = service.updatePage(db, page.id, { content: 'v2', version: page.version })
     expect(updated?.content).toBe('v2')
   })
 
   it('drops pageType from update input (no conversion in Phase 4A)', async () => {
     const { UpdatePageSchema } = await import('@rtwiki/shared/schemas/pages')
-    const parsed = UpdatePageSchema.safeParse({ title: 'New Title', pageType: 'html' })
+    const parsed = UpdatePageSchema.safeParse({ title: 'New Title', pageType: 'html', version: 1 })
     // The schema strips the field silently; the route layer rejects its
     // presence explicitly (see pages-controller API tests).
     expect(parsed.success).toBe(true)
@@ -99,7 +99,10 @@ describe('page CRUD', () => {
   })
 
   it('returns null when updating non-existent page', () => {
-    const result = service.updatePage(db, '00000000-0000-0000-0000-000000000000', { title: 'x' })
+    const result = service.updatePage(db, '00000000-0000-0000-0000-000000000000', {
+      title: 'x',
+      version: 1
+    })
     expect(result).toBeNull()
   })
 
@@ -234,7 +237,7 @@ describe('rich-content JSON round trip', () => {
       type: 'blockContainer',
       children: [{ type: 'paragraph', content: [{ type: 'text', text: 'v2', styles: {} }] }]
     })
-    service.updatePage(db, page.id, { content: updatedContent })
+    service.updatePage(db, page.id, { content: updatedContent, version: page.version })
     const fetched = service.getPage(db, page.id)
     expect(fetched?.content).toBe(updatedContent)
   })
@@ -306,19 +309,23 @@ describe('HTML-page canonical content lifecycle', () => {
     const page = service.createPage(db, { title: 'Update HTML', pageType: 'html', content: '' })
     expect(() =>
       service.updatePage(db, page.id, {
-        content: '{"version":9,"html":"","css":"","javascript":""}'
+        content: '{"version":9,"html":"","css":"","javascript":""}',
+        version: page.version
       })
     ).toThrow(service.PageValidationError)
 
     const next = '{"version":1,"html":"<p>v2</p>","css":"","javascript":"console.log(2)"}'
-    const updated = service.updatePage(db, page.id, { content: next })
+    const updated = service.updatePage(db, page.id, { content: next, version: page.version })
     expect(updated?.content).toBe(next)
   })
 
   it('leaves rich-page content validation unchanged (any string accepted)', () => {
     const page = service.createPage(db, { title: 'Rich Any', pageType: 'rich', content: '<raw>' })
     expect(page.content).toBe('<raw>')
-    const updated = service.updatePage(db, page.id, { content: 'still anything' })
+    const updated = service.updatePage(db, page.id, {
+      content: 'still anything',
+      version: page.version
+    })
     expect(updated?.content).toBe('still anything')
   })
 
@@ -345,7 +352,10 @@ describe('HTML-page canonical content lifecycle', () => {
     expect(legacyPage.content).toBe('<p>pre-canonical garbage</p>')
 
     // Title-only updates succeed without rewriting content.
-    const renamed = service.updatePage(db, legacyPage.id, { title: 'Legacy Renamed' })
+    const renamed = service.updatePage(db, legacyPage.id, {
+      title: 'Legacy Renamed',
+      version: legacyPage.version
+    })
     expect(renamed?.content).toBe('<p>pre-canonical garbage</p>')
 
     // Duplicates copy the malformed content verbatim.
@@ -423,7 +433,7 @@ describe('HTML-page search indexing', () => {
       css: '',
       javascript: ''
     })
-    service.updatePage(db, page.id, { content: v2 })
+    service.updatePage(db, page.id, { content: v2, version: page.version })
 
     expect(service.listPages(db, { search: 'OriginalSearchTerm' }).pages).toHaveLength(0)
     expect(service.listPages(db, { search: 'ReplacementSearchTerm' }).pages).toHaveLength(1)
@@ -501,13 +511,19 @@ describe('API validation', () => {
 
   it('UpdatePageSchema accepts partial updates', async () => {
     const { UpdatePageSchema } = await import('@rtwiki/shared/schemas/pages')
-    const result = UpdatePageSchema.safeParse({ title: 'New Title' })
+    const result = UpdatePageSchema.safeParse({ title: 'New Title', version: 3 })
     expect(result.success).toBe(true)
   })
 
   it('UpdatePageSchema rejects empty title', async () => {
     const { UpdatePageSchema } = await import('@rtwiki/shared/schemas/pages')
-    const result = UpdatePageSchema.safeParse({ title: '' })
+    const result = UpdatePageSchema.safeParse({ title: '', version: 1 })
     expect(result.success).toBe(false)
+  })
+
+  it('UpdatePageSchema requires the write version', async () => {
+    const { UpdatePageSchema } = await import('@rtwiki/shared/schemas/pages')
+    expect(UpdatePageSchema.safeParse({ title: 'New Title' }).success).toBe(false)
+    expect(UpdatePageSchema.safeParse({ content: 'x' }).success).toBe(false)
   })
 })
