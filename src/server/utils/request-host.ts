@@ -46,7 +46,7 @@
  *   influence the shape of the header.
  */
 
-/** Hostnames always accepted: the loopback interface, however it is spelled. */
+/** Hostnames matched by name. `127.0.0.0/8` is matched by a rule, not here. */
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '::1', '0:0:0:0:0:0:0:1'])
 
 /**
@@ -79,7 +79,19 @@ export function isAllowedHost(hostHeader: string | null, configuredHost: string)
   // The host the server was actually configured to bind, so an authorised LAN
   // phase keeps working without revisiting this check.
   if (candidate === configuredHost.toLowerCase()) return true
-  // A bare IPv6 literal, with or without its zone index.
+  // **Any** bracketed value is admitted, not only an IPv6 literal.
+  //
+  // This is deliberately broader than "it is an IPv6 loopback address", and the
+  // comment used to claim otherwise. It is safe because a DNS rebinding attack
+  // cannot reach it: the attack works by pointing an attacker-controlled
+  // *hostname* at 127.0.0.1, brackets are not legal in a DNS name, and a browser
+  // will not put them in a `Host` header. So the form that arrives here has
+  // either come from a client we do not model or from a real bracketed IPv6
+  // literal, and refusing it would break something without closing a hole.
+  //
+  // IPv6 loopback is admitted by the rules above -- `[::1]` and a bare `::1`
+  // both match `LOOPBACK_HOSTNAMES` -- so this line is the fallback, not the
+  // mechanism.
   if (candidate.startsWith('[') && candidate.endsWith(']')) return true
 
   return false
@@ -91,22 +103,29 @@ export function isUnsafeMethod(method: string): boolean {
 }
 
 /**
- * The hostname part of a `Host` header, lowercased, with any port and IPv6
- * brackets removed. Returns `null` when it cannot be read.
+ * The hostname part of a `Host` header, lowercased by the caller, with any port
+ * and IPv6 brackets removed. Returns `null` when it cannot be read.
  */
 function extractHostname(hostHeader: string): string | null {
   const value = hostHeader.trim()
   if (value === '') return null
 
-  // IPv6 literal: [::1]:8080 -> ::1
+  // IPv6 literal: [::1]:8080 -> [::1]
   if (value.startsWith('[')) {
     const close = value.indexOf(']')
     if (close === -1) return null
     return value.slice(0, close + 1)
   }
 
-  // Strip the port. Only the LAST colon matters, and only when what follows is
-  // numeric -- otherwise the colon is part of an unbracketed IPv6 address.
+  // A BARE IPv6 literal, e.g. ::1. Non-conforming as a Host header, but a client
+  // may send one and it must not be mangled into a 403: for `::1` the text after
+  // the last colon is `1`, which is numeric, so the port rule below would return
+  // `:` and the value would match nothing. Two or more colons and no bracket means
+  // there is no port to strip.
+  if (value.indexOf(':') !== value.lastIndexOf(':')) return value
+
+  // Strip the port. Only a trailing numeric segment is a port; otherwise the
+  // colon is part of the host.
   const lastColon = value.lastIndexOf(':')
   if (lastColon === -1) return value
   const port = value.slice(lastColon + 1)

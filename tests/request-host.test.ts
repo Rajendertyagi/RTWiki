@@ -101,6 +101,63 @@ describe('isAllowedHost — relaxed by design', () => {
   })
 })
 
+/**
+ * IPv6 has three separate behaviours, and each was once described wrongly. These
+ * pin all three so a future edit cannot quietly change one of them.
+ */
+describe('IPv6 handling', () => {
+  it('matches a bracketed IPv6 loopback literal', () => {
+    expect(isAllowedHost('[::1]', CONFIGURED)).toBe(true)
+    expect(isAllowedHost('[::1]:8080', CONFIGURED)).toBe(true)
+    expect(isAllowedHost('[0:0:0:0:0:0:0:1]', CONFIGURED)).toBe(true)
+  })
+
+  it('matches a BARE IPv6 loopback literal instead of mangling it', () => {
+    /**
+     * This is the case that was broken. `::1` has one colon, and the text after it
+     * is `1` -- numeric -- so the port-stripping rule used to return `:`, which
+     * matched nothing and produced a 403. The allowlist listed `::1` all along and
+     * never once matched it, because the value was destroyed before the lookup.
+     */
+    expect(isAllowedHost('::1', CONFIGURED)).toBe(true)
+    expect(isAllowedHost('0:0:0:0:0:0:0:1', CONFIGURED)).toBe(true)
+  })
+
+  it('does not strip a port from a bare IPv6 literal that has one', () => {
+    // `::1:8080` is two or more colons, so it is read whole. It is not loopback by
+    // name, and it is not bracketed either -- so it falls through to the
+    // configured-host comparison and is refused. Pinned because it is the
+    // ambiguous case: there is no way to tell an IPv6 address from an address and
+    // a port without brackets, and this allowlist does not try.
+    expect(isAllowedHost('::1:8080', CONFIGURED)).toBe(false)
+  })
+
+  it('admits ANY bracketed value, not only an IPv6 literal -- stated, not implied', () => {
+    /**
+     * Deliberately permissive, and previously mis-described as "a bare IPv6
+     * literal, with or without its zone index", which was neither what the code did
+     * nor what it needed to do.
+     *
+     * It is safe because a rebinding attack cannot produce this form: the attack
+     * points an attacker-controlled *hostname* at 127.0.0.1, and brackets are not
+     * legal in a DNS name, so no browser will put them in a `Host` header. The
+     * allowlist admits a shape it does not model rather than refusing a client it
+     * does not recognise.
+     */
+    for (const host of ['[1.2.3.4]', '[attacker.example]', '[anything]', '[::2]']) {
+      expect(isAllowedHost(host, CONFIGURED), `${host} is admitted by the fallback`).toBe(true)
+    }
+  })
+
+  it('still refuses an unbracketed attacker name, which is the shape a browser sends', () => {
+    // The counterpart to the test above, and the one that matters: a rebinding
+    // attack arrives unbracketed, so it must still be refused.
+    for (const host of ['attacker.example', 'attacker.example:8080', '::2', '2001:db8::1']) {
+      expect(isAllowedHost(host, CONFIGURED), `${host} must be refused`).toBe(false)
+    }
+  })
+})
+
 describe('isUnsafeMethod', () => {
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('treats %s as state-changing', (method) => {
     expect(isUnsafeMethod(method)).toBe(true)
