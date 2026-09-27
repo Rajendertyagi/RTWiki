@@ -27,7 +27,7 @@ import {
   IconZoomIn,
   IconZoomOut
 } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
@@ -37,6 +37,7 @@ import { DiagramTemplateBar } from '../rich-editor/blocks/diagram-template-bar.j
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
+import { mapAutosaveStatus, type StatusSaveState } from '../workspace/save-state.js'
 import { DiagramCanvas, type RenderErrorCode } from './diagram-canvas.js'
 import classes from './mermaid-workspace.module.css'
 import { starterSourceFor } from './starter-source.js'
@@ -62,7 +63,7 @@ export interface MermaidPageWorkspaceProps {
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
     isDirty: boolean
-    saveState: 'clean' | 'saving' | 'saved' | 'error'
+    saveState: StatusSaveState
     error?: string | null
   }) => void
   /** Opens a page through the controller/tab flow, for the sidebar's backlinks. */
@@ -73,6 +74,12 @@ const ERROR_MESSAGE = UI_TEXT.diagramErrorTitle
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 2
 const ZOOM_STEP = 0.25
+
+/**
+ * Shared empty list for unparseable content, so a page that fails to parse does
+ * not hand a fresh array to state on every render and reconcile forever.
+ */
+const NO_BLOCKS: VisualPageBlock[] = []
 
 export default function MermaidPageWorkspace({
   pageId,
@@ -88,11 +95,31 @@ export default function MermaidPageWorkspace({
   // The secure Mermaid pipeline keys render IDs by block type; the mind-map
   // page type maps onto the pipeline's camelCase token.
   const mermaidBlockType: 'diagram' | 'mindMap' = pageType === 'mindmap' ? 'mindMap' : 'diagram'
-  const parsed = parseVisualPageContent(storedContent)
+  // Parsed once per stored document rather than per render, so the block list
+  // below is referentially stable while `storedContent` is unchanged.
+  const parsed = useMemo(() => parseVisualPageContent(storedContent), [storedContent])
   // The page's blocks, as stored. A v1 page reads as a one-block page, so a page
   // written before the format gained a block list needs no special case here.
-  const committedBlocks: VisualPageBlock[] = parsed.ok ? parsed.value.blocks : []
+  const storedBlocks: VisualPageBlock[] = parsed.ok ? parsed.value.blocks : NO_BLOCKS
   const parseFailed = !parsed.ok
+
+  /**
+   * The block list every write is built from, and the page's live state.
+   *
+   * It is state rather than a value derived from `storedContent`, because the
+   * prop only refreshes after a successful round-trip to the server, and writes
+   * are debounced. Deriving it from the prop therefore meant a second mutation
+   * inside the debounce window computed from a list that predated the first: two
+   * presses of Add within the window left the first new diagram in memory but not
+   * in the document that was written, and the save then succeeded and reported
+   * "Saved". Nothing errored and the diagram was simply gone. It survived a
+   * failed save too, which is worse, because the stale snapshot then lasted
+   * until something refreshed the prop.
+   *
+   * Reconciliation with the server is below; the invariant is that a local list
+   * is only ever replaced by a *newer* server document, never by an older one.
+   */
+  const [blocks, setBlocks] = useState<VisualPageBlock[]>(storedBlocks)
 
   const colorScheme = useComputedColorScheme('light')
   // Which block the source editor is open on, or null when viewing the page. A
@@ -130,10 +157,44 @@ export default function MermaidPageWorkspace({
   useEffect(() => {
     onSaveStateChange?.({
       isDirty,
-      saveState: status as 'clean' | 'saving' | 'saved' | 'error',
+      // The shared mapping, not a cast. Casting let `'dirty'` through as a value
+      // the status bar does not recognise, which fell through to "Saved" - so a
+      // page mid-debounce announced itself as saved. This is the last editor that
+      // still did it that way; see `workspace/save-state.ts`.
+      saveState: mapAutosaveStatus(status),
       error: status === 'error' ? error : null
     })
   }, [isDirty, status, error, onSaveStateChange])
+
+  /**
+   * The document this workspace last handed to autosave, or null before its
+   * first write. Reconciliation reads it to tell two very different prop changes
+   * apart, which are otherwise indistinguishable: the server confirming this
+   * workspace's own write, and the server holding a document that a local edit
+   * has already superseded.
+   */
+  const localContentRef = useRef<string | null>(null)
+  const localPageIdRef = useRef(pageId)
+
+  /**
+   * Adopts the server's block list, but never a stale one.
+   *
+   * The rule is one-directional. A prop equal to the document this workspace last
+   * wrote is that write coming back, and adopting it changes nothing. A prop that
+   * differs while a local write is outstanding is *older* than what is on screen -
+   * the debounce has not fired, or the save failed - and adopting it would delete
+   * a block the user can see. So the local list stands, and the next mutation is
+   * written from it, which is what makes a failed save recoverable instead of
+   * permanent.
+   */
+  useEffect(() => {
+    const openedAnotherPage = localPageIdRef.current !== pageId
+    localPageIdRef.current = pageId
+    const serverIsBehind =
+      localContentRef.current !== null && localContentRef.current !== storedContent
+    if (!openedAnotherPage && serverIsBehind) return
+    setBlocks(storedBlocks)
+  }, [pageId, storedContent, storedBlocks])
 
   useEffect(() => {
     onFlushRef?.(flush)
@@ -173,18 +234,38 @@ export default function MermaidPageWorkspace({
   }, [debouncedDraft, colorScheme, renderSeq, pageId, mermaidBlockType])
 
   const startEditing = (index: number): void => {
-    const block = committedBlocks[index]
+    const block = blocks[index]
     if (!block) return
     setDraft(block.source)
     setEditingIndex(index)
     debugLog('ui', 'ui_context_menu_action', { targetId: pageId, code: `${pageType}-page-edit` })
   }
 
+  /**
+   * Makes a new block list both the page's state and the document that will be
+   * written.
+   *
+   * These are deliberately the same call. Setting the state and notifying autosave
+   * separately is what let a write be built from a list that predated it: the
+   * second press of Add inside the debounce window read a list the first press
+   * had not reached yet, so the diagram the first press added was absent from the
+   * write and vanished on a save that reported success.
+   *
+   * `localContentRef` is what the reconciliation effect above compares the next
+   * `storedContent` against, so recording it here is part of the same invariant.
+   */
+  const adoptBlocks = (next: VisualPageBlock[]): void => {
+    const content = serializeVisualPageBlocks(pageType, next)
+    localContentRef.current = content
+    setBlocks(next)
+    notifyEdit(content)
+  }
+
   const apply = (): void => {
     const index = editingIndex
     setEditingIndex(null)
     if (index === null) return
-    const current = committedBlocks[index]
+    const current = blocks[index]
     if (!current || draft === current.source) {
       debugLog('ui', 'ui_context_menu_action', {
         targetId: pageId,
@@ -199,10 +280,7 @@ export default function MermaidPageWorkspace({
     // silently collapse a multi-block page to one diagram, because a v1 document
     // parses as exactly one block — the other diagrams would be discarded with
     // no error anywhere.
-    const next = committedBlocks.map((block, i) =>
-      i === index ? { ...block, source: draft } : block
-    )
-    notifyEdit(serializeVisualPageBlocks(pageType, next))
+    adoptBlocks(blocks.map((block, i) => (i === index ? { ...block, source: draft } : block)))
     debugLog('ui', 'ui_context_menu_action', {
       targetId: pageId,
       code: `${pageType}-page-apply`,
@@ -222,16 +300,20 @@ export default function MermaidPageWorkspace({
    * the page's shape rather than one per action.
    */
   const commitBlocks = (next: VisualPageBlock[], code: string): void => {
-    notifyEdit(serializeVisualPageBlocks(pageType, next))
+    adoptBlocks(next)
     debugLog('ui', 'ui_context_menu_action', { targetId: pageId, code, len: next.length })
   }
 
   const addBlock = (): void => {
-    // Capped in the schema as well; refusing here means the button explains itself
+    // Capped against the list that is actually written, not against what the
+    // server last confirmed: a burst of presses inside one debounce window is
+    // written as a single document, so the cap has to be read from the list the
+    // next write is built from or the burst would walk straight past it. The
+    // schema caps it again, and refusing here means the button explains itself
     // instead of the save failing.
-    if (committedBlocks.length >= MAX_VISUAL_PAGE_BLOCKS) return
+    if (blocks.length >= MAX_VISUAL_PAGE_BLOCKS) return
     commitBlocks(
-      [...committedBlocks, { id: crypto.randomUUID(), source: starterSourceFor(pageType) }],
+      [...blocks, { id: crypto.randomUUID(), source: starterSourceFor(pageType) }],
       `${pageType}-block-add`
     )
   }
@@ -239,21 +321,21 @@ export default function MermaidPageWorkspace({
   const removeBlock = (index: number): void => {
     // The schema requires at least one block, so the last one cannot be removed.
     // Deleting every diagram would leave a page that cannot be rendered at all.
-    if (committedBlocks.length <= 1) return
+    if (blocks.length <= 1) return
     commitBlocks(
-      committedBlocks.filter((_, i) => i !== index),
+      blocks.filter((_, i) => i !== index),
       `${pageType}-block-remove`
     )
   }
 
   const moveBlock = (index: number, delta: -1 | 1): void => {
     const target = index + delta
-    if (target < 0 || target >= committedBlocks.length) return
-    const ids = committedBlocks.map((block) => block.id)
+    if (target < 0 || target >= blocks.length) return
+    const ids = blocks.map((block) => block.id)
     const [moved] = ids.splice(index, 1)
     ids.splice(target, 0, moved)
     commitBlocks(
-      reorderByIds(committedBlocks, ids, (block) => block.id),
+      reorderByIds(blocks, ids, (block) => block.id),
       `${pageType}-block-move`
     )
   }
@@ -367,12 +449,12 @@ export default function MermaidPageWorkspace({
     <section
       key={block.id}
       className={classes.blockCard}
-      aria-label={blockLabel(index + 1, committedBlocks.length)}
+      aria-label={blockLabel(index + 1, blocks.length)}
       data-testid={`${pageType}-block-${index}`}
     >
       <Group justify="space-between" wrap="nowrap" gap="xs" className={classes.blockBar}>
         <Text size="xs" c="dimmed" data-testid={`${pageType}-block-title-${index}`}>
-          {blockLabel(index + 1, committedBlocks.length)}
+          {blockLabel(index + 1, blocks.length)}
         </Text>
         <Group gap={2} wrap="nowrap">
           <Tooltip label={UI_TEXT.diagramEditBlockLabel}>
@@ -405,7 +487,7 @@ export default function MermaidPageWorkspace({
               size="xs"
               variant="subtle"
               aria-label={UI_TEXT.diagramMoveBlockDownLabel}
-              disabled={index === committedBlocks.length - 1}
+              disabled={index === blocks.length - 1}
               onClick={() => moveBlock(index, 1)}
               data-testid={`${pageType}-block-down-${index}`}
             >
@@ -419,7 +501,7 @@ export default function MermaidPageWorkspace({
               aria-label={UI_TEXT.diagramRemoveBlockLabel}
               // The last remaining diagram cannot be removed: a page with none
               // cannot be rendered at all.
-              disabled={committedBlocks.length <= 1}
+              disabled={blocks.length <= 1}
               onClick={() => removeBlock(index)}
               data-testid={`${pageType}-block-remove-${index}`}
             >
@@ -554,7 +636,7 @@ export default function MermaidPageWorkspace({
               onClick={addBlock}
               // Disabled rather than failing on click: the cap is a real limit and
               // the control should say so instead of doing nothing.
-              disabled={committedBlocks.length >= MAX_VISUAL_PAGE_BLOCKS}
+              disabled={blocks.length >= MAX_VISUAL_PAGE_BLOCKS}
               data-testid={`${pageType}-add-block`}
             >
               {UI_TEXT.diagramAddBlockLabel}
@@ -568,7 +650,7 @@ export default function MermaidPageWorkspace({
           </Group>
           <div className={classes.contentRow}>
             <div className={classes.blockList} data-testid={`${pageType}-block-list`}>
-              {committedBlocks.map((block, index) => blockCard(block, index))}
+              {blocks.map((block, index) => blockCard(block, index))}
             </div>
             {sidebar}
           </div>
