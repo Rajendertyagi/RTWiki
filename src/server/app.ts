@@ -14,7 +14,23 @@ import { createShutdownRoutes } from './routes/shutdown.js'
 import type { ShutdownCoordinator } from './shutdown-coordinator.js'
 import { serveStatic } from './static.js'
 
+/**
+ * Context key a route uses to ask for a stricter Content-Security-Policy than the
+ * app-wide one. Declared here, where the middleware that reads it lives, and
+ * imported by the attachment routes that need it — so the key has one owner.
+ */
+export const DOCUMENT_CSP_KEY = 'rtwikiDocumentCsp' as const
+
 export type AppVariables = SecureHeadersVariables & {
+  /**
+   * A per-response Content-Security-Policy for a route that needs one stricter
+   * than the app-wide policy — currently only a document download, which must not
+   * be able to run anything even if a browser renders it despite the disposition.
+   *
+   * Set by the route; applied by a middleware registered *before*
+   * `securityHeaders`, so it wins. See the note where that middleware is added.
+   */
+  [DOCUMENT_CSP_KEY]?: string
   db: ReturnType<typeof getDb>
 }
 
@@ -87,6 +103,25 @@ export interface AppDependencies {
  */
 export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables }> {
   const app = new Hono<{ Variables: AppVariables }>()
+
+  // A route that must serve a *stricter* policy than the app-wide one cannot set
+  // the header itself: `secureHeaders` calls `setHeaders` after `await next()`, so
+  // it overwrites whatever a handler wrote. That is not theoretical — a document
+  // response asking for `default-src 'none'` was silently replaced by the
+  // app-wide policy, leaving `script-src 'self'` in force while serving a PDF.
+  //
+  // The ordering below is therefore load-bearing, and was established by
+  // measurement rather than by reading Hono's source: of the four arrangements
+  // tried, only *this* one lets the stricter policy reach the client. Hono unwinds
+  // middleware in reverse registration order, so registering this first makes its
+  // post-handler code run after `secureHeaders` has set the app-wide policy, and
+  // the document's policy overwrites it. The route records what it needs in the
+  // context; nothing outside this module knows the key.
+  app.use('*', async (c, next) => {
+    await next()
+    const override = c.get(DOCUMENT_CSP_KEY)
+    if (typeof override === 'string') c.header('Content-Security-Policy', override)
+  })
 
   // Registered before all routes so the nonce exists in context by the time
   // HTML-serving handlers execute.

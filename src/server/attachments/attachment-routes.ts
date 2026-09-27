@@ -5,6 +5,7 @@ import {
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { acceptedDocumentFormatFor } from '../../shared/attachments/document-formats.js'
+import { DOCUMENT_CSP_KEY } from '../app.js'
 import type { getDb } from '../database/index.js'
 import type { Logger } from '../logging/index.js'
 import { isSameOrigin } from '../utils/request-origin.js'
@@ -18,7 +19,7 @@ import {
   normaliseOriginalName,
   streamAttachmentBytes
 } from './attachment-repository.js'
-import { contentDisposition } from './content-disposition.js'
+import { contentDisposition, DOCUMENT_CONTENT_SECURITY_POLICY } from './content-disposition.js'
 import { inspectDocumentUpload } from './document-detect.js'
 import { inspectImageUpload, pixelCount } from './image-detect.js'
 
@@ -92,10 +93,38 @@ interface AcceptedUpload {
  * render, and carries a per-response `default-src 'none'` policy as a second,
  * independent layer. See ADR-015.
  */
+/**
+ * The context this route's own Hono instance carries.
+ *
+ * Declared here rather than imported from `app.ts` because that module mounts
+ * these routes, and importing it back would be a cycle.
+ */
+interface AttachmentRouteVariables {
+  [DOCUMENT_CSP_KEY]?: string
+}
+
 export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
-  const routes = new Hono()
+  const routes = new Hono<{ Variables: AttachmentRouteVariables }>()
   const { getDb, logger } = opts
   const available = opts.available ?? true
+
+  // Applies the stricter document policy when a route asked for one.
+  //
+  // `app.ts` registers the equivalent override ahead of `secureHeaders`, and this
+  // one makes the route correct on its own too — the route is mounted on a
+  // separate Hono instance in tests, where the app-wide middleware does not exist
+  // at all. Writing the header twice is harmless: the second write is the same
+  // value.
+  //
+  // Without either, a PDF is served with the app-wide policy, `script-src 'self'`
+  // included, because the document's own `default-src 'none'` was overwritten. That
+  // was found by an end-to-end test against the compiled executable, not by any
+  // unit test.
+  routes.use('*', async (c, next) => {
+    await next()
+    const override = c.get(DOCUMENT_CSP_KEY)
+    if (typeof override === 'string') c.header('Content-Security-Policy', override)
+  })
 
   // Size is capped before the body is parsed, not after. Verified against both
   // an honest Content-Length request and a chunked stream with no length: both
@@ -186,7 +215,10 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
         record.originalName,
         acceptedDocumentFormatFor(record.mimeType)?.ext ?? 'bin'
       )
-      headers['content-security-policy'] = "default-src 'none'; sandbox"
+      // The policy is requested through the context rather than set here, because
+      // the app-wide `secureHeaders` middleware runs after this handler and would
+      // overwrite a header written here. See `DOCUMENT_CSP_KEY`.
+      c.set(DOCUMENT_CSP_KEY, DOCUMENT_CONTENT_SECURITY_POLICY)
     }
 
     return new Response(stream, { headers })

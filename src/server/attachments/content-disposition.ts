@@ -1,4 +1,18 @@
 /**
+ * The policy a document response is served under.
+ *
+ * `default-src 'none'` denies every fetch directive, so nothing in a rendered
+ * document could load or execute; `sandbox` removes the same powers again at the
+ * document level. Applied on top of `Content-Disposition: attachment`, and neither
+ * layer is trusted to work alone.
+ *
+ * This is deliberately stricter than the app-wide policy, which permits
+ * `script-src 'self'` because the application itself is a scripted page. A
+ * document is not the application and must not inherit its permissions.
+ */
+export const DOCUMENT_CONTENT_SECURITY_POLICY = "default-src 'none'; sandbox"
+
+/**
  * How a document's name is put into a `Content-Disposition` header.
  *
  * ## Why this is not a sanitiser

@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
+import { secureHeaders } from 'hono/secure-headers'
+import { APP_CONTENT_SECURITY_POLICY, DOCUMENT_CSP_KEY } from '../src/server/app.js'
 import { getAttachment, listAttachments } from '../src/server/attachments/attachment-repository.js'
 import { createAttachmentRoutes } from '../src/server/attachments/attachment-routes.js'
 import { contentDisposition } from '../src/server/attachments/content-disposition.js'
@@ -295,6 +297,46 @@ describe('document serving is never inline', () => {
     const received = new Uint8Array(await response.arrayBuffer())
     expect(received.byteLength).toBe(REAL_PDF.byteLength)
     expect(received.every((byte, index) => byte === REAL_PDF[index])).toBe(true)
+  })
+
+  it('keeps its own policy even when the app-wide security headers are applied', async () => {
+    // The bug this guards against: `secureHeaders` is registered app-wide and
+    // runs *after* the route handler, so a document that set its own policy had it
+    // silently replaced by the app-wide one - which permits `script-src 'self'`
+    // because the application itself is a scripted page. Found by an end-to-end
+    // test against the compiled executable, not by any unit test, because the
+    // route is mounted on its own Hono instance in unit tests and the app-wide
+    // middleware only exists once everything is mounted together.
+    //
+    // The ordering below mirrors `createApp`: the override middleware is
+    // registered *before* `secureHeaders`, so Hono unwinds it afterwards and the
+    // stricter policy is the one that survives.
+    const app = new Hono<{ Variables: { [DOCUMENT_CSP_KEY]?: string } }>()
+    app.use('*', async (c, next) => {
+      await next()
+      const override = c.get(DOCUMENT_CSP_KEY)
+      if (typeof override === 'string') c.header('Content-Security-Policy', override)
+    })
+    app.use('*', secureHeaders({ contentSecurityPolicy: APP_CONTENT_SECURITY_POLICY }))
+    app.route(
+      '/api/attachments',
+      createAttachmentRoutes({ getDb: () => db, logger: new MemoryLogger() })
+    )
+
+    const body = new FormData()
+    body.append(
+      'file',
+      new File([REAL_PDF as unknown as BlobPart], 'lecture.pdf', { type: 'application/pdf' })
+    )
+    const created = (await (
+      await app.request('/api/attachments', { method: 'POST', body })
+    ).json()) as { attachment: { url: string } }
+
+    const served = await app.request(created.attachment.url)
+    const policy = served.headers.get('content-security-policy') ?? ''
+    // The stricter document policy must be the one that reaches the browser.
+    expect(policy).toContain("default-src 'none'")
+    expect(policy).not.toContain("script-src 'self'")
   })
 
   it('applies the same headers to a DOCX', async () => {

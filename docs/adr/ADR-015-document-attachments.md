@@ -43,6 +43,10 @@ Every document response carries:
 
 **Both layers are required.** The disposition is the one that works; the policy is the one that holds if the first is ever worked around. Serving only one of them would be a single point of failure.
 
+The policy is deliberately stricter than the app-wide one, which permits `script-src 'self'` because the application itself is a scripted page. A document is not the application and must not inherit its permissions.
+
+**Getting the per-response policy to actually reach the client took two attempts, and the failure was silent.** `secureHeaders` sets its headers *after* `await next()`, so it overwrites anything a handler writes. The first attempt put the override middleware in the wrong order and the document's `default-src 'none'` was replaced by the app-wide policy — with `script-src 'self'` — on every PDF and DOCX response, while every unit test passed. Only an end-to-end test against the shipped executable caught it, because in unit tests the route is mounted on its own Hono instance and the app-wide middleware does not exist. The ordering that works was established by measuring four arrangements rather than by reading middleware source, and is now asserted by a test that mounts both.
+
 This is deliberately stricter than the reference implementation, which serves PDFs on its `/open` route with **no `Content-Disposition` and no CSP at all** — its own tests assert the header is absent. Its SVG path is hardened; its PDF path is not.
 
 Images are unaffected and remain served inline, because an image is not a program.
@@ -131,3 +135,14 @@ Every claim here was produced on the development machine against this schema, Bu
 | `sanitize-filename` on `report.pdf\r\nX-Injected: pwned` | CRLF removed, but **U+202E preserved** |
 | A `File` built from text | reports `text/plain;charset=utf-8`, which matches no exact allowlist entry |
 | A PDF renamed `.txt`, through the endpoint | accepted as text — **the bug this ordering exists to prevent** |
+| A PDF's `Content-Security-Policy` with the app-wide middleware mounted | app-wide policy won, `script-src 'self'` included — **unit tests could not see this** |
+| Document policy under the correct middleware order | `default-src 'none'; sandbox` reaches the client |
+
+## Verifying the shipped build
+
+Two checks exist because two defects were invisible to the unit suite:
+
+- `bun run test:compiled-images` — compiles a probe to a standalone executable and runs it. Document parsing fails *only* inside the compiled binary, so this is the check that catches it.
+- `bun run scripts/verify-compiled-e2e.ts` — starts the built `RTWiki.exe` and drives it over HTTP as a browser would: uploads a real PDF, DOCX and PNG, then asserts the disposition, the policy, byte integrity, the type-confusion case and the extracted text. This is what found the policy being overwritten.
+
+The end-to-end script passes `--no-open`, because the application otherwise opens a browser tab on the user's screen on every run, and it stops the server on every exit path including a thrown assertion.
