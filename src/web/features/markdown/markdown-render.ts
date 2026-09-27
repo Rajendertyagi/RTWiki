@@ -1,8 +1,19 @@
 import DOMPurify, { type Config } from 'dompurify'
 import { micromark } from 'micromark'
+import { type Directive, directive, directiveHtml } from 'micromark-extension-directive'
 import { gfm, gfmHtml } from 'micromark-extension-gfm'
 import { math, mathHtml } from 'micromark-extension-math'
 import { codes } from 'micromark-util-symbol'
+import { UI_TEXT } from '../../config/index.js'
+import {
+  COLUMN_CHILD_DIRECTIVE_NAME,
+  COLUMNS_DIRECTIVE_NAME,
+  type ColumnDirectiveInput,
+  renderColumnChild,
+  renderColumnsDirective,
+  renderUnknownDirective,
+  setColumnsDividerLabel
+} from './markdown-columns.js'
 import { mathTextGithubRule } from './math-inline-github-rule.js'
 
 /**
@@ -49,16 +60,112 @@ import { mathTextGithubRule } from './math-inline-github-rule.js'
  */
 const baseMath = math()
 
+/**
+ * The `:::columns` handler, and the fallback for every name it does not claim.
+ *
+ * ## A handler emits with `this.tag`/`this.raw`, not by returning a string
+ *
+ * Measured: a handler that *returns* `"<i>x</i>"` emits nothing at all.
+ * micromark's compiler calls each handler and **discards the return value** —
+ * `micromark/lib/compile.js` calls `handle.call({...context}, token)` with no
+ * assignment. Output is written through `this.tag(html)` (respects the image
+ * alt-text tag suppression) or `this.raw(html)`.
+ *
+ * What the return value *does* control is one thing only, inside the
+ * extension's own `exit()`: `found = result !== false`, which decides whether
+ * the `'*'` fallback runs. So a named handler returns `false` to hand a name
+ * over to the fallback, and anything else to keep it. The fallback's return
+ * value is likewise only that flag.
+ *
+ * ## The `'*'` fallback is not defensive
+ *
+ * See `renderUnknownDirective`. The extension **buffers** a container's body
+ * and hands it to the handler, so a container nothing writes is deleted along
+ * with the rest of the document. Without this fallback,
+ * `before\n\n:::warning\n**be careful**\n\nafter\n` renders as `<p>before</p>`
+ * and loses two paragraphs silently. This is the measured reason the fallback
+ * exists, and it is asserted by a test.
+ *
+ * ## All three directive kinds arrive here
+ *
+ * `directiveHtml` takes a record of name to handler, so one function sees
+ * container, leaf and text directives alike, distinguished by `d.type`. That
+ * is a structural property of the API rather than three separate
+ * registrations: a leaf `::columns` and an inline `:::columns` reach this
+ * fallback too, and are rendered inline rather than as a two-pane block.
+ */
+interface EmitContext {
+  /** micromark's escaper. Apply to every value taken from the document. */
+  encode: (value: string) => string
+  /** Writes output respecting the image alt-text tag suppression. */
+  tag: (value: string) => void
+  /** Writes output verbatim. Used for `directive.content`, which is already
+   *  compiled HTML and must not be escaped a second time. */
+  raw: (value: string) => void
+}
+
+const DIRECTIVE_HTML_OPTIONS = {
+  [COLUMNS_DIRECTIVE_NAME](this: EmitContext, directive: Directive): boolean | undefined {
+    // A text directive is inline: emitting block-level panes into a paragraph
+    // would be malformed HTML, and `:::columns` used inline is not a layout
+    // request anyway. `false` hands it to the fallback, which renders it inline
+    // and visibly. (Measured: a mid-line `:::columns` never reaches a handler
+    // at all — it stays literal text — so this only fires for one on its own
+    // line.)
+    if (directive.type === 'textDirective') return false
+    this.raw(renderColumnsDirective(this.encode, directive as ColumnDirectiveInput))
+    return undefined
+  },
+  /*
+   * One `:::column` child. It renders **itself**, completely.
+   *
+   * That is measured, not stylistic. Nested directives compile inside out, so
+   * this handler always runs before the parent `::::columns` and its compiled
+   * HTML is already sitting in the parent's `content` when the parent runs. So
+   * there is no need to hand anything over — and passing it over through
+   * micromark's compile-data store was tried and **lost content**: an orphan
+   * `:::column` outside any `::::columns` was pushed onto the store, never
+   * reached the output, and vanished. The parent finds its children in the
+   * compiled string instead.
+   */
+  [COLUMN_CHILD_DIRECTIVE_NAME](this: EmitContext, directive: Directive): boolean | undefined {
+    if (directive.type === 'textDirective') return false
+    this.raw(renderColumnChild(this.encode, directive as ColumnDirectiveInput))
+    return undefined
+  },
+  '*'(this: EmitContext, directive: Directive): boolean | undefined {
+    this.raw(renderUnknownDirective(this.encode, directive as ColumnDirectiveInput))
+    // `undefined` is the "handled, and there is nothing after me" signal. It is
+    // written explicitly because the return type is `boolean | undefined` and a
+    // bare `void` body would not satisfy it.
+    return undefined
+  }
+}
+
+// The divider's accessible name is user-facing text, so it comes from the UI text
+// dictionary ([DEVELOPMENT_STANDARDS](../../docs/DEVELOPMENT_STANDARDS.md) §5.2)
+// rather than being written into the feature module. Injected once at module
+// scope so the render path stays a pure function of its input.
+setColumnsDividerLabel(UI_TEXT.columnsResizeLabel)
+
 const MARKDOWN_OPTIONS = {
   extensions: [
     gfm(),
+    directive(),
     {
       // `flow` is the package's `$$` handling, kept verbatim. `text` is replaced.
       ...baseMath,
       text: { [codes.dollarSign]: mathTextGithubRule() }
     }
   ],
-  htmlExtensions: [gfmHtml(), mathHtml({ throwOnError: false, trust: false })]
+  htmlExtensions: [
+    gfmHtml(),
+    // After gfm: the directive extension's handlers cover different token types,
+    // so the order is not load-bearing, and keeping our own after the packages
+    // makes the composition read top-down as "GFM, maths, then RTWiki's own".
+    directiveHtml(DIRECTIVE_HTML_OPTIONS),
+    mathHtml({ throwOnError: false, trust: false })
+  ]
 }
 
 /**

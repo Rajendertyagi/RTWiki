@@ -24,9 +24,26 @@ import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
 import { isAutosaveDirty, mapAutosaveStatus } from '../workspace/save-state.js'
+import { attachColumnDividers } from './markdown-columns-divider.js'
 import { extractMarkdownOutline, MARKDOWN_HEADING_SELECTOR } from './markdown-outline.js'
 import { renderMarkdown } from './markdown-render.js'
 import classes from './markdown-workspace.module.css'
+/**
+ * The `:::columns` stylesheet, imported for its side effect.
+ *
+ * A **plain** `.css` on purpose, and the import shape matters as much as the
+ * file type. Measured with this repo's Vite: a bare `import './x.module.css'`
+ * emits no CSS at all, while a bare import of a plain `.css` does — and a bare
+ * `.module.css` import sitting alongside a class-map import of another module
+ * contributes nothing, silently, with no build error. That is how this feature
+ * shipped with correct markup, 1030 passing unit tests, and no stylesheet at all.
+ *
+ * The class names are global rather than hashed because the markup is produced
+ * as a string by `renderMarkdown`; see the header of the stylesheet. Do not add
+ * `:global(...)` to it: a plain stylesheet passes that syntax through to the
+ * browser, where it matches nothing.
+ */
+import './markdown-columns.css'
 
 export interface MarkdownPageWorkspaceProps {
   pageId: string
@@ -139,6 +156,40 @@ export default function MarkdownPageWorkspace({
     setMode('preview')
     setPendingHeading(blockId)
   }, [])
+
+  /*
+   * Makes a rendered `:::columns` divider draggable.
+   *
+   * Deliberately **not** a React child of the preview: the preview is a
+   * `dangerouslySetInnerHTML` element whose contents are replaced from scratch,
+   * so anything React-owned inside it would remount constantly. The preview
+   * element itself is a stable container that `innerHTML` does not replace, so
+   * the wiring lives on the container and is delegated.
+   *
+   * Keyed on `mode` alone, and that is deliberate rather than an oversight. This
+   * effect owns exactly one thing: the *identity of the preview element*, which
+   * `mode` changes and nothing else does. The wiring's other dependency — the
+   * divider elements inside it — is owned by `attachColumnDividers` itself,
+   * which watches the container for changes to its children.
+   *
+   * That split exists because the two signals are not interchangeable. Measured
+   * in a browser: the framework replaced the preview's `innerHTML` **17 ms after**
+   * this effect ran, with the row already present, and **no React dependency
+   * changed** — `html` was byte-identical. An effect keyed on `html` therefore
+   * does not re-run, the wiring keeps references to detached dividers, and every
+   * `pointerdown` and `keydown` lookup misses: the listener still fires, still
+   * gets the right event on the right target, still does not throw, and silently
+   * does nothing. Drag and keyboard were dead on every page opened from the
+   * sidebar, and worked only after an Edit → Preview round trip, which *does*
+   * change `mode`. A `MutationObserver` on the container is the signal that
+   * actually arrives.
+   */
+  useEffect(() => {
+    if (mode !== 'preview') return
+    const preview = previewRef.current
+    if (!preview) return
+    return attachColumnDividers(preview)
+  }, [mode])
 
   useEffect(() => {
     if (pendingHeading === null) return

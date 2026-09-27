@@ -1,0 +1,198 @@
+/*
+ * `:::columns` — an N-pane row with draggable dividers, on a Markdown page.
+ *
+ * ## Why this is a PLAIN stylesheet, and not a CSS module
+ *
+ * Two measured facts, both of which cost the whole feature a browser run before
+ * they were found. Neither is visible by reading the source.
+ *
+ * **1. A CSS module hashes its class names, and the markup is a string.**
+ * `renderMarkdown` produces the column block as an HTML **string** and injects
+ * it through `dangerouslySetInnerHTML`, so a hashed name cannot be substituted
+ * into it. The names here are therefore fixed `rt-cols*` globals, declared once
+ * as constants in `markdown-columns.ts` — which is also what the runtime wiring
+ * and the element scanner select on. A CSS module is the wrong tool for markup
+ * that is emitted as text.
+ *
+ * **2. A bare side-effect import of a `*.module.css` emits no CSS at all.**
+ * Measured with this repo's Vite: `import './x.module.css'` in a module produced
+ * no stylesheet in the output, while `import classes from './x.module.css'` in
+ * the same module emitted it. A file that both supplied a class map *and* was
+ * bare-imported contributed only the first one's CSS — silently, with no error.
+ * A bare import of a **plain** `.css` is the form that works, and it is the form
+ * every other bare CSS import in this app already uses (`main.tsx`,
+ * `wb-tree-host.ts`, `markdown-workspace.tsx` for KaTeX).
+ *
+ * So: plain `.css`, imported for its side effect, names left global. **`do not
+ * add `:global(...)` here** — that syntax is only understood by the CSS-modules
+ * compiler, so in a plain stylesheet it reaches the browser verbatim and matches
+ * nothing. Measured and asserted.
+ *
+ * ## The duplication with `markdown-columns.ts` is real, and it is guarded
+ *
+ * The class names appear in the render string (as constants) and here (as
+ * selectors), because a stylesheet cannot import a TypeScript constant. That is
+ * inherent to emitting raw HTML. `tests/markdown-columns-styles.test.ts` runs the
+ * real Vite CSS pipeline over this file and fails if any name the renderer emits
+ * has no matching rule — which is the only test that can see the difference
+ * between "the name is in the source" and "a rule for it ships".
+ */
+
+/* The row. `align-items: stretch` so a short pane still lines up with a tall one;
+ * the divider is `align-self: stretch` for the same reason. */
+.rt-cols {
+  display: flex;
+  align-items: stretch;
+  margin: 0 0 0.75em;
+  /* A row holds several documents, so it is never wider than its page. */
+  max-width: 100%;
+}
+
+/*
+ * Panes.
+ *
+ * `min-width: 0` is what actually stops a wide child — a table, a long code
+ * fence, an unbreakable token — from forcing the pane past its share and pushing
+ * the divider out of the block. Without it `flex-basis` is only a suggestion.
+ *
+ * There is deliberately **no** `flex` rule here. Each pane's width arrives as an
+ * inline `style`, because it is a per-instance value the drag rewrites on every
+ * pointermove and a stylesheet cannot express a number that only exists at
+ * runtime. An inline style beats any stylesheet declaration, so a `flex` rule
+ * here would be dead weight that looks load-bearing.
+ */
+.rt-cols__pane {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rt-cols__pane > *:first-child {
+  margin-top: 0;
+}
+
+.rt-cols__pane > *:last-child {
+  margin-bottom: 0;
+}
+
+/*
+ * The divider. The element is the pointer hit-area and the focus target; the 1px
+ * line appears on hover, on keyboard focus, and while dragging, exactly as the
+ * shell's pane dividers do.
+ *
+ * The hit-area width comes from the published layout token via the global custom
+ * property set in `theme/index.ts`, so this and the shell's dividers are one
+ * width with one source — not a second literal.
+ */
+.rt-cols__divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  outline: none;
+  width: var(--rtwiki-divider-hit-width, 6px);
+  /*
+   * The visible line is a pseudo-element rather than a child: the emitted HTML
+   * has no child here, and adding one would mean the render string and this
+   * stylesheet each half-implement the same element.
+   */
+  position: relative;
+}
+
+.rt-cols__divider::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.rt-cols__divider:hover::after,
+.rt-cols__divider:focus-visible::after {
+  background: var(--rtwiki-border, var(--mantine-color-default-border));
+}
+
+.rt-cols__divider[data-dragging="true"]::after {
+  background: var(--mantine-color-blue-filled);
+}
+
+.rt-cols__divider:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-outline);
+  outline-offset: -2px;
+}
+
+/*
+ * The notice shown when an authored width was present and rejected. It names the
+ * value that was rejected and the one being used, so a typo is visible where it
+ * happened rather than only in the resulting layout.
+ */
+.rt-cols__notice {
+  margin: 0 0 0.5em;
+  padding: 4px 8px;
+  border-left: 3px solid var(--mantine-color-yellow-filled);
+  background: var(--mantine-color-yellow-light);
+  color: var(--mantine-color-yellow-text);
+  font-size: 0.9em;
+}
+
+/*
+ * An unclaimed `:::` directive, rendered visibly with its name.
+ *
+ * This styling is the point of the element. The extension buffers a container's
+ * body and hands it to the handler, so an unhandled directive is *deleted*
+ * rather than merely unstyled; this block is what shows the content was surfaced
+ * instead. It deliberately reads as a problem without being one — the note's own
+ * content is intact underneath it.
+ */
+.rt-unknown-directive {
+  margin: 0 0 0.75em;
+  padding: 6px 10px;
+  border: 1px dashed var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-default-hover);
+}
+
+.rt-unknown-directive__name {
+  margin: 0 0 0.35em;
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+/* Inline form, for a leaf or a text directive, which cannot hold block content. */
+span.rt-unknown-directive {
+  display: inline;
+  margin: 0;
+  padding: 0 4px;
+  border-radius: var(--mantine-radius-xs);
+}
+
+/*
+ * Stacked on a narrow viewport. The divider is removed rather than left inert:
+ * a `col-resize` cursor and a focusable separator that cannot move are worse than
+ * no control at all. The panes stack in source order, so the first stays first.
+ *
+ * The width is an inline `style`, so no stylesheet `flex` declaration could
+ * override it, and `!important` is not available here either. Instead the panes
+ * stop being flex items at all, which makes the flex property irrelevant and is
+ * what actually makes them full-width.
+ */
+@media (max-width: 47.99em) {
+  .rt-cols {
+    flex-direction: column;
+  }
+
+  .rt-cols__pane {
+    display: block;
+  }
+
+  .rt-cols__divider {
+    display: none;
+  }
+}

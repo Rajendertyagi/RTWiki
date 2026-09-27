@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { JSDOM } from 'jsdom'
+import { beforeAll, describe, expect, it } from 'bun:test'
+import { parseFragment, sharedDom } from './utils/dom-harness.js'
 
 /**
  * Markdown rendering, and the sanitiser that guards it.
  *
- * ## Why jsdom is set up before the module is imported
+ * ## Why the DOM is installed before the module is imported
  *
  * `markdown-render.ts` creates its DOMPurify instance at import time, bound to the
  * ambient `window`. Bun has no DOM, so without this the sanitiser would run
@@ -12,34 +12,21 @@ import { JSDOM } from 'jsdom'
  * a no-op — which is the worst possible failure for a test whose whole job is to
  * prove markup does not survive. The globals are installed first and the module is
  * imported dynamically afterwards, so the instance under test is a real one.
+ *
+ * The DOM comes from `sharedDom()` and is **never closed**. See that module: the
+ * instance is cached for the life of the process, and a second test file closing
+ * its own JSDOM would invalidate the sanitiser every later file is still using.
  */
 let renderMarkdown: (source: string) => string
-let dom: JSDOM
 
 beforeAll(async () => {
-  dom = new JSDOM('<!doctype html><html><body></body></html>')
-  const globals = globalThis as unknown as Record<string, unknown>
-  globals.window = dom.window
-  globals.document = dom.window.document
-  globals.Node = dom.window.Node
-  globals.Element = dom.window.Element
-  globals.HTMLElement = dom.window.HTMLElement
-  globals.DocumentFragment = dom.window.DocumentFragment
-  globals.NodeFilter = dom.window.NodeFilter
-  globals.trustedTypes = undefined
+  sharedDom()
   ;({ renderMarkdown } = await import('../src/web/features/markdown/markdown-render.js'))
-})
-
-afterAll(() => {
-  dom.window.close()
-  const globals = globalThis as unknown as Record<string, unknown>
-  delete globals.window
-  delete globals.document
 })
 
 /** Parses rendered output so assertions are about structure, not about substrings. */
 function parse(html: string): Document {
-  return new JSDOM(`<!doctype html><body>${html}</body>`).window.document
+  return parseFragment(html)
 }
 
 describe('GFM features render', () => {
@@ -506,7 +493,9 @@ describe('the sanitiser profile keeps what generated markup needs', () => {
     const { MARKDOWN_SANITIZE_OPTIONS } = await import(
       '../src/web/features/markdown/markdown-render.js'
     )
-    const purify = createDOMPurify(dom.window as unknown as Parameters<typeof createDOMPurify>[0])
+    const purify = createDOMPurify(
+      sharedDom().window as unknown as Parameters<typeof createDOMPurify>[0]
+    )
     // The defect being fixed: with `{ html: true }` only, both were removed while
     // the surrounding KaTeX spans survived byte-identically, so a DOM snapshot
     // looked fine and `\sqrt{2}` rendered as a bare `2`.
@@ -530,7 +519,9 @@ describe('the sanitiser profile keeps what generated markup needs', () => {
     const { MARKDOWN_SANITIZE_OPTIONS } = await import(
       '../src/web/features/markdown/markdown-render.js'
     )
-    const purify = createDOMPurify(dom.window as unknown as Parameters<typeof createDOMPurify>[0])
+    const purify = createDOMPurify(
+      sharedDom().window as unknown as Parameters<typeof createDOMPurify>[0]
+    )
     for (const markup of [
       '<math><mtext><script>alert(1)</script></mtext></math>',
       '<svg><script>alert(1)</script></svg>',
@@ -551,7 +542,9 @@ describe('the sanitiser profile keeps what generated markup needs', () => {
     const { MARKDOWN_SANITIZE_OPTIONS } = await import(
       '../src/web/features/markdown/markdown-render.js'
     )
-    const purify = createDOMPurify(dom.window as unknown as Parameters<typeof createDOMPurify>[0])
+    const purify = createDOMPurify(
+      sharedDom().window as unknown as Parameters<typeof createDOMPurify>[0]
+    )
     const out = purify.sanitize(
       '<style>body{display:none}</style><svg><style>x{}</style></svg>',
       MARKDOWN_SANITIZE_OPTIONS

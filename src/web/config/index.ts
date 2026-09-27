@@ -273,6 +273,12 @@ export const UI_TEXT = {
   resizeTreePaneLabel: 'Resize page tree pane',
   resizeSidebarLabel: 'Resize sidebar',
   restoreSidebarLabel: 'Restore sidebar',
+  /**
+   * A Markdown page's `:::columns` divider. The single-boundary case only: a row
+   * of three or more panes names each boundary in its own generated label, since
+   * "resize columns" alone does not say which boundary a screen reader is on.
+   */
+  columnsResizeLabel: 'Resize columns',
   // Rich Document toolbar
   richToolbarLabel: 'Formatting',
   undoLabel: 'Undo',
