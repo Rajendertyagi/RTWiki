@@ -12,6 +12,16 @@
   padding: 0 var(--rtwiki-chrome-pad-x);
 }
 
+/* The document surface and the right-hand panel sit side by side, with the bar
+ * above both. Mirrors the Rich editor's row so the panel lands in the same place
+ * on every page type and the reader's saved pane width carries across. */
+.contentRow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
 /* The editing pane deliberately KEEPS its frame and the panel tone, unlike the
  * rendered preview beside it. A text-entry surface has a real argument for
  * staying visually distinct from the result it produces, so you can tell at a

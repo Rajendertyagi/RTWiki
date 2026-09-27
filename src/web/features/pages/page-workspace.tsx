@@ -217,9 +217,12 @@ function PageEditors({
           pageId={page.id}
           storedContent={page.content}
           pageType={page.pageType}
+          createdDate={page.createdAt}
+          updatedDate={page.updatedAt}
           onSaveContent={onSaveContent}
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}
+          onOpenPage={onOpenPageLink}
         />
       </Suspense>
     )
@@ -232,10 +235,13 @@ function PageEditors({
           pageId={page.id}
           pageTitle={page.title}
           storedContent={page.content}
+          createdDate={page.createdAt}
+          updatedDate={page.updatedAt}
           onSaveContent={onSaveContent}
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}
           onEditorStatusChange={onEditorStatusChange}
+          onOpenPage={onOpenPageLink}
         />
       </Suspense>
     )

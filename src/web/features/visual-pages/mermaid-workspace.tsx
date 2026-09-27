@@ -26,6 +26,7 @@ import type { CSSVars } from '../../style-props.js'
 import { DiagramTemplateBar } from '../rich-editor/blocks/diagram-template-bar.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
+import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import classes from './mermaid-workspace.module.css'
 
 /**
@@ -43,6 +44,8 @@ export interface MermaidPageWorkspaceProps {
   pageId: string
   storedContent: string
   pageType: Extract<PageType, 'diagram' | 'mindmap'>
+  createdDate?: string
+  updatedDate?: string
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onFlushRef?: (fn: (() => Promise<boolean>) | null) => void
   onSaveStateChange?: (state: {
@@ -50,6 +53,8 @@ export interface MermaidPageWorkspaceProps {
     saveState: 'clean' | 'saving' | 'saved' | 'error'
     error?: string | null
   }) => void
+  /** Opens a page through the controller/tab flow, for the sidebar's backlinks. */
+  onOpenPage?: (pageId: string) => void
 }
 
 type RenderErrorCode = 'parse_error' | 'render_error'
@@ -64,15 +69,21 @@ export default function MermaidPageWorkspace({
   pageId,
   storedContent,
   pageType,
+  createdDate,
+  updatedDate,
   onSaveContent,
   onFlushRef,
-  onSaveStateChange
+  onSaveStateChange,
+  onOpenPage
 }: MermaidPageWorkspaceProps): JSX.Element {
   // The secure Mermaid pipeline keys render IDs by block type; the mind-map
   // page type maps onto the pipeline's camelCase token.
   const mermaidBlockType: 'diagram' | 'mindMap' = pageType === 'mindmap' ? 'mindMap' : 'diagram'
   const parsed = parseVisualPageContent(storedContent)
-  const committedSource = parsed.ok ? parsed.value.source : ''
+  // The workspace edits one diagram at a time, so it works against the block it
+  // was opened on. A v1 page reads as a single block, which is why this needs no
+  // special case.
+  const committedSource = parsed.ok ? (parsed.value.blocks[0]?.source ?? '') : ''
   const parseFailed = !parsed.ok
 
   const colorScheme = useComputedColorScheme('light')
@@ -281,6 +292,22 @@ export default function MermaidPageWorkspace({
     </div>
   )
 
+  // A diagram or mind map has no headings, so the panel carries backlinks and
+  // page information only - `outline` is omitted rather than passed empty, which
+  // is what keeps an empty "Outline" heading off these pages.
+  //
+  // Fullscreen deliberately drops the panel: the whole point of fullscreen is an
+  // unobstructed diagram, and a pane the reader cannot collapse would defeat it.
+  const sidebar = fullscreen ? null : (
+    <RightSidebarRegion
+      pageId={pageId}
+      pageTypeLabel={pageType === 'mindmap' ? UI_TEXT.mindMapPage : UI_TEXT.diagramPage}
+      createdDate={createdDate ?? ''}
+      updatedDate={updatedDate ?? ''}
+      onOpenPage={onOpenPage}
+    />
+  )
+
   return (
     <div
       className={`${classes.root} ${fullscreen ? classes.fullscreen : ''}`}
@@ -337,30 +364,33 @@ export default function MermaidPageWorkspace({
               }}
             />
           ) : null}
-          <div className={classes.editSplit}>
-            <Textarea
-              className={classes.sourcePane}
-              value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
-              minRows={10}
-              autosize
-              maxRows={28}
-              aria-label={UI_TEXT.workspaceSourceLabel}
-              data-testid={`${pageType}-source-input`}
-            />
-            <div className={classes.previewPane} data-testid={`${pageType}-live-preview`}>
-              {liveError !== null ? (
-                <Text size="sm" c="red" role="alert" className={classes.previewError}>
-                  {ERROR_MESSAGE}
-                </Text>
-              ) : liveSvg !== null ? (
-                renderSvgArea(liveSvg)
-              ) : (
-                <Text size="xs" c="dimmed" role="status">
-                  …
-                </Text>
-              )}
+          <div className={classes.contentRow}>
+            <div className={classes.editSplit}>
+              <Textarea
+                className={classes.sourcePane}
+                value={draft}
+                onChange={(event) => setDraft(event.currentTarget.value)}
+                minRows={10}
+                autosize
+                maxRows={28}
+                aria-label={UI_TEXT.workspaceSourceLabel}
+                data-testid={`${pageType}-source-input`}
+              />
+              <div className={classes.previewPane} data-testid={`${pageType}-live-preview`}>
+                {liveError !== null ? (
+                  <Text size="sm" c="red" role="alert" className={classes.previewError}>
+                    {ERROR_MESSAGE}
+                  </Text>
+                ) : liveSvg !== null ? (
+                  renderSvgArea(liveSvg)
+                ) : (
+                  <Text size="xs" c="dimmed" role="status">
+                    …
+                  </Text>
+                )}
+              </div>
             </div>
+            {sidebar}
           </div>
         </>
       ) : (
@@ -380,30 +410,33 @@ export default function MermaidPageWorkspace({
             {zoomControls}
             {fullscreenToggle}
           </Group>
-          <div className={classes.viewHost} data-testid={`${pageType}-rendered`}>
-            {errorCode !== null ? (
-              <div className={classes.errorBox} data-testid={`${pageType}-error`} role="alert">
-                <Text size="sm" c="red">
-                  {ERROR_MESSAGE}
+          <div className={classes.contentRow}>
+            <div className={classes.viewHost} data-testid={`${pageType}-rendered`}>
+              {errorCode !== null ? (
+                <div className={classes.errorBox} data-testid={`${pageType}-error`} role="alert">
+                  <Text size="sm" c="red">
+                    {ERROR_MESSAGE}
+                  </Text>
+                  <Button
+                    size="compact-xs"
+                    variant="light"
+                    mt="xs"
+                    leftSection={<IconRefresh size={12} />}
+                    onClick={() => setRenderSeq((seq) => seq + 1)}
+                    data-testid={`${pageType}-retry`}
+                  >
+                    {UI_TEXT.diagramRetryLabel}
+                  </Button>
+                </div>
+              ) : svg !== null ? (
+                renderSvgArea(svg)
+              ) : (
+                <Text size="xs" c="dimmed" role="status">
+                  …
                 </Text>
-                <Button
-                  size="compact-xs"
-                  variant="light"
-                  mt="xs"
-                  leftSection={<IconRefresh size={12} />}
-                  onClick={() => setRenderSeq((seq) => seq + 1)}
-                  data-testid={`${pageType}-retry`}
-                >
-                  {UI_TEXT.diagramRetryLabel}
-                </Button>
-              </div>
-            ) : svg !== null ? (
-              renderSvgArea(svg)
-            ) : (
-              <Text size="xs" c="dimmed" role="status">
-                …
-              </Text>
-            )}
+              )}
+            </div>
+            {sidebar}
           </div>
         </>
       )}
