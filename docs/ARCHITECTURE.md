@@ -228,6 +228,18 @@ The heading outline for the right-hand panel is built from the same grammar via
 `mdast-util-from-markdown` (`markdown-outline.ts`), so the outline and the preview agree structurally
 about which lines are headings. Navigation is by index, not by heading text.
 
+Maths in a Markdown page are rendered at parse time by **KaTeX**, via
+`micromark-extension-math`, into the same HTML string the sanitiser then processes. `$…$` is inline and
+`$$…$$` on its own line is display. KaTeX's `trust` is pinned to `false` and `throwOnError` to `false`;
+see [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+
+**The KaTeX stylesheet is owned by the Markdown workspace**, which imports `katex/dist/katex.min.css`.
+`@blocknote/math-block` imports the same file, but only from the Rich Note's lazily-loaded chunk — a
+Markdown page never mounts the rich editor, so that CSS was never fetched and maths rendered with a
+correct DOM and no glyphs. One stylesheet, one source: the bundler emits a single shared
+`katex-*.css` chunk that both paths load. The woff2 files must be present in `build/web` after a build;
+a missing font is a silent visual failure, not an error.
+
 BlockNote JSON is the canonical saved representation of page content. HTML and Markdown are import/export formats only — they are converted to and from BlockNote JSON at the API boundary, never stored directly in the database. See [ADR-004](adr/ADR-004-canonical-block-json-format.md) for the full rationale and [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) for the rich-content extension.
 
 The canonical format is a **versioned, RTWiki-extended BlockNote JSON schema**:

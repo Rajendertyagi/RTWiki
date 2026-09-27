@@ -164,6 +164,262 @@ describe('dangerous markup does not survive', () => {
   })
 })
 
+describe('maths render', () => {
+  it('renders inline math, with both the MathML and the HTML layers', () => {
+    const doc = parse(renderMarkdown('Cost is $E=mc^2$ exactly.'))
+    const katex = doc.querySelector('.katex')
+    expect(katex, 'KaTeX must produce output').not.toBeNull()
+    // The MathML subtree is what a screen reader reads; the `.katex-html` span is
+    // what everyone else sees. Losing either is a regression, and the MathML half
+    // is the one the old sanitiser profile deleted silently.
+    expect(doc.querySelector('.katex-mathml math')).not.toBeNull()
+    expect(doc.querySelector('.katex-html')).not.toBeNull()
+    expect(katex?.textContent).toContain('E=mc2')
+  })
+
+  it('renders display math, but only in the multi-line form', () => {
+    /**
+     * The form matters and is not obvious. Measured across five shapes:
+     *
+     *   $$\frac{a}{b}$$          on one line          -> math-INLINE
+     *   $$ \frac{a}{b} $$        one line, spaced      -> math-INLINE
+     *   $$                       own line, content on  -> math-DISPLAY
+     *   \frac{a}{b}
+     *   $$
+     *
+     * `micromark-extension-math` only reaches its `mathFlow` construct when the
+     * opening `$$` is alone on its line, so the one-line form is text maths wearing
+     * a different delimiter. Asserted both ways, because a user who writes
+     * `$$x$$` on one line and gets inline maths has found a real limitation and it
+     * should be visible in a test rather than discovered in the app.
+     */
+    const oneLine = parse(renderMarkdown('$$\\frac{a}{b}$$'))
+    expect(oneLine.querySelector('.math-display')).toBeNull()
+    expect(oneLine.querySelector('.math-inline')).not.toBeNull()
+    // The maths is still correct; only the presentation differs.
+    expect(oneLine.querySelector('.katex-mathml math mfrac')).not.toBeNull()
+
+    const block = parse(renderMarkdown('before\n\n$$\n\\frac{a}{b}\n$$\n\nafter'))
+    expect(block.querySelector('.math-display'), 'multi-line $$ is display maths').not.toBeNull()
+    expect(block.querySelector('.math-display mfrac')).not.toBeNull()
+  })
+
+  it('renders a radical with its MathML root and its SVG overlay', () => {
+    // The two halves that were being stripped. A radical is a MathML <msqrt> plus an
+    // SVG overlay drawn by KaTeX; if either is gone the expression degrades to a
+    // bare "2".
+    const doc = parse(renderMarkdown('$\\sqrt{2}$'))
+    expect(doc.querySelector('.katex-mathml math msqrt')).not.toBeNull()
+    expect(doc.querySelector('.katex-html svg'), 'the SVG overlay must survive').not.toBeNull()
+  })
+
+  it('renders maths inside a list item and a blockquote', () => {
+    const list = parse(renderMarkdown('- item with $a^2$'))
+    expect(list.querySelector('li .katex')).not.toBeNull()
+    const quote = parse(renderMarkdown('> quoted $a^2$'))
+    expect(quote.querySelector('blockquote .katex')).not.toBeNull()
+  })
+
+  it('renders a literal dollar for an escaped one', () => {
+    const doc = parse(renderMarkdown('Escaped \\$5 and \\$x$.'))
+    expect(doc.querySelector('.katex'), 'an escaped dollar is not maths').toBeNull()
+    expect(doc.body.textContent).toBe('Escaped $5 and $x$.')
+  })
+})
+
+describe('the $ delimiter, and where it misfires', () => {
+  /**
+   * **The prompt expected these to stay text. Measured, they do not.**
+   *
+   * `micromark-extension-math` does not implement the pandoc/GitHub delimiter rule
+   * (opener not followed by whitespace, closer not preceded by whitespace and not
+   * followed by a digit). Measured boundary, exhaustively:
+   *
+   *   one `$` in a paragraph            -> text          (correct)
+   *   two `$` anywhere in a paragraph  -> MATH          (a false positive)
+   *   `\$`                              -> text          (correct)
+   *   inside code                       -> text          (correct)
+   *
+   * So `It cost $20,000 and $30,000 won` becomes maths, and so does `Pay $5 or $10`.
+   * A single amount is fine, which is what makes the failure so easy to miss: most
+   * test notes contain one amount and render perfectly.
+   *
+   * This is asserted as measured behaviour rather than as desired behaviour, so that
+   * a future upgrade that changes it is noticed, and so `KNOWN_BUGS.md` has a test
+   * behind it. Turning `singleDollarTextMath` off would fix it and would also remove
+   * inline maths entirely, which is a worse trade; the choice is recorded in ADR-017.
+   */
+  it('leaves a single amount as text', () => {
+    // One dollar and no partner. Every one of these has exactly one `$`.
+    for (const source of ['Only $100.', 'Only $100', 'Earn $5 million.']) {
+      const doc = parse(renderMarkdown(source))
+      expect(doc.querySelector('.katex'), `"${source}" must stay text`).toBeNull()
+    }
+  })
+
+  it('treats two amounts in one paragraph as maths — a known false positive', () => {
+    // A *range* is the case that surprises most, because "Between $3 and $4." reads
+    // like one amount to a person and like a pair of delimiters to the parser. It was
+    // written into the "stays text" list here first and failed, which is exactly how
+    // it would be mis-assumed in a note.
+    for (const source of [
+      'It cost $20,000 and $30,000 won.',
+      'Pay $5 or $10 today.',
+      'Between $3 and $4.'
+    ]) {
+      const doc = parse(renderMarkdown(source))
+      expect(
+        doc.querySelector('.katex'),
+        `"${source}" becomes maths — measured, see KNOWN_BUGS`
+      ).not.toBeNull()
+    }
+  })
+
+  it('leaves an escaped amount as text', () => {
+    const doc = parse(renderMarkdown('Cost \\$5 and \\$6.'))
+    expect(doc.querySelector('.katex')).toBeNull()
+    expect(doc.body.textContent).toBe('Cost $5 and $6.')
+  })
+})
+
+describe('code is never maths', () => {
+  it('leaves inline code literal', () => {
+    const doc = parse(renderMarkdown('Use `$x$` literally.'))
+    expect(doc.querySelector('.katex')).toBeNull()
+    const code = doc.querySelector('code')
+    expect(code?.textContent).toBe('$x$')
+  })
+
+  it('leaves a latex fence literal — no react-katex recipe here', () => {
+    const doc = parse(renderMarkdown('```latex\n\\sqrt{2}\n```'))
+    expect(doc.querySelector('.katex')).toBeNull()
+    expect(doc.querySelector('code.language-latex')?.textContent).toContain('\\sqrt{2}')
+  })
+
+  it('leaves a fence with an unknown language literal', () => {
+    const doc = parse(renderMarkdown('```\n$x$\n```'))
+    expect(doc.querySelector('.katex')).toBeNull()
+  })
+})
+
+describe('invalid TeX degrades instead of breaking the page', () => {
+  it('renders the source in an error span and keeps the rest of the page', () => {
+    // `throwOnError: false` is chosen precisely so one typo cannot blank a note.
+    // With throwing enabled, this input would make the whole preview fail.
+    const doc = parse(renderMarkdown('Before.\n\nBroken $\\frac{1}{$ here.\n\nAfter.'))
+    const error = doc.querySelector('.katex-error')
+    expect(error, 'the failure must be visible, not silent').not.toBeNull()
+    // The rest of the document is intact, which is the point of the option.
+    expect(doc.body.textContent).toContain('Before.')
+    expect(doc.body.textContent).toContain('After.')
+    // And the error is a styled span, not a live element.
+    expect(doc.querySelectorAll('script')).toHaveLength(0)
+  })
+})
+
+describe('maths cannot become an injection vector', () => {
+  /**
+   * Every one of KaTeX's `trust`-gated commands, fed through the real pipeline.
+   *
+   * `trust: false` is the control, and it is asserted by **effect** rather than by
+   * reading the flag: with trust on, `\href` would emit a live anchor. These must
+   * render as visible TeX in KaTeX's error colour with no live element and no
+   * `javascript:` URL anywhere.
+   */
+  it.each([
+    ['\\href{javascript:alert(1)}{x}', 'href'],
+    ['\\url{javascript:alert(1)}', 'url'],
+    ['\\htmlClass{evil}{y}', 'htmlClass'],
+    ['\\htmlId{evil}{y}', 'htmlId'],
+    ['\\htmlData{foo=bar}{z}', 'htmlData'],
+    ['\\includegraphics{https://evil.test/x.png}', 'includegraphics']
+  ])('refuses the trust-gated command %s', (tex) => {
+    const html = renderMarkdown(`Text ${tex} more.`)
+    const doc = parse(html)
+
+    // No live element of any kind, and no event handler - asserted on the DOM, not
+    // by matching the HTML string. A string match on escaped text reports a leak
+    // that is not one, which is how a wrong call gets made.
+    expect(doc.querySelectorAll('script')).toHaveLength(0)
+    expect(doc.querySelectorAll('iframe')).toHaveLength(0)
+    expect(doc.querySelectorAll('object')).toHaveLength(0)
+    expect(doc.querySelectorAll('embed')).toHaveLength(0)
+    for (const el of doc.querySelectorAll('*')) {
+      for (const attr of [...el.attributes]) {
+        expect(attr.name.toLowerCase(), `${el.tagName} kept ${attr.name}`).not.toMatch(/^on/)
+        expect(attr.value.toLowerCase(), `${el.tagName}[${attr.name}]`).not.toContain('javascript:')
+      }
+    }
+    // The image-loading command must not have produced an <img> either.
+    expect(doc.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('renders a refused command as visible TeX rather than dropping it', () => {
+    // Silently swallowing it would be worse than refusing it: the author would have
+    // no idea why their expression did nothing.
+    const doc = parse(renderMarkdown('Click $\\href{javascript:alert(1)}{x}$ now.'))
+    expect(doc.body.textContent).toContain('href')
+    expect(doc.querySelector('a')).toBeNull()
+  })
+
+  it('keeps hostile TeX from smuggling anything through the sanitiser', () => {
+    // The `-->` trap in reverse: TeX travels as text content, and this is the
+    // property that makes that safe. Asserted on the parsed DOM.
+    for (const tex of [
+      '\\text{</div><script>alert(1)</script>}',
+      '\\text{--><img src=x onerror=alert(1)>}',
+      '\\text{javascript:alert(1)}',
+      '\\rule{1em}{\\text{</style><script>alert(1)</script>}}'
+    ]) {
+      const doc = parse(renderMarkdown(`Math $${tex}$ end.`))
+      expect(doc.querySelectorAll('script'), tex).toHaveLength(0)
+      expect(doc.querySelectorAll('style'), tex).toHaveLength(0)
+      for (const el of doc.querySelectorAll('*')) {
+        for (const attr of [...el.attributes]) {
+          expect(attr.name.toLowerCase()).not.toMatch(/^on/)
+        }
+      }
+    }
+  })
+})
+
+describe('existing behaviour survives the math extension', () => {
+  it('still renders tables, task lists, strikethrough, autolinks and footnotes', () => {
+    // The extension was added to a working pipeline; this is the regression guard
+    // for the composition rather than for maths.
+    const doc = parse(
+      renderMarkdown(
+        [
+          '| a | b |',
+          '| - | - |',
+          '| 1 | 2 |',
+          '',
+          '- [x] done',
+          '',
+          '~~gone~~',
+          '',
+          'https://example.com',
+          '',
+          'A note[^1].',
+          '',
+          '[^1]: the note'
+        ].join('\n')
+      )
+    )
+    expect(doc.querySelector('table th')?.textContent).toBe('a')
+    expect(doc.querySelector('li input[type="checkbox"]')).not.toBeNull()
+    expect(doc.querySelector('del')?.textContent).toBe('gone')
+    expect(doc.querySelector('a[href="https://example.com"]')).not.toBeNull()
+    expect(doc.body.textContent).toContain('the note')
+  })
+
+  it('still escapes raw HTML, now that maths output is in the same stream', () => {
+    const doc = parse(renderMarkdown('<b>raw</b> and <script>alert(1)</script>'))
+    expect(doc.querySelector('b')).toBeNull()
+    expect(doc.querySelectorAll('script')).toHaveLength(0)
+  })
+})
+
 describe('the sanitiser profile keeps what generated markup needs', () => {
   /**
    * Applied to the configuration directly, because through `renderMarkdown` there

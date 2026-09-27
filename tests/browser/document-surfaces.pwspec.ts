@@ -251,4 +251,153 @@ test.describe('Rendered content is a document, not a card', () => {
       'no script from the document may have executed'
     ).toBeUndefined()
   })
+
+  /**
+   * The visual proof. Until this ran, no one had ever seen a radical render.
+   *
+   * Every earlier claim about `\sqrt{2}` was inferred from markup. The inference
+   * turned out to be right about the *cause* — the old sanitiser profile deleted the
+   * `<math>` and the `<svg>` — but "the SVG is in the DOM" is not "a radical is drawn
+   * on screen". A missing stylesheet produces a correct-looking DOM and a blank
+   * glyph, which is why the screenshot is part of the deliverable rather than a
+   * nicety, and why the font check below is explicit.
+   */
+  test('a radical, an arrow and a formula are visibly drawn in a real browser', async ({
+    page,
+    request
+  }) => {
+    const content = [
+      '# Maths',
+      '',
+      'Radical: $\\sqrt{2}$',
+      '',
+      'Arrow: $\\overrightarrow{AB}$',
+      '',
+      'Formula: $x^2 + y^2 = z^2$'
+    ].join('\n')
+    const id = await seedPage(request, uniqueTitle('MarkdownMath'), 'markdown', content)
+    await page.goto(`/?page=${id}`)
+
+    const rendered = page.locator(MARKDOWN_RENDERED)
+    await expect(rendered).toBeVisible({ timeout: 20_000 })
+
+    // Three expressions rendered.
+    await expect(rendered.locator('.katex')).toHaveCount(3, { timeout: 15_000 })
+
+    /**
+     * The SVG is the proof, not the `.katex` span.
+     *
+     * A radical is a MathML `<msqrt>` plus an SVG overlay. The span existing only
+     * says the pipeline ran; the `<svg>` existing says the part the old sanitiser
+     * used to delete is now present, which is the specific regression this feature
+     * was blocked on.
+     */
+    await expect(rendered.locator('.katex .katex-html svg').first()).toBeAttached({
+      timeout: 15_000
+    })
+    // The radical's vinculum is an SVG path in KaTeX, so a non-zero path count is a
+    // real check that geometry was emitted rather than an empty shell.
+    expect(
+      await rendered.locator('.katex-html svg path').count(),
+      'KaTeX must have drawn vector geometry'
+    ).toBeGreaterThan(0)
+
+    // The MathML subtree survives, which is what makes the maths reachable by a
+    // screen reader. This is the half that used to be deleted silently.
+    await expect(rendered.locator('.katex-mathml math')).toHaveCount(3)
+    expect(await rendered.locator('.katex-mathml math msqrt').count(), 'the radical').toBe(1)
+    expect(await rendered.locator('.katex-mathml math mover').count(), 'the arrow accent').toBe(1)
+
+    /**
+     * The fonts, checked against the families the page actually uses.
+     *
+     * `document.fonts.check` reports false for a family that has not been *requested*
+     * yet, so checking all of KaTeX's ~20 families would fail on families this page
+     * never uses — a false negative that says nothing about the product. Measured:
+     * `KaTeX_Size1` reported false while `KaTeX_Main` and `KaTeX_Math` reported true.
+     *
+     * Note also that KaTeX draws most glyphs as **SVG paths**, not font text, so the
+     * geometry assertion above is the stronger check of the two. This one is here to
+     * catch a stylesheet that loaded but whose woff2 files were never emitted.
+     */
+    const fontsResolved = await page.evaluate(async () => {
+      await document.fonts.ready
+      return ['KaTeX_Main', 'KaTeX_Math'].map((f) => document.fonts.check(`16px ${f}`))
+    })
+    expect(
+      fontsResolved.every(Boolean),
+      `KaTeX fonts must resolve; got ${JSON.stringify(fontsResolved)}. A false means the ` +
+        'woff2 files were not emitted or the stylesheet never loaded.'
+    ).toBe(true)
+
+    // The glyph layer occupies a real box, which a blank fallback would not.
+    const box = await rendered
+      .locator('.katex .katex-html')
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        return { w: Math.round(r.width), h: Math.round(r.height) }
+      })
+    expect(box.w, 'the rendered radical must occupy width').toBeGreaterThan(4)
+    expect(box.h, 'the rendered radical must occupy height').toBeGreaterThan(4)
+
+    // Evidence, kept as an artefact rather than an assertion nobody can re-check.
+    // Written outside `test-results/`, which Playwright clears at the start of a run.
+    await rendered.screenshot({ path: 'docs/evidence/markdown-math-proof.png' })
+
+    /**
+     * A second, enlarged artefact, taken on the *same* page so the real stylesheet
+     * and the real fonts are still in play.
+     *
+     * At body zoom the maths is ~16px, and at that size it is genuinely hard to
+     * distinguish a real glyph from a plausible-looking fallback — which is the
+     * specific doubt this evidence exists to settle. Scaling the rendered maths with
+     * a transform keeps every computed style and every loaded font identical, and
+     * only changes the size, so what is captured is what is really there.
+     */
+    const maths = rendered.locator('.katex').first()
+    await maths.evaluate((el) => {
+      el.style.transform = 'scale(3.5)'
+      el.style.transformOrigin = 'left top'
+      el.style.display = 'inline-block'
+    })
+    await page.waitForTimeout(300)
+    await maths.screenshot({ path: 'docs/evidence/markdown-math-zoom.png' })
+  })
+
+  test('maths on a Markdown page are styled, not raw TeX', async ({ page, request }) => {
+    /**
+     * The lazy-chunk trap, as a test.
+     *
+     * `@blocknote/math-block` imports KaTeX's stylesheet, but only from the Rich
+     * Note's lazily-loaded chunk. A Markdown page never mounts the rich editor, so
+     * that CSS was never fetched: correct DOM, no glyphs, no error thrown. The
+     * Markdown workspace now imports the same file, and this asserts the stylesheet
+     * actually reaches *this* page.
+     */
+    const id = await seedPage(
+      request,
+      uniqueTitle('MarkdownMathStyled'),
+      'markdown',
+      'Styled: $\\sqrt{3}$'
+    )
+    await page.goto(`/?page=${id}`)
+    const rendered = page.locator(MARKDOWN_RENDERED)
+    await expect(rendered.locator('.katex').first()).toBeVisible({ timeout: 20_000 })
+
+    // KaTeX visually hides its MathML layer and shows the HTML layer. Without the
+    // stylesheet both would be visible and the raw MathML would sit beside the text.
+    const mathmlHidden = await rendered
+      .locator('.katex-mathml')
+      .first()
+      .evaluate((el) => getComputedStyle(el).position === 'absolute')
+    expect(mathmlHidden, 'the MathML layer must be hidden by the stylesheet').toBe(true)
+
+    // The glyph layer is laid out, not collapsed.
+    const htmlLayer = await rendered
+      .locator('.katex-html')
+      .first()
+      .evaluate((el) => getComputedStyle(el).display)
+    expect(htmlLayer).not.toBe('none')
+  })
 })

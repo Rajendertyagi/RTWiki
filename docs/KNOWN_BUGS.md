@@ -222,6 +222,61 @@ the parser now escapes raw HTML, a user cannot put `<math>` or `<svg>` into the 
 characters arrive as text. The only MathML or SVG reaching the sanitiser is markup RTWiki generated
 itself. So this widens what our own output may contain, not what a user's keystrokes can.
 
+### Two amounts in one paragraph become maths
+
+**Measured, documented, and a deliberate trade-off rather than a bug.** `micromark-extension-math` does
+**not** implement the pandoc/GitHub delimiter rule. Its actual boundary:
+
+| Source | Renders as |
+|---|---|
+| `Only $100.` · `Earn $5 million.` | text ✓ |
+| `It cost $20,000 and $30,000 won.` | **maths** ✗ |
+| `Pay $5 or $10 today.` | **maths** ✗ |
+| `Between $3 and $4.` | **maths** ✗ |
+| `Cost \$5 and \$6.` | text ✓ |
+| `` `$5` `` in code, or in a fence | text ✓ |
+
+One `$` in a paragraph is safe. **Two** is not, whatever is between them.
+
+**Why it is easy to miss:** a note containing a single amount renders perfectly, so the feature looks
+correct until one paragraph happens to name two. A range is the worst case, because `Between $3 and $4.`
+reads as one amount to a person and as a pair of delimiters to the parser. It was written into the
+"stays text" list in the test suite first and failed there, which is the cheapest possible warning.
+
+**The workaround is `\$`**, or putting the amounts in different paragraphs. Turning off
+`singleDollarTextMath` would remove the false positive and also remove inline maths, which is the
+commoner case in study notes — so the looser default is kept, deliberately, with the cost recorded here
+and asserted by a test. See [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+
+### Display maths only works when `$$` is alone on its line
+
+`$$x$$` written on one line renders as **inline** maths, not display. The extension only reaches its
+flow construct when the opening `$$` sits on a line by itself, with the expression on the lines between
+and a closing `$$` after them. The expression is still rendered correctly; only the presentation
+differs, so nothing looks broken — it just does not do what the author expected. Measured across five
+shapes and asserted both ways.
+
+### KaTeX fonts: a silent failure that no test would have caught
+
+Importing the stylesheet is not enough. KaTeX's CSS references `.woff2` files that the bundler copies
+alongside it, and **a missing font produces a correct DOM and wrong pixels** — no console error, no
+failed assertion, just maths that looks subtly off or falls back to a serif.
+
+Two specific traps found here:
+
+- **The stylesheet was in a lazy chunk.** `@blocknote/math-block` imports `katex/dist/katex.min.css`,
+  but only from the Rich Note's dynamically-loaded chunk. A Markdown page never mounts the rich editor,
+  so that CSS was never fetched: the full stylesheet (19 font references) lived in `rich-editor-*.css`
+  while the eagerly-loaded `index-*.css` carried 9. The Markdown workspace now imports the same file,
+  and the bundler emits one shared `katex-*.css` for both paths — verified after a build, not assumed.
+- **`document.fonts.check` returns false for a family that has not been requested.** An early version
+  of the browser test checked all of KaTeX's families and failed on `KaTeX_Size1`, which this page never
+  uses. Checking only the families the page actually renders with is the meaningful check.
+
+**The checkable rule:** after a build, `build/web` must contain the `KaTeX_*.woff2` files, and a browser
+test must assert the SVG overlay and a resolved font. See `docs/evidence/markdown-math-zoom.png` for
+what correct output looks like.
+
 ## Recently fixed
 
 ### A document's own Content-Security-Policy was silently replaced by the app-wide one

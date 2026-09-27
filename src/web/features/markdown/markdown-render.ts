@@ -1,16 +1,35 @@
 import DOMPurify, { type Config } from 'dompurify'
 import { micromark } from 'micromark'
 import { gfm, gfmHtml } from 'micromark-extension-gfm'
+import { math, mathHtml } from 'micromark-extension-math'
 
 /**
- * GitHub-Flavored Markdown: tables, task lists, strikethrough, autolinks and
- * footnotes.
+ * The extension set: GitHub-Flavored Markdown plus `$…$` / `$$…$$` maths.
  *
- * `gfm()` and `gfmHtml()` are the two halves of one extension — the first parses
- * the syntax, the second serialises it. Composed once at module scope so every
- * render shares one parser configuration and none of them can drift.
+ * Each extension has two halves — the first parses the syntax, the second
+ * serialises it — and both are composed here, once, at module scope, so every
+ * render shares one configuration and none of them can drift.
+ *
+ * ## `trust: false` is pinned, not defaulted
+ *
+ * KaTeX's `trust` flag gates `\href`, `\url`, `\htmlClass`, `\htmlId` and
+ * `\includegraphics`. With it on, TeX in a note becomes an injection vector: a
+ * study note containing `\href{javascript:alert(1)}{click}` would produce a live
+ * link in RTWiki's own origin. It is set explicitly rather than left to KaTeX's
+ * default so that a future KaTeX release cannot quietly change what the default
+ * means. `tests/markdown-render.test.ts` asserts the effect, not the flag.
+ *
+ * ## `throwOnError: false` is deliberate
+ *
+ * With throwing enabled, one malformed expression in a note makes the whole
+ * preview fail to render — a single typo would blank the page. Disabled, KaTeX
+ * renders the source in its error colour, so the reader sees what they wrote and
+ * the rest of the page survives.
  */
-const MARKDOWN_OPTIONS = { extensions: [gfm()], htmlExtensions: [gfmHtml()] }
+const MARKDOWN_OPTIONS = {
+  extensions: [gfm(), math()],
+  htmlExtensions: [gfmHtml(), mathHtml({ throwOnError: false, trust: false })]
+}
 
 /**
  * Renders Markdown source to a sanitised HTML string for preview.
@@ -33,11 +52,17 @@ const MARKDOWN_OPTIONS = { extensions: [gfm()], htmlExtensions: [gfmHtml()] }
  * overlay, so `\sqrt{2}` was losing both and rendering as a bare `2`, and maths
  * were invisible to a screen reader.
  *
+ * **This is the reason maths work at all.** The profile was widened in anticipation
+ * of them; `micromark-extension-math` is what makes the widening load-bearing. A
+ * reader with a screen reader gets the MathML subtree, and everyone else gets the
+ * SVG overlay.
+ *
  * Widening the profile was checked against the attacks it could plausibly admit,
  * rather than assumed safe. Under the widened profile: `<script>`, `<img onerror>`,
  * `<svg><script>`, `<math><mtext><script>`, `<svg><animate onbegin>` and
  * `<iframe src=javascript:>` are all still neutralised. `tests/markdown-render.test.ts`
- * keeps that check.
+ * keeps that check, and re-runs it against real hostile TeX rather than only against
+ * hand-written markup.
  */
 /**
  * The sanitiser configuration, exported so it can be asserted directly.

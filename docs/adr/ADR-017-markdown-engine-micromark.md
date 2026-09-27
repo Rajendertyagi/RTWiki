@@ -90,6 +90,61 @@ Markdown, and the old arrangement left the entire burden on the sanitiser. The p
 at the source, so a parser bug is no longer the only thing standing between a note and script
 execution. It is user-visible, so it is recorded here and asserted by a test.
 
+## Maths
+
+`micromark-extension-math` is composed into the same single `MARKDOWN_OPTIONS` as GFM, so maths and
+Markdown cannot drift apart. KaTeX does the rendering, at parse time, into the same HTML string the
+sanitiser then processes.
+
+### The sanitiser widening is what makes this possible
+
+`\sqrt{2}` is a MathML `<msqrt>` with an SVG overlay. The `{ html: true }` profile deleted both, so
+this extension **could not have worked** without the widening above. That is the concrete load the
+widening was taken for, and it is now measured rather than predicted: a real browser renders the
+radical, the SVG overlay is in the DOM, and the MathML subtree survives for a screen reader.
+Evidence: `docs/evidence/markdown-math-proof.png` and `markdown-math-zoom.png`.
+
+### `trust: false` is pinned, not defaulted
+
+KaTeX's `trust` flag gates `\href`, `\url`, `\htmlClass`, `\htmlId`, `\htmlData` and
+`\includegraphics`. With it on, TeX in a note is an injection vector — a study note containing
+`\href{javascript:alert(1)}{click}` produces a live link in RTWiki's own origin. It is set explicitly
+so a future KaTeX release cannot quietly change what the default means, and the effect is asserted
+rather than the flag: all six commands are fed through the real pipeline and the DOM is audited.
+
+`throwOnError: false` for the same reason of robustness rather than safety: with throwing enabled, one
+malformed expression makes the whole preview fail to render, so a single typo would blank a note.
+Disabled, KaTeX shows the source in its error colour and the rest of the page survives.
+
+### The `$` delimiter is looser than a reader expects
+
+**Measured, and this is the sharpest edge in the feature.** `micromark-extension-math` does not
+implement the pandoc/GitHub delimiter rule. Its behaviour is:
+
+| Source | Result |
+|---|---|
+| One `$` in a paragraph — `Only $100.`, `Earn $5 million.` | text ✓ |
+| **Two** `$` in a paragraph — `It cost $20,000 and $30,000 won.`, `Pay $5 or $10.`, `Between $3 and $4.` | **maths** ✗ |
+| `\$` escaped | text ✓ |
+| Inside inline code or a fence | text ✓ |
+
+So a paragraph with two amounts becomes maths. It is easy to miss because a note with one amount
+renders perfectly, and a range like `Between $3 and $4.` reads as a single amount to a person and as a
+pair of delimiters to the parser.
+
+`math({ singleDollarTextMath: false })` removes the false positive entirely — and removes inline
+maths with it, so `$E=mc^2$` would stop working. That is a worse trade for a study-notes application
+where inline maths is the common case, so the looser default is kept and the boundary is documented in
+[KNOWN_BUGS.md](../KNOWN_BUGS.md) and asserted by a test. **This is a deliberate choice with a known
+cost, not an oversight.**
+
+### Display maths needs the multi-line form
+
+`$$` on its own line with the content between produces `<div class="math math-display">`. Written on
+one line, `$$x$$` produces **inline** maths — the extension only reaches its flow construct when the
+opening `$$` is alone on a line. The expression is still correct; only the presentation differs. Asserted
+both ways.
+
 ## Alternatives considered
 
 **`markdown-it`.** A capable parser with a real plugin API, and the most natural fit if extensions were

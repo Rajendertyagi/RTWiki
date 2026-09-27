@@ -1,6 +1,18 @@
 import { Button, Group, Text } from '@mantine/core'
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content'
 import { IconDownload, IconEye, IconPencil } from '@tabler/icons-react'
+// KaTeX's stylesheet, imported here so maths are styled on a **Markdown** page.
+//
+// `@blocknote/math-block` already imports this exact file, but only from the Rich
+// Note's lazily-loaded chunk. A Markdown page never mounts the rich editor, so that
+// chunk is never fetched and its CSS never arrives - measured: the full stylesheet
+// (19 font references) lives in the lazy `rich-editor-*.css`, while the eagerly
+// loaded `index-*.css` carried 9. Maths would have rendered with the correct DOM and
+// no glyphs, which throws no error and looks merely wrong.
+//
+// This is the same file, not a second copy, so the CSS has one source. Verified after
+// building rather than assumed; see the note in `markdown-workspace.module.css`.
+import 'katex/dist/katex.min.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { updatePage } from '../../services/pages-api.js'
