@@ -9,7 +9,11 @@ import {
 } from '@mantine/core'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
-import { parseVisualPageContent } from '@rtwiki/shared/schemas/visual-page-content'
+import {
+  parseVisualPageContent,
+  serializeVisualPageBlocks,
+  type VisualPageBlock
+} from '@rtwiki/shared/schemas/visual-page-content'
 import {
   IconAspectRatio,
   IconPencil,
@@ -83,7 +87,13 @@ export default function MermaidPageWorkspace({
   // The workspace edits one diagram at a time, so it works against the block it
   // was opened on. A v1 page reads as a single block, which is why this needs no
   // special case.
-  const committedSource = parsed.ok ? (parsed.value.blocks[0]?.source ?? '') : ''
+  // The page's blocks, as stored. A v1 page reads as a one-block page, so there is
+  // no special case here.
+  const committedBlocks: VisualPageBlock[] = parsed.ok ? parsed.value.blocks : []
+  // Which block the editor is working on. Always the first until the multi-block
+  // view lands; named now so the apply path below is already block-aware.
+  const editingIndex = 0
+  const committedSource = committedBlocks[editingIndex]?.source ?? ''
   const parseFailed = !parsed.ok
 
   const colorScheme = useComputedColorScheme('light')
@@ -194,7 +204,15 @@ export default function MermaidPageWorkspace({
   const apply = (): void => {
     setEditing(false)
     if (draft !== committedSource) {
-      notifyEdit(JSON.stringify({ version: 1, type: pageType, source: draft }))
+      // Written as v2 with the *whole* block list, replacing only the block being
+      // edited. Writing v1 here would look correct for a single-diagram page and
+      // silently collapse a multi-block page to one diagram, because a v1 document
+      // parses as exactly one block — the other diagrams would be discarded with
+      // no error anywhere.
+      const next = committedBlocks.map((block, index) =>
+        index === editingIndex ? { ...block, source: draft } : block
+      )
+      notifyEdit(serializeVisualPageBlocks(pageType, next))
     }
     debugLog('ui', 'ui_context_menu_action', {
       targetId: pageId,
