@@ -23,6 +23,7 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-015](ADR-015-document-attachments.md) | Document Attachments — Forced Download and Extracted Text | **Accepted** (§3 "never served inline" superseded by ADR-016) |
 | [ADR-016](ADR-016-inline-document-viewing.md) | Inline Document Viewing on a Separate Route | **Accepted** (owner-authorised 2026-09-27) |
 | [ADR-017](ADR-017-markdown-engine-micromark.md) | Markdown Engine — micromark | **Accepted** (replaces `marked`) |
+| [ADR-018](ADR-018-documented-vs-built.md) | Documented vs. Built — the Code Is the Authority | **Accepted** |
 
 ## How to Read an ADR
 

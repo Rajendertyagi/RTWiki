@@ -626,7 +626,7 @@ Clicking an existing Rich Note or creating a new one blanked the entire applicat
 ### Correction (`95ce27a8`, lockfile sync `df2bc3aa`)
 
 - Removed the standalone toolbar — `BlockNoteView` renders its default formatting toolbar automatically.
-- Added `EditorErrorBoundary` around the editor: safe recovery panel (no error text, paths, tokens, or page content), reset-to-valid-empty-document flow, forced editor remount on recovery.
+- Added `EditorErrorBoundary` around the editor: safe recovery panel (no error text, paths, tokens, or page content), reset-to-valid-empty-document flow **behind an explicit confirmation (`f155f82`)** — the first press only arms a `ResetConfirmation`, `onReset()` is reachable solely from its confirm button, and the confirmation states plainly that the original cannot be recovered because RTWiki keeps no backup; forced editor remount on recovery.
 - Canonical empty document is a paragraph without a `content` key.
 - New Playwright browser suite (`tests/browser/rich-note.spec.ts`, `@playwright/test` 1.62.1) runs against the real built application in CI: dashboard render, open/create paths, formatting toolbar, autosave Saved state, manual save, reload, home+reopen, pending-flush switch, dark-theme surface, HTML placeholder isolation (BlockNote never mounted), malformed-content recovery UI, plus uncaught-exception and blank-root guards.
 - CI gained a `browser-tests` job (ubuntu, Chromium) between Verify and the Windows smoke; artifact uploads only after all three jobs pass.
