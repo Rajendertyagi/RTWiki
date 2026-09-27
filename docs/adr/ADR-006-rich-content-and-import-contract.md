@@ -37,7 +37,7 @@ The preferred interchange format for AI-generated pages is the **RTWiki note-pac
 - `page.html` — optional rich-HTML source per page; on import, non-lossless HTML is stored as a `richHtml` block inside `pages.content` (L2 fallback).
 - `style.css` — optional per-page scoped CSS (L3).
 - `script.js` — optional per-page sandboxed JS (L3).
-- `assets/` — images and other binary assets, localized to `data/attachments/` on import.
+- `assets/` - images and other binary assets, stored as attachment rows on import ([ADR-014](ADR-014-blob-stored-image-bytes.md)).
 - `schema` — a declared `schemaVersion` enabling startup migration.
 
 ### Centralized Import Pipeline

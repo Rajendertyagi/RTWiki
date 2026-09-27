@@ -19,13 +19,13 @@ RTWiki is designed first and foremost to receive AI-generated rich pages. An ext
 When arbitrary HTML/CSS/JS cannot be converted losslessly to native blocks, it is stored as a typed `richHtml` block **inside** `pages.content` — the single canonical document. It is never a separate database column and never a second canonical format. The block carries:
 
 - `originalHtml` — the original rich-HTML source, preserved verbatim.
-- `cssSource` / `assetId` — scoped CSS source or a reference to a localized attachment in `data/attachments/`.
+- `cssSource` / `assetId` — scoped CSS source or a reference to a localized attachment row.
 - `jsSource` / `assetId` — sandboxed JS source or a reference to a localized attachment.
 - `sandboxPolicyVersion` — version of the sandbox policy applied (see [ADR-007](adr/ADR-007-sandboxed-custom-content.md)).
 - `contentSchemaVersion` — version of the RTWiki-extended BlockNote schema.
 - `validation` — sanitization/validation metadata (e.g., whether scripts were stripped, unknown blocks preserved).
 
-Binary assets stay in `data/attachments/`. Search derives sanitized text from `pages.content`, but the search index is not the canonical store.
+Binary assets stay in application-owned storage ([ADR-014](adr/ADR-014-blob-stored-image-bytes.md)). Search derives sanitized text from `pages.content`, but the search index is not the canonical store.
 
 ## 3. The RTWiki Note-Package (`.rtwiki.zip`)
 
@@ -80,7 +80,7 @@ Per-page custom CSS/JS. They are **never** executed in the main application cont
 
 ### 3.5 `assets/`
 
-Binary assets. On import they are copied into `data/attachments/` under a safe generated filename and all references are rewritten to the localized path.
+Binary assets. On import they are stored as attachment rows whose type was decided from their own bytes, and all references are rewritten to the localized URL.
 
 ## 4. Import Paths (One Shared Pipeline)
 
@@ -102,7 +102,7 @@ adapter → validation → sanitize → asset localization → convert → previ
 1. **Adapter** — detects the source format (note-package, HTML, Markdown, or BlockNote JSON) and normalizes it.
 2. **Validation** — verifies manifest, size, and `schemaVersion`; applies ZIP-bomb and path-traversal guards for packages.
 3. **Sanitize** — runs DOMPurify on any HTML; strips scripts from pasted/imported HTML.
-4. **Asset localization** — extracts referenced images and writes them to `data/attachments/`, rewriting references.
+4. **Asset localization** - extracts referenced images and stores them as attachment rows, rewriting references.
 5. **Convert** — maps source structures to the RTWiki-extended BlockNote schema (native blocks + `rt-*` HTML where needed).
 6. **Preview** — renders a sanitized preview and collects warnings (unknown blocks, stripped scripts).
 7. **Canonical JSON** — produces the stored BlockNote JSON document.
@@ -120,7 +120,7 @@ adapter → validation → sanitize → asset localization → convert → previ
 | Unknown-block preservation | Unrecognized block types are stored (not deleted) and rendered with a safe fallback, flagged for review. |
 | Rich-HTML fallback | When conversion is not lossless, the original HTML is stored as a typed `richHtml` block inside `pages.content` (see §2.1) — not in a separate column. |
 | No silent loss | Warnings are surfaced in the preview; content is never dropped without a visible flag. |
-| Image localization | Imported images are stored under `data/attachments/` and references rewritten; they render offline. |
+| Image localization | Imported images are stored as attachment rows and references rewritten; they render offline. |
 | Preview before save | The user sees sanitized output and warnings before the import is committed. |
 
 See [SECURITY.md](SECURITY.md) for the threat model and enforcement details.
@@ -131,7 +131,7 @@ Imported content is stored as described in [DATA_MODEL.md](DATA_MODEL.md):
 
 - `pages.content` — RTWiki-extended BlockNote JSON (versioned via `content_schema_version`). It is the single canonical page document.
 - `pages.content` (richHtml block) — for non-lossless conversions, the original rich-HTML source (with scoped CSS/JS source or asset id, sandbox-policy version, and validation metadata) is stored as a typed `richHtml` block inside the canonical JSON, not a separate column.
-- `attachments` — localized images under `data/attachments/`.
+- `attachments` - localized images, stored as rows.
 
 ## 7. Localhost Import API
 

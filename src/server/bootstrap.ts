@@ -129,7 +129,9 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   const attachmentsDir = joinPaths(dataDir, ATTACHMENTS_DIR)
   const backupsDir = joinPaths(dataDir, 'backups')
 
-  // ADR-005 portable layout: every runtime directory must exist after launch.
+  // ADR-005 portable layout plus one legacy directory: `attachments/` is where a
+  // database created before ADR-014 still keeps its image files, and the
+  // migration reads from it. It is no longer written to.
   ensureDirectory(dataDir)
   ensureDirectory(attachmentsDir)
   ensureDirectory(backupsDir)
@@ -224,7 +226,10 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   }
 
   const db = initDatabase(dataDir)
-  await runMigrations(db)
+  // The attachments directory is still created and still passed in: images moved
+  // into the database (ADR-014), but a database created before that change still
+  // has its bytes in files there, and the migration has to be able to find them.
+  await runMigrations(db, attachmentsDir)
   if (!checkIntegrity()) {
     logger.error('Database failed integrity check', { event: 'startup', action: 'abort' })
     await closeDatabase()

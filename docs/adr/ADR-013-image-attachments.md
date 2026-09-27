@@ -63,17 +63,22 @@ If SVG support is ever wanted, the accepted route is ingest-sanitisation with DO
 
 ### 3. Uploads are addressed by catalogue id, not by filename
 
-Requests name an opaque `id`. The server looks up the row and serves the `stored_name` **it** generated.
+Requests name an opaque `id`. The server looks up the row and serves the stored type **it** decided from the bytes.
 
-This is stronger than sanitising a filename and then verifying the resolved path is inside the directory. There, correctness depends on the sanitiser and the check both being right. Here, no part of the request ever becomes a path, so a traversal attempt has nothing to traverse — the failure mode is the failure mode of an ordinary lookup miss.
+This is stronger than sanitising a filename and then verifying the resolved path is inside the directory. There, correctness depends on the sanitiser and the check both being right. Here, no part of the request ever becomes a path, so a traversal attempt has nothing to traverse — the failure mode is the failure mode of an ordinary lookup miss. Since [ADR-014](ADR-014-blob-stored-image-bytes.md) there is no longer a path to traverse at all, so the argument is now moot in the strongest possible way.
 
-The stored name is `<UUID>.<ext>`. The uploader's filename is kept in `original_name` for display, with path separators and control characters removed, and is never used to build a path.
+The uploader's filename is kept in `original_name` for display, with path separators and control characters removed, and is never used to build a path or a header.
 
 ### 4. The document stores a URL, not file content
 
+> **Storage location superseded by [ADR-014](ADR-014-blob-stored-image-bytes.md).** The bytes now live
+> in the `attachments` row rather than in a file under `data/attachments/`. Everything else in this
+> section stands: the document still stores a URL, the bytes are still never inlined as a `data:` URI,
+> and requests are still addressed by catalogue id.
+
 An `image` block stores the URL returned by the upload. The document stays canonical BlockNote JSON ([ADR-004](ADR-004-canonical-block-json-format.md)) with a URL in a `url` prop; no bytes are inlined, and no `data:` URI is used as a fallback. Inlining would put megabytes of base64 into the page row and into every autosave, and would bypass the size limit and the type check entirely.
 
-The file itself lives under `data/attachments/` per [ADR-005](ADR-005-portable-data-layout.md), and the catalogue row is the source of truth about it.
+The image bytes are stored in the `attachments` row, and the catalogue row is the source of truth about them.
 
 ### 5. One client entry point, with the message owned centrally
 
@@ -127,4 +132,4 @@ An insertion entry declares which toolbar run it belongs to. The toolbar groups 
 
 **Use `jimp` for resizing.** Not rejected on merit — it is pure JavaScript and does run inside the compiled executable. It is out of scope for this decision, and it decodes only five formats, so adopting it would permanently cap what RTWiki can process. Resizing is a separate decision with its own ADR.
 
-**Store the original filename in the stored path** (`<UUID>_<original>`), as an earlier draft of the data model described. Rejected: it puts user-controlled text into a filesystem path for no benefit — the original name is kept in a column and used only for display.
+**Store the original filename in the stored path** (`<UUID>_<original>`), as an earlier draft of the data model described. Rejected: it puts user-controlled text into a filesystem path for no benefit — the original name is kept in a column and used only for display. Superseded entirely by [ADR-014](ADR-014-blob-stored-image-bytes.md), which removes the path.

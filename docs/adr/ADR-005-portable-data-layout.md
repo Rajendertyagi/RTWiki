@@ -33,7 +33,7 @@ RTWiki/
 │   ├── rtwiki.sqlite
 │   ├── rtwiki.sqlite-wal
 │   ├── rtwiki.sqlite-shm
-│   ├── attachments/
+│   ├── attachments/     # legacy: image files predate ADR-014, no longer written
 │   └── backups/
 └── logs/
     └── rtwiki.log
@@ -73,7 +73,7 @@ At startup, the application resolves the absolute path of its own executable and
 
 ```
 <directory_of_RTWiki.exe>/data/rtwiki.sqlite
-<directory_of_RTWiki.exe>/data/attachments/
+<directory_of_RTWiki.exe>/data/attachments/    # legacy, read once by the ADR-014 migration
 <directory_of_RTWiki.exe>/data/backups/
 <directory_of_RTWiki.exe>/logs/rtwiki.log
 ```
@@ -121,9 +121,18 @@ SQLite WAL mode is enabled. The WAL (`-wal`) and shutdown (`-shm`) files are sto
 
 ### Attachments
 
+> **Superseded by [ADR-014](ADR-014-blob-stored-image-bytes.md).** Image bytes are stored in the
+> `attachments` table, not as files under `data/attachments/`. The decision below remains in force for
+> everything else on this page: the database, backups and logs still live beside the executable, and
+> the directory name is still defined once in the config module.
+
 Allowed attachments are stored under `data/attachments/`. The storage path for each attachment is derived from the attachment's unique ID and the configured attachments subdirectory name.
 
 ### Backups
+
+> **Superseded by [ADR-014](ADR-014-blob-stored-image-bytes.md).** A backup is now a single consistent
+> snapshot of the database, taken with `VACUUM INTO`. It no longer has to gather an attachments
+> directory alongside it, which removes the possibility of a backup whose database and files disagree.
 
 User-created backups are stored under `data/backups/`. A backup archive includes the database file and all attachments. Ordinary log files are **excluded** from backups.
 

@@ -127,7 +127,7 @@ This document defines measurable, observable pass/fail criteria for the MVP. Eac
 |----|----------|---------------|
 | AC-056 | The downloadable artifact is a `.zip` file containing an `.exe` and all runtime assets. | Extracting the zip shows a single executable. The `data/` and `logs/` directories are absent from the fresh ZIP; they are created automatically on first launch. |
 | AC-057 | Running the `.exe` starts the application without requiring any installed runtime. | The application launches and opens in the default browser. No error about missing Bun, Node, or .NET is shown. |
-| AC-058 | The application stores all mutable data beside the executable. | After first run, a `data/` directory and a `logs/` directory exist beside the `.exe`, containing `rtwiki.sqlite`, `attachments/`, `backups/`, and `rtwiki.log` respectively. No data is written to `%LOCALAPPDATA%` or any other system directory. |
+| AC-058 | The application stores all mutable data beside the executable. | After first run, a `data/` directory and a `logs/` directory exist beside the `.exe`, containing `rtwiki.sqlite`, `backups/`, and `rtwiki.log` respectively. Image bytes live inside the database ([ADR-014](adr/ADR-014-blob-stored-image-bytes.md)); an `attachments/` directory may exist on a workspace created before that change and is not written to. No data is written to `%LOCALAPPDATA%` or any other system directory. |
 
 ## 14. Non-Functional Targets
 
@@ -151,7 +151,7 @@ These criteria validate the rich-content model (native blocks, `rt-*` HTML, and 
 | AC-067 | A Grid block (L1) is a first-class multi-column responsive layout. | The grid renders two or more columns that reflow on narrow widths. |
 | AC-068 | Mathematical formulas render inline and as block. | Both inline and block formulas render as properly formatted math notation. |
 | AC-069 | Mermaid diagrams, including mind maps, render. | The diagram renders as a visual graphic within the page. |
-| AC-070 | Imported images are localized to `data/attachments/`. | Images referenced by imported content are stored locally and their references are rewritten; they display offline. |
+| AC-070 | Imported images are localized to application storage. | Images referenced by imported content are stored locally and their references are rewritten; they display offline. |
 | AC-071 | A note-package with an invalid or missing manifest is rejected. | The application shows a clear error and writes no partial data. |
 | AC-072 | A failed import rolls back completely. | After a failed import, all previously existing pages remain unchanged and intact. |
 | AC-073 | Unknown block types are preserved, not deleted. | An unrecognized block is stored, rendered with a safe fallback, and flagged for review. |

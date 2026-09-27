@@ -192,4 +192,34 @@ describe('pixel counting', () => {
     expect(pixelCount(8000, 6000)).toBeLessThan(50_000_000)
     expect(pixelCount(30_000, 30_000)).toBeGreaterThan(50_000_000)
   })
+
+  it('refuses to report a pixel count it cannot represent exactly', () => {
+    // A header may declare dimensions near 2^32. Their product exceeds
+    // Number.MAX_SAFE_INTEGER, where a JavaScript number silently loses its low
+    // digits - 18446744065119617025 would come back as ...7000. Reporting
+    // Infinity is honest: such an image is over every limit it could be
+    // compared against.
+    const huge = pixelCount(0xffffffff, 0xffffffff)
+    expect(huge).toBe(Number.POSITIVE_INFINITY)
+    expect(Number.isSafeInteger(huge ?? 0)).toBe(false)
+    // And it must still compare as "too many", which is the only use made of it.
+    expect((huge ?? 0) > 50_000_000).toBe(true)
+  })
+
+  it('reports an exact count whenever one is representable', () => {
+    expect(pixelCount(46340, 46340)).toBe(46340 * 46340)
+    expect(pixelCount(1, 1)).toBe(1)
+    expect(pixelCount(0, 5000)).toBe(0)
+  })
+
+  it('cannot be tricked into understating a size past the limit', () => {
+    // The reason Infinity is safe: imprecision only appears far above the
+    // ceiling, so no dimension pair can make an oversized image look acceptable.
+    for (const dimension of [50_001, 100_000, 1_000_000, 1e7, 2 ** 31, 2 ** 32 - 1]) {
+      const counted = pixelCount(dimension, dimension) ?? 0
+      if (counted <= 50_000_000) {
+        throw new Error(`${dimension}x${dimension} understated as ${counted}`)
+      }
+    }
+  })
 })

@@ -122,13 +122,9 @@ Both are junction tables that enforce referential integrity at the database leve
 
 ### 3.5 Attachments
 
-Each attachment row records metadata about a file stored on disk. The actual file is stored at a generated path derived from the `stored_name` column. The mapping is:
+Image bytes are stored in the `attachments.data` column, not as files in a directory (see [ADR-014](adr/ADR-014-blob-stored-image-bytes.md)). The row is written as a single statement, so an attachment cannot exist as bytes without metadata or the reverse. Files left behind by a database created before that change are read once by the migration and then left on disk untouched; removing them is a separate retention decision.
 
-```
-<data_directory>/attachments/<stored_name>
-```
-
-**Addressing:** The browser addresses an attachment by `id`, never by filename. `GET /api/attachments/:id` looks the row up and serves the `stored_name` the *server* generated, so no user-supplied string ever reaches the filesystem. See [ADR-013](adr/ADR-013-image-attachments.md).
+**Addressing:** The browser addresses an attachment by `id`, never by filename. `GET /api/attachments/:id` looks the row up and streams its bytes, so no user-supplied string ever reaches the filesystem — there is no path to reach. See [ADR-013](adr/ADR-013-image-attachments.md).
 
 **Filename generation:** Stored names are `<UUID>.<extension>`, where the extension is chosen from the file's own detected type — never from the uploader's filename or its declared `Content-Type`. The original filename is kept in `original_name` for display only, with path separators and control characters removed. A request naming `../../../etc/passwd` therefore produces an ordinary UUID name like any other upload; there is no traversal to defend against, because no part of the request becomes a path.
 

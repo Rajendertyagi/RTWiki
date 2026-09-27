@@ -1,5 +1,3 @@
-import { unlink } from 'node:fs/promises'
-import { join } from 'node:path'
 import {
   PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES,
   PROVISIONAL_MAX_IMAGE_PIXELS
@@ -15,13 +13,12 @@ import {
   getAttachment,
   insertAttachment,
   planStorage,
-  type StoredAttachment
+  type StoredAttachment,
+  streamAttachmentBytes
 } from './attachment-repository.js'
 import { inspectImageUpload, pixelCount } from './image-detect.js'
 
 export interface AttachmentRouteOptions {
-  /** Absolute path to `data/attachments` (ADR-005). */
-  attachmentsDir: string
   getDb: () => ReturnType<typeof getDb>
   logger: Logger
   /** Bounded by tests and by the default test instance. */
@@ -69,7 +66,7 @@ const REJECTION_MESSAGES: Record<
  */
 export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
   const routes = new Hono()
-  const { attachmentsDir, getDb, logger } = opts
+  const { getDb, logger } = opts
   const available = opts.available ?? true
 
   // Size is capped before the body is parsed, not after: Hono's documented
@@ -122,14 +119,11 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
       return c.json({ error: message.error, code: planned.reason }, message.status)
     }
 
-    // The generated name is the only path used. It cannot escape the directory
-    // because it is a UUID and an extension we chose.
-    const path = join(attachmentsDir, planned.record.storedName)
+    // One statement writes the bytes and their metadata together, so an
+    // attachment can never exist as one without the other (ADR-014).
+    let record: AttachmentRecord
     try {
-      // The bytes are already in memory, so Bun.write is the whole story. It
-      // creates the file, writes, and closes; a partial file cannot be served
-      // because the catalogue row is only inserted after this resolves.
-      await Bun.write(path, bytes)
+      record = insertAttachment(getDb(), { ...planned.record, data: bytes })
     } catch (err) {
       logger?.error('Attachment write failed', {
         event: 'attachment_write_failed',
@@ -138,43 +132,34 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
       return c.json({ error: 'Could not store the image' }, 500)
     }
 
-    const record = insertAttachment(getDb(), {
-      id: planned.record.id,
-      storedName: planned.record.storedName,
-      mimeType: planned.record.mimeType,
-      byteSize: planned.record.byteSize,
-      originalName: planned.record.originalName,
-      checksum: planned.record.checksum
-    })
     return c.json({ attachment: toResponse(record) }, 201)
   })
 
   routes.get('/:id', async (c) => {
     if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
-    const record = getAttachment(getDb(), c.req.param('id'))
+    const id = c.req.param('id')
+    const record = getAttachment(getDb(), id)
     if (!record) return c.json({ error: 'Not found' }, 404)
 
-    const file = Bun.file(join(attachmentsDir, record.storedName))
-    if (!(await file.exists())) {
-      // A row without its file is a broken state, not a 404 to retry: log it so
-      // it is visible, and say plainly that the image is gone.
-      logger?.error('Attachment file missing', {
-        event: 'attachment_file_missing',
-        targetId: record.id
-      })
-      return c.json({ error: 'Not found' }, 404)
-    }
+    // Streamed rather than read whole, so an in-flight response holds one chunk
+    // instead of the entire image (ADR-014 §4).
+    const stream = streamAttachmentBytes(getDb(), id)
+    if (!stream) return c.json({ error: 'Not found' }, 404)
 
-    return new Response(file, {
+    return new Response(stream, {
       headers: {
-        // The type comes from our signature detection, never from the uploader.
+        // The type comes from our detection of the file's own structure, never
+        // from the uploader.
         'content-type': record.mimeType,
         // Stops a browser second-guessing the type and reinterpreting the bytes.
         'x-content-type-options': 'nosniff',
         // The image is addressed by id, so the cache key must be too: a shared
         // cache must never hand one attachment's bytes to another URL.
         'cache-control': 'private, no-cache',
-        etag: `"${record.id}"`
+        etag: `"${record.id}"`,
+        // Declared from the stored length so the browser can lay the image out
+        // before the last chunk arrives.
+        'content-length': String(record.byteSize)
       }
     })
   })
@@ -183,20 +168,10 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
     if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
     const id = c.req.param('id')
-    const record = getAttachment(getDb(), id)
-    if (!record) return c.json({ error: 'Not found' }, 404)
-    // The row goes first: a file with no row is an orphan that nothing can reach,
-    // whereas a row pointing at a missing file is already reported by the GET
-    // route and is harmless.
+    if (!getAttachment(getDb(), id)) return c.json({ error: 'Not found' }, 404)
+    // One statement removes the bytes and their metadata together. There is no
+    // second step that can fail and leave the two disagreeing.
     if (!deleteAttachment(getDb(), id)) return c.json({ error: 'Not found' }, 404)
-    try {
-      await unlink(join(attachmentsDir, record.storedName))
-    } catch {
-      logger?.warn('Attachment file could not be removed', {
-        event: 'attachment_delete_partial',
-        targetId: id
-      })
-    }
     return c.json({ ok: true })
   })
 

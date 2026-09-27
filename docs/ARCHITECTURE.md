@@ -104,20 +104,20 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 ### 3.7 Attachments
 
-- **Technology:** Filesystem storage under `data/attachments/`, catalogued by the `attachments` table
-- **Modules:** `src/shared/attachments/image-formats.ts` (the accepted-format allowlist, dependency-free and shared by client and server), `src/server/attachments/image-detect.ts` (content-based detection and header dimension reading), `src/server/attachments/attachment-repository.ts` (catalogue), `src/server/attachments/attachment-routes.ts` (endpoints)
+- **Technology:** Image bytes stored in the `attachments` table, catalogued by the same row ([ADR-014](adr/ADR-014-blob-stored-image-bytes.md))
+- **Modules:** `src/shared/attachments/image-formats.ts` (the accepted-format allowlist, dependency-free and shared by client and server), `src/server/attachments/image-detect.ts` (content-based detection and header dimension reading), `src/server/attachments/attachment-repository.ts` (catalogue and blob streaming), `src/server/attachments/attachment-routes.ts` (endpoints)
 - **Endpoints:**
   - `POST /api/attachments` — multipart upload; type decided by reading the file's structure, size capped by `bodyLimit` before the body is parsed, pixel count capped from the header
-  - `GET /api/attachments/:id` — serves the file at the type recorded from its bytes, with `X-Content-Type-Options: nosniff`
-  - `DELETE /api/attachments/:id` — removes the row, then the file
+  - `GET /api/attachments/:id` — streams the stored bytes at the type recorded from them, with `X-Content-Type-Options: nosniff` and a `content-length` taken from the stored size
+  - `DELETE /api/attachments/:id` — removes the bytes and their metadata in one statement
   - A refused upload answers with a reason code (`unsupported_type`, `svg_not_supported`, `too_many_pixels`) beside the user-facing message, so the client can give actionable words without parsing English
 - **Responsibility:** Accept image uploads, decide the type from content, store under a server-generated name, and serve them back by catalogue id.
-- **Constraint:** Uploaded files are never executed. SVG is not accepted, because serving it inline is document execution, and a refused SVG says so. Requests address an attachment by id, so no user-supplied string reaches the filesystem — there is no traversal to prevent, rather than a traversal that is prevented. See [ADR-013](adr/ADR-013-image-attachments.md).
+- **Constraint:** Uploaded files are never executed. SVG is not accepted, because serving it inline is document execution, and a refused SVG says so. Requests address an attachment by id, and the bytes live in the database, so no user-supplied string reaches the filesystem at all. See [ADR-013](adr/ADR-013-image-attachments.md) and [ADR-014](adr/ADR-014-blob-stored-image-bytes.md).
 - **Client:** BlockNote's `uploadFile` hook is the single entry point, so the file picker, paste and drop all take this one path. The image block stores the returned URL, keeping the document canonical BlockNote JSON with no bytes inlined.
 
 ### 3.8 Backup and Restore
 
-- **Technology:** ZIP archive containing the SQLite database, attachments directory, and metadata
+- **Technology:** ZIP archive containing a consistent snapshot of the SQLite database, taken with `VACUUM INTO` ([ADR-014](adr/ADR-014-blob-stored-image-bytes.md)). Image bytes are in that snapshot, so there is no second thing to keep consistent with it
 - **Responsibility:**
   - **Create:** Lock the database, copy files into a ZIP archive, write metadata JSON. Logs are excluded.
   - **Restore:** Validate the archive (checksum or internal manifest), verify it was created by a compatible version, extract to a temporary location, run integrity checks, then replace the live data.
@@ -150,7 +150,7 @@ adapter → validation → sanitize → asset localization → convert → previ
 - **Adapter:** detects the source format (note-package, HTML, Markdown, or BlockNote JSON) and normalizes it.
 - **Validation:** verifies manifests, sizes, and schema versions; applies ZIP-bomb and path-traversal guards for packages.
 - **Sanitize:** runs DOMPurify on any HTML; strips scripts from pasted/imported HTML.
-- **Asset localization:** downloads/extracts referenced images and writes them to `data/attachments/`, rewriting references.
+- **Asset localization:** downloads/extracts referenced images and stores them as attachment rows, rewriting references.
 - **Convert:** maps source structures to the RTWiki-extended BlockNote schema (native blocks + `rt-*` HTML where needed).
 - **Preview:** renders a sanitized preview and collects warnings (unknown blocks, stripped scripts).
 - **Canonical JSON:** produces the stored BlockNote JSON document.

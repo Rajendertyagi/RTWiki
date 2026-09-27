@@ -37,7 +37,7 @@ The MVP implements every requirement in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIR
 | Shared import pipeline | One pipeline for paste, drop, and file import (adapter → validation → sanitize → asset localization → convert → preview → canonical JSON → transactional save) (R-041) |
 | AI note workflow | Import of AI-generated rich pages via paste and the `.rtwiki.zip` note-package (R-040, R-045, R-046) |
 | Note-package import | Manifest validation, transactional write, rollback, ZIP-bomb and path-traversal protection (R-045, R-046, R-048, R-049, R-050) |
-| Asset localization | Images and assets rewritten into `data/attachments/` (R-047) |
+| Asset localization | Images and assets rewritten into application-owned storage (R-047) |
 | Lossless handling | Preview before save, retain the original rich-HTML source as a `richHtml` block inside `pages.content`, preserve unknown blocks (R-057, R-058, R-061) |
 
 ### Milestone 3: Search, Hardening, Sandbox & Packaging

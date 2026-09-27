@@ -10,7 +10,7 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-002](ADR-002-bun-hono-sqlite.md) | Bun, Hono, and SQLite | **Accepted** |
 | [ADR-003](ADR-003-react-blocknote-mantine.md) | React, BlockNote, and Mantine | **Accepted** |
 | [ADR-004](ADR-004-canonical-block-json-format.md) | Canonical BlockNote JSON Format | **Accepted** |
-| [ADR-005](ADR-005-portable-data-layout.md) | Portable Data Layout Beside the Executable | **Accepted** |
+| [ADR-005](ADR-005-portable-data-layout.md) | Portable Data Layout Beside the Executable | **Accepted** (attachments storage superseded by ADR-014) |
 | [ADR-006](ADR-006-rich-content-and-import-contract.md) | Rich-Content Model and Note-Package Import Contract | **Accepted** |
 | [ADR-007](ADR-007-sandboxed-custom-content.md) | Sandboxed Custom HTML/CSS/JS | **Accepted** |
 | [ADR-008](ADR-008-page-hierarchy-and-workspace-tree.md) | Page Hierarchy and the Workspace Tree | **Accepted** |
@@ -18,7 +18,8 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-010](ADR-010-chart-block.md) | Rich Note Chart Block (Future Feature) | **Accepted** |
 | [ADR-011](ADR-011-tauri-desktop-wrapper.md) | Tauri Desktop Wrapper (Native App with Browser Mode) | **Accepted** |
 | [ADR-012](ADR-012-diagram-rendering-and-sanitisation.md) | Diagram Rendering and Sanitisation Contract | **Accepted** |
-| [ADR-013](ADR-013-image-attachments.md) | Image Attachments — Content-Based Validation and Id-Addressed Serving | **Accepted** |
+| [ADR-013](ADR-013-image-attachments.md) | Image Attachments — Content-Based Validation and Id-Addressed Serving | **Accepted** (§4 storage location superseded by ADR-014) |
+| [ADR-014](ADR-014-blob-stored-image-bytes.md) | Image Bytes Stored in the Database | **Accepted** |
 
 ## How to Read an ADR
 

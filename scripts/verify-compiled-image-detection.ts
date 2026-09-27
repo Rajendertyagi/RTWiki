@@ -1,3 +1,12 @@
+import { Database } from 'bun:sqlite'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  BLOB_STREAM_CHUNK_BYTES,
+  insertAttachment,
+  streamAttachmentBytes
+} from '../src/server/attachments/attachment-repository.js'
 import { inspectImageUpload, pixelCount } from '../src/server/attachments/image-detect.js'
 
 // The portable executable must be able to detect images with no Node, no Bun and
@@ -44,6 +53,49 @@ const checks: Array<[string, Promise<unknown>, boolean]> = [
   ],
   ['pixel count works', Promise.resolve(pixelCount(4000, 3000) === 12_000_000), true]
 ]
+
+// Blobs and their streaming are the other half of the storage story (ADR-014),
+// and they are exactly the kind of thing that works under Bun and fails once
+// bundled into an executable, so they are checked here too.
+async function checkBlobStorage(): Promise<boolean> {
+  const dir = mkdtempSync(join(tmpdir(), 'rtwiki-compiled-blob-'))
+  const db = new Database(join(dir, 'probe.sqlite'))
+  try {
+    db.exec('PRAGMA page_size = 8192')
+    db.exec('PRAGMA auto_vacuum = INCREMENTAL')
+    db.exec('PRAGMA journal_mode = WAL')
+    db.exec(
+      "CREATE TABLE attachments (id TEXT PRIMARY KEY, mime_type TEXT NOT NULL, byte_size INTEGER NOT NULL, original_name TEXT, checksum TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), data BLOB NOT NULL)"
+    )
+
+    // Larger than one chunk, so a stream that stopped early would be caught.
+    const size = BLOB_STREAM_CHUNK_BYTES * 2 + 777
+    const bytes = new Uint8Array(size)
+    for (let i = 0; i < size; i++) bytes[i] = i % 251
+    insertAttachment(db, {
+      id: 'probe',
+      mimeType: 'image/png',
+      byteSize: size,
+      originalName: 'probe.png',
+      checksum: null,
+      data: bytes
+    })
+
+    const stream = streamAttachmentBytes(db, 'probe')
+    if (!stream) return false
+    const received = new Uint8Array(await new Response(stream).arrayBuffer())
+    if (received.byteLength !== size) return false
+    for (let i = 0; i < size; i += 991) {
+      if (received[i] !== i % 251) return false
+    }
+    return true
+  } finally {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+checks.push(['blob storage and streaming', checkBlobStorage(), true])
 
 let failures = 0
 for (const [name, promise, want] of checks) {

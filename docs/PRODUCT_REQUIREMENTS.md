@@ -94,7 +94,7 @@ RTWiki is built to receive rich study notes produced by external AI tools. The a
 | R-044 | The application must support optional per-page custom HTML/CSS/JS (L3) rendered in an isolated sandbox (iframe) with no same-origin access to the application. |
 | R-045 | The application must provide a RTWiki note-package (`.rtwiki.zip`) as the preferred interchange format for AI-generated pages, containing a manifest, content, optional HTML/CSS/JS, and assets. |
 | R-046 | The note-package manifest must declare a schema `version` and a list of pages; the importer must validate the manifest before any content is written. |
-| R-047 | Import must localize referenced images and assets into `data/attachments/` and rewrite references to the localized storage path. |
+| R-047 | Import must localize referenced images and assets into application-owned storage and rewrite references to the localized storage path. |
 | R-048 | Import must be transactional: either all pages and assets are written, or none. A failed import must not leave partial data behind. |
 | R-049 | Import must support rollback: a failed or rejected import must not alter existing pages; the prior workspace state must remain intact. |
 | R-050 | The importer must reject packages that exceed configured size limits (ZIP-bomb protection) and must prevent path traversal in archive entry names. |

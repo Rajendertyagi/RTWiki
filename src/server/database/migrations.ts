@@ -1,6 +1,11 @@
-import { getDatabaseLogger, type getDb } from './index.js'
+import { readFileSync } from 'node:fs'
+import { joinPaths } from '../config/index.js'
+import { ensureStoragePragmas, getDatabaseLogger, type getDb } from './index.js'
 
-export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void> {
+export async function runMigrations(
+  db: ReturnType<typeof getDb>,
+  attachmentsDir = ''
+): Promise<void> {
   await applyMigration(db, '001_create_pages', (db) => {
     db.run(`
       CREATE TABLE IF NOT EXISTS _migrations (
@@ -135,16 +140,16 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
   })
 
   await applyMigration(db, '006_attachments', (db) => {
-    // Uploaded images, stored as files under data/attachments (ADR-005) and
-    // catalogued here.
+    // Uploaded images, catalogued here. The bytes were originally files under
+    // data/attachments (ADR-005); ADR-014 moves them into this table.
     //
     // The row is the only thing the browser ever names. Requests address an
     // attachment by `id`, never by a filename, so no user-supplied string ever
     // reaches the filesystem: a traversal attempt has nothing to traverse.
     //
-    // `mime_type` and `extension` are recorded from our own signature detection
+    // `mime_type` is recorded from our own detection of the file's structure
     // (see shared/attachments/image-formats.ts) and never from the upload's
-    // declared Content-Type, which is attacker-controlled. The stored file is
+    // declared Content-Type, which is attacker-controlled. A stored image is
     // therefore always served as the type its bytes actually are.
     //
     // No foreign key to pages: an attachment may be uploaded before it is
@@ -167,6 +172,232 @@ export async function runMigrations(db: ReturnType<typeof getDb>): Promise<void>
     // by id and list them by age, so both are indexed.
     db.run('CREATE INDEX idx_attachments_created_at ON attachments(created_at)')
   })
+
+  // Moves image bytes into the row (ADR-014). Deliberately *outside*
+  // applyMigration: it reads files from disk and runs VACUUM, neither of which
+  // belongs inside a synchronous schema transaction, and its safety depends on
+  // being able to stop and report rather than roll back.
+  await migrateAttachmentBytesToBlobs(db, attachmentsDir)
+}
+
+/**
+ * Moves image bytes out of files and into the `attachments` row (ADR-014).
+ *
+ * ## Why this is not an ordinary schema migration
+ *
+ * Three things here cannot happen inside the synchronous transaction that
+ * `applyMigration` wraps: reading files from disk, running `VACUUM`, and
+ * stopping to report a problem without rolling back. The safety property that
+ * matters is not "the transaction committed" but "no file was removed before its
+ * bytes were proven to be in the database", so the steps are ordered to make
+ * that true at every point.
+ *
+ * ## Order, and why it is this order
+ *
+ * 1. `auto_vacuum` is applied and `VACUUM` run, because a populated database
+ *    silently ignores the pragma otherwise (ADR-014 §3).
+ * 2. The `data` column is added. Every row is still readable and servable, so a
+ *    failure from here on is recoverable.
+ * 3. Bytes are copied in, one row at a time, verifying each against its recorded
+ *    `byte_size`.
+ * 4. The copy is verified from the database itself.
+ * 5. `stored_name` is dropped - only once every row is known to hold its bytes.
+ *
+ * No file is deleted at any point. Files on disk with no row are left alone:
+ * they are unreferenced, so nothing can display them, but the application cannot
+ * prove they are garbage rather than merely not-yet-referenced. Reclaiming them
+ * belongs to the retention pass tracked in KNOWN_BUGS.md.
+ */
+async function migrateAttachmentBytesToBlobs(
+  db: ReturnType<typeof getDb>,
+  attachmentsDir: string
+): Promise<void> {
+  const logger = getDatabaseLogger()
+  if (db.query('SELECT id FROM _migrations WHERE name = ?').get('007_attachment_blobs')) {
+    // Already applied, but auto_vacuum may still need converting on a database
+    // created before ADR-014, so the check below runs regardless.
+    ensureAutoVacuum(db, logger)
+    return
+  }
+
+  // Step 1: the pragma, then the VACUUM that makes it stick.
+  ensureAutoVacuum(db, logger)
+
+  // Step 2: add the column. Existing rows stay fully readable.
+  db.run('ALTER TABLE attachments ADD COLUMN data BLOB')
+  db.run(`INSERT INTO _migrations (name) VALUES ('007_attachment_blobs')`)
+  logger.info('Attachment blob column added', { event: 'migration', name: '007_attachment_blobs' })
+
+  // Step 3: copy the bytes, checking each against what the catalogue recorded.
+  const pending = db
+    .query('SELECT id, stored_name, byte_size FROM attachments WHERE data IS NULL')
+    .all() as Array<{ id: string; stored_name: string; byte_size: number }>
+
+  if (pending.length === 0) {
+    dropStoredName(db)
+    return
+  }
+
+  const failures: string[] = []
+  let copied = 0
+
+  for (const row of pending) {
+    try {
+      const bytes = readFileSync(joinPaths(attachmentsDir, row.stored_name))
+      if (bytes.byteLength !== row.byte_size) {
+        // The catalogue and the file disagree. Storing either would record a
+        // lie, so the row is left alone and reported.
+        failures.push(`${row.id}: ${bytes.byteLength} bytes on disk, ${row.byte_size} recorded`)
+        continue
+      }
+      db.run('UPDATE attachments SET data = ? WHERE id = ?', [bytes, row.id])
+      copied++
+    } catch (err) {
+      failures.push(`${row.id}: ${err instanceof Error ? err.name : 'unknown'}`)
+    }
+  }
+
+  // Step 4: verify from the database, not from the loop's own count.
+  const stillMissing = db
+    .query('SELECT count(*) AS n FROM attachments WHERE data IS NULL')
+    .get() as { n: number }
+
+  if (stillMissing.n > 0) {
+    // Deliberately does not throw. The application still works - every row kept
+    // its file and its `stored_name` - and the problem is reported rather than
+    // discovered later as a broken image.
+    logger.error('Attachment backfill incomplete; no files were removed', {
+      event: 'attachment_backfill_incomplete',
+      migrated: String(copied),
+      pending: String(stillMissing.n),
+      // Ids and reasons only: no filenames, no paths, no user content.
+      failures: failures.slice(0, 10).join('; ')
+    })
+    return
+  }
+  const total = db
+    .query('SELECT count(*) AS n, sum(length(data)) AS bytes FROM attachments')
+    .get() as { n: number; bytes: number | null }
+  logger.info('Attachment bytes moved into the database', {
+    event: 'attachment_backfill_complete',
+    attachments: String(total.n),
+    bytes: String(total.bytes ?? 0)
+  })
+
+  // Only now, with every row proven to hold its bytes.
+  dropStoredName(db)
+}
+
+/**
+ * Drops `stored_name` once every row is known to hold its bytes.
+ *
+ * A separate step, and deliberately the last one. `stored_name` is `NOT NULL`, so
+ * until it goes an insert that omits it fails - which is a useful property
+ * during the backfill, because it means a partially-migrated database refuses
+ * new uploads rather than accepting rows with no way to find their file. It also
+ * means this cannot be folded into the backfill: the column has to survive until
+ * the copy is verified, and only then become redundant.
+ *
+ * The rebuild is the documented way to drop a column in SQLite, which has no
+ * `DROP COLUMN` before 3.35. The new table is built from an explicit column list
+ * so it cannot silently pick up a column added later.
+ */
+function dropStoredName(db: ReturnType<typeof getDb>): void {
+  const logger = getDatabaseLogger()
+  if (db.query('SELECT id FROM _migrations WHERE name = ?').get('008_drop_stored_name')) return
+
+  const stillMissing = db
+    .query('SELECT count(*) AS n FROM attachments WHERE data IS NULL')
+    .get() as { n: number }
+  if (stillMissing.n > 0) {
+    // The column stays. The application keeps working, because every row still
+    // has a file on disk to be served from.
+    logger.warn('stored_name retained: some attachments have no bytes yet', {
+      event: 'attachment_backfill_incomplete',
+      pending: String(stillMissing.n)
+    })
+    return
+  }
+
+  db.run('BEGIN IMMEDIATE')
+  try {
+    db.run(`
+      CREATE TABLE attachments_migrated (
+        id TEXT PRIMARY KEY,
+        mime_type TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        original_name TEXT,
+        checksum TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        data BLOB NOT NULL
+      )
+    `)
+    db.run(`
+      INSERT INTO attachments_migrated (id, mime_type, byte_size, original_name, checksum, created_at, data)
+      SELECT id, mime_type, byte_size, original_name, checksum, created_at, data FROM attachments
+    `)
+    // Verified before the old table goes: a row count that changed means the copy
+    // lost something, and the old table is still there to fall back to.
+    const moved = db.query('SELECT count(*) AS n FROM attachments_migrated').get() as { n: number }
+    const before = db.query('SELECT count(*) AS n FROM attachments').get() as { n: number }
+    if (moved.n !== before.n) {
+      throw new Error(`row count changed during the copy: ${before.n} became ${moved.n}`)
+    }
+    db.run('DROP TABLE attachments')
+    db.run('ALTER TABLE attachments_migrated RENAME TO attachments')
+    db.run('CREATE INDEX idx_attachments_created_at ON attachments(created_at)')
+    db.run('INSERT INTO _migrations (name) VALUES (?)', ['008_drop_stored_name'])
+    db.run('COMMIT')
+    logger.info('Attachment filename column removed', {
+      event: 'migration',
+      name: '008_drop_stored_name',
+      rows: String(moved.n)
+    })
+  } catch (err) {
+    db.run('ROLLBACK')
+    logger.error('Could not remove the attachment filename column', {
+      event: 'migration',
+      name: '008_drop_stored_name',
+      error: err instanceof Error ? err.message : String(err)
+    })
+    // Not thrown: the database is still correct and the application still works,
+    // because the rows kept both their bytes and their filenames.
+  }
+}
+
+/**
+ * Applies `auto_vacuum` and runs the `VACUUM` an existing database needs.
+ *
+ * On a database that already has tables the pragma alone does nothing - the value
+ * stays 0, nothing is raised, and deleted space is never returned. Running
+ * `VACUUM` afterwards is what makes it take effect.
+ *
+ * The page size is deliberately *not* chased here. In WAL mode it cannot be
+ * changed at all, not even by `VACUUM`, so a database created before ADR-014
+ * keeps its 4 KB pages and the honest outcome is to say so rather than to
+ * pretend. It is a performance difference, not a correctness one.
+ */
+function ensureAutoVacuum(
+  db: ReturnType<typeof getDb>,
+  logger: ReturnType<typeof getDatabaseLogger>
+): void {
+  const stale = ensureStoragePragmas(db)
+  if (!stale.includes('auto_vacuum')) return
+  try {
+    db.run('VACUUM')
+    if (ensureStoragePragmas(db).includes('auto_vacuum')) {
+      logger.warn('auto_vacuum could not be enabled; deleted images will not reclaim space', {
+        event: 'db_storage_pragmas_stale',
+        pragmas: 'auto_vacuum'
+      })
+    }
+  } catch (err) {
+    logger.warn('auto_vacuum could not be enabled; deleted images will not reclaim space', {
+      event: 'db_storage_pragmas_stale',
+      pragmas: 'auto_vacuum',
+      error: err instanceof Error ? err.name : 'unknown'
+    })
+  }
 }
 
 async function applyMigration(

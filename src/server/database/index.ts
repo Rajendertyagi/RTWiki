@@ -23,6 +23,60 @@ export function getDatabaseLogger(): Logger {
   return databaseLog
 }
 
+/**
+ * Page size and auto-vacuum mode, applied together and before anything else.
+ *
+ * ## Order matters, and getting it wrong is completely silent
+ *
+ * SQLite honours both only on a database with no tables yet. Two traps compound:
+ *
+ * 1. On a populated database `PRAGMA auto_vacuum` is a no-op - the value stays 0,
+ *    nothing is raised, and deleted space is never returned. `VACUUM` afterwards
+ *    is what makes it take effect.
+ * 2. **`PRAGMA page_size` is ignored entirely once the database is in WAL mode,
+ *    and `VACUUM` cannot undo that.** Verified: setting `journal_mode = WAL`
+ *    first and `page_size = 8192` second leaves the page size at 4096, before or
+ *    after a `VACUUM`. Setting the page size first and WAL second works.
+ *
+ * So these are applied *before* `journal_mode = WAL`, and the values are read
+ * back. A setting whose failure is invisible is worse than no setting at all.
+ *
+ * `auto_vacuum = INCREMENTAL` is what makes a deleted image give its space back.
+ * Measured: four 8 MB blobs inserted then deleted leave the file at 32.1 MB with
+ * the default mode, and at 0.0 MB with this one once `incremental_vacuum` runs.
+ *
+ * 8192 is one of the two page sizes SQLite's own guidance names as best for
+ * large BLOB I/O. See ADR-014.
+ */
+const STORAGE_PRAGMAS: ReadonlyArray<{ pragma: string; expected: number; label: string }> = [
+  { pragma: 'page_size = 8192', expected: 8192, label: 'page_size' },
+  { pragma: 'auto_vacuum = INCREMENTAL', expected: 2, label: 'auto_vacuum' }
+]
+
+/** Reads a single-value pragma, which `bun:sqlite` returns keyed by column name. */
+function readPragma(db: Database, name: string): number | null {
+  const row = db.query(`PRAGMA ${name}`).get() as Record<string, unknown> | null
+  if (!row) return null
+  const value = Object.values(row)[0]
+  return typeof value === 'number' ? value : null
+}
+
+/**
+ * Applies the storage pragmas and confirms they took effect.
+ *
+ * Safe to call on every startup: the pragmas are no-ops once the values are
+ * already correct, and the verification is what makes an existing database that
+ * predates this change report itself rather than quietly never reclaiming space.
+ */
+export function ensureStoragePragmas(db: Database): string[] {
+  for (const entry of STORAGE_PRAGMAS) {
+    db.exec(`PRAGMA ${entry.pragma}`)
+  }
+  return STORAGE_PRAGMAS.filter((entry) => readPragma(db, entry.label) !== entry.expected).map(
+    (entry) => entry.label
+  )
+}
+
 export function getDatabasePath(dataDir: string): string {
   if (dbPath) return dbPath
   dbPath = joinPaths(dataDir, DATABASE_FILENAME)
@@ -33,11 +87,27 @@ export function initDatabase(dataDir: string): Database {
   const path = getDatabasePath(dataDir)
   const sqlite = new Database(path)
 
+  // BEFORE journal_mode = WAL, and before any table. See STORAGE_PRAGMAS: in WAL
+  // mode the page size cannot be changed at all, not even by VACUUM, so setting
+  // it afterwards fails without any error.
+  const notApplied = ensureStoragePragmas(sqlite)
+
   // WAL gives safe, concurrent reads with a single writer. foreign_keys is opt-in
   // in SQLite and must be enabled per connection.
   sqlite.exec('PRAGMA journal_mode = WAL')
   sqlite.exec('PRAGMA foreign_keys = ON')
   sqlite.exec('PRAGMA busy_timeout = 5000')
+
+  if (notApplied.length > 0) {
+    // A database that already had tables. The page size in particular cannot be
+    // recovered without recreating the file, so this says so plainly rather than
+    // implying the setting will take effect on a later run.
+    databaseLog.warn('Storage settings could not be fully applied to this database', {
+      event: 'db_storage_pragmas_stale',
+      // Names only. No path, no user content.
+      pragmas: notApplied.join(',')
+    })
+  }
 
   dbInstance = sqlite
   databaseLog.info('Database connection established', { event: 'db_init' })

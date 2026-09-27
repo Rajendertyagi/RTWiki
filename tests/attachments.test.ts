@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
-import { listAttachments } from '../src/server/attachments/attachment-repository.js'
+import { getAttachment, listAttachments } from '../src/server/attachments/attachment-repository.js'
 import { createAttachmentRoutes } from '../src/server/attachments/attachment-routes.js'
 import { closeDatabase, type getDb, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
@@ -105,13 +105,16 @@ beforeAll(async () => {
     tmpdir(),
     `rtwiki-attachment-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
   )
+  // Still created and still passed to the migration: a database created before
+  // ADR-014 keeps its image files here, and the migration reads from it. Nothing
+  // writes to it now (ADR-014).
   attachmentsDir = join(tempDir, ATTACHMENTS_DIR)
   mkdirSync(attachmentsDir, { recursive: true })
   db = initDatabase(tempDir)
-  await runMigrations(db)
+  await runMigrations(db, attachmentsDir)
   app = new Hono().route(
     '/api/attachments',
-    createAttachmentRoutes({ attachmentsDir, getDb: () => db, logger: new MemoryLogger() })
+    createAttachmentRoutes({ getDb: () => db, logger: new MemoryLogger() })
   )
 })
 
@@ -170,9 +173,11 @@ describe('upload rejection by content', () => {
   })
 
   it('stores nothing when a file is rejected', async () => {
-    const before = readdirSync(attachmentsDir).length
+    // Asserted against the database, which is where the bytes now live
+    // (ADR-014). Counting rows is the direct statement of "nothing was stored".
+    const before = listAttachments(db).length
     await upload(SVG_WITH_SCRIPT, 'rejected.png', 'image/png')
-    expect(readdirSync(attachmentsDir).length).toBe(before)
+    expect(listAttachments(db).length).toBe(before)
     expect(listAttachments(db).every((a) => !a.originalName?.includes('rejected'))).toBe(true)
   })
 
@@ -226,29 +231,33 @@ describe('upload rejection by content', () => {
   })
 })
 
-describe('stored names never come from the uploader', () => {
-  it('ignores a traversal filename and keeps the file inside the directory', async () => {
-    const before = new Set(readdirSync(attachmentsDir))
-
+describe('a uploader filename never becomes anything executable', () => {
+  it('stores a traversal filename as data and serves the image normally', async () => {
+    // Since ADR-014 there is no path at all: the bytes are in the row and the
+    // request names the row's id. So the strongest statement is available - the
+    // string is inert data, and the image still works.
     const response = await upload(REAL_PNG, '../../../etc/passwd', 'image/png')
     expect(response.status).toBe(201)
-    const payload = (await response.json()) as { attachment: { id: string } }
+    const payload = (await response.json()) as { attachment: { id: string; url: string } }
 
-    const after = readdirSync(attachmentsDir)
-    const added = after.filter((name) => !before.has(name))
-    expect(added.length).toBe(1)
-    // The stored name is the catalogue id plus an extension we chose.
-    expect(added[0]).toBe(`${payload.attachment.id}.png`)
-    // Nothing landed outside the directory, and the traversal string was never
-    // used as a path.
-    expect(existsSync(join(attachmentsDir, '..', '..', 'etc', 'passwd'))).toBe(false)
+    const served = await app.request(payload.attachment.url)
+    expect(served.status).toBe(200)
+    expect(served.headers.get('content-type')).toBe('image/png')
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(new Uint8Array(REAL_PNG))
+
+    // The name is kept only as a cleaned display string, never as a path.
+    const stored = getAttachment(db, payload.attachment.id)
+    expect(stored?.originalName).not.toContain('/')
+    expect(stored?.originalName).not.toContain('\\')
   })
 
   it('records the original name as data, cleaned of separators and control characters', async () => {
-    const response = await upload(REAL_PNG, 'my\\shot .png', 'image/png')
+    // Separators and control characters are dropped; a space *inside* a name is
+    // legitimate and is kept, because "my shot.png" is a name a person wrote.
+    const response = await upload(REAL_PNG, 'my\\shot .png', 'image/png')
     expect(response.status).toBe(201)
     const payload = (await response.json()) as { attachment: { originalName: string } }
-    expect(payload.attachment.originalName).toBe('myshot.png')
+    expect(payload.attachment.originalName).toBe('myshot .png')
   })
 })
 
@@ -258,17 +267,24 @@ describe('attachment lookup and removal', () => {
     expect(response.status).toBe(404)
   })
 
-  it('removes both the row and the file', async () => {
+  it('removes the bytes and the metadata in one step', async () => {
+    // The reason this test can be simple is the point of ADR-014: there is no
+    // second filesystem step that could fail and leave a row pointing at nothing.
     const created = (await (await upload(REAL_PNG, 'temporary.png', 'image/png')).json()) as {
       attachment: { id: string; url: string }
     }
-    expect(existsSync(join(attachmentsDir, `${created.attachment.id}.png`))).toBe(true)
+    expect(getAttachment(db, created.attachment.id)).not.toBeNull()
 
     const removed = await app.request(`/api/attachments/${created.attachment.id}`, {
       method: 'DELETE'
     })
     expect(removed.status).toBe(200)
-    expect(existsSync(join(attachmentsDir, `${created.attachment.id}.png`))).toBe(false)
+    expect(getAttachment(db, created.attachment.id)).toBeNull()
+    // The bytes went with it: the row that held them no longer exists.
+    const stored = db
+      .query('SELECT length(data) AS size FROM attachments WHERE id = ?')
+      .get(created.attachment.id)
+    expect(stored).toBeNull()
     expect((await app.request(created.attachment.url)).status).toBe(404)
   })
 
@@ -277,7 +293,6 @@ describe('attachment lookup and removal', () => {
     expect(response.status).toBe(404)
   })
 })
-
 describe('upload origin checks', () => {
   it('refuses a cross-origin upload', async () => {
     const response = await app.request('/api/attachments', {

@@ -74,14 +74,26 @@ one at a time without looking at the tree.
 ### 6. Uploaded images are not associated with a page, so they are never cleaned up
 
 **Impact: low now, and it grows silently.** An `image` block stores a URL; the `attachments` table
-records the file but has no foreign key to `pages` (see [ADR-013](adr/ADR-013-image-attachments.md)).
-Consequences: deleting a note leaves its image files on disk as orphans, and there is no
-"images on this page" list because there is no page to scope one by. `GET /api/pages/:id/attachments`
-is listed in [ARCHITECTURE.md](ARCHITECTURE.md) as **not implemented** for this reason.
+records the image but has no foreign key to `pages` (see [ADR-013](adr/ADR-013-image-attachments.md)).
+Consequences: deleting a note leaves its images unreferenced, and there is no "images on this page"
+list because there is no page to scope one by. `GET /api/pages/:id/attachments` is listed in
+[ARCHITECTURE.md](ARCHITECTURE.md) as **not implemented** for this reason.
 
-**Why it is this way:** an attachment may legitimately be uploaded before it is referenced, and a
-note may be deleted while its images are still wanted — a page foreign key with a delete cascade
-would destroy files that are still in use elsewhere.
+**Partly reduced by [ADR-014](adr/ADR-014-blob-stored-image-bytes.md).** Two of the three failure
+modes are gone: bytes and metadata can no longer get out of step, because they are one row, and
+reclaiming an unreferenced image is now a single `DELETE` rather than a delete plus an unlink that
+can fail. What remains is the policy question, not the mechanics.
+
+This was not hypothetical. The development database held **14 image files that no row referenced**,
+left by earlier runs, with nothing reporting it.
+
+**Also outstanding:** files left in `data/attachments/` by a database created before ADR-014 are
+deliberately not deleted by the migration, because an unreferenced file cannot be proven to be
+garbage rather than merely not-yet-referenced. They are inert and can be removed by hand.
+
+**Why there is still no page foreign key:** an attachment may legitimately be uploaded before it is
+referenced, and a note may be deleted while its images are still wanted — a cascade would destroy
+images still in use elsewhere.
 
 **Next step:** a retention pass over the `attachments` table that reclaims rows unreferenced by any
 document, plus a "referenced by" check before reclaiming. This needs a deliberate policy decision
@@ -109,6 +121,23 @@ before anything is built.
 ---
 
 ## Recently fixed
+
+### An image was accepted because it started with the right bytes
+
+**Also fixed:** `pixelCount` returned a subtly wrong number for an image declaring dimensions near
+2^32, because the product exceeds `Number.MAX_SAFE_INTEGER` and a JavaScript number silently loses
+its low digits. It now reports a value too large to represent as `Infinity` rather than a figure
+that is not the truth. The pixel limit was never at risk — the imprecision only appears far above it
+— but a function that reports a wrong number is a trap for whoever uses it next.
+
+### Storage settings that failed silently
+
+**The kind of failure that looks like it worked.** `PRAGMA page_size` is ignored entirely once a
+database is in WAL mode, and `VACUUM` cannot undo it. Setting `journal_mode = WAL` before
+`page_size` left the page size at its 4096 default with no error, and `auto_vacuum` was silently
+ignored on any database that already had tables. Both settings are now applied *before* WAL and
+their values read back, and a database that could not be converted says so at startup rather than
+quietly never reclaiming space. See [ADR-014](adr/ADR-014-blob-stored-image-bytes.md).
 
 ### An image was accepted because it started with the right bytes
 

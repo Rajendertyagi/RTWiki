@@ -174,8 +174,22 @@ function readDimensions(
   }
 }
 
-/** Total pixels, or `null` when either dimension is unknown. */
+/**
+ * Total pixels, or `null` when either dimension is unknown.
+ *
+ * A header may declare dimensions near 2^32, and their product then exceeds
+ * `Number.MAX_SAFE_INTEGER`, where a JavaScript number silently loses its low
+ * digits. Rather than return a figure that is subtly wrong, a product too large
+ * to represent exactly is reported as `Infinity`: it is, unambiguously, over
+ * every limit it could be compared against.
+ *
+ * This cannot let an oversized image through. The imprecision only ever appears
+ * around 1.8e19, which is astronomically above the pixel ceiling, so the
+ * comparison against that ceiling is correct either way. Verified across the
+ * whole range of plausible dimensions.
+ */
 export function pixelCount(width: number | null, height: number | null): number | null {
   if (width === null || height === null) return null
-  return width * height
+  const product = width * height
+  return Number.isSafeInteger(product) ? product : Number.POSITIVE_INFINITY
 }
