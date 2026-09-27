@@ -118,7 +118,80 @@ DOC), and **a scanned PDF yields no searchable text**, because it has no text la
 [ADR-007](adr/ADR-007-sandboxed-custom-content.md) gives custom content. That is a separate decision with
 its own threat model, not an allowlist edit.
 
+### 8. There is no way to attach a document from the application
+
+**Impact: high — the feature cannot be reached by a user.** Document upload works at every layer
+below the toolbar: the endpoint accepts the formats, the parser extracts text, the bytes are stored
+in the database, the search index picks the text up, and the download is protected. None of it is
+reachable. `uploadDocument` in
+`src/web/features/rich-editor/blocks/document-upload.ts` is exported and **imported nowhere** — it has
+no caller, no toolbar entry, and no menu item. (Measured: a repository-wide search for the symbol
+returns only its own definition.)
+
+So [R-024](PRODUCT_REQUIREMENTS.md)'s "images, PDFs, and documents" is satisfied for the API and not
+for the product. A user cannot attach a PDF today.
+
+**Next step:** add the insert entry beside the Image one, declaring its toolbar run through
+`INSERT_RUNS` rather than by adding a key to a list — the exact trap recorded under
+*The toolbar silently hid a newly added insert control* above, which is why the declaration
+mechanism is the thing to reuse here. Its `fileBlockAccept` list will collide with the `file` block's
+`*/*` in the way described under *BlockNote picks the file block, not the image block*, so the schema
+ordering has to be checked rather than assumed.
+
 ## Recently fixed
+
+### A document's own Content-Security-Policy was silently replaced by the app-wide one
+
+**The kind of failure that passes every gate.** A document response is protected twice: by
+`Content-Disposition: attachment`, and by a stricter per-response `default-src 'none'; sandbox`.
+`secureHeaders` sets its headers *after* `await next()`, so it overwrote the second layer on every
+PDF and DOCX response and left `script-src 'self'` in force. The disposition was still present, so
+nothing executed — but the second of two independent layers was doing no work, which is the entire
+reason for having two. The fix is a middleware registered *before* `secureHeaders`; see
+[ADR-015](adr/ADR-015-document-attachments.md) and the comment above `app.use` in `src/server/app.ts`.
+
+**No unit test could have caught it.** The route is mounted on its own Hono instance in tests, so the
+app-wide `secureHeaders` middleware does not exist there at all. It shipped through a fully green
+suite and was found only by `scripts/verify-compiled-e2e.ts`, which starts the built executable and
+drives it over HTTP as a browser would.
+
+**And the regression test written for it could not fail.** It mounted the override middleware in the
+*broken* order — the arrangement the fix was moving away from — so it passed whether the code was
+right or wrong. Verified by swapping `src/server/app.ts` back to the broken arrangement: 23/23 still
+passed. A test that cannot fail is worse than no test, because it reads as coverage; see the last
+entry under *Harness traps* for the same lesson arriving independently.
+
+### A PDF renamed `.txt` was accepted as text and read as note prose
+
+**The kind of failure only shows up to someone trying to break it.** The document detector checked
+the *reported* type before looking at the bytes, so a PDF renamed `.txt` matched the text rule, and
+the parser read the container's own markup as if it were the note's content. A DOCX renamed `.html`
+had the same problem one layer up. Caught by a test that renamed a fixture.
+
+**Fixed** by inverting the order: identify the container from the bytes *first*, and consult the
+reported type only when the bytes are not a recognisable container, and only for the formats the
+allowlist marks `signatureless` (`.txt`, `.md`, `.html`) — those have no signature to check, which is
+precisely why they are the only ones where a claim is worth anything.
+
+### Every document was refused inside the compiled `.exe`
+
+**Working perfectly in development, silently broken in the build the user actually runs.** The
+document parser's own file-type auto-detection fails inside the compiled binary and reports the
+failure in the same words it uses for "this is not a document" — indistinguishable from a rejection.
+Every document would have been refused in the shipped executable.
+
+**Fixed** by passing the parser the type RTWiki has already determined itself, so it never has to
+guess. A second library was measured and rejected: it parsed exactly one PDF per process and every
+later call threw. See [ADR-015](adr/ADR-015-document-attachments.md).
+
+**This is the second defect in this class** — behaviour that differs between the dev server and the
+compiled binary. It cannot be found by any test that does not run the executable.
+
+### Every text upload was refused, because a browser reports a charset
+
+`text/plain;charset=utf-8` matches no exact allowlist entry, so `.txt` and `.md` uploads were
+rejected while unit tests uploading raw `text/plain` passed. **Fixed** by normalising the media type
+— parameters such as `charset` are not part of the type — before it is compared.
 
 ### Storage settings that failed silently
 
@@ -316,3 +389,26 @@ Kept because each one produced a confidently wrong conclusion.
 - **A test that cannot fail is worse than no test.** An early version of the submenu test skipped
   its only meaningful assertion because the type it needed never reached the dropdown. It now
   forces the condition and fails loudly if it cannot.
+- **A test that cannot fail is worse than no test, and it is not obvious from reading it.** The
+  regression test written for the document CSP overwrite (above) mounted its middleware in the broken
+  order, so it agreed with the code *and* with the opposite of the code. Nothing about the test
+  looked wrong. **Check a regression test by breaking the code it guards** — if the suite still
+  passes, the test is decoration and the claim that the fix is verified is false.
+- **Starting the built application opens a browser tab on the user's screen.** `bootstrap` launches
+  a browser unless `--no-open` is passed. The end-to-end script omitted it and opened a tab on every
+  run, dozens of times. The script now passes the flag.
+- **Stop a spawned server on every exit path.** An earlier version only stopped it on the success
+  path, so a single failed assertion left an `RTWiki.exe` running and holding its port for the rest
+  of the session. Cleanup registered before anything can throw, not inside the success branch.
+- **Never copy the workspace's own `data/` directory into a test.** The end-to-end script staged a
+  copy of the real data directory, and that copy silently changed what the CSP check reported.
+  Chasing the symptom — middleware ordering, an instrumented build, a stale-binary theory — cost far
+  more than building a fresh data directory would have. A test that stages state must construct all
+  of it.
+- **A build that reported success can still be stale.** `bun run format:fix` running alongside
+  `bun run build` produced an executable that predated the fix under test, which made a correct
+  change look broken. The end-to-end script now compares the executable's age against the source's
+  and prints a warning when the source is newer.
+- **In a compiled executable, check what the *library* does, not what your code does.** Two separate
+  defects above (document auto-detection, and a PDF parser that worked once per process) existed
+  only inside the binary. Run the build.
