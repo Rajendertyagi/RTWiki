@@ -25,8 +25,9 @@ export function getRTWikiSlashMenuItems(
   const mathItems = getMathSlashMenuItems(editor)
   const insertItems = getInsertEntries(editor).map((entry) => ({
     title: entry.label,
-    subtext: entry.group === 'callout' ? undefined : undefined,
-    group: entry.group === 'callout' ? 'Callouts' : 'Insert',
+    subtext: undefined,
+    // The run names the block family, which is what the slash menu groups by.
+    group: entry.run === 'callout' ? 'Callouts' : 'Insert',
     onItemClick: () => {
       runInsertEntry(editor, entry)
     },

@@ -1,4 +1,6 @@
 import { UI_TEXT } from '../../config/index.js'
+import { pickImage } from './blocks/image-picker.js'
+import { uploadImage } from './blocks/image-upload.js'
 import type { AnyRichEditor, RTWikiPartialBlock } from './schema.js'
 
 /**
@@ -147,6 +149,11 @@ export const DIAGRAM_TEMPLATES: Record<string, { label: string; source: string }
 /** Starter LaTeX formula used by the Formula insertion. */
 export const FORMULA_STARTER = 'x^2 + y^2 = z^2'
 
+/** True for a bare empty paragraph, which an insertion replaces in place. */
+function isEmptyParagraph(block: { type: string; content?: unknown }): boolean {
+  return block.type === 'paragraph' && JSON.stringify(block.content) === JSON.stringify('')
+}
+
 /**
  * Inserts a partial block at the cursor: an empty paragraph in place is
  * replaced; otherwise the new block is added after the current one.
@@ -154,14 +161,26 @@ export const FORMULA_STARTER = 'x^2 + y^2 = z^2'
  */
 function insertOrReplace(editor: AnyEditor, block: AnyPartialBlock): void {
   const current = editor.getTextCursorPosition().block
-  const isEmptyParagraph =
-    current.type === 'paragraph' && JSON.stringify(current.content) === JSON.stringify('')
-  if (isEmptyParagraph) {
+  if (isEmptyParagraph(current)) {
     editor.updateBlock(current, block as never)
   } else {
     editor.insertBlocks([block], current, 'after')
   }
 }
+
+/**
+ * Toolbar runs, in display order. Entries in the same run sit together and runs
+ * are separated by a divider.
+ *
+ * The position lives on the entry rather than in a hand-written key list inside
+ * the toolbar. A second list is a second thing to forget: an entry added here but
+ * not named there simply never appears, which is a silent failure rather than a
+ * compile error.
+ */
+export const INSERT_RUNS = ['blocks', 'basic', 'callout'] as const
+
+/** One run of the toolbar, in the order `INSERT_RUNS` lists them. */
+export type InsertRun = (typeof INSERT_RUNS)[number]
 
 export interface InsertEntry {
   /** Stable machine token (also used as the debug-log code field). */
@@ -173,6 +192,7 @@ export interface InsertEntry {
     | 'diagram'
     | 'mindMap'
     | 'linkedPage'
+    | 'image'
     | 'table'
     | 'code'
     | 'quote'
@@ -181,7 +201,8 @@ export interface InsertEntry {
     | 'calloutTip'
     | 'calloutWarning'
     | 'calloutDanger'
-  group: 'visual' | 'callout'
+  /** Which toolbar run this entry belongs to. */
+  run: InsertRun
   insert: (editor: AnyEditor) => void
 }
 
@@ -190,7 +211,7 @@ function formulaEntry(): InsertEntry {
     key: 'insert-formula',
     label: UI_TEXT.formulaLabel,
     icon: 'formula',
-    group: 'visual',
+    run: 'blocks',
     insert: (editor) =>
       insertOrReplace(editor, {
         type: 'mathBlock',
@@ -204,7 +225,7 @@ export function diagramEntry(starter: string): InsertEntry {
     key: 'insert-diagram',
     label: UI_TEXT.diagramLabel,
     icon: 'diagram',
-    group: 'visual',
+    run: 'blocks',
     insert: (editor) =>
       insertOrReplace(editor, {
         type: 'diagram',
@@ -218,7 +239,7 @@ export function mindMapEntry(starter: string): InsertEntry {
     key: 'insert-mind-map',
     label: UI_TEXT.mindMapLabel,
     icon: 'mindMap',
-    group: 'visual',
+    run: 'blocks',
     insert: (editor) =>
       insertOrReplace(editor, {
         type: 'mindMap',
@@ -244,7 +265,7 @@ function linkedPageEntry(): InsertEntry {
     key: 'insert-linked-page',
     label: UI_TEXT.linkedPageLabel,
     icon: 'linkedPage',
-    group: 'visual',
+    run: 'blocks',
     insert: (editor) =>
       insertOrReplace(editor, {
         type: 'linkedPage',
@@ -258,7 +279,7 @@ function calloutEntries(): InsertEntry[] {
     key: `insert-callout-${variant}`,
     label,
     icon,
-    group: 'callout' as const,
+    run: 'callout' as const,
     insert: (editor) =>
       insertOrReplace(editor, {
         type: 'callout',
@@ -266,6 +287,46 @@ function calloutEntries(): InsertEntry[] {
         content: [{ type: 'text', text: '', styles: {} }]
       } as never)
   }))
+}
+
+/**
+ * Image insertion from the Insert menu.
+ *
+ * Unlike every other entry this one cannot finish synchronously: it has to wait
+ * for a human to choose a file. The cursor anchor is therefore captured *before*
+ * the file dialog opens, because the dialog takes focus and the editor's cursor
+ * position is not dependable afterwards. Losing that would put the image at the
+ * top of the page instead of where the user was typing.
+ */
+function imageEntry(): InsertEntry {
+  return {
+    key: 'insert-image',
+    label: UI_TEXT.imageLabel,
+    icon: 'image',
+    run: 'blocks',
+    insert: (editor) => {
+      const anchor = editor.getTextCursorPosition().block
+      const replaceAnchor = isEmptyParagraph(anchor)
+
+      void pickImage()
+        .then((file) => (file ? uploadImage(file) : null))
+        .then((url) => {
+          if (!url) return
+          const block = { type: 'image', props: { url } } as never
+          if (replaceAnchor) editor.updateBlock(anchor, block)
+          else editor.insertBlocks([block], anchor, 'after')
+          editor.focus()
+        })
+        .catch(() => {
+          // The message is already on screen - uploadImage owns it, because
+          // paste and drop fail through code this app does not run. All that is
+          // left is to hand the caret back, so the user can carry on typing where
+          // they left off. A cancelled dialog never reaches here: the picker
+          // resolves null instead of rejecting.
+          editor.focus()
+        })
+    }
+  }
 }
 
 /** Entries that exist regardless of optional blocks (always-available). */
@@ -284,6 +345,9 @@ function baseEntries(editor: AnyEditor): InsertEntry[] {
   if ('linkedPage' in editor.schema.blockSchema) {
     entries.push(linkedPageEntry())
   }
+  if ('image' in editor.schema.blockSchema) {
+    entries.push(imageEntry())
+  }
   return entries
 }
 
@@ -298,7 +362,7 @@ export function getInsertEntries(editor: AnyEditor): InsertEntry[] {
       key: 'insert-table',
       label: UI_TEXT.tableLabel,
       icon: 'table',
-      group: 'visual',
+      run: 'basic',
       insert: (ed) => {
         const current = ed.getTextCursorPosition().block
         const table = {
@@ -322,7 +386,7 @@ export function getInsertEntries(editor: AnyEditor): InsertEntry[] {
       key: 'insert-code-block',
       label: UI_TEXT.codeBlockLabel,
       icon: 'code',
-      group: 'visual',
+      run: 'basic',
       insert: (ed) => {
         const current = ed.getTextCursorPosition().block
         if (
@@ -339,7 +403,7 @@ export function getInsertEntries(editor: AnyEditor): InsertEntry[] {
       key: 'insert-quote',
       label: UI_TEXT.quoteLabel,
       icon: 'quote',
-      group: 'visual',
+      run: 'basic',
       insert: (ed) => {
         const current = ed.getTextCursorPosition().block
         ed.updateBlock(current, { type: 'quote' } as never)

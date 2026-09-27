@@ -284,6 +284,11 @@ export const UI_TEXT = {
   linkLabel: 'Link',
   linkApply: 'Apply link',
   richPlaceholder: 'Type here…',
+  // Images
+  imageLabel: 'Image',
+  imageUploadFailedTitle: 'Image not added',
+  imageUploadFailed: 'That image could not be added. Try a PNG, JPEG, GIF, WebP or BMP file.',
+  imageTooLarge: 'That image is larger than the 50 MB limit.',
   // Right sidebar
   rightSidebarLabel: 'Page details',
   collapseSidebarLabel: 'Collapse sidebar',

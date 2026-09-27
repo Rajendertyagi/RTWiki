@@ -12,15 +12,34 @@ import type { Page } from '@rtwiki/shared/contracts/pages'
 interface BlockLike {
   type?: string
   text?: string
+  /** Block props, e.g. an image's `caption`. */
+  props?: { caption?: unknown }
   content?: BlockLike[]
   children?: BlockLike[]
 }
+
+/**
+ * Prop names that are authored prose and so belong in the plain-text reduction.
+ *
+ * A caption is the author's own description of a picture, and excluding it would
+ * make a page whose only words are in captions unfindable. Anything else in
+ * `props` is a URL or a style value and must stay out.
+ */
+const PROSE_PROP_NAMES = ['caption'] as const
 
 function textFromBlocks(blocks: BlockLike[]): string {
   let out = ''
   for (const block of blocks) {
     if (typeof block.text === 'string') {
       out += `${block.text} `
+    }
+    if (block.props) {
+      for (const name of PROSE_PROP_NAMES) {
+        const value = block.props[name]
+        if (typeof value === 'string' && value.length > 0) {
+          out += `${value} `
+        }
+      }
     }
     if (Array.isArray(block.content)) {
       out += textFromBlocks(block.content)

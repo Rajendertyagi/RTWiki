@@ -16,6 +16,7 @@ import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
 import { mapAutosaveStatus } from '../workspace/save-state.js'
+import { uploadImage } from './blocks/image-upload.js'
 import { LinkedPageContext, type LinkedPageContextValue } from './blocks/linked-page-block.js'
 import {
   containUnknownBlocks,
@@ -319,6 +320,11 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     {
       extensions: [spellcheckExtension],
       schema: rtwikiBlockSchema,
+      // BlockNote routes the file picker, paste and drop through this one hook,
+      // so images take a single code path. The returned URL is what gets stored
+      // in the block, which keeps the document canonical BlockNote JSON (ADR-004)
+      // with the attachment catalogue - not the file - as the source of truth.
+      uploadFile: uploadImage,
       initialContent: initialDocument as unknown as RTWikiPartialBlock[],
       dictionary: {
         ...en,

@@ -26,6 +26,7 @@ import {
   IconListNumbers,
   IconNote,
   IconPencil,
+  IconPhoto,
   IconQuote,
   IconSitemap,
   IconSortAscending,
@@ -35,11 +36,11 @@ import {
   IconUnderline
 } from '@tabler/icons-react'
 import type { JSX, ReactNode } from 'react'
-import { Children, isValidElement, useState } from 'react'
+import { Children, Fragment, isValidElement, useState } from 'react'
 import { LAYOUT, OVERLAY_OWNER_ATTR, UI_TEXT } from '../../config/index.js'
 import { useToolbarOverflow } from '../../hooks/use-toolbar-overflow.js'
 import type { CSSVars } from '../../style-props.js'
-import { getInsertEntries, type InsertEntry, runInsertEntry } from './insert-blocks.js'
+import { getInsertEntries, INSERT_RUNS, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
 import type { AnyRichEditor } from './schema.js'
 import { type LinkablePage, WikiLinkToolbarAction } from './wiki-link.js'
@@ -52,6 +53,7 @@ const INSERT_ICONS = {
   diagram: IconSitemap,
   mindMap: IconSitemap,
   linkedPage: IconLink,
+  image: IconPhoto,
   table: IconTable,
   code: IconCode,
   quote: IconQuote,
@@ -151,6 +153,16 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
   // Popover.Dropdown click handler.
   const [moreOpen, setMoreOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
+
+  // The insertion entries, bucketed into toolbar runs. `INSERT_RUNS` fixes the
+  // order and an entry whose run is unknown is dropped rather than rendered in an
+  // arbitrary place, so a typo cannot quietly reorder the bar. Empty runs are
+  // removed so a run that has no entries does not leave a stray divider.
+  const insertEntries = getInsertEntries(editor)
+  const insertRuns = INSERT_RUNS.map((run) => ({
+    run,
+    entries: insertEntries.filter((entry) => entry.run === run)
+  })).filter(({ entries }) => entries.length > 0)
 
   const withEditor = (action: () => void) => (): void => {
     action()
@@ -536,32 +548,21 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
       <span className={classes.divider} />
 
       {/* Insertion controls live directly on the persistent toolbar — one
-          compact icon per entry, grouped with separators. Nothing is hidden
-          behind an Insert dropdown; the slash menu remains as an alternative
-          surface. The row neither wraps nor scrolls: `useToolbarOverflow`
-          measures it and moves whatever does not fit into the trailing "more"
-          dropdown, so a control is never sliced off mid-icon. */}
-      {(['insert-formula', 'insert-diagram', 'insert-mind-map', 'insert-linked-page'] as const).map(
-        (key) => {
-          const entry = getInsertEntries(editor).find((candidate) => candidate.key === key)
-          return entry ? <InsertButton key={key} editor={editor} entry={entry} /> : null
-        }
-      )}
-
-      <span className={classes.divider} />
-
-      {(['insert-table', 'insert-code-block', 'insert-quote'] as const).map((key) => {
-        const entry = getInsertEntries(editor).find((candidate) => candidate.key === key)
-        return entry ? <InsertButton key={key} editor={editor} entry={entry} /> : null
-      })}
-
-      <span className={classes.divider} />
-
-      {getInsertEntries(editor)
-        .filter((entry) => entry.group === 'callout')
-        .map((entry) => (
-          <InsertButton key={entry.key} editor={editor} entry={entry} />
-        ))}
+          compact icon per entry, grouped into runs by the order `INSERT_RUNS`
+          declares. Nothing is hidden behind an Insert dropdown; the slash menu
+          remains as an alternative surface. The row neither wraps nor scrolls:
+          `useToolbarOverflow` measures it and moves whatever does not fit into
+          the trailing "more" dropdown, so a control is never sliced off
+          mid-icon. Naming the entry keys here instead would be a second list to
+          keep in step, and a new entry would then silently never appear. */}
+      {insertRuns.map(({ run, entries }, runIndex) => (
+        <Fragment key={run}>
+          {runIndex > 0 && <span className={classes.divider} />}
+          {entries.map((entry) => (
+            <InsertButton key={entry.key} editor={editor} entry={entry} />
+          ))}
+        </Fragment>
+      ))}
 
       <span className={classes.divider} />
 
