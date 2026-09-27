@@ -4,7 +4,12 @@ A running list of defects found and left unfixed, so they are not rediscovered l
 Every entry records what was **measured**, what remains unproven is said plainly, and an
 entry inherited from an earlier pass is marked as such rather than presented as freshly checked.
 
-Last reviewed: 2026-09-27, on branch `docs/trilium-uiux-spec` (pushed to `origin`).
+Last reviewed: 2026-09-27, on branch `docs/trilium-uiux-spec`.
+
+**Not yet built, and recorded here so it is not mistaken for done:** a visual page can now *store*
+several diagrams (content v2, ordered blocks, 50-block cap), but the workspace still edits one
+diagram at a time and there is no reordering UI yet. The storage and parsing half is done and
+tested; the view and the drag-to-reorder are the remaining work.
 
 ---
 
@@ -82,22 +87,7 @@ would destroy files that are still in use elsewhere.
 document, plus a "referenced by" check before reclaiming. This needs a deliberate policy decision
 (age threshold, and what "referenced" means for a note in the recycle bin) rather than a default.
 
-### 7. The right-hand panel is only on the Rich workspace
-
-**Impact: low, but it is an inconsistency the user can see.** The shared panel
-(`src/web/features/workspace/right-sidebar-region.tsx`) was extracted so one implementation serves
-every page type, and its outline section is optional so a page type without headings does not show
-an empty "Outline". Only the Rich workspace renders it. `markdown-workspace.tsx` and
-`mermaid-workspace.tsx` do not, so those pages have no page-info panel at all.
-
-**Not claimed as done.** This entry exists so the gap is recorded rather than assumed away.
-
-**Next step:** mount the same region in both workspaces. Markdown can derive a heading outline from
-its `#` source; Diagram and Mind Map have no outline to show, so those get backlinks and page info
-only. This needs `createdDate` / `updatedDate` threaded through `page-workspace.tsx` for the
-page-info section.
-
-### 8. Only images are supported as attachments — PDF and documents are not implemented
+### 7. Only images are supported as attachments — PDF and documents are not implemented
 
 **Impact: low, but it contradicts a documented requirement.** [R-024](../docs/PRODUCT_REQUIREMENTS.md)
 in `PRODUCT_REQUIREMENTS.md` says the application must support attaching "images, PDFs, and
@@ -151,6 +141,42 @@ will notice.
 
 Kept because the *reason* is not obvious from the code, and each was found by measurement rather
 than reported.
+
+### The Markdown and Diagram pages had no right-hand panel
+
+**The component was fine. That is why nothing caught it.** `RightSidebarRegion` was extracted so one
+implementation would serve every page type, and it was correct — but only `rich-editor.tsx` ever
+mounted it. The Markdown and diagram pages had no panel, and no test could fail, because nothing was
+wrong with anything under test.
+
+**Fixed** by mounting the same region in both, with `createdDate` / `updatedDate` threaded through
+`page-workspace.tsx`. A diagram has no headings, so it omits the outline rather than showing an
+"Outline" heading over "no headings". Fullscreen drops the panel: an unobstructed canvas is the
+whole point of fullscreen, and a pane the reader cannot collapse from there would defeat it.
+
+**The outline is built from `marked.lexer`, not a regex**, because the outline and the preview must
+agree about which lines are headings or a click scrolls to the wrong place. A `^#{1,6}` scan
+disagrees three ways: a `#` line in a fenced block is code, a setext `===` heading has no leading
+`#`, and an indented line is a code block. Navigation is by index into the lexer's heading list, not
+by text, because `## **Bold**` reads as `**Bold**` in the source and `Bold` once rendered.
+
+### A `Fragment` around each toolbar run silently broke overflow measurement
+
+Found by the narrow-width test, and the cause is already recorded lower down this page as a harness
+trap — which is exactly why it is repeated here. `Children.toArray` treats a `Fragment` as **one
+opaque child**, so grouping eleven insert controls into three runs made the overflow hook measure
+three units. The split stopped meaning anything: controls moved into the "more" panel when they
+should have stayed on the bar, and the table control could not be found at all.
+
+**Fixed** by rendering the runs through `flatMap` — one element per child, no grouping wrapper. The
+grouping reads like a harmless readability improvement, which is why the comment at the site now
+explains it.
+
+A related test change is worth flagging because it looks like weakening a test: one case used a bare
+`getByTestId('insert-table')` while its siblings used the file's own `useControl` helper. The bar is
+one control wider now that image insertion is on it, so "this control is on the bar at this width" is
+no longer a true statement at every width. `useControl` is the established pattern in that file for
+precisely this, and the assertion under test — a table appears — is unchanged.
 
 ### Diagram labels were missing from every diagram in the application
 

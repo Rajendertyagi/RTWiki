@@ -220,6 +220,27 @@ The canonical format is a **versioned, RTWiki-extended BlockNote JSON schema**:
 - When a source (rich HTML/Markdown) cannot be converted losslessly, the original rich-HTML source is stored as a typed `richHtml` block inside `pages.content` so no content is silently lost.
 - **Unknown or unrecognized block types are preserved**, not deleted. They are stored and rendered with a safe fallback, and flagged for review.
 
+### Diagram and Mind Map pages
+
+These two page types do **not** store BlockNote JSON. Their content is opaque page JSON holding
+Mermaid source, never indexed verbatim and never rendered into dashboard previews. The `pages.content`
+column is unconstrained TEXT, so changing this format requires **no database migration** — a new
+version is a new shape of the same column.
+
+Two versions coexist and both normalise to the same block list, so no caller branches on the version:
+
+- **v1** — `{ version: 1, type, source }`, a single diagram.
+- **v2** — `{ version: 2, type, blocks: [{ id, source }] }`, an ordered list, capped at
+  `MAX_VISUAL_PAGE_BLOCKS` (50). The cap bounds the autosave payload, the cost of the live previews
+  and the work a reorder has to do, and it is enforced on read as well as on write.
+
+A v1 page is not rewritten when it is read. It reads as a one-block page and becomes v2 the first
+time it is saved, which is why an old page and a new page can sit in the same database with no
+migration step.
+
+**Current state:** storage and parsing hold several diagrams. The workspace still edits one diagram
+at a time and there is no reordering UI yet — see [KNOWN_BUGS.md](KNOWN_BUGS.md).
+
 ## 5. Lazy Loading
 
 Heavy features are lazy-loaded to keep the initial bundle small:
