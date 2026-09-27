@@ -243,6 +243,115 @@ then processes. `$…$` is inline and `$$…$$` on its own line is display. KaTe
 
 So a reader looking for "the maths extension" will find two files, and that is expected.
 
+### Directive containers: `:::columns`
+
+`micromark-extension-directive` is composed into the same single `MARKDOWN_OPTIONS`, and its
+serialiser half `directiveHtml` is what RTWiki's own handlers are registered with. Three modules own it:
+`markdown-render.ts` registers the handlers at the composition root, `markdown-columns.ts` decides what
+they mean as pure `string -> string` functions, and `markdown-columns-scanner.ts` holds the one
+top-level-element scanner both the two-pane split and the N-child collection are built on. The drag is
+separate again, in `markdown-columns-divider.ts`, because the preview is an `innerHTML` element React
+does not own.
+
+**Its stylesheet is a plain `.css`, not a CSS module** — `markdown-columns.css`, bare-imported by the
+preview. Two measured reasons, both of which a source read cannot reveal:
+
+- A CSS module **hashes** its class names, and the markup here is a *string* that a hashed name can
+  never reach. The emitted `class="rt-cols"` met a shipped `_rtCols_<hash>_21`.
+- A bare side-effect import of a `*.module.css` **emits no CSS at all** in this build — measured —
+  while a bare import of a plain `.css` does. A `.module.css` bare-imported alongside another module's
+  class-map import contributes nothing, silently, with no build error. This file is the only bare
+  `.module.css` import in the app; every other bare CSS import is a plain `.css`.
+
+Consequently `:global(...)` must **not** appear in it: that syntax is only understood by the
+CSS-modules compiler, so in a plain stylesheet it reaches the browser verbatim and matches nothing.
+`tests/markdown-columns-styles.test.ts` runs the real Vite CSS pipeline over the stylesheet the preview
+actually imports and fails if any emitted class has no rule in the CSS that ships. A string assertion
+cannot catch this: the name *was* in the source, and hashed on the way out.
+
+`:::columns` renders a row of panes with **N−1 draggable** dividers. Two panes is the everyday case
+and needs a separator; three or more uses named children:
+
+````markdown
+:::columns{left=40}
+Left pane.
+
+***
+
+Right pane.
+:::
+````
+
+````markdown
+::::columns
+:::column{width=20}
+First.
+:::
+:::column
+Second.
+:::
+:::column
+Third, taking what is left.
+:::
+::::
+````
+
+Four properties of this feature are structural rather than incidental, and each is asserted by a test:
+
+- **The `'*'` fallback is what prevents content loss.** The extension *buffers* a container directive's
+  body and hands it to the handler as `directive.content`; it is never written to the output. An
+  unclaimed `:::` container is therefore **deleted**, not merely unstyled — and an unclosed fence takes
+  the rest of the document with it. Measured, with the extension installed and no fallback:
+  `before\n\n:::warning\n**be careful**\n\nafter\n` renders as `<p>before</p>` and loses two paragraphs
+  silently. `renderUnknownDirective` writes the name and the content back out, and is the only thing
+  standing between a typo'd directive name and silent data loss on an existing note.
+- **Children self-render; nothing is handed between handlers.** Nested directives compile *inside out* —
+  every `:::column` handler runs before its parent `::::columns`, and its compiled HTML is already in
+  the parent's `content`. So the parent finds the children in its own compiled string. Passing them
+  through micromark's compile-data store was tried and measured to **lose content**: a `:::column`
+  outside any `::::columns` was pushed onto the store, never reached the output, and vanished. Content
+  in a row body that is *not* a child is kept in reading order around the row rather than dropped.
+- **The width grammar is one integer, not a filter.** `/^\d{1,3}$/` plus a 1–99 range check, because
+  `SAFE_FOR_XML` drops any attribute containing `-->` or `]>` **before** the allow-list, so
+  `ADD_ATTR` cannot rescue it — `this.encode` does not either, since DOMPurify decodes entities before
+  matching — and DOMPurify does not sanitise `style` attribute *contents* at all. A free-form CSS length
+  would be copied straight into a live `style` value protected by nothing downstream. A width belongs to
+  a **child**, not the root: a root-side list for N panes would need a second grammar. A rejected width
+  is **surfaced** with a notice, never silently clamped. See [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+- **The drag reuses the shell's.** `createDividerDrag` was extracted from `PaneDivider`
+  (`layout/pane-divider.tsx`) because the behaviour is not React's — only the rendering is. The one
+  difference is `unitsPerPixel`: a shell divider is a pixel width and passes `1`, a column divider is a
+  percentage of its container and passes `100 / containerWidth`. The `layoutResizing` document flag comes
+  from inside the shared object, so a column drag sets it exactly as a shell one does — but **no
+  stylesheet reads it.** Measured across every stylesheet in `src/web`: there is not one `transition` on
+  a layout property, so the rule the flag exists to enable would suppress nothing. The flag is inert
+  pending an owner decision on whether layout-transition suppression is wanted at all.
+  One divider resizes the pane to its **left**; the rest of the row absorbs the change, so an N-pane row
+  is N independent boundaries rather than one shared budget to rebalance.
+- **The divider wiring watches its own invalidation.** All six listeners sit on the preview container,
+  which survives every re-render of its contents. But the boundaries they look up hold **element
+  references**, and the framework replaces the preview's children wholesale — measured in a browser,
+  17 ms after the attach ran, with no React dependency changed and the HTML byte-identical. A snapshot
+  therefore goes stale silently: the listener still fires, still gets the right event, still does not
+  throw, and every lookup misses. `attachColumnDividers` rebuilds the list from a `MutationObserver` on
+  the container's `childList`, so the list cannot outlive the markup it describes. See
+  [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+
+The syntax is `:::name{attr}` with **no spaces** — micromark forbids a space before the name and before
+the brace, while Pandoc and Quarto require them, and the two cannot be reconciled without forking the
+tokeniser. The failure mode is a **visible literal paragraph** containing the reader's own text, never
+silent loss. Nesting requires the outer fence to be **strictly longer** than the inner one; an
+equal-length pair leaks the trailing fence as a stray paragraph, which is pinned by a test rather than
+left to be discovered.
+
+**The pane separator is a `***` thematic break, not `---`.** A `---` on the line directly after
+paragraph text is a *setext heading* in CommonMark: measured, `Left text\n---\nRight text` compiles to
+`<h2>Left text</h2>` with no `<hr>` at all, so the divider silently vanishes and both halves land in one
+pane. That failure is **not detectable** — the compiled output is the same shape as a heading the author
+genuinely meant — so the block reports the fact it *can* observe ("no column separator found") and names
+the form that works, rather than asserting a cause it cannot see. The N-child form sidesteps the trap
+entirely: it has no separator to get wrong.
+
 **The KaTeX stylesheet is owned by the Markdown workspace**, which imports `katex/dist/katex.min.css`.
 `@blocknote/math-block` imports the same file, but only from the Rich Note's lazily-loaded chunk — a
 Markdown page never mounts the rich editor, so that CSS was never fetched and maths rendered with a

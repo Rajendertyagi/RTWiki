@@ -216,6 +216,234 @@ checkable at all — has nowhere to sit.
 reimplementation of parsing behaviour is a second source of truth for Markdown semantics, and the
 byte-parity requirement would be measured against our own code rather than an independent one.
 
+## Amendment: directive containers, and the `SAFE_FOR_XML` finding applied to a width
+
+**Status:** Accepted amendment. The engine decision above is unchanged; this records the first
+construct built on it and the measured facts that shaped it.
+
+### The brief, and why the shipped grammar is narrower than it
+
+The `markdown-it-container` entry above names the requirement as `:::columns{size="60 40"}` — a free-form
+CSS length pair. **What shipped is `:::columns{left=40}`: a single integer percent, right pane
+`100 - left`, with no free-form CSS length at all.** That is a deliberate narrowing, and the ADR's own
+`SAFE_FOR_XML` finding is the reason.
+
+DOMPurify strips any attribute whose value matches `/((--!?|])>)|<\/(style|script|…)/i`, and it runs
+**before** the allow-list, so `ADD_ATTR` and `ALLOWED_ATTR` cannot rescue it. Measured, against
+`MARKDOWN_SANITIZE_OPTIONS`: `data-left="a-->b"` loses the attribute entirely, and so does
+`data-left="a]>b"`.
+
+Two measurements closed off the alternatives:
+
+- **`this.encode` does not save it.** DOMPurify decodes entities before matching, so `a--&gt;b` is
+  dropped exactly as `a-->b` is. Escaping at emit time is not a defence.
+- **DOMPurify does not sanitise `style` attribute *contents*.** Measured: `style="width:expression(…)"`
+  survives verbatim. So a free-form length validated by RTWiki's own code and copied into a `style` value
+  is protected by *nothing* downstream — the sanitiser is not a second line of defence there, it is no line
+  at all.
+
+So the grammar is `/^\d{1,3}$/` plus a 1–99 range check. `-->` and `]>` are unreachable **by
+construction** rather than filtered for afterwards, and the only string that ever reaches a `style`
+attribute is `String(an integer this code parsed)`. A value outside the grammar is **surfaced** with a
+visible notice naming the rejected value, never silently clamped — and the rejected value is echoed as
+escaped **text**, which is the one place a document-supplied string is safe.
+
+### The extension deletes unhandled content, and this is the finding that mattered most
+
+`micromark-extension-directive`'s serialiser **buffers** a container directive's body and passes it to
+the handler as `directive.content`; the extension never writes it. Measured consequences:
+
+| Input | With a `columns` handler, **no** `'*'` fallback | With the fallback |
+|---|---|---|
+| `before\n\n:::warning\n**be careful**\n\nafter\n` | `<p>before</p>` — **two paragraphs silently lost** | name shown, `**be careful**` and `after` both present |
+
+The unclosed fence swallowed the rest of the document, and the whole of it was discarded. No error is
+raised, no warning is logged, and the preview looks like a successful render. **A `'*'` fallback is
+therefore load-bearing, not defensive.** It is recorded as a standard in
+[DEVELOPMENT_STANDARDS.md](../DEVELOPMENT_STANDARDS.md) §15.1, and asserted by a test.
+
+Related, and the opposite of what the type suggests: **a handler emits with `this.tag()`/`this.raw()`,
+not by returning a string.** micromark's compiler discards handler return values
+(`micromark/lib/compile.js`: `handle.call({...context}, token)`, unassigned). The return value controls
+only `found = result !== false` inside the extension's `exit()`, which decides whether the `'*'` fallback
+runs — so a named handler returns `false` to hand a name over.
+
+### Three syntax facts, all measured, none of them choices
+
+- **No space before the name or the brace.** `::: columns` and `:::columns {left=40}` both render as a
+  literal paragraph. Pandoc and Quarto *require* those spaces; reconciling that needs a fork of the
+  tokeniser. Accepted, because the failure mode is a **visible literal paragraph** containing the reader's
+  own text — never silent loss.
+- **Nesting needs a strictly longer outer fence.** Measured across eight fence-length pairs: equal
+  lengths leak the trailing fence as a stray paragraph (a 3/3 pair leaks `<p>:::</p>`, 4/4 leaks
+  `<p>::::</p>`), while a strictly longer outer fence closes cleanly. Inherent to the extension, and
+  pinned by a test so it is written down rather than discovered.
+- **The pane separator is `***`, not `---`.** A `---` on the line directly after paragraph text is a
+  **setext heading** in CommonMark, not a thematic break — measured: `Left text\n---\nRight text` compiles
+  to `<h2>Left text</h2>` with no `<hr>` at all, so the divider would silently vanish and both panes would
+  land in the left one. `***` and `___` are never setext underlines.
+
+### Amendment: N columns, and the two ways a body can say where they end
+
+**Status:** Accepted amendment. The engine decision and the two-pane form are unchanged; this records
+the generalisation and the measured facts that shaped it.
+
+### A block is two panes with a separator, or N panes with children
+
+```
+:::columns{left=40}      →  two panes, split at a *** thematic break
+Left ***
+
+Right :::
+```
+
+```
+::::columns             →  N panes, one per :::column child
+:::column{width=20}
+First :::
+:::column
+Second :::
+::::
+```
+
+Both forms are supported and the two-pane form is unchanged. They cannot conflict: a body either
+contains pane children or it contains a separator.
+
+### Nested directives compile inside out — measured, and it is the load-bearing fact
+
+For `::::columns` with three `:::column` children, the handler call order is `column, column, column,
+columns`, and the parent's `content` is already
+`<div …>…</div>\n<div …>…</div>\n<div …>…</div>`. **So a child can render itself completely and the
+parent only has to find the results.** Everything else follows from that.
+
+### Passing children through the compile-data store was tried, and it loses content
+
+The obvious alternative is a channel between the handlers, and micromark provides one: `this.setData`.
+Measured: a `:::column` written **outside** any `::::columns` had its HTML pushed onto the store, never
+reached the output buffer, and **vanished**. An orphan is not a syntax error — it is a reader whose
+fences are slightly wrong — so deleting its content is precisely the failure this ADR's earlier section
+records as the reason the `'*'` fallback exists. Rejected; children self-render instead.
+
+Two more measured losses from the same direction, both fixed and both now tested:
+
+- The first draft had the parent **wrap** each child's already-complete element, so two children
+  produced four panes. The parent now unwraps each child and re-emits it.
+- The first draft **discarded everything in the body that was not a child**. An unknown `:::warning`
+  between two children lost its body and the text after it. Content that is not a pane is now emitted
+  around the row, in reading order; its position relative to the panes is not preserved, and that is
+  the accepted cost of not deleting it.
+
+### Where widths live: on the child, not the root
+
+A root-side list for N panes (`{width="30 30 40"}`) would need a **second grammar** — a
+delimiter-separated list is a different parse — and a free-form one reintroduces exactly the
+`SAFE_FOR_XML` problem above. Per-child `:::column{width=30}` reuses the *same* integer grammar per
+child, needs no list parsing, and degrades naturally: a child with no `width` takes an equal share of
+what the others leave. Measured: `{width=60}` with two undeclared siblings gives `60 / 20 / 20`, and
+three undeclared children give `34 / 33 / 33`, summing to exactly 100.
+
+The root keeps `left` for the two-pane form, where it is the one number that describes that form, and
+it is **ignored when children are present** — with children present, the children are what have widths.
+
+### Every pane grows by its own share, including the last
+
+This is a bug worth recording, because the wrong version looks correct. The two-pane form shipped as
+`flex: 0 0 40%` on the left and `flex: 1 1 0%` on the right — a *fixed* basis. Replacing that with a
+uniform `flex: <share> 1 0%` and leaving the last pane at `1 1 0%` renders an authored **40% as
+40/41 — about 98% of the row**, because grow factors are ratios. With every pane carrying its own share
+the authored width is the rendered width. The shares need not sum to 100 for the geometry to be right
+(flexbox normalises them); they are kept at 100 so the *announced* values mean what they say.
+
+### N−1 dividers, each naming its own boundary
+
+Measured for 2, 3, 4, 5, 8, 12 and 20 children: N panes, N−1 dividers, shares summing to 100. Dragging
+divider *i* resizes the pane to its **left** and the rest of the row absorbs the change, so an N-pane
+row is N independent boundaries rather than one shared budget to rebalance.
+
+A two-pane row keeps the plain label it always had — one boundary needs no disambiguation, and the
+everyday case should be announced exactly as it was. Three or more panes name each boundary:
+`Resize columns: boundary 2 of 4, between column 2 and column 3`, with `aria-valuenow` the width of the
+pane that boundary resizes. That is the value a drag changes, and therefore the one a reader can act on.
+
+### The setext trap: made loud, but the *cause* cannot be reported
+
+`Left text\n---\nRight text` is a **setext heading**, not a separator: it compiles to
+`<h2>Left text</h2>` with no `<hr>` at all, so the divider silently vanishes. `***` and `___` are never
+setext underlines, and a blank line before `---` also works.
+
+**It cannot be detected.** Measured: that output is the same shape as `<h2>Genuine heading</h2>` from a
+`##` the author meant, and nothing in the compiled HTML distinguishes them. So the block does not claim
+a cause. It reports the fact it can observe — *no column separator was found* — names the form that
+works, and shows a notice only when the body has content and no separator, so a genuine heading is not
+accused of being a typo. The N-child form sidesteps the trap entirely: it has no separator to get wrong,
+which is a real advantage of it above two panes and the reason to reach for it.
+
+### Amendment: the stylesheet is a plain `.css`, and it needed a test that runs the build
+
+**The feature rendered correct markup, passed 1030 unit tests, and was invisible in a browser.**
+Twelve browser tests failed. Two independent faults, neither visible by reading the source:
+
+| Fault | Measured |
+|---|---|
+| `.rt-cols` was a **local** CSS-module class, so the build hashed it | `rt-cols` appears in **zero** built stylesheets; the shipped CSS had no rule for it |
+| the file was **bare-imported as a `.module.css`** | that import form emits no CSS at all here; a bare **plain** `.css` import does |
+
+The second is the more interesting one, because it is a silent no-op. A module holding both a
+class-map import of one stylesheet and a bare import of another emitted **only the first one's CSS**,
+with no error. Every other bare CSS import in this app is a plain `.css`; this was the only bare
+`.module.css` import in the codebase.
+
+**Resolution:** `markdown-columns.css`, plain, global names, no `:global()` anywhere — that syntax is
+only understood by the CSS-modules compiler, so in a plain stylesheet it reaches the browser verbatim
+and matches nothing (measured: a plain `.css` with `:global(.rt-cols){display:flex}` builds cleanly
+and emits exactly that). A CSS module is the wrong tool for markup emitted as a string, because it
+hashes the very names the string cannot carry.
+
+**The lesson is the test, not the CSS.** Every unit test was true: the renderer emitted `rt-cols`,
+and `rt-cols` was written in the stylesheet source. Neither fact says a rule *ships*. The only thing
+that can see the difference is the pipeline, so
+`tests/markdown-columns-styles.test.ts` resolves the stylesheet **from the preview's own import**,
+runs a real Vite build over it, and asserts every class the renderer emits has a rule in the CSS that
+comes out. Against the shipped state it fails 11 of 13 assertions, including all six class rules, with
+`no CSS rule shipped for .rt-cols; the markup would render unstyled`. It costs about 200 ms, writes
+only to a temp directory, and is not skippable in short mode — a skipped test of this kind restores
+exactly the blind spot it closes.
+
+### The drag, and why the shell's was extracted rather than copied
+
+`createDividerDrag` was extracted from `PaneDivider` (`src/web/layout/pane-divider.tsx`) so both
+consumers share one implementation. The behaviour is not React's; only the rendering is. The single
+difference is `unitsPerPixel`: a shell divider's value is a pixel width and passes `1`, a column divider's
+is a percentage of its container and passes `100 / containerWidth`.
+
+It is attached by **delegated DOM listeners**, not a React island: the preview is a
+`dangerouslySetInnerHTML` element replaced on every keystroke, `createRoot` appears exactly once in the
+app, and there is no island infrastructure. This follows the precedent already in
+`rich-editor.tsx:453-511`. All six listeners — `pointerdown`, `pointermove`, `pointerup`,
+`pointercancel`, `lostpointercapture`, `keydown` — are on the container rather than on the dividers, and
+that includes the move/release pair: pointer capture retargets an event to the capturing element, but
+captured events still **bubble** through its ancestors, so delegation loses nothing.
+
+**The wiring must not be a snapshot of the dividers it found.** Measured in a browser: the framework
+replaced the preview's `innerHTML` **17 ms after** the attach ran, with the row already present, and
+**no React dependency changed** — the rendered HTML was byte-identical. An effect keyed on that HTML did
+not re-run, the boundary list went on holding detached dividers, and every `pointerdown` and `keydown`
+lookup missed. The symptom was silent in the worst way: the container listener still fired, still
+received the right event on the right target, still did not throw, and did nothing. Drag and keyboard
+were dead on every page opened from the sidebar and worked only after an Edit → Preview round trip,
+which *does* change a dependency. So `attachColumnDividers` watches the container with a
+`MutationObserver` on `childList` and rebuilds the list itself; the effect above it is keyed on `mode`
+alone and owns only the preview element's identity. `attributes` is deliberately not observed, because
+`applyPercent` writes `style` and `aria-valuenow` during a drag and re-scanning on those would discard
+the value being dragged.
+
+The `layoutResizing` document flag is set from inside the shared drag object, so a column drag sets it
+exactly as a shell one does. **No stylesheet reads it.** Measured across every stylesheet in `src/web`:
+there is not one `transition` on a layout property, so the rule the flag exists to enable
+(`transition: none` during a drag) would suppress nothing and only cost a style recalculation over the
+whole document. The flag and the three comments describing it as active are inert pending an owner
+decision on whether RTWiki wants layout-transition suppression at all.
+
 ## Consequences
 
 **Easier:** extensions compose instead of being bolted on; the outline reads resolved heading text

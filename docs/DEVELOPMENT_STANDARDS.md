@@ -227,6 +227,127 @@ Rich content is implemented as a set of cooperating modules discovered through r
 - **Extensions must not change unhandled output.** An extension that intercepts one construct must leave every other construct byte-identical to stock micromark, and a table-driven test must prove it.
 - **Sanitiser policy lives in one exported constant.** `MARKDOWN_SANITIZE_OPTIONS` is exported so it can be asserted directly: a profile change is a security change and must be covered by tests that feed it hostile markup, not only by tests that pass well-formed input through it.
 
+### 15.1 Directive extensions must have a `'*'` fallback that writes content back
+
+**This rule exists because of a measured content-loss defect, and it is not optional.**
+
+`micromark-extension-directive`'s serialiser **buffers** a container directive's body and hands it to the
+handler as `directive.content`. It is never written to the output by the extension. Two consequences, both
+measured:
+
+1. A container directive no handler writes is **deleted**, not merely left unstyled. The name
+   disappears, its body disappears, and its markup disappears with it.
+2. A `:::` fence that is never closed swallows the **rest of the document**, so everything after the typo
+   is inside the discarded body.
+
+`before\n\n:::warning\n**be careful**\n\nafter\n` renders as `<p>before</p>` and nothing else, with no error
+raised anywhere. The fallback is the only thing that prevents this, so:
+
+- **Register a `'*'` fallback on any `directiveHtml(...)` call.** It must handle all three directive
+  kinds. A leaf and a text directive reach it too and must be rendered *inline* — a `<div>` around
+  block content in a paragraph is malformed.
+- **Write `directive.content` back out**, encoded with `this.encode` where the value is document-supplied.
+  Emitting the name without the body still loses the body.
+- **Emit with `this.tag()` or `this.raw()`.** A handler that *returns* an HTML string emits **nothing**:
+  micromark's compiler discards the return value (`micromark/lib/compile.js` calls `handle.call(...)` with
+  no assignment). The return value controls exactly one thing, inside the extension's own `exit()` —
+  `found = result !== false`, which decides whether the `'*'` fallback runs. So a named handler returns
+  `false` to hand a name over, and anything else to keep it.
+- **Assert it.** A test that feeds an unclaimed `:::name` and checks that the paragraph *after* it is
+  still present is the test that catches a regression here. `tests/markdown-columns.test.ts` does.
+
+See [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+
+### 15.2 A directive handler must not depend on another handler running first
+
+**The extension compiles nested directives inside out**, which is the fact the whole child-column
+design rests on and the one most likely to be assumed the other way round. Measured: for
+`::::columns` containing two `:::column` children, the handler call order is `column, column, columns` —
+and by the time `columns` runs, each child's compiled HTML is already sitting in its `content` string.
+
+Three rules follow, each from a measured failure:
+
+- **A child renders itself, completely.** It emits a finished element rather than a placeholder for a
+  parent to fill in. Measured: a `:::column` written outside any `::::columns` is not a syntax error, it
+  is a reader whose fences are slightly wrong, and its content must still appear.
+- **Do not pass children through micromark's compile-data store.** It was tried and measured to lose
+  content: an orphan child's HTML went onto the store, never reached the output buffer, and vanished.
+  There is no channel between two handlers except the compiled string, and the compiled string is a
+  *sufficient* channel.
+- **A row body that is not a child is still content.** A stray `***`, a paragraph, or an unclaimed
+  directive can sit among the children. Measured: the first draft of the N-child path discarded all of
+  it, and an unknown `:::warning` between two children lost its body and everything after it. Content
+  that is not a pane is emitted around the row, in reading order — its position relative to the panes
+  is not preserved, and that is the accepted cost of not deleting it.
+
+A test that feeds an orphan child, and one that puts an unknown directive *between* two children, are
+the two that catch a regression here. Both are in `tests/markdown-columns-children.test.ts`.
+
+### 15.3 Markup emitted as a string needs a plain stylesheet, and a test that runs the CSS pipeline
+
+**A string assertion cannot tell you that a rule ships.** The `:::columns` feature rendered correct
+markup, passed 1030 unit tests, and was completely invisible in a browser: the stylesheet declared
+`.rt-cols` as a **local** CSS-module class, the build hashed it, and the shipped CSS contained no
+`rt-cols` rule at all. Measured: `rt-cols` appears in **zero** built stylesheets. Every unit test was
+true; the feature was unstyled. A second, independent fault compounded it — a bare side-effect import
+of a `*.module.css` emits no CSS in this build, so even correct rules would not have shipped.
+
+Two rules follow, and they are about **emitted** markup generally, not about this feature:
+
+- **A stylesheet for string-emitted markup must be a plain `.css`, imported for its side effect.** A
+  CSS module hashes the very names the string cannot carry. And `:global(...)` must not appear in a
+  plain stylesheet: the browser receives it verbatim, where it is an unknown pseudo-class that matches
+  nothing. Measured both ways.
+- **A test for emitted markup must run the real CSS pipeline.** String and source-text assertions are
+  both blind here — the name was in the source *and* in the output HTML; only the build revealed the
+  gap. `tests/markdown-columns-styles.test.ts` resolves the stylesheet from the preview's own import,
+  runs a Vite build over it, and asserts every emitted class has a rule in the CSS that comes out. It
+  costs about 200 ms, writes only to a temp directory, and is deliberately not skipped in short mode:
+  skipping a test of this kind would restore exactly the blind spot it closes.
+
+### 15.4 Behaviour wired to injected markup must be tested against the injected markup
+
+The same feature had a **second** blind spot, of the same family. The drag and keyboard wiring was
+tested against a **hand-written fixture** of the markup the render path was believed to produce. The
+fixture was faithful, so 22 tests passed — and nothing had ever run the wiring against the output of
+`renderMarkdown`. A fixture can only be as good as someone's belief about what the code emits, and it
+keeps passing when that belief is wrong.
+
+`tests/markdown-columns-wiring.test.ts` renders the real source, injects the real HTML, attaches the
+real wiring, and replays the same sequences. Where a fixture asserts an *intention*, this asserts the
+*contract between two modules* — which is the thing that actually breaks.
+
+It also found a defect the fixture could not. jsdom has no pointer capture, so every test stubbed
+`setPointerCapture` to succeed; the wiring therefore recorded "a drag is in progress" for calls that a
+real browser throws from, leaving it permanently wedged — every later drag on the page refused. The
+regression test makes the stub **throw**, which is the only way to produce the condition at all.
+
+### 15.5 A cache of DOM nodes is invalidated by the DOM, not by a dependency array
+
+The same file hit the deeper version of the problem, and **only a browser could find it.** The wiring
+captured the divider elements it found at attach time and looked every event up by element identity. The
+framework replaced the preview's `innerHTML` **17 ms later**, with the row already present, and **no
+React dependency changed** — the rendered HTML was byte-identical, so an effect keyed on it did not
+re-run. The captured list went on holding detached nodes, and every `pointerdown` and `keydown` missed.
+
+The failure mode is what makes it worth writing down. Nothing threw. The container listener still fired,
+still received the right event, on the right target, with the right key. It simply did nothing, and
+looked identical to a layout fault, a wrong expectation, or a missing stylesheet. Every unit test passed
+throughout, because nothing in jsdom ever replaces the container's children.
+
+Two rules follow, and both are general:
+
+- **A reference to a DOM node is a cache, so it needs an invalidation signal that is guaranteed to
+  arrive.** A `MutationObserver` on `childList` is; a component's dependency array is not, because the
+  framework can re-render children without any of *its* inputs changing. Observed `attributes` only
+  where the code's own writes cannot trigger the callback — re-scanning mid-drag would discard the value
+  being dragged.
+- **A silent no-op is the expensive failure.** "Throws loudly" costs one run. "Runs correctly and does
+  nothing" costs the four rounds this took, three of them spent ruling out the wrong layer. When
+  behaviour is inert in a browser, instrument the *product* with a temporary log and read the branch it
+  took; reasoning about the wiring from the source could not distinguish the two, because both the
+  pointer and the keyboard path were genuinely correct in isolation.
+
 ## Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — layer boundaries these standards govern

@@ -15,10 +15,11 @@ This table states a mitigation per threat. **Where the mitigation is not impleme
 | Malicious script in the raw-HTML page | User authors a page with a `<script>` or an inline `on*` handler | Sandboxed `<iframe>` (`allow-scripts`, opaque origin) + its own CSP meta + HTML normalization that removes `script`, `iframe`, `object`, `embed`, `base`, external stylesheets, `meta[http-equiv]` and inline `on*` | **Built** — `src/web/features/html/preview-document.ts:236`, §2.4 and §5.2 |
 | Malicious Mermaid / diagram SVG | Diagram text carries HTML tags, click callbacks or a `foreignObject` | `securityLevel: 'strict'`, `htmlLabels: false`, `svg-sanitize.ts`, CSP | **Built** — `src/web/features/rich-editor/blocks/mermaid-render.ts:80,90`, [ADR-012](adr/ADR-012-diagram-rendering-and-sanitisation.md) |
 | Path traversal via attachment upload | User uploads a file with a crafted filename | Id-addressed serving: the request names an opaque `id`, the server serves the `stored_name` it generated | **Built** — `src/server/attachments/attachment-routes.ts`, §3 |
-| Database corruption | Power loss, crash, concurrent writes | SQLite WAL + `foreign_keys = ON` + transactions + startup `integrity_check` | **Built** — `src/server/database/index.ts:98,130`, §7 |
+| Database corruption | Power loss, crash, concurrent writes | SQLite WAL + `foreign_keys = ON` + transactions + startup `integrity_check` | **Partly** — WAL, foreign keys and transactions are **Built** (`src/server/database/index.ts:97,98`); the startup check **throws instead of reporting failure on severe corruption** as of `476de71`, so its rejection path is unreachable for that class. §7 |
 | Accidental data loss | User deletes a page | Soft delete + recycle bin | **Built** — `migrations.ts:24,64,70,74` |
 | Accidental data loss | Restore from a corrupt or incompatible backup | Backup validation before restore | **Not implemented.** No backup or restore feature exists in `src/`; `data/backups/` is created at startup and stays empty. §8 is a requirement, not a description |
 | Unauthorized LAN access (future) | Someone on the local network discovers the server | Localhost binding by default; LAN access requires explicit opt-in | **Built** — §4 |
+| **A web page the user visits writes to their own server** | Any site the user browses while RTWiki runs issues a cross-origin `POST` to `127.0.0.1:8080` | **None.** No `Host` validation, no CORS middleware, and `isSameOrigin()` is not applied to the page, schedule or preset routes — 17 of 25 mutating routes perform no origin check, 5 of which are reachable with no prior identifier | **Not implemented.** Data-destroying: `POST /api/schedule/presets/apply` with `mode: "replace"` deletes every timetable entry and reminder. The loopback bind does not cover it — it stops remote hosts, not a page in the user's own browser. §4.1 and [KNOWN_BUGS.md](KNOWN_BUGS.md) |
 
 ## 2. Input Sanitization
 
@@ -82,7 +83,7 @@ has no corresponding code. Unbuilt security work, to be built before any import 
 1. One shared, centralized import pipeline for every entry point (paste, drop, file, localhost API) — never parallel paths.
 2. DOMPurify as an intermediate step for any pasted or imported HTML, since no other control covers it (§2.1).
 3. The loopback-only import API of §2.5, with CORS disabled, request and package size limits applied **before** parsing (ZIP-bomb protection), manifest validation, and entry-name path-traversal checks.
-4. Warnings surfaced rather than silent content loss; unknown blocks preserved by `containUnknownBlocks()`, which rewrites each into a `codeBlock` holding its exact JSON behind `UNSUPPORTED_BLOCK_MARKER` (`src/web/features/rich-editor/document.ts:110`, `src/shared/constants/index.ts:68`).
+4. Warnings surfaced rather than silent content loss; unknown blocks preserved by `containUnknownBlocks()`, which rewrites each into a `codeBlock` holding its exact JSON behind `UNSUPPORTED_BLOCK_MARKER` (`src/web/features/rich-editor/document.ts:273`, `src/shared/constants/index.ts:76`).
 
 **Interim risk, stated plainly:** until this exists, any HTML that enters the application by a path other than the Markdown renderer, the raw-HTML page sandbox or the diagram pipeline is unsanitized by RTWiki. Today no such path is exposed, so this is latent rather than live — but it is the reason the requirement must not be treated as satisfied.
 
@@ -104,7 +105,7 @@ When a page supplies optional custom HTML/CSS/JS (L3), it is rendered only insid
 The localhost import API (`POST /api/v1/import/pages`) must be bound to the loopback interface only:
 
 - It accepts no cross-origin requests (CORS is disabled); only the local machine may call it. The same-origin check that exists for attachment writes (`isSameOrigin`, `src/server/utils/request-origin.ts`) is the pattern to follow.
-- Request and package size limits are enforced before parsing (ZIP-bomb protection). No import-package size cap is configured today; the general request ceiling is `MAX_REQUEST_SIZE` (100 MB), which is not a substitute — an agent must not treat it as one.
+- Request and package size limits are enforced before parsing (ZIP-bomb protection). No import-package size cap is configured today, and **no global request ceiling exists** — the former `MAX_REQUEST_SIZE` was deleted in `138aa62` because no request path read it, and an uncapped route is a real gap that only a `bodyLimit` in `createApp()` can close. The per-route caps in §6 are not a substitute for a package cap.
 - Incoming packages are validated against the manifest schema; entry names are checked for path traversal.
 - Import is idempotent per client-supplied request id; duplicate submissions do not create duplicate pages.
 - Custom JavaScript inside an imported package is confined to the sandbox (§2.4) and has no database, filesystem, or network access. The sandbox itself is built and enforced by the app-wide CSP, so this requirement is satisfiable — but the import route that would carry package JavaScript into it does not exist.
@@ -132,14 +133,75 @@ The CSP already allows these images: `img-src 'self' data:` permits a same-origi
 
 ## 4. Server Binding
 
-The `config.server.host` paths named below **do not exist**. `AppConfig` (`src/server/config/index.ts:16-31`) exposes a flat `host`; the default is `DEFAULT_HOST` at `src/shared/constants/index.ts:11`, and the resolved paths come from `resolveRuntimePaths()` (`src/server/config/index.ts:79-101`).
+The `config.server.host` paths named below **do not exist**. `AppConfig` (`src/server/config/index.ts:15-29`) exposes a flat `host`; the default is `DEFAULT_HOST` at `src/shared/constants/index.ts:10`, and the resolved paths come from `resolveRuntimePaths()` (`src/server/config/index.ts:76-98`).
 
 | Mode | Configuration |
 |------|--------------|
-| **Default (localhost only)** | `DEFAULT_HOST` = `127.0.0.1` — `src/shared/constants/index.ts:11`, overridable by a flat `host` on `AppConfig` |
+| **Default (localhost only)** | `DEFAULT_HOST` = `127.0.0.1` — `src/shared/constants/index.ts:10`, overridable by a flat `host` on `AppConfig` |
 | **LAN access (future)** | Requires explicitly setting `host` to `0.0.0.0` or a specific interface IP |
 
 The server must **never** bind to `0.0.0.0` by default. Future LAN access must require a deliberate configuration change documented in [ADR-001](adr/ADR-001-browser-first-local-application.md).
+
+### 4.1 Cross-origin requests — required, not implemented
+
+**Binding to loopback is not a cross-origin control, and treating it as one is the specific mistake
+this subsection exists to prevent.** The bind stops a *remote host* from connecting. It does nothing
+about a web page running in the user's own browser, which can reach `127.0.0.1:8080` just as
+readily — and RTWiki opens a browser tab itself on every launch unless `--no-open` is passed.
+
+**Measured at commit `476de71`, today:** there is **no** `Host` header validation (0 matches for
+`allowedHosts`, `hostAllow`, or reading the `host` header in `src/`), **no** CORS middleware (0
+matches for `hono/cors` or `Access-Control-Allow-Origin`), and **no** cookies anywhere, so
+`SameSite` has no subject to protect. The existing `isSameOrigin()` helper
+(`src/server/utils/request-origin.ts:16-44`) is correct and tested, but it is called on 5 route files
+and **not** on `pages.ts`, `schedule.ts` or `schedule-presets.ts` — 17 of the 25 mutating routes in
+`src/server/` perform no origin check. The JSON readers never inspect `Content-Type`
+(`pages.ts:44-65`), so a request that declares a CORS-safelisted `text/plain` and carries a JSON body
+is dispatched without a preflight.
+
+**This is data-destroying, not merely a write.** Five routes are reachable with no prior
+identifier, and one of them is destructive: `POST /api/schedule/presets/apply` with
+`mode: "replace"` runs unqualified `DELETE FROM schedule_entries` and `DELETE FROM reminders`. Its
+`source` accepts any of three literal, enumerable built-in keys, and `builtin:blank` is empty — so
+one cross-origin request **permanently erases the user's entire timetable and every reminder**. It
+requires no identifier, no reconnaissance, and no knowledge of the victim's data. The other four
+create attacker-chosen pages, entries, reminders and presets. The full route table, the shortest
+destructive request, and the impact bounds are in [KNOWN_BUGS.md](KNOWN_BUGS.md).
+
+**The requirements, none of which is met today:**
+
+1. **A `Host` allowlist on every request**, permitting only `127.0.0.1[:port]`,
+   `localhost[:port]` and the configured `host`. This is the only control that stops **DNS
+   rebinding**, where the browser believes the request is same-origin and therefore sends no
+   `Origin` and no `Sec-Fetch-Site` — the branch `isSameOrigin` deliberately accepts at
+   `request-origin.ts:43` for the CLI/automation path. A fix must not treat that branch as a
+   security decision. It is also the only single control that covers all 17 unprotected routes.
+2. **`isSameOrigin()` applied to every unsafe method**, either per route or hoisted to a single
+   `app.use`. Correct for the ordinary cross-origin form `POST`; insufficient alone, per (1).
+3. **`POST /api/schedule/presets/apply` must not accept an arbitrary built-in key as the source of a
+   `replace`.** A destructive bulk delete is not an appropriate consequence of a request that names
+   no existing record. This is a narrow fix to one route and is worth doing regardless of (1) and (2).
+4. **`Content-Type: application/json` required by the JSON body readers.** Cheap and worth doing,
+   but a second line rather than a fix: a `fetch` declaring it triggers a preflight that fails, so
+   on its own it only refuses the `text/plain` variant.
+
+A per-process token in a custom request header is the durable answer and the model every comparable
+loopback product chose. It is a larger change — the frontend must attach it, it must not be kept in
+`localStorage` where any XSS could read it, and it complicates the CLI path — so it does not replace
+(1) or (2), and it is not listed as a requirement here because it has not been designed for this
+codebase.
+
+**This is a pre-existing gap, not a regression.** No documented claim asserted that it was covered;
+it is recorded now so that a future agent does not read the localhost bind as the answer. Because a
+reachable route can **destroy** data rather than only add it, LAN binding
+([ADR-001](adr/ADR-001-browser-first-local-application.md)) must not be authorized before (1) and
+(2) land.
+
+**A fix for (1) was in the working tree when this section was written and is not counted as built
+here** — it is uncommitted and this pass did not verify it. Two cautions for whoever lands it: a
+`Host` allowlist stops **DNS rebinding** and does nothing about the ordinary cross-origin `POST` that
+requires no rebinding, so the `POST /apply` wipe above stays reachable from a bare form submit until
+(2) or (3) lands; and landing (1) is not evidence that (2) landed. Re-measure the route table.
 
 ## 5. HTTP Security Headers
 
@@ -220,24 +282,48 @@ anything else.
 
 ## 6. Upload and Request Limits
 
-The `Config Key` column names what the code actually reads. Several entries previously named `config.*` paths that **do not exist** — `AppConfig` (`src/server/config/index.ts:16-31`) exposes flat `host`, `port`, `dataDir`, `maxRequestSize`, and has no `attachments`, `search` or `pages` sub-objects.
+The `Config Key` column names what the code actually reads. Several entries previously named `config.*` paths that **do not exist** — `AppConfig` (`src/server/config/index.ts:15-29`) exposes flat `host`, `port`, `dataDir`, and has no `attachments`, `search` or `pages` sub-objects.
+
+**There is no global request ceiling, and this table must not be read as implying one.** Every row
+below is a *per-route* or *per-field* cap. Nothing bounds a request to a route that has no row.
 
 | Limit | Default Value | Enforced by | Status |
 |-------|--------------|-------------|--------|
-| Maximum attachment size | 50 MB | `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES`, `src/shared/constants/index.ts`; Hono `bodyLimit` at `src/server/attachments/attachment-routes.ts:6,144` — applied **before** the body is parsed, so an oversized upload is never buffered | Built |
-| Maximum request body size | 100 MB | `MAX_REQUEST_SIZE`, `src/shared/constants/index.ts:16` | **Defined but NOT enforced.** Declared at `:16`, imported at `src/server/config/index.ts:13`, typed at `:30`, assigned at `:53` — and read by nothing. No request path consults it, so no request is actually bounded by it. Do not cite it as a limit |
-| Maximum page JSON body (create/update) | 4 MB | `MAX_PAGE_JSON_BODY_BYTES`, `src/shared/constants/index.ts:20` | Built |
+| Maximum attachment size | 50 MB | `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES`, `src/shared/constants/index.ts:33`; Hono `bodyLimit` at `src/server/attachments/attachment-routes.ts:6,144` — applied **before** the body is parsed, so an oversized upload is never buffered | Built |
+| Maximum page JSON body (create/update) | 4 MB | `MAX_PAGE_JSON_BODY_BYTES`, `src/shared/constants/index.ts:19`; enforced at `src/server/routes/pages.ts:46,55` | Built |
+| Maximum schedule JSON body (entries, reminders, timetable presets) | 1 MiB | `MAX_SCHEDULE_JSON_BODY_BYTES`, `src/shared/constants/index.ts:28`; one shared reader at `src/server/routes/schedule.ts:30,35`, imported by `schedule-presets.ts` | Built — added in `138aa62` |
+| Maximum settings JSON body | 4 KiB | A private `MAX_SETTINGS_BODY_BYTES` at `src/server/routes/settings.ts:17,45` — a module-local constant, deliberately not promoted to shared config | Built |
 | Maximum HTML pane per page | 2 MiB UTF-8 | `MAX_HTML_BYTES`, `src/shared/schemas/html-content.ts:29,46` | Built |
-| Maximum CSS pane per page | 512 KiB UTF-8 | `MAX_CSS_BYTES`, `src/shared/schemas/html-content.ts:30` | Built |
-| Maximum JavaScript pane per page | 512 KiB UTF-8 | `MAX_JAVASCRIPT_BYTES`, `src/shared/schemas/html-content.ts:31` | Built |
-| Client-error report size | 8 KB | `Content-Length` and raw byte length, before JSON parsing — §10 | Built |
+| Maximum CSS pane per page | 512 KiB UTF-8 | `MAX_CSS_BYTES`, `src/shared/schemas/html-content.ts:30,47` | Built |
+| Maximum JavaScript pane per page | 512 KiB UTF-8 | `MAX_JAVASCRIPT_BYTES`, `src/shared/schemas/html-content.ts:31,48` | Built |
+| Client-error report size | 8 KB | `Content-Length` and raw byte length, before JSON parsing — `src/server/routes/client-errors.ts:90,95`, §10 | Built |
 | Client-error rate limit | 20 per minute → `429` | §10 | Built |
-| Maximum search query length | 500 characters | *No limit found* — no `maxQueryLength` in `src/` | **Not implemented** |
-| Maximum tags per page | 20 | *No limit found*, and **tags are not implemented as a feature**; the `page_tags` table does not exist in `migrations.ts` | **Not implemented** |
-| Maximum title length | 200 characters | *No limit found* in a page schema | **Not implemented** |
-| Import package size | — | *No import package cap is configured.* The general 100 MB request ceiling is **not** a substitute | **Not implemented** (§2.5) |
+| Client debug-event batch size | 32 KiB | `Content-Length` and raw byte length, before JSON parsing — `src/server/routes/client-debug-events.ts:89,94` | Built |
+| **Global request body ceiling** | — | *No such control exists.* `MAX_REQUEST_SIZE` (100 MB) was **deleted** in `138aa62` | **Not implemented** — see below |
+| Maximum search query length | 200 characters | `MAX_SEARCH_QUERY_LENGTH`, a module-local constant at `src/server/routes/pages.ts:24`, checked at `:81-88` before `listPages`; an over-long `q` is a `400` with an actionable message, never a silent clamp | Built — added in `476de71` |
+| Maximum tags per page | 20 | *No limit found*, and **tags are not implemented as a feature**; there is no `page_tags` table in `migrations.ts` and no `tags` field on either page schema | **Not implemented** |
+| Maximum title length | 200 characters | `z.string().min(1).max(200)` in both page schemas (`src/shared/schemas/pages.ts:4,29`), enforced at the route by `CreatePageSchema.safeParse` (`src/server/routes/pages.ts:108`) and `UpdatePageSchema.safeParse` (`:212`) — an over-long title is a `400` | Built |
+| Import package size | — | *No import package cap is configured, and there is no global request ceiling to fall back on* | **Not implemented** (§2.5) |
 
-The three unbuilt rows are limits a user can reach today, so they are real gaps rather than aspirational entries. The search row is the most exposed: `GET /api/pages?q=` takes a query string with no length bound (`src/server/routes/pages.ts:57,60`).
+**The only unbuilt row above is tags, and tags are not a reachable limit because the feature does not
+exist.** The rows that remain genuinely unbuilt are the global request ceiling and the import-package
+cap, both recorded above. This table previously listed the search term as unbounded at 500
+characters and the title as unbounded; both were wrong — the search ceiling was added in `476de71`
+and the title ceiling has always been in the schema. A row that reports a control as missing is as
+misleading as one that reports a dead constant as enforced, and both were corrected here.
+
+**On the deleted global ceiling — recorded so it is not reintroduced as a claim.** `MAX_REQUEST_SIZE`
+(100 MB) existed until `138aa62`. It was not merely unenforced: it was **unreachable**, because
+`createConfig()` is called only from tests — the runtime composition root uses
+`resolveRuntimePaths()` and never constructs an `AppConfig`. It was also a poor number: below Bun's
+own default transport ceiling of 128 MB and above every application-level cap in the table, so it
+could not have changed any reachable outcome. A 100 MB limit that reads like protection while
+governing nothing is worse than its absence, because every document naming it misleads the next
+reader. The correct place for a real backstop is a `bodyLimit` registered in `createApp()` — the
+composition root every security test exercises through `app.fetch`. **That backstop is still
+unbuilt**, and the deletion is not a fix. Per §13 of [`AGENTS.md`](../AGENTS.md): a constant that is
+declared, exported, typed and assigned but read by nothing is dead configuration, and a deleted
+constant is not evidence that the limit it named now exists.
 
 ## 7. SQLite Integrity
 
@@ -246,10 +332,21 @@ The three unbuilt rows are limits a user can reach today, so they are real gaps 
 - **Foreign keys are enforced** via `PRAGMA foreign_keys = ON` at every connection — `src/server/database/index.ts:98`.
 - **Transactions** wrap all multi-step operations. *Partly verified:* parameterised SQL with explicit `transaction(...)` calls lives in `src/server/repositories/` and `src/server/services/`. The parenthetical "backup creation" above this list is **not implemented** — see §8.
 - **Integrity check** runs on startup: `PRAGMA integrity_check` (`src/server/database/index.ts:130`). The helper returns true only when SQLite reports a single `"ok"` row (`:125-131`). *Note:* the earlier claim that a failed check starts the app in a **read-only mode** prompting a restore was not verifiable in `src/`; the read-only branch is not confirmed, and with no restore feature there would be nothing to restore from. Treat the read-only fallback as unverified until the backup work lands.
+- **The check throws rather than returning false on the worst corruption.** *Measured at `476de71`,
+  and it inverts what the bullet above implies:* `checkIntegrity()` has no `try`/`catch`, and
+  `PRAGMA integrity_check` does not always return rows to be judged. On a 60% truncation and on a
+  file that is not a database at all it **throws**; on a 300-byte truncation it returns five error
+  rows. So "returns true only for a single `ok` row" is correct but incomplete, and the intended
+  failure path is not reached for the corruption classes that matter most. At the call in
+  `src/server/bootstrap.ts` the exception propagates as a raw `SQLiteError` and the
+  `'Database failed integrity check'` log line never fires. Any validator built by reusing this
+  helper would crash instead of reject. See [KNOWN_BUGS.md](KNOWN_BUGS.md). *A fix adding the
+  `try`/`catch` was present in the working tree but uncommitted and unverified when this was
+  written, so it is not counted as built.*
 
 ## 8. Backup Validation
 
-**Not implemented.** Measured: 0 matches for a backup or restore feature in `src/`. The directory `data/backups/` is real and is created at startup (`src/server/bootstrap.ts:130,137`; `src/server/config/index.ts:96`), but nothing is ever written to it. `VACUUM` appears once, at `src/server/database/migrations.ts:405`, and only to re-apply `auto_vacuum`.
+**Not implemented.** Measured: 0 matches for a backup or restore feature in `src/`. The directory `data/backups/` is real and is created at startup (`src/server/bootstrap.ts:181,188`; `src/server/config/index.ts:93`), but nothing is ever written to it. `VACUUM` appears once, at `src/server/database/migrations.ts:405`, and only to re-apply `auto_vacuum`.
 
 The requirements below are unbuilt security work. **They must be satisfied before a restore endpoint exists** — a restore that validates nothing is a data-corruption and code-execution vector, which is why this section is kept rather than removed.
 
@@ -258,12 +355,75 @@ Before any restore operation begins, the backup service must validate:
 1. The ZIP archive is readable and not corrupted (CRC check).
 2. The archive contains a valid `manifest.json` with expected structure.
 3. The `rtwiki_version` in the manifest matches a compatible version range.
-4. The SQLite database inside the archive passes `integrity_check`.
-5. All attachment references in the manifest point to existing files in the archive.
+4. The SQLite database inside the archive opens, is a database, and passes `integrity_check` — **and a throw counts as failure**, per §7. `integrity_check` alone is not sufficient even when it passes cleanly.
+5. `PRAGMA foreign_key_check` returns zero rows. **Not covered by step 4** — SQLite documents that `integrity_check` "does not find FOREIGN KEY errors", and `foreign_keys = ON` (`src/server/database/index.ts:98`) means a restore leaving orphaned rows would otherwise pass. This is a separate, required step.
+6. All attachment references in the manifest point to existing files in the archive.
+7. **Schema compatibility is checked against the `_migrations` table, not `user_version`.** `user_version`
+   is never used anywhere in `src/`; the ordered list of applied migrations is
+   `src/server/database/migrations.ts`, guarded by `SELECT id FROM _migrations WHERE name = ?`
+   (`:435`). Reject if the backup's highest applied migration is unknown to the running build, or if
+   the build expects a migration the backup lacks. Both `user_version` and `_migrations` survive a
+   `VACUUM INTO`, so either would work — but only one authority should be used, and it must be the
+   one the runtime actually reads.
 
 If any validation step fails, the restore is aborted and the user is shown a clear error message.
 
-The one pre-existing safeguard this depends on is already real: `PRAGMA integrity_check` runs on startup and the check helper requires a single `"ok"` row (`src/server/database/index.ts:125-131`).
+The one pre-existing safeguard this depends on is already real: `PRAGMA integrity_check` runs on
+startup and the check helper requires a single `"ok"` row (`src/server/database/index.ts:125-131`) —
+with the throw behaviour in §7 as the gap in it.
+
+### 8.1 How a backup must be taken — measured constraints on unbuilt work
+
+The list above says what to validate. These are the measured facts that constrain *how to produce*
+the thing being validated, and each one closes off an approach that looks reasonable.
+
+**A plain file copy of `rtwiki.sqlite` is not a backup, and the failure is silent.** The database
+runs in WAL mode (`src/server/database/index.ts:97`), so the `-wal` file is part of its persistent
+state. SQLite's WAL documentation is explicit that separating a database from its WAL "might lose
+transactions that were previously committed". Measured against a live WAL database holding an
+uncheckpointed committed table in its `-wal`:
+
+```
+source -wal exists     true
+copy integrity_check   ["ok"]        <-- PASSES
+copy sees late table   0             <-- and the committed table is GONE
+```
+
+**A copy that passes `integrity_check` while having lost committed data would be accepted as good
+by every step in the list above.** That single measurement is the strongest argument for the
+mechanism below, and it is why step 4 cannot be the only check.
+
+**`VACUUM INTO` is the supported mechanism, and it is safe on a live database.** SQLite documents it
+as "an alternative to the backup API for generating backup copies of a live database", and states
+that while `VACUUM` is a write operation requiring the lock, **`VACUUM INTO` is not** — so it needs
+no exclusive lock and does not block writers. Measured on a live, actively-written WAL database:
+the command succeeded, the connection stayed open and writable, and the output returned
+`integrity_check = ok`. It has no `-wal` of its own, which removes a whole class of restore mistake.
+Two operational constraints come with it: the target "must not previously exist, or else it must be
+an empty file", and an interrupted run "might be incomplete and corrupt" — so a partial output must
+be deleted rather than offered for restore. It is not incremental, and it is not synchronised
+unless `PRAGMA synchronous` is `NORMAL` or `FULL`.
+
+**`PRAGMA synchronous` is currently never set** — 0 matches in `src/` or `scripts/`, so SQLite's
+compiled default applies. It is `FULL` in practice, which satisfies the guarantee above, but that
+rests on a build flag in a dependency RTWiki does not control. **Setting it explicitly would remove
+the assumption**, and is worth doing for a backup feature specifically.
+
+**Attachments are BLOBs, so a fully migrated database needs exactly one file — with one measured
+exception.** Bytes live in `attachments.data` (`src/server/database/migrations.ts:245`) and no route
+reads them from disk, so there is nothing else to copy. The exception:
+`dropStoredName()` (`:323-336`) deliberately **retains** the `stored_name` column when any row still
+has `data IS NULL`, and logs `attachment_backfill_incomplete`. A database in that state still has
+bytes in `data/attachments/`, so **that** database needs the directory too. A backup routine must
+detect it with `SELECT count(*) FROM attachments WHERE data IS NULL` and either back up the directory
+or refuse — silently omitting it is exactly the content loss `AGENTS.md` §4 forbids.
+
+**A standing check, not a one-off:** the bundled SQLite version is a property of the **Bun**
+version, not of anything `package.json` pins, so no dependency bump would ever flag it. Measured
+here: Bun 1.4.2 ships SQLite **3.53.2**. SQLite documents a WAL-reset bug that "is likely present in
+all versions of SQLite from 3.7.0 through 3.51.2" and is "fixed in version 3.51.3 and later", so the
+current build is above it — but a Bun downgrade below 3.51.3 would silently introduce a corruption
+bug. Re-check this whenever the Bun version changes.
 
 ## 9. No Secrets in Git
 
@@ -363,6 +523,7 @@ rules keep the web content untrusted even inside the native window:
 ## 11. Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — where sanitization and validation happen in each layer
+- [KNOWN_BUGS.md](KNOWN_BUGS.md) — the measured defects behind §4.1, §6 and §7, with their evidence
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding standards that enforce these requirements
 - [DATA_MODEL.md](DATA_MODEL.md) — soft-delete and attachment safety in the data layer
 - [CI_CD.md](CI_CD.md) — security linting and static analysis in the build pipeline

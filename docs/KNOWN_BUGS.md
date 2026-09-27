@@ -294,6 +294,38 @@ below. The fix belongs in the autosave controller (hold the content for a retry 
 page) or in the close/switch confirmation, which is where `isAutosaveDirty` already feeds the prompt
 for the ordinary unsaved case. The failed-save case is the one that never reaches it.
 
+**The loss surface is narrower than the entry above implies, and the gap is elsewhere.** Measured:
+the controller deliberately keeps the payload on failure (`// Do NOT clear pendingContent - preserve
+for retry`, `autosave-controller.ts:156`), and a retry **is** wired to the UI in two places — the
+status bar (`status-bar.tsx:361`, `data-testid="status-retry"`) and the Rich Note's own alert. So
+while the tab stays open, a failed save is recoverable by a visible button, not lost. The two real
+losses are:
+
+- **Close, reload or navigate away inside the 2,000 ms debounce window.** `dispose()` sets
+  `disposed = true` and calls `clearTimer()` (`autosave-controller.ts:238-241`), so up to two seconds
+  of typing disappears with no prompt and no flush. There is **no `beforeunload`, `pagehide` or
+  `unload` handler anywhere in `src/`** — the only lifecycle listener is a `visibilitychange` in an
+  unrelated feature (`schedule-notifications.tsx:24,27`).
+- **Close or reload while `status === 'error'`.** The pending content lives in component state, so a
+  remount loses it and the retry button cannot help a user who has already closed the tab.
+
+**A close prompt is the wrong fix for the first one, and saying so is part of the entry.** The
+pending amount is at most two seconds of typing, the failure is already surfaced visibly, and a
+prompt firing on every close of a healthy document trains the user to dismiss it — destroying its
+value on the one occasion it matters. Flushing the controller on `visibilitychange → hidden`, with
+`pagehide` as a fallback, narrows the window to near zero for ordinary use and adds no prompt. MDN
+recommends exactly this pair over `beforeunload`, and `beforeunload` is additionally unreliable
+against the back/forward cache.
+
+**Not a fix, deliberately:** the alternative is persisting the draft to `IndexedDB` per change and
+recovering on mount. That trades a two-second window for a **second, unencrypted copy of private note
+content in the browser profile**, surviving the app, which the privacy posture built around "the data
+lives in `data/rtwiki.sqlite` beside the executable" does not cover. It also needs an explicit
+staleness policy — a recovered draft older than the server copy must not silently overwrite newer
+work. **The performance cost of that option on this codebase is unmeasured** and should not be
+guessed: the handler already runs `JSON.stringify(editor.document)` on every change, so a draft write
+is not a new class of work, but the actual number is not established.
+
 ### `isDirty` now means two different things, and only one of them is read
 
 The visual workspace uses `useAutosave`'s own `isDirty` — `dirty || error`,
@@ -376,6 +408,193 @@ the server's `SEARCH_MAX_BLOCK_DEPTH` and with the same defined behaviour — re
 everything already collected, stop, never throw. The client cannot import the server constant, so the
 equality is asserted by a test rather than assumed. Without it, a hand-edited document nested without
 bound would exhaust the stack while the dashboard was merely drawing a card.
+
+### **Any web page open in the user's own browser can write to the server**
+
+**Impact: high, and it is the only finding in this list that is remotely reachable without physical
+access to the machine.** Measured from the code, not inferred.
+
+`isSameOrigin()` exists and works (`src/server/utils/request-origin.ts:16-44`). It is called on
+**5 route files** — attachments, settings, shutdown, client-errors, client-debug-events — and on
+**none of the three that write user content**. Of the 25 mutating routes in `src/server/`, **17
+perform no origin check at all**:
+
+| Route | Method | Origin check | Reachable from another site |
+|---|---|---|---|
+| `pages.ts:99` `POST /api/pages` | POST | **No** | **YES** |
+| `pages.ts:235` `POST /api/pages/:id/move` | POST | **No** | needs an id |
+| `pages.ts:261` `POST /api/pages/:id/duplicate` | POST | **No** | needs an id |
+| `pages.ts:276` `POST /api/pages/:id/restore` | POST | **No** | needs an id |
+| `pages.ts:180` `PATCH /api/pages/:id` | PATCH | **No** | No — preflight |
+| `pages.ts:291,306` `DELETE` | DELETE | **No** | No — preflight |
+| `schedule.ts:65` `POST /api/schedule/entries` | POST | **No** | **YES** |
+| `schedule.ts:136` `POST /api/schedule/reminders` | POST | **No** | **YES** |
+| `schedule.ts:95,115,166,186` | PATCH/DELETE | **No** | No — preflight |
+| `schedule-presets.ts:28` `POST /api/schedule/presets` | POST | **No** | **YES** |
+| `schedule-presets.ts:79` `POST /apply` | POST | **No** | **YES — and it destroys data.** See below |
+| `schedule-presets.ts:47,67` | PATCH/DELETE | **No** | No — preflight |
+
+**The mechanism, and why nothing else stops it.** A cross-origin `POST` whose `Content-Type` is one
+of the CORS-safelisted values — `text/plain` is enough — is a *simple request*: no preflight is
+sent, and the browser sends it unconditionally. CORS governs whether the attacker's JavaScript may
+**read the reply**, never whether the request is dispatched. RTWiki has **no** CORS middleware (0
+matches for `hono/cors` or `Access-Control-Allow-Origin` in `src/`), and its JSON readers never
+inspect `Content-Type` — `readJsonBody` (`pages.ts:44-65`) calls `c.req.text()` and `JSON.parse`s
+whatever arrives, so the safelisted header and a JSON body coexist without objection. The reply is
+opaque, and the attacker does not need it.
+
+`PATCH`, `PUT` and `DELETE` are a different case and are **not** reachable: an HTML `<form>` cannot
+send them, and `fetch()` triggers a preflight that RTWiki answers through `app.notFound`
+(`app.ts:218`) with no CORS headers, so the browser never dispatches the real request. Saying
+"every route is exposed" would overstate it; saying "no write route is exposed" would understate it.
+
+**The loopback bind does not cover this, which is the part that is easy to get wrong.** Binding
+`127.0.0.1` stops a *remote host*. It does nothing about a page in the user's **own** browser, and
+RTWiki starts a browser tab itself on every launch unless `--no-open` is passed. For a study-notes
+app on a shared family PC — the stated deployment — the user is browsing the web at the same time.
+
+**What an attacker can actually achieve, bounded honestly.** Without reading any response they can
+**create** pages, timetable entries, reminders and presets — four write routes that need no prior
+identifier — and, on a fifth, **destroy the timetable outright**. Page `content` is `z.string()`
+with no server-side validation (`CreatePageSchema`, `src/shared/schemas/pages.ts:3-10`), so nothing at
+the API boundary refuses attacker-chosen text. The move, duplicate, restore and delete routes are
+equally unprotected but need a page UUID that cannot be read cross-origin, so they are not
+practically reachable today.
+
+**The worst of them: `POST /api/schedule/presets/apply` wipes the user's study schedule.** With
+`mode: "replace"`, `applyPreset` (`src/server/services/schedule-service.ts`) runs
+`repo.deleteAllScheduleEntries(db)` and `repo.deleteAllReminders(db)` — unqualified
+`DELETE FROM schedule_entries` and `DELETE FROM reminders` — inside one transaction, then inserts
+the preset's contents. The `source` is **not** required to name an existing record: the `builtin`
+branch takes any **key string**, and the three valid keys are literal, obvious and enumerable —
+`builtin:blank`, `builtin:school`, `builtin:exam` (`src/shared/schedule/presets.ts:11,19,75`). An
+attacker needs no identifier, no reconnaissance, and no knowledge of the victim's data. The shortest
+possible request is:
+
+```
+POST http://127.0.0.1:8080/api/schedule/presets/apply
+Content-Type: text/plain
+
+{"source":{"type":"builtin","key":"builtin:blank"},"mode":"replace"}
+```
+
+`builtin:blank` is `data: { periods: [], reminders: [] }` (`presets.ts:16`). So the deletes run and
+the inserts add nothing: **every timetable period and every reminder is permanently gone**, in one
+request, from a web page the user merely visited. An unknown key is refused by `resolvePresetData`
+*before* the transaction opens, so the attacker must supply a valid one — and all three are guessable
+from the product's own vocabulary. This is data destruction, not defacement, and it is the single
+most severe finding in this document.
+
+**The rest is not script execution, and that distinction is worth keeping precise.** An injected
+`html` page renders inside the sandboxed `<iframe>` on an opaque origin with `connect-src 'none'`, so
+it cannot read or call the API. The realistic impact of the other four routes is therefore
+**persistent attacker-chosen content written into a private local wiki** — spam, defacement, and
+content the user later opens believing it is their own — which is serious for an application whose
+entire value is that the notes in it are the user's, but is not code execution and not a wipe.
+
+**The one control that closes the DNS-rebinding variant, and it is the one that is missing.** Under
+rebinding the browser believes the request is same-origin, so it sends **no** `Origin` and **no**
+`Sec-Fetch-Site` — and `isSameOrigin` reaches its final `return true` at
+`request-origin.ts:43`, the branch documented as the CLI/automation path. Validating the **`Host`**
+header is what distinguishes the attack, because it is the one header the browser still sends
+attacker-influenced. There is no `Host` validation in `src/` (0 matches for `allowedHosts`,
+`hostAllow`, or reading the `host` header), and there are no cookies anywhere, so `SameSite` has
+nothing to protect. RTWiki's own Tauri shell already does the equivalent check on navigation
+(`src-tauri/src/main.rs:429-431`), so the pattern exists in the codebase — but the shell does not
+protect the HTTP server, which is reachable from a browser tab regardless of which shell launched
+it.
+
+**Next step, in order.** (0) `POST /api/schedule/presets/apply` with `mode: "replace"` is
+unqualified bulk deletion reachable cross-origin — if only one route is fixed, fix that one, and make
+"replace" require a named existing source instead of accepting an arbitrary key string. (1) A `Host`
+allowlist middleware in `createApp()` permitting only `127.0.0.1[:port]`, `localhost[:port]` and the
+configured host — this is the only control that stops rebinding, and the only one that covers all 17
+unprotected routes at once. (2) Apply `isSameOrigin` to the unprotected routes, or hoist it to one
+`app.use` covering all unsafe methods; the helper exists and is tested, so this is small. (3)
+Requiring `Content-Type: application/json` in the body readers — cheap, and worth doing, but on its
+own it only defends against the `text/plain` variant, because such a `fetch` would preflight and fail
+anyway. A per-process token in a custom header is the durable answer and the model every comparable
+loopback product chose, but it is a larger change that must not live in `localStorage`, and it does
+not replace (1) or (2).
+
+**What was not established.** No live cross-origin page was run against a running server, so the
+chain is established from the code and from the CORS and Fetch-Metadata specifications, not from an
+executed exploit. What would settle it end to end is a page served from a second origin asserting
+that a page is created by `POST /api/pages` with `Content-Type: text/plain`, and — the one that
+matters — that `GET /api/schedule/entries` afterwards returns nothing. See [SECURITY.md](SECURITY.md)
+§4.1 for the requirement this fails.
+
+> **Measured at commit `476de71`, and a fix was in flight in the working tree when this entry was
+> written.** `src/server/utils/request-host.ts` had appeared and was being registered in
+> `createApp()` as a `Host` allowlist on every request — requirement (1) below. That work is
+> **uncommitted and unverified here**, so it is not counted as built. Two things are worth saying
+> about it anyway, because they are properties of the fix rather than of the fix's completeness:
+> a `Host` allowlist stops **rebinding**, but it does nothing about the plain cross-origin `POST`
+> that needs no rebinding at all — the `POST /apply` wipe above is reachable from a bare form
+> submit; and `isSameOrigin()` was **still** not called from `pages.ts`, `schedule.ts` or
+> `schedule-presets.ts`, so requirement (2) remained unmet. Whoever lands this must re-measure the
+> route table rather than assume the allowlist closed it.
+
+### A double-clicked `RTWiki.exe` closes the window its own error message is printed in
+
+**Measured, and it is a visibility defect rather than a reporting one.** The message is correct; it
+is written into a stream nobody is watching.
+
+- `build/server/RTWiki.exe` is a PE32+ x64 image with **Subsystem 3**
+  (`IMAGE_SUBSYSTEM_WINDOWS_CUI`), read from the file header. A console-subsystem process launched by
+  double-click gets a console window that appears and closes as the process exits.
+- `src/server/index.ts:132-135` is `main().catch(async (err) => { await reportFatalStartupError(err);
+  process.exitCode = 1 })` — no pause, no wait, no dialog.
+- `reportFatalStartupError` (`src/server/fatal.ts:28-29`) writes to **stderr first**, then the log.
+  `stderr` is bound to that closing window.
+
+**The commonest fatal cause has a specific fix that the user is never shown.** An unwritable install
+folder now produces an actionable message naming the directory, the OS error and three remedies
+(`138aa62`) — and a user who cannot write to `Program Files` is exactly the user who needs to read
+it. `fatal.ts` fixed the *log-write* half of "a diagnostic nobody reads" and left the
+*terminal-visibility* half open. `138aa62` says so in its own commit message and does not claim
+otherwise; the gap is recorded here so it is not rediscovered as a surprise.
+
+**Next step:** pause on the fatal path only, guarded by `!process.stdin.isTTY` so a script or CI
+launch does not hang. Roughly ten lines, no dependency. Honest limit: it makes the message
+*readable*, not *actionable*. `bun:ffi` → `MessageBoxW` would be the fatal-only GUI option, but
+Bun's own documentation calls `bun:ffi` experimental and advises against it in production, and
+whether `dlopen` survives `bun build --compile` is unestablished. A window subsystem is not the
+answer either: it removes the console from *normal* operation, which is the diagnostic surface
+`fatal.ts` exists to use.
+
+### `checkIntegrity()` throws on severe corruption instead of reporting failure
+
+**The rule a validator needs is half of what it looks like.** `checkIntegrity()`
+(`src/server/database/index.ts`) calls `db.query('PRAGMA integrity_check').all()` with **no
+`try`/`catch`**, and the pragma does not always return rows to be judged. Measured on the bundled
+SQLite 3.53.2:
+
+| Corruption | `integrity_check` | `quick_check` |
+|---|---|---|
+| intact | `["ok"]` | `["ok"]` |
+| truncated by 300 bytes | 5 error rows | 5 identical rows |
+| truncated to 60% | **throws** `database disk image is malformed` | **throws** the same |
+| not a database at all | **throws** `file is not a database` | — |
+
+So "returns true only when SQLite reports a single `ok` row" is correct but incomplete: on the
+corruption classes that matter most, the helper **crashes instead of returning false**, and a
+restore validator built by reusing it would reject nothing and die instead.
+
+**Two consequences beyond the helper itself.** At `bootstrap.ts` the call is unwrapped, so
+severe corruption propagates as a raw `SQLiteError` and the intended `'Database integrity check
+failed'` log line never fires — the diagnostic designed for exactly this case is the one
+the exception pre-empts. And the read-only fallback described in [SECURITY.md](SECURITY.md) §7 is
+unreachable for this corruption class, which is a further reason to treat that branch as unverified.
+
+**Next step:** wrap the pragma and treat a throw as failure, keeping the single-`ok`-row test for
+the cases that do return rows. `src/server/app.ts` is already inside a `try` and is unaffected.
+
+> **Measured at commit `476de71`.** A fix was in the working tree when this entry was written —
+> `checkIntegrity()` gained a `try`/`catch` that returns `false` — but it is **uncommitted and
+> unverified here**, so this entry records the state of `476de71` and must be closed by whoever
+> lands the fix, with the same discipline as any other entry in *Recently fixed*. The underlying
+> measurement, that the pragma throws rather than answering, is unaffected either way.
 
 ## Recently fixed
 
@@ -663,6 +882,85 @@ that mapping — the rich editor, the markdown workspace and the HTML editor all
 closes the loop: `mapAutosaveStatus` switches exhaustively over `AutosaveStatus` with no default
 branch, so adding a case to `AutosaveStatus` without handling it there is a **compile** error. A new
 state cannot be added and silently un-mapped, which is exactly the failure the cast was suppressing.
+
+### Ctrl+K could write the search term into the open note, and autosave it
+
+**Impact: high — it destroyed user data, and the keystrokes were never visible in the finder.**
+
+Press Ctrl+K on a Rich Note, start typing a page title, and a run of characters could land in the
+document instead of the search box. The debounced autosave then persisted them. The finding that made
+this worth chasing was not the assertion but its *shape*: the character where the input stopped
+receiving text moved between runs (3 characters one run, 20 the next), and a character-by-character
+cut at a shifting offset is a focus race, not a search bug.
+
+**Two independent defects, either of which is sufficient to corrupt the note.**
+
+1. **The modal's focus trap overrode `autoFocus`.** Mantine's `Modal` wraps its content in
+   `useFocusTrap` (`node_modules/@mantine/hooks`), which chooses an initial focus target on a
+   `setTimeout(0)` — one macrotask *after* React has already applied `autoFocus`. It picks an element
+   carrying `data-autofocus`, and failing that **the first tabbable descendant**. The finder Modal sets
+   a `title`, so `withCloseButton` defaults to true, and the close button precedes the body in DOM
+   order. Measured in the browser: the input received focus at t=1199 ms and the trap moved it to
+
+   ```html
+   <button class="mantine-focus-auto mantine-active … mantine-Modal-close …">
+   ```
+
+   at t=1218 ms. The search box therefore never held focus for the whole session, and the
+   `autoFocus` prop was decorative.
+
+2. **The rich editor's post-mount focus poll treated any button as reclaimable.** `rich-editor.tsx`
+   re-asserts focus into the document for 1.2 s after mount — deliberately, because a closing Mantine
+   Modal restores focus to its *trigger* button — and its grace list covers `input`, `textarea`,
+   `contenteditable`, `role=tree/tab/tablist` but not buttons. So a button inside an open dialog was
+   read as "the trigger", and 1 ms after the trap focused the close button the poll moved the caret
+   into the document. Mantine's trap does not pull focus back: `useFocusTrap` focuses once on mount
+   and thereafter only handles Tab, so once focus escapes, it stays escaped.
+
+**How the finder was dismissed — the part that was not obvious.** Neither of `setFinderOpen`'s two call
+sites should have fired: the needle contains no `k`, and `keyboard.type` sends no clicks. The trace
+shows the finder was closed by **a Space activating the close button the trap had focused**, because a
+`<button>` is activated by Space. The needle `Finder Needle 1756534…` contains spaces. In the traced
+run the sequence was: trap → close button (t=1235), keystrokes to the button (t=1250–1284), Space at
+t=1261 fires a synthetic `click`, the `onClick` stack reaches the `onClose` prop, the finder unmounts,
+and the remaining characters are typed into the document behind it. `openRow`'s result buttons have
+the same property, so a Space on a focused result row also opens that page.
+
+**Fixed** in two places. `quick-finder.tsx` now carries `data-autofocus` on the search input, which is
+Mantine's documented way to tell the trap where focus belongs, so the trap agrees with `autoFocus`
+instead of overriding it. `rich-editor.tsx` adds `[role="dialog"]` to the poll's grace selector, so a
+focus target inside an open dialog is never stolen from. The poll's original intent is intact:
+`useFocusReturn` moves focus back out of the dialog ~10 ms after it closes, so by the time the poll
+observes the trigger button the dialog is no longer an ancestor and the trigger is still reclaimable.
+`tests/browser/connect-find.pwspec.ts` pins both halves — the input keeps every character *and* the
+open document keeps none, checked against the status bar's word/char tally so a needle cannot hide
+from it.
+
+**The trap worth keeping: `.fill()` is not a user.** The sibling step that searched for body text used
+`locator.fill()`, which assigns the value directly and emits no key events at all. It had never
+flaked, in any run, because it never needed focus. The one step that typed for real was the one that
+failed. A suite can be green on a path no human takes; `keyboard.type` is not redundant with `fill`,
+it is the only one of the two that exercises focus.
+
+**Harness trap, same class as the PDF one.** The failure snapshot showed the finder "entirely absent",
+which reads as "something closed the modal and nothing is wrong with focus". It was the *timing*: the
+finder was still in its 200 ms exit transition when the snapshot was taken, so `toHaveCount(0)` was
+not yet true while `inputCount` measured 1. The modal had genuinely closed — but the trace, not the
+snapshot, is what identified the Space activation.
+
+### The same `autoFocus` defect is still live in the New page dialog
+
+**Found, not fixed — outside the file partition of the pass that found it.**
+
+`src/web/features/pages/new-page-dialog.tsx:92` puts `autoFocus` on the Title `TextInput` inside a
+`Modal` with a `title`, so `withCloseButton` is on and `useFocusTrap` moves initial focus to the close
+button by exactly the mechanism measured above. Consequence: opening *New page* and typing leaves the
+first characters in the title field, which reads as the field ignoring the keyboard. There is no data
+loss — the field is not a document and nothing is autosaved — but the fix is the same one line
+(`data-autofocus` on that `TextInput`).
+
+`src/web/features/rich-editor/wiki-link.tsx:144` also uses `autoFocus`, but its `TextInput` is inside a
+`Popover`, which does not use `useFocusTrap`. Checked and not affected.
 
 ---
 
