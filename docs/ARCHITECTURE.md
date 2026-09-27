@@ -240,8 +240,16 @@ A v1 page is not rewritten when it is read. It reads as a one-block page and bec
 time it is saved, which is why an old page and a new page can sit in the same database with no
 migration step.
 
-**Current state:** storage and parsing hold several diagrams. The workspace still edits one diagram
-at a time and there is no reordering UI yet — see [KNOWN_BUGS.md](KNOWN_BUGS.md).
+**Current state:** a Diagram or Mind Map page renders every block it holds, each as its own card with
+its own render state. Actions are per block — edit, move up, move down, remove — plus an **Add
+diagram** button that appends a starter diagram. A page-level **Refresh** re-renders every block; a
+failed block offers **Retry** for itself alone, so one broken diagram no longer replaces the page's
+canvas.
+
+Reordering is offered as **Move up / Move down** rather than only as a drag. Both produce the same
+order, but buttons are reachable from the keyboard and name themselves to a screen reader, whereas a
+drag handle is neither. The order goes through the same shared `reorderByIds` rule the tab strip
+uses, so a block can never be dropped or duplicated by a malformed order.
 
 ## 5. Lazy Loading
 

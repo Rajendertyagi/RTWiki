@@ -6,10 +6,11 @@ entry inherited from an earlier pass is marked as such rather than presented as 
 
 Last reviewed: 2026-09-27, on branch `feat/document-attachments`.
 
-**Not yet built, and recorded here so it is not mistaken for done:** a visual page can now *store*
-several diagrams (content v2, ordered blocks, 50-block cap), but the workspace still edits one
-diagram at a time and there is no reordering UI yet. The storage and parsing half is done and
-tested; the view and the drag-to-reorder are the remaining work.
+**Multi-block diagram pages are done:** a page renders every diagram it holds, each as its own card
+with its own render state, and each can be edited, moved up or down, or removed. Verified by
+`tests/browser/visual-multi-block.pwspec.ts`. Reordering is buttons rather than drag, deliberately —
+see [ARCHITECTURE.md](ARCHITECTURE.md) for why, and for the fact that drag-to-reorder is *not*
+included.
 
 **Likewise for documents:** the whole backend exists, is tested, and **cannot be reached from the
 interface** — there is no control that attaches one. See item 8.
