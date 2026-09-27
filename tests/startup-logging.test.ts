@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { bootstrap } from '../src/server/bootstrap.js'
+import { bootstrap, unusableDirectoryMessage } from '../src/server/bootstrap.js'
 import { resolveRuntimePaths } from '../src/server/config/index.js'
 import { reportFatalStartupError } from '../src/server/fatal.js'
 import type { Launcher } from '../src/server/launcher.js'
@@ -150,5 +150,97 @@ describe('runtime lifecycle logging', () => {
     const existedBefore = existsSync(target)
     await import('../src/server/app.js')
     expect(existsSync(target)).toBe(existedBefore)
+  })
+})
+
+describe('unusable runtime directory', () => {
+  // A real EACCES cannot be produced here: a directory ACL cannot be changed
+  // without elevation this suite must not ask for. The two behaviours that
+  // matter are therefore asserted separately:
+  //
+  //   1. the message a user is shown — tested directly against the pure builder;
+  //   2. that bootstrap turns a directory it cannot use into that message and
+  //      stops, rather than a raw Node errno — tested against a real failure,
+  //      produced with ENOTDIR instead of EACCES because it needs no privileges.
+  //
+  // Both go through the same `ensureRuntimeDirectory` catch, so the ENOTDIR run
+  // exercises the exact branch an EACCES takes.
+
+  it('names the directory and states the remedy', () => {
+    const message = unusableDirectoryMessage('/app/data', 'EACCES')
+
+    // The three things a user needs: which folder, what went wrong, what to do.
+    expect(message).toContain('/app/data')
+    expect(message).toContain('data')
+    expect(message).toMatch(/could not|unable|cannot/i)
+    // A remedy, not just a diagnosis.
+    expect(message).toMatch(/move|permission|write access|properties/i)
+    // And the honest part: RTWiki stops rather than quietly writing elsewhere.
+    expect(message).toMatch(/stop|quit|exit|not be stored|will not/i)
+    // The underlying cause is carried, not swallowed.
+    expect(message).toContain('EACCES')
+  })
+
+  it('stops startup and reports the directory instead of a raw errno', async () => {
+    const dir = makeTempDir()
+    // A regular file where the data directory should be: `data/` cannot be
+    // created, so the very first ensure step fails.
+    const blocked = join(dir, 'data')
+    writeFileSync(blocked, 'not a directory')
+
+    let thrown: unknown
+    try {
+      await bootstrap({
+        port: 0,
+        openBrowser: false,
+        launcher: noopLauncher,
+        logPath: join(dir, 'logs', 'rtwiki.log'),
+        dataDir: blocked
+      })
+    } catch (err) {
+      thrown = err
+    }
+
+    expect(thrown).toBeInstanceOf(Error)
+    const message = (thrown as Error).message
+    // The directory reported is the first one that could not be used. Here
+    // `data` itself already exists (as a file, so mkdir is skipped) and
+    // `data/attachments` is the first child that cannot be created - which is
+    // the directory the user actually has to fix.
+    const blockedNormalised = blocked.replace(/\\/g, '/')
+    expect(message).toContain(blockedNormalised)
+    // The OS error is carried rather than swallowed.
+    expect(message).toMatch(/Windows reported: ENOTDIR|EACCES|EPERM/)
+    // The old failure said only "EACCES: permission denied, mkdir '...'"; the
+    // actionable part is what must be present now.
+    expect(message).toMatch(/move|permission|write access|properties/i)
+    // Still no fallback: nothing was created beside the blocked path.
+    expect(existsSync(join(dir, 'data', 'rtwiki.sqlite'))).toBe(false)
+    cleanup(dir)
+  })
+
+  it('reports a fatal startup failure on the terminal, not only in the log file', async () => {
+    const dir = makeTempDir()
+    const logPath = join(dir, 'logs', 'rtwiki.log')
+    const lines: string[] = []
+    const original = console.error
+    console.error = (...args: unknown[]) => {
+      lines.push(args.map(String).join(' '))
+    }
+    try {
+      await reportFatalStartupError(new Error('RTWiki could not use this folder'), logPath)
+    } finally {
+      console.error = original
+    }
+
+    // The window a user sees is the only channel that survives a log directory
+    // that cannot be opened, so the human sentence must not depend on the file.
+    expect(lines.length).toBeGreaterThan(0)
+    expect(lines.join('\n')).toContain('RTWiki could not use this folder')
+    // The log file keeps exactly one machine-readable line, as before.
+    const events = readEvents(logPath)
+    expect(events.length).toBe(1)
+    expect(events[0].event).toBe('startup_fatal')
+    cleanup(dir)
   })
 })

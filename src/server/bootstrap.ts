@@ -59,6 +59,57 @@ export interface ExistingInstanceResult {
 }
 
 /**
+ * Explains a directory RTWiki cannot use, in words a user can act on.
+ *
+ * The failure this replaces was a bare `EACCES: permission denied, mkdir '...'`
+ * thrown out of `mkdirSync` before the logger existed. It named no folder in
+ * RTWiki's own terms, offered no remedy, and — because a protected folder
+ * usually protects its log directory too — could not be written down either.
+ *
+ * Exported and kept free of side effects so the exact words a user reads can be
+ * asserted directly. A real EACCES cannot be produced in a test without changing
+ * a directory ACL, which needs elevation; the branch is therefore covered by
+ * this builder plus a real (privilege-free) failure through the same catch.
+ */
+export function unusableDirectoryMessage(dir: string, cause?: unknown): string {
+  const lines: string[] = ['RTWiki could not use this folder to store your notes:', `  ${dir}`]
+  const reported = errorCodeOf(cause)
+  if (reported !== null) {
+    lines.push(`  Windows reported: ${reported}`)
+  }
+  lines.push(
+    '',
+    'To fix this:',
+    '  1. Move the RTWiki folder somewhere you have write access, such as your',
+    '     Documents folder, then start RTWiki again.',
+    '  2. Or give your user permission to write there: right-click the folder,',
+    '     choose Properties, clear Read-only, and tick "Allow access" for you.',
+    '  3. Installing into Program Files, or antivirus or corporate security',
+    '     software, is the usual cause. RTWiki keeps its data beside the program',
+    '     and will not store it anywhere else.',
+    '',
+    'RTWiki has stopped.'
+  )
+  return lines.join('\n')
+}
+
+/**
+ * The OS error code, or the message when there is no code.
+ *
+ * Node's errno (`EACCES`, `EPERM`, `ENOSPC`, `ENOTDIR`) is the part a user can
+ * look up; the full message restates the path that is already named above it.
+ */
+function errorCodeOf(cause: unknown): string | null {
+  if (cause === undefined || cause === null) return null
+  if (typeof cause === 'string') return cause
+  if (cause instanceof Error) {
+    const code = (cause as NodeJS.ErrnoException).code
+    return typeof code === 'string' ? code : cause.message
+  }
+  return String(cause)
+}
+
+/**
  * Probes the port to detect whether an existing RTWiki instance is already running.
  *
  * Returns `null` if the port is free or occupied by a different application.
@@ -132,11 +183,11 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   // ADR-005 portable layout plus one legacy directory: `attachments/` is where a
   // database created before ADR-014 still keeps its image files, and the
   // migration reads from it. It is no longer written to.
-  ensureDirectory(dataDir)
-  ensureDirectory(attachmentsDir)
-  ensureDirectory(backupsDir)
-  ensureDirectory(paths.logDir)
-  ensureDirectory(paths.frontendDistDir)
+  ensureRuntimeDirectory(dataDir)
+  ensureRuntimeDirectory(attachmentsDir)
+  ensureRuntimeDirectory(backupsDir)
+  ensureRuntimeDirectory(paths.logDir)
+  ensureRuntimeDirectory(paths.frontendDistDir)
 
   // The logger constructor eagerly creates <logDir>/rtwiki.log, so it must be
   // constructed only after the directory exists.
@@ -220,9 +271,12 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   try {
     await Bun.write(writeTest, 'test')
     rmSync(writeTest, { force: true })
-  } catch {
+  } catch (err) {
     logger.error('Data directory is not writable', { event: 'startup', action: 'abort' })
-    throw new Error('RTWiki data directory is not writable')
+    // The directory exists but cannot be written to, which is the case the
+    // mkdir above cannot catch. Same words, same remedy: the user is told which
+    // folder and what to do about it rather than being handed an errno.
+    throw new Error(unusableDirectoryMessage(dataDir, err))
   }
 
   const db = initDatabase(dataDir)
@@ -298,8 +352,23 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   }
 }
 
-function ensureDirectory(dir: string): void {
-  if (!existsSync(dir)) {
+/**
+ * Creates a runtime directory if it is missing, or explains why it cannot.
+ *
+ * Every one of these directories lives beside the executable (ADR-005), so a
+ * failure here is always the same user problem with the same remedy: the folder
+ * RTWiki was installed into cannot be written to. It must not fall back to
+ * another location, so this throws and startup stops.
+ *
+ * The error is raised here, before the logger exists, so the message has to be
+ * complete on its own — the fatal reporter can only write it down if the log
+ * directory is also usable, and often it is not.
+ */
+function ensureRuntimeDirectory(dir: string): void {
+  if (existsSync(dir)) return
+  try {
     mkdirSync(dir, { recursive: true })
+  } catch (err) {
+    throw new Error(unusableDirectoryMessage(dir, err))
   }
 }

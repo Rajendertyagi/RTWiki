@@ -1,18 +1,47 @@
+import { MAX_SCHEDULE_JSON_BODY_BYTES } from '@rtwiki/shared/constants'
 import { reminderSchema, scheduleEntrySchema } from '@rtwiki/shared/schemas/schedule'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { getDb } from '../database/index.js'
 import * as service from '../services/schedule-service.js'
 
-type BodyResult = { ok: true; body: unknown } | { ok: false; error: string }
+const requestTextEncoder = new TextEncoder()
 
-async function readJson(c: Context): Promise<BodyResult> {
+/** A JSON body that was read and parsed, or a response the caller must return. */
+export type JsonBodyResult = { ok: true; body: unknown } | { ok: false; response: Response }
+
+/**
+ * Reads a schedule/preset JSON request body under an enforced byte ceiling.
+ *
+ * Shared by the schedule and schedule-preset routes so the ceiling has exactly
+ * one definition: Content-Length is checked first (a cheap refusal that never
+ * reads the body), then the byte length of the text actually read (authoritative,
+ * and the only check that applies to a chunked request with no declared length).
+ * Malformed and empty bodies stay 400s — a client that sent bad JSON must not be
+ * told it sent too much and go looking in the wrong place.
+ *
+ * This is the same contract as `readJsonBody` in `routes/pages.ts`, which is
+ * currently owned by a separate in-flight change and still carries its own
+ * private copy. When that file is next editable both should read this one; the
+ * seam is here rather than in a third copy of the same check.
+ */
+export async function readJson(c: Context): Promise<JsonBodyResult> {
+  const contentLength = Number(c.req.header('content-length') ?? '0')
+  if (Number.isFinite(contentLength) && contentLength > MAX_SCHEDULE_JSON_BODY_BYTES) {
+    return { ok: false, response: c.json({ error: 'Request body too large' }, 413) }
+  }
+
+  const text = await c.req.text()
+  if (requestTextEncoder.encode(text).byteLength > MAX_SCHEDULE_JSON_BODY_BYTES) {
+    return { ok: false, response: c.json({ error: 'Request body too large' }, 413) }
+  }
+  if (text.length === 0) {
+    return { ok: false, response: c.json({ error: 'Empty request body' }, 400) }
+  }
   try {
-    const text = await c.req.text()
-    if (text.length === 0) return { ok: false, error: 'Empty request body' }
     return { ok: true, body: JSON.parse(text) as unknown }
   } catch {
-    return { ok: false, error: 'Invalid JSON' }
+    return { ok: false, response: c.json({ error: 'Invalid JSON' }, 400) }
   }
 }
 
@@ -35,7 +64,7 @@ export function createScheduleRoutes(getDbFn: () => ReturnType<typeof getDb>): H
 
   routes.post('/entries', async (c) => {
     const body = await readJson(c)
-    if (!body.ok) return badRequest(c, body.error)
+    if (!body.ok) return body.response
     const parsed = scheduleEntrySchema.safeParse(body.body)
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid entry')
@@ -65,7 +94,7 @@ export function createScheduleRoutes(getDbFn: () => ReturnType<typeof getDb>): H
 
   routes.patch('/entries/:id', async (c) => {
     const body = await readJson(c)
-    if (!body.ok) return badRequest(c, body.error)
+    if (!body.ok) return body.response
     const parsed = scheduleEntrySchema.safeParse(body.body)
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid entry')
@@ -106,7 +135,7 @@ export function createScheduleRoutes(getDbFn: () => ReturnType<typeof getDb>): H
 
   routes.post('/reminders', async (c) => {
     const body = await readJson(c)
-    if (!body.ok) return badRequest(c, body.error)
+    if (!body.ok) return body.response
     const parsed = reminderSchema.safeParse(body.body)
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid reminder')
@@ -136,7 +165,7 @@ export function createScheduleRoutes(getDbFn: () => ReturnType<typeof getDb>): H
 
   routes.patch('/reminders/:id', async (c) => {
     const body = await readJson(c)
-    if (!body.ok) return badRequest(c, body.error)
+    if (!body.ok) return body.response
     const parsed = reminderSchema.safeParse(body.body)
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid reminder')

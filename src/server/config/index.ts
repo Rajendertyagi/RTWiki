@@ -9,8 +9,7 @@ import {
   DEFAULT_HOST,
   DEFAULT_PORT,
   LOG_FILENAME,
-  LOGS_DIR,
-  MAX_REQUEST_SIZE
+  LOGS_DIR
 } from '@rtwiki/shared/constants'
 
 export interface AppConfig {
@@ -27,7 +26,6 @@ export interface AppConfig {
   backupDir: string
   logDir: string
   logFilename: string
-  maxRequestSize: number
 }
 
 export interface CreateConfigOverrides {
@@ -49,8 +47,7 @@ export function createConfig(baseDir: string, overrides: CreateConfigOverrides =
     attachmentDir: ATTACHMENTS_DIR,
     backupDir: BACKUPS_DIR,
     logDir: joinPaths(baseDir, LOGS_DIR),
-    logFilename: LOG_FILENAME,
-    maxRequestSize: MAX_REQUEST_SIZE
+    logFilename: LOG_FILENAME
   }
 }
 

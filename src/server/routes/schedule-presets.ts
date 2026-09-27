@@ -7,18 +7,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { getDb } from '../database/index.js'
 import * as service from '../services/schedule-service.js'
-
-type BodyResult = { ok: true; body: unknown } | { ok: false; error: string }
-
-async function readJson(c: Context): Promise<BodyResult> {
-  try {
-    const text = await c.req.text()
-    if (text.length === 0) return { ok: false, error: 'Empty request body' }
-    return { ok: true, body: JSON.parse(text) as unknown }
-  } catch {
-    return { ok: false, error: 'Invalid JSON' }
-  }
-}
+import { readJson } from './schedule.js'
 
 function badRequest(c: Context, message: string): Response {
   return c.json({ error: message }, 400)
@@ -38,7 +27,7 @@ export function createSchedulePresetRoutes(getDbFn: () => ReturnType<typeof getD
 
   routes.post('/', async (c) => {
     const body = await readJson(c)
-    if (!body.ok) return badRequest(c, body.error)
+    if (!body.ok) return body.response
     const parsed = createPresetSchema.safeParse(body.body)
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid preset')
@@ -57,7 +46,7 @@ export function createSchedulePresetRoutes(getDbFn: () => ReturnType<typeof getD
 
   routes.patch('/:id', async (c) => {
     const body = await readJson(c)
-    if (!body.ok) return badRequest(c, body.error)
+    if (!body.ok) return body.response
     const parsed = updatePresetSchema.safeParse(body.body)
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid preset')
@@ -89,7 +78,7 @@ export function createSchedulePresetRoutes(getDbFn: () => ReturnType<typeof getD
   // Apply a built-in or custom preset to the current timetable.
   routes.post('/apply', async (c) => {
     const body = await readJson(c)
-    if (!body.ok) return badRequest(c, body.error)
+    if (!body.ok) return body.response
     const parsed = applyPresetSchema.safeParse(body.body)
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid apply request')

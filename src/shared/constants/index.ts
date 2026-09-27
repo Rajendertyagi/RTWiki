@@ -13,11 +13,19 @@ export const DEFAULT_PORT = 8080 as const
 // reserved for test auto-assignment and is never accepted from settings.
 export const MIN_USER_PORT = 1024 as const
 export const MAX_USER_PORT = 65535 as const
-export const MAX_REQUEST_SIZE = 100 * 1024 * 1024
 // Ceiling for page create/update JSON bodies: accommodates the worst-case
 // JSON encoding overhead of a fully populated canonical HTML-page content
 // document (2 MiB HTML + 2 x 512 KiB CSS/JS) with generous headroom.
 export const MAX_PAGE_JSON_BODY_BYTES = 4 * 1024 * 1024
+// Ceiling for schedule entry, reminder and timetable-preset JSON bodies.
+// A timetable is a list of small period/reminder records (titles capped at 200
+// characters, times as HH:mm), so this is generous by roughly an order of
+// magnitude even for a full-term preset of a few hundred periods — while still
+// refusing an unbounded body before it is parsed. Provisional, like its
+// neighbours. The former global `MAX_REQUEST_SIZE` (100 MB) was removed rather
+// than enforced: no request path read it, and 100 MB is above every ceiling
+// actually enforced, so it could not have changed any reachable outcome.
+export const MAX_SCHEDULE_JSON_BODY_BYTES = 1024 * 1024
 // Live-preview rebuild delay for editable HTML pages: applied after the last
 // keystroke so typing never rebuilds the sandboxed document per keystroke.
 export const PREVIEW_REBUILD_DEBOUNCE_MS = 800 as const
