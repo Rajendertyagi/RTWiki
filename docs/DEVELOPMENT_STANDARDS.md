@@ -11,7 +11,7 @@ The project owner's "singleton" principle means every reusable value, function, 
 - **One authoritative source per configuration value.** If a port number, file-size limit, colour, or text string is used in more than one place, it lives in a shared constant or configuration object.
 - **Shared functions for repeated behaviour.** If a pattern appears in three or more places, extract it into a named utility.
 - **Reusable UI components.** Common patterns (buttons, cards, modals, form fields) are extracted into shared components before being used for the second time.
-- **Shared schemas and types between frontend and backend.** The `shared/` module is the single source of truth for types such as `Page`, `Block`, `Tag`, `Attachment`, and `SearchResult`.
+- **Shared schemas and types between frontend and backend.** The `shared/` module is the single source of truth for types used by both sides. **Measured:** only `Page` exists as a shared type (`src/shared/contracts/pages.ts:3`), alongside `PageType`, `CreatePageRequest`, `UpdatePageRequest` and `PageListResponse`. `Tag` and `SearchResult` have **0 matches** in `src/shared/`; there is no shared `Block` type; and `Attachment` appears once, in a comment (`document-formats.ts:56`), not as a type. An earlier version of this line named all five as existing, which was wrong. `ARCHITECTURE.md:132` repeats the same claim and is **outside the scope of this correction** — reported, not edited.
 
 ### 1.2 True Singletons — Only Where Technically Appropriate
 
@@ -132,13 +132,15 @@ All styles are defined in Mantine theme tokens, CSS modules, or Emotion styled-c
 
 ## 6. Database Standards
 
-| Rule | Detail |
-|------|--------|
-| **Parameterized queries only** | No string concatenation or template literals for SQL values. Use Drizzle parameter binding. |
-| **Versioned migrations** | Every schema change is a numbered migration file. Migrations are applied automatically at startup. |
-| **No raw SQL in services** | Use Drizzle query builders. Raw SQL is allowed only inside migration files. |
-| **Single database connection** | One connection pool is created at startup. Services receive it as a dependency. |
-| **Transactions for multi-step writes** | Page save + FTS5 index update + attachment metadata must be in a single transaction. |
+**There is no ORM.** Drizzle ORM was named in [ADR-002](adr/ADR-002-bun-hono-sqlite.md) and never adopted: absent from `package.json` and `bun.lock`, 0 imports in `src/`. The rule below is re-stated in terms of what actually enforces it — **parameter binding** — because that is the property that matters, and it is enforced by the code doing the binding, not by a library.
+
+| Rule | Detail | Status |
+|------|--------|--------|
+| **Parameterized queries only** | No string concatenation or template literals for SQL **values**. Pass values as bound parameters (`$1` / `?`) to `bun:sqlite`. Identifiers and keywords may be literal SQL; values may not. | **Enforced in practice** — bound parameters throughout `src/server/repositories/` and `src/server/services/` |
+| **Versioned migrations** | Every schema change is a numbered migration, applied automatically at startup | **Built** — `src/server/database/migrations.ts` |
+| **SQL is hand-written** | There is no query builder. SQL lives in `src/server/repositories/` and `src/server/services/`, **not** only inside migrations — the earlier "raw SQL is allowed only inside migration files" was false | Re-stated above |
+| **Single database connection** | One connection is created at startup; services receive it as a dependency | **Built** — `src/server/database/index.ts` |
+| **Transactions for multi-step writes** | A multi-step write must be one transaction | **Partly** — `transaction(...)` is used in repositories/services. The FTS5 index update named in the earlier version is **not** a real path: `search_index_fts` is created (`migrations.ts:37`) and never queried; writes go to the base table `search_index` |
 
 ## 7. Error Handling
 
@@ -163,18 +165,26 @@ All styles are defined in Mantine theme tokens, CSS modules, or Emotion styled-c
 | Constants | `UPPER_SNAKE_CASE` | `MAX_ATTACHMENT_SIZE` |
 | Functions | `camelCase` | `createPage()`, `sanitizeHtml()` |
 | Components | `PascalCase` | `PageList`, `BlockEditor` |
-| Database tables | `snake_case` | `page_tags`, `search_index` |
+| Database tables | `snake_case` | `search_index` — **verified** at `src/server/database/migrations.ts:29`. The earlier example `page_tags` **does not exist**; tags are not an implemented feature |
 | Environment variables | `UPPER_SNAKE_CASE` | `PORT`, `HOST`, `MAX_ATTACHMENT_SIZE` |
 
 ## 10. Module Size and Cohesion
 
-- Modules must be small and focused. A module that exceeds 300 lines of non-comment, non-blank code should be split.
+- Modules must be small and focused. A module that exceeds **300 lines of non-comment, non-blank code** should be split.
 - Each module must have an explicit public interface (named exports). Everything else is private to the module.
 - Circular dependencies are prohibited. If two modules depend on each other, extract the shared concept into a third module.
 
+**Known debt, recorded rather than relaxed.** The 300-line threshold is a target, and the codebase does not currently meet it: **18 modules exceed it**, measured by counting non-comment, non-blank lines across `src/**/*.ts,tsx`. The largest are `src/web/App.tsx` (858), `rich-toolbar.tsx` (617), `html-editor.tsx` (545), `wb-tree-host.ts` (513) and `settings-workspace.tsx` (513).
+
+**The threshold is not being lowered to fit the code, and the debt is not being hidden by deleting the rule.** A new module over 300 lines should be split at creation. Reducing the 18 existing modules is unstarted work, and none of them is a security or correctness risk on its own — the risk would be in *claiming* the rule is met.
+
 ## 11. Dependency Management
 
-- All dependency versions are pinned in the lockfile. No `^` or `~` range selectors in `package.json` for production dependencies.
+**The pin is the lockfile, and CI enforces it.** `bun install --frozen-lockfile` runs on every job (`.github/workflows/build.yml:27,52`), so a `package.json` range is a *request* and `bun.lock` is the actual pin. It records the resolved version and integrity hash — `dayjs@1.11.23`, `dompurify@3.4.15` — so a build cannot float.
+
+- **No floating major versions.** A caret may sit on a minor (`^6.5.2` may resolve to `6.9.0`) but must never permit a major jump. This is the same rule as `AGENTS.md` §6, stated in the terms that are actually enforceable.
+- **The lockfile is the single source of truth for versions.** Changing a version means changing `bun.lock` deliberately, never as a side effect of an install.
+- **Exact pins are preferred** and are the norm: 45 of 48 production dependencies are exact. Three use a caret, and each is within its major — `@codemirror/lang-markdown` `^6.5.2`, `dayjs` `^1.11.23`, `dompurify` `^3.4.15`. These are the accepted exceptions, not a pattern to copy; prefer an exact pin for a new dependency.
 - No runtime CDN assets. All JavaScript and CSS must be bundled locally.
 - No undocumented or unreviewed dependencies. Every new package requires a brief justification comment in `package.json`.
 
@@ -197,18 +207,21 @@ All styles are defined in Mantine theme tokens, CSS modules, or Emotion styled-c
 
 ## 14. Modular Block and Extension Architecture
 
-Rich content is implemented as a set of cooperating modules discovered through registries, not through central switch statements.
+Rich content is implemented as a set of cooperating modules discovered through registries, not through central switch statements. **Requirements below; the first two are not yet met.**
 
-- **Block registry.** Every rich block type (cards, tabs, callouts, grids, formulas, diagrams, images, and any future type) is owned by its own module declaring a unique type id, a schema (Zod/BlockNote), an editor component, a viewer/renderer, a parser (source → block), a serializer (block → source), and an optional unknown-block fallback.
-- **Single composition root.** One module reads all registries (block, import adapter, export adapter, renderer/editor, sanitization policy, asset storage, theme/token, package validator, schema migrator, and a future AI-provider adapter) and wires the editor, renderer, import pipeline, and search extractor together.
-- **No central switch over block types.** Dispatch is performed by looking up registry metadata by type id; do not add `if/else` or `switch` ladders keyed on block type.
+- **Block registry. Required, not implemented.** Every rich block type (cards, tabs, callouts, grids, formulas, diagrams, images, and any future type) is to be owned by its own module declaring a unique type id, a schema (Zod/BlockNote), an editor component, a viewer/renderer, a parser (source → block), a serializer (block → source), and an optional unknown-block fallback. **Measured: no registry exists.** 0 matches for `blockRegistry` / `BLOCK_REGISTRY` in `src/`. `src/web/features/rich-editor/schema.ts:28-37` is a hand-maintained `BlockNoteSchema.create().extend({ blockSpecs: { mathBlock, callout, diagram, mindMap, linkedPage, documentBlock } })` — six named specs, which is the central registration this rule forbids. The block *modules* do exist under `src/web/features/rich-editor/blocks/`; what is missing is the registry that discovers them. **A new block belongs in its own module, and the registry is owed.**
+- **Single composition root. Required, not implemented.** One module is to read all registries and wire the editor, renderer, import pipeline, and search extractor together. No such module exists today.
+- **No central switch over block types.** Dispatch is to be performed by looking up registry metadata by type id; do not add `if/else` or `switch` ladders keyed on block type.
 - **Lifecycle rules (continue accepted practice).** One configuration object, one database connection/lifecycle manager, one structured logger. Editor instances are scoped to the active page; services use explicit dependencies (no hidden globals).
 - **Custom content isolation.** Custom HTML/CSS/JS (L3) is rendered only in a sandbox that has no same-origin, database, or filesystem access and no network egress. Active content is off by default. No custom script may run in the main application context.
-- **Import is centralized.** All entry paths (paste, drop, file, localhost API) go through one import pipeline; do not add parallel import code.
+- **Import is centralized. Required, not implemented.** All entry paths (paste, drop, file, localhost API) are to go through one import pipeline; do not add parallel import code. **Measured: no import pipeline exists** — 0 matches for an import, adapter or sanitise module in `src/`, and no paste handler (0 matches for `handlePaste` / `transformPasted` / `clipboard`). `src/shared/schemas/html-content.ts` and `markdown-content.ts` are page-content *schemas*, not import adapters. The consequence for security is in [SECURITY.md](SECURITY.md) §2.3: because no such path exists, no pasted or imported HTML is sanitized by RTWiki today. The rule stands so that building one cannot bypass it.
 
 ## 15. Markdown and Sanitisation
 
+**Scope: this section governs the Markdown render path only.** DOMPurify is imported in exactly one file in `src/` — `markdown-render.ts:1`, called at `:136`. It does **not** cover pasted HTML, the raw-HTML page, or diagram output; those have their own controls, itemised in [SECURITY.md](SECURITY.md) §2.1. Do not describe DOMPurify as covering them.
+
 - **One engine, one grammar.** Markdown is parsed by `micromark` with `micromark-extension-gfm`, composed once at module scope in `markdown-render.ts`. The outline parses with `mdast-util-from-markdown`, which shares the grammar. Do not add a second Markdown parser, and do not parse headings with a regular expression — see [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+- **Inline maths is delimited by GitHub's adjacency rule, by a local construct.** `math-inline-github-rule.ts` replaces the package's inline construct because `micromark-extension-math` decides by marker count and cannot express the rule; display maths and the KaTeX renderer remain the package's. Both halves are asserted separately, so a reader is not misled into thinking one library does both — see [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
 - **Never carry untrusted text in an attribute.** DOMPurify strips any attribute whose value matches `-->`, `]>`, or `</script`. Diagram and other source text is carried as element **text content**, never as a `data-` attribute, and the sanitiser is never weakened with `SAFE_FOR_XML: false` to accommodate one.
 - **Raw HTML in Markdown is inert by design.** The parser escapes it. Do not add an extension that re-enables raw HTML passthrough without a new ADR; it moves the whole security burden back onto the sanitiser.
 - **Extensions must not change unhandled output.** An extension that intercepts one construct must leave every other construct byte-identical to stock micromark, and a table-driven test must prove it.
