@@ -454,6 +454,15 @@ export const UI_TEXT = {
   settingsLabel: 'Settings',
   settingsSearchPlaceholder: 'Filter settings',
   settingsNoMatches: 'No matching settings',
+  // A failed settings read used to be swallowed, so the panel rendered its
+  // fallback values with nothing on screen and an empty port field read as a
+  // real setting. Each read reports separately, because the two are independent
+  // endpoints: one failing must not blank the other.
+  settingsLoadFailedTitle: 'Some settings could not be loaded',
+  settingsLoadFailedServer:
+    'Server port settings could not be loaded. The port field is empty and does not show the real port — do not change it until this succeeds.',
+  settingsLoadFailedDesktop:
+    'Desktop settings could not be loaded. The window close options below are showing a default, not your saved choice.',
   markdownImportLabel: 'Import Markdown',
   markdownImportErrorType: 'Please choose a .md or .markdown file.',
   markdownImportErrorSize: 'That file is too large to import.',
@@ -590,6 +599,8 @@ export const UI_TEXT = {
   desktopCloseQuit: 'Quit the app',
   desktopCloseHint: 'Quit is always available from the tray icon.',
   desktopCloseUnavailable: 'Window close options apply to the desktop app only.',
+  desktopCloseSaveFailed:
+    'Could not save the window close option. Your previous choice is still in effect.',
   // Window-control button labels (desktop shell chrome only).
   minimizeWindow: 'Minimize window',
   maximizeWindow: 'Maximize window',

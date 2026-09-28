@@ -17,8 +17,6 @@ export interface AppConfig {
   version: string
   host: string
   port: number
-  apiPrefix: string
-  healthPath: string
   frontendDistDir: string
   dataDir: string
   databaseFilename: string
@@ -39,8 +37,6 @@ export function createConfig(baseDir: string, overrides: CreateConfigOverrides =
     version: APP_VERSION,
     host: overrides.host ?? DEFAULT_HOST,
     port: overrides.port ?? DEFAULT_PORT,
-    apiPrefix: '/api',
-    healthPath: '/health',
     frontendDistDir: joinPaths(baseDir, 'dist', 'web'),
     dataDir: joinPaths(baseDir, 'data'),
     databaseFilename: DATABASE_FILENAME,

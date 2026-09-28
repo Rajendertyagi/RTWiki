@@ -1,6 +1,5 @@
 export const APP_NAME = 'RTWiki' as const
 export const APP_VERSION = '0.1.0' as const
-export const API_PREFIX = '/api' as const
 export const HEALTH_PATH = '/health' as const
 export const DATABASE_FILENAME = 'rtwiki.sqlite' as const
 export const ATTACHMENTS_DIR = 'attachments' as const

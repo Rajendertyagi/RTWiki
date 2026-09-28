@@ -1,4 +1,5 @@
 import {
+  Alert,
   Box,
   Button,
   Group,
@@ -10,12 +11,12 @@ import {
   Text,
   TextInput,
   Title,
-  useComputedColorScheme,
   useMantineColorScheme
 } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
 import { MAX_USER_PORT, MIN_USER_PORT } from '@rtwiki/shared/constants'
 import {
+  IconAlertCircle,
   IconAppWindow,
   IconCalendarEvent,
   IconFileAnalytics,
@@ -25,9 +26,13 @@ import {
   IconTextCaption,
   IconX
 } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
-import { isDebugLoggingEnabled, setDebugLoggingEnabled } from '../../diagnostics/debug-log.js'
+import {
+  debugLog,
+  isDebugLoggingEnabled,
+  setDebugLoggingEnabled
+} from '../../diagnostics/debug-log.js'
 import {
   type BrowserPermission,
   browserNotificationPermission,
@@ -61,6 +66,25 @@ import { DebugLogViewer } from './debug-log-viewer.js'
 import classes from './settings.module.css'
 
 type Section = 'appearance' | 'layout' | 'editor' | 'debugLogs' | 'scheduler' | 'desktop'
+
+/**
+ * The two independently-failing server-side reads, and one failed load of each.
+ *
+ * `getServerSettings` and `getDesktopSettings` are separate endpoints over
+ * separate files (`data/server.json`, `data/desktop.json`), so one failing says
+ * nothing about the other. They are tracked apart for that reason: a shared
+ * error flag would let a desktop-read failure blank the port the server read
+ * already returned, which is the failure mode this replaced.
+ */
+type SettingsSource = 'server' | 'desktop'
+
+interface SettingsLoadFailure {
+  source: SettingsSource
+  /** What is on screen instead of the real value, stated in user terms. */
+  message: string
+  /** The raw read error, for diagnosis. Never the only thing shown. */
+  detail: string | null
+}
 
 interface SettingsWorkspaceProps {
   layoutPrefs: LayoutPreferences
@@ -136,30 +160,100 @@ export function SettingsWorkspace({
   const [portField, setPortField] = useState<string>('')
   const [portMessage, setPortMessage] = useState<string | null>(null)
   const [restarting, setRestarting] = useState<boolean>(false)
+  // One error per read. Both were previously swallowed by `.catch(() => {})`,
+  // so a failed load left the panel rendering its fallback values — an empty
+  // port field included — indistinguishable from real ones.
+  const [serverLoadError, setServerLoadError] = useState<string | null>(null)
+  const [desktopLoadError, setDesktopLoadError] = useState<string | null>(null)
+  const [closeMessage, setCloseMessage] = useState<string | null>(null)
+  // Guards the in-flight reads against committing state after unmount, which
+  // the per-effect `cancelled` flag used to do — except the reads now outlive
+  // the effect that started them, because Retry calls this loader directly.
+  const settingsMounted = useRef(true)
 
   useEffect(() => {
     if (!nativeMode) return
     void getAutostartState().then(setAutostart)
   }, [nativeMode])
 
-  useEffect(() => {
-    let cancelled = false
-    void getServerSettings()
-      .then((s) => {
-        if (cancelled) return
-        setServerSettings(s)
-        setPortField(String(s.configuredPort))
-      })
-      .catch(() => {})
-    void getDesktopSettings()
-      .then((s) => {
-        if (!cancelled) setDesktopSettings(s)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
+  /**
+   * Loads both server-side settings blocks, handling each result on its own.
+   *
+   * `allSettled` rather than `all` because the two reads are independent —
+   * separate endpoints over separate files (`data/server.json` and
+   * `data/desktop.json`) — and one rejecting must not discard the other's
+   * value. That is the whole point of tracking the errors separately: a
+   * desktop-read failure still shows the port, and a server-read failure still
+   * shows the close behaviour.
+   *
+   * An error is cleared only by a *successful* read, never at the start of an
+   * attempt, so a retry that fails again cannot make the notice flicker away
+   * while the values on screen are still the wrong ones. The port is never
+   * defaulted either: a blank port field must mean "not loaded", never
+   * "port 0", so a user cannot save a placeholder over a port they were never
+   * shown.
+   */
+  const loadSettings = useCallback(async (): Promise<void> => {
+    const [serverResult, desktopResult] = await Promise.allSettled([
+      getServerSettings(),
+      getDesktopSettings()
+    ])
+    if (!settingsMounted.current) return
+
+    if (serverResult.status === 'fulfilled') {
+      setServerSettings(serverResult.value)
+      setPortField(String(serverResult.value.configuredPort))
+      setServerLoadError(null)
+    } else {
+      debugLog('error', 'error_api_failure', { code: 'get_server_settings' })
+      setServerLoadError(serverResult.reason instanceof Error ? serverResult.reason.message : null)
+    }
+
+    if (desktopResult.status === 'fulfilled') {
+      setDesktopSettings(desktopResult.value)
+      setDesktopLoadError(null)
+    } else {
+      debugLog('error', 'error_api_failure', { code: 'get_desktop_settings' })
+      setDesktopLoadError(
+        desktopResult.reason instanceof Error ? desktopResult.reason.message : null
+      )
     }
   }, [])
+
+  useEffect(() => {
+    settingsMounted.current = true
+    void loadSettings()
+    return () => {
+      settingsMounted.current = false
+    }
+  }, [loadSettings])
+
+  /**
+   * A failed read is not a dismissed notice, so the way out is to try again
+   * rather than to close it — the same affordance the connection error uses.
+   */
+  const retrySettingsLoad = (): void => {
+    void loadSettings()
+  }
+
+  const loadFailures: SettingsLoadFailure[] = useMemo(() => {
+    const failures: SettingsLoadFailure[] = []
+    if (serverLoadError !== null) {
+      failures.push({
+        source: 'server',
+        message: UI_TEXT.settingsLoadFailedServer,
+        detail: serverLoadError
+      })
+    }
+    if (desktopLoadError !== null) {
+      failures.push({
+        source: 'desktop',
+        message: UI_TEXT.settingsLoadFailedDesktop,
+        detail: desktopLoadError
+      })
+    }
+    return failures
+  }, [serverLoadError, desktopLoadError])
 
   const handleDebugToggle = (checked: boolean): void => {
     setDebugLoggingEnabled(checked)
@@ -230,9 +324,22 @@ export function SettingsWorkspace({
 
   const handleCloseBehavior = (value: string): void => {
     if (value !== 'ask' && value !== 'minimize' && value !== 'quit') return
+    setCloseMessage(null)
     void updateCloseBehavior(value)
-      .then(setDesktopSettings)
-      .catch(() => {})
+      .then((s) => {
+        setDesktopSettings(s)
+        setCloseMessage(null)
+      })
+      .catch((err: unknown) => {
+        debugLog('error', 'error_api_failure', { code: 'update_close_behavior' })
+        // Reported rather than swallowed: a close behaviour that failed to save
+        // is a real, unacknowledged loss, not a best-effort probe. The radio
+        // group is controlled by `desktopSettings`, so it snaps back to the
+        // stored choice on the next render either way — which is exactly why
+        // swallowing this was so quiet. The user was left clicking a control
+        // that appeared to work and never took effect, with nothing to say so.
+        setCloseMessage(err instanceof Error ? err.message : UI_TEXT.desktopCloseSaveFailed)
+      })
   }
 
   return (
@@ -283,6 +390,46 @@ export function SettingsWorkspace({
             {UI_TEXT.settingsCloseLabel}
           </Button>
         </Group>
+
+        {/*
+          Above the scroll area, not inside a section: the reads behind the
+          notice happen once on mount, and a failure is worth seeing from any
+          section rather than only after finding the Desktop tab. The error
+          states are cleared by a successful read, so Retry doubles as the
+          "still broken" signal — a failed retry re-raises the same notice.
+        */}
+        {loadFailures.length > 0 ? (
+          <Alert
+            color="red"
+            variant="light"
+            icon={<IconAlertCircle size={16} />}
+            title={UI_TEXT.settingsLoadFailedTitle}
+            m="sm"
+            data-testid="settings-load-error"
+          >
+            <Stack gap={4}>
+              {loadFailures.map((failure) => (
+                <Text
+                  key={failure.source}
+                  size="xs"
+                  data-testid={`settings-load-error-${failure.source}`}
+                >
+                  {failure.message}
+                  {failure.detail === null ? null : ` (${failure.detail})`}
+                </Text>
+              ))}
+              <Button
+                size="compact-xs"
+                variant="light"
+                color="red"
+                onClick={retrySettingsLoad}
+                data-testid="settings-load-retry"
+              >
+                {UI_TEXT.retry}
+              </Button>
+            </Stack>
+          </Alert>
+        ) : null}
 
         <ScrollArea className={classes.scroll} type="never">
           {section === 'appearance' ? (
@@ -524,6 +671,11 @@ export function SettingsWorkspace({
               <Text size="xs" c="dimmed">
                 {nativeMode ? UI_TEXT.desktopCloseHint : UI_TEXT.desktopCloseUnavailable}
               </Text>
+              {closeMessage ? (
+                <Text size="xs" c="red" data-testid="desktop-close-message">
+                  {closeMessage}
+                </Text>
+              ) : null}
             </Stack>
           ) : null}
 

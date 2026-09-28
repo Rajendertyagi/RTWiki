@@ -353,9 +353,6 @@ export function MermaidBlockView({
         {blockType === 'diagram' ? UI_TEXT.diagramLabel : UI_TEXT.mindMapLabel}
       </Text>
       <Group gap={4} wrap="nowrap" className={classes.previewToolbar}>
-        <Text size="xs" fw={600} className={classes.caption} data-testid={`${blockType}-caption`}>
-          {blockType === 'diagram' ? UI_TEXT.diagramLabel : UI_TEXT.mindMapLabel}
-        </Text>
         {blockType === 'mindMap' ? zoomControls : null}
         {fitToggle}
         <Tooltip label={UI_TEXT.diagramEditLabel} position="top">

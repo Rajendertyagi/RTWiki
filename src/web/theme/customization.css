@@ -28,7 +28,6 @@
      The previous 75% of an 18px box was ~13.5px and read as decoration rather
      than as a disclosure control. */
   --rtwiki-tree-expander-glyph: 80%;
-  --rtwiki-tree-glyph-size: 12px;
   /* Icon slots. */
   --rtwiki-tree-icon-size: 18px;
   --rtwiki-tree-icon-outer-height: 22px;
@@ -40,11 +39,8 @@
      (the expander cell IS the indent step), keeping the root
      lead equal to the per-level indent instead of larger. */
   --rtwiki-tree-row-padding-left: 0px;
-  --rtwiki-tree-row-padding-right: 8px;
   /* Reserved trailing space so the hover action button never overlaps titles. */
   --rtwiki-tree-action-reserve: 24px;
-  /* Context menu width: fixed and compact, independent of title length. */
-  --rtwiki-tree-menu-width: 240px;
   --rtwiki-drop-target-border: var(--mantine-color-blue-6);
 }
 

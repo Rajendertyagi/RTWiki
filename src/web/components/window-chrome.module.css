@@ -57,9 +57,6 @@
   flex: 1;
   min-width: 0;
   height: 100%;
-  /* The band owns the one bottom separator; drop the strip's own so the
-     boundary is a single 1px line and no height is lost to a second border. */
-  --rtwiki-tab-strip-border-width: 0px;
 }
 
 .controls {
