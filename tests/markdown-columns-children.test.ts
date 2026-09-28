@@ -65,7 +65,13 @@ function dividersOf(html: string): Element[] {
   return [...parse(html).querySelectorAll(columns.COLUMNS_DIVIDER_SELECTOR)]
 }
 
-/** The `flex` shorthand of each pane, which is the whole sizing model. */
+/**
+ * The grow factor each pane carries, as a string.
+ *
+ * Read from the `style` attribute rather than from `element.style`: the value is
+ * a **custom property** (`--rt-cols-pane-flex`), and the `flex` shorthand that
+ * consumes it belongs to `markdown-columns.css`, not to the markup.
+ */
 function flexOf(html: string): string[] {
   return panesOf(html).map((pane) => pane.getAttribute('style') ?? '')
 }
@@ -114,7 +120,32 @@ describe('N children render N panes with N-1 dividers', () => {
      * percentages.
      */
     const html = renderMarkdown(childSource(2, ['40', '60']))
-    expect(flexOf(html)).toEqual(['flex: 40 1 0%', 'flex: 60 1 0%'])
+    expect(flexOf(html)).toEqual(['--rt-cols-pane-flex: 40', '--rt-cols-pane-flex: 60'])
+  })
+
+  it('carries the equal share as a property, not as a flex shorthand, when undeclared', () => {
+    /**
+     * The equal-share case, on the new arrangement.
+     *
+     * Every pane emits the property whether or not a width was declared, so
+     * `markdown-columns.css` always has a number to read and its `, 1` fallback
+     * is a backstop rather than the normal path. Asserted on the `N`-child form
+     * because that is where a share is *computed* rather than authored.
+     */
+    const panes = panesOf(renderMarkdown(childSource(3)))
+    expect(panes.map((pane) => pane.getAttribute('style'))).toEqual([
+      '--rt-cols-pane-flex: 34',
+      '--rt-cols-pane-flex: 33',
+      '--rt-cols-pane-flex: 33'
+    ])
+    // And no pane smuggles a shorthand past it, which would make the rule dead.
+    // Matched on the declaration *name*: the property emitted here is
+    // `--rt-cols-pane-flex`, so a bare `flex:` substring test would match its own
+    // name and pass for the wrong reason.
+    for (const pane of panes) {
+      const style = pane.getAttribute('style') ?? ''
+      expect(/(?:^|;)\s*flex(?:-grow|-shrink|-basis)?\s*:/.test(style)).toBe(false)
+    }
   })
 
   it('splits the prose between panes, so a heading cannot end up in the wrong one', () => {
@@ -441,7 +472,10 @@ describe('the two-pane form did not regress', () => {
     const html = renderMarkdown(':::columns{left=40}\nLeft pane\n\n***\n\nRight pane\n:::')
     const doc = parse(html)
     expect(paneTexts(html)).toEqual(['Left pane', 'Right pane'])
-    expect(flexOf(html)).toEqual(['flex: 40 1 0%', 'flex: 60 1 0%'])
+    // The **explicit-percent** case on the new arrangement: the two-pane form
+    // carries its authored `left` through as the property, and the remainder as
+    // the other pane's.
+    expect(flexOf(html)).toEqual(['--rt-cols-pane-flex: 40', '--rt-cols-pane-flex: 60'])
     expect(dividersOf(html)[0]?.getAttribute('aria-valuenow')).toBe('40')
     expect(
       doc.querySelector(columns.COLUMNS_ROOT_SELECTOR)?.hasAttribute(columns.COLUMNS_NESTED_ATTR)
@@ -450,14 +484,14 @@ describe('the two-pane form did not regress', () => {
 
   it('uses 50/50 when no left is given, and reports no error', () => {
     const html = renderMarkdown(':::columns\nA\n\n***\n\nB\n:::')
-    expect(flexOf(html)).toEqual(['flex: 50 1 0%', 'flex: 50 1 0%'])
+    expect(flexOf(html)).toEqual(['--rt-cols-pane-flex: 50', '--rt-cols-pane-flex: 50'])
     expect(parse(html).querySelector(`.${columns.COLUMNS_NOTICE_CLASS}`)).toBeNull()
   })
 
   it('surfaces a rejected left width, as it always did', () => {
     const html = renderMarkdown(':::columns{left="a-->b"}\nA\n\n***\n\nB\n:::')
     const doc = parse(html)
-    expect(flexOf(html)).toEqual(['flex: 50 1 0%', 'flex: 50 1 0%'])
+    expect(flexOf(html)).toEqual(['--rt-cols-pane-flex: 50', '--rt-cols-pane-flex: 50'])
     expect(doc.querySelector(`.${columns.COLUMNS_NOTICE_CLASS}`)?.textContent).toContain('a-->b')
   })
 

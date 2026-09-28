@@ -55,15 +55,36 @@
  * fence, an unbreakable token — from forcing the pane past its share and pushing
  * the divider out of the block. Without it `flex-basis` is only a suggestion.
  *
- * There is deliberately **no** `flex` rule here. Each pane's width arrives as an
- * inline `style`, because it is a per-instance value the drag rewrites on every
- * pointermove and a stylesheet cannot express a number that only exists at
- * runtime. An inline style beats any stylesheet declaration, so a `flex` rule
- * here would be dead weight that looks load-bearing.
+ * ## The `flex` rule, and the custom property behind it
+ *
+ * Each pane's grow factor arrives as an inline `--rt-cols-pane-flex: N` — a
+ * number that only exists at runtime, which no stylesheet can express on its
+ * own. So the shorthand that consumes it lives **here**, and this rule is the
+ * reason a stylesheet is the right owner of it rather than the inline style.
+ *
+ * It used to be `flex: N 1 0%` inline. An inline declaration beats every
+ * stylesheet rule it competes with, so this rule would have been **dead weight
+ * that looked load-bearing**, and nothing could have said so: the markup is a
+ * string, a unit test has no computed style to read, and CSS coverage reports
+ * selector *matching*, never which declaration won the cascade. Routing the
+ * number through a custom property makes the pairing checkable —
+ * `tests/markdown-columns-styles.test.ts` builds this file and asserts the rule
+ * ships and references the property, which is the check that makes a dead rule
+ * observable instead of plausible.
+ *
+ * The `, 1` in the `var()` is **load-bearing**. A `var()` with no fallback makes
+ * the entire declaration invalid at computed-value time, and each longhand then
+ * takes its initial value: measured in Chromium, this resolves to `0 1 auto`, so
+ * the panes stop growing to share the row and size to their content. Not a
+ * zero-width collapse - the wrong guess, recorded because it is the one a reader
+ * would make. An equal share is the right thing to degrade to: it is what a pane
+ * with no width asked for means. tests/browser/markdown-columns-sizing.pwspec.ts
+ * removes the property from a live pane and asserts this.
  */
 .rt-cols__pane {
   min-width: 0;
   overflow-wrap: anywhere;
+  flex: var(--rt-cols-pane-flex, 1) 1 0%;
 }
 
 .rt-cols__pane > *:first-child {
@@ -178,10 +199,18 @@ span.rt-unknown-directive {
  * a `col-resize` cursor and a focusable separator that cannot move are worse than
  * no control at all. The panes stack in source order, so the first stays first.
  *
- * The width is an inline `style`, so no stylesheet `flex` declaration could
- * override it, and `!important` is not available here either. Instead the panes
- * stop being flex items at all, which makes the flex property irrelevant and is
- * what actually makes them full-width.
+ * `!important` is not needed and not used. Nothing here has to out-specify the
+ * pane's `flex`, because this block changes the **axis** the row lays panes out
+ * on, not the value.
+ *
+ * **Unchanged by the move to a custom property, and not measured.** The shorthand
+ * resolved to the same `N 1 0%` before and after, so the behaviour here is
+ * whatever it was: on a column axis the flex shorthand sizes the *block* axis, so
+ * the grow factor distributes height rather than width. That was true of the old
+ * inline `flex: N 1 0%` too, which is why this is a note and not a change. Whether
+ * the result is what the author wanted is **unobserved** — the browser spec runs
+ * at one desktop size, and no unit test has a layout engine. Recorded as unknown
+ * rather than asserted, because that is what it is.
  */
 @media (max-width: 47.99em) {
   .rt-cols {

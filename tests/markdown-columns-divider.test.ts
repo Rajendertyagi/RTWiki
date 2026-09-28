@@ -8,10 +8,10 @@ import { sharedDom, sharedWindow } from './utils/dom-harness.js'
  *
  * `attachColumnDividers` is plain DOM code over a container it does not own, and
  * the three things most likely to break — the pointer-capture arithmetic, the
- * clamping, and the teardown that clears the document flag — are all reachable
- * from jsdom. The browser spec covers what only a real browser can: that a
- * pointer drag on a rendered page moves the divider, that the drag survives
- * leaving the element, and that the measured container width is non-zero.
+ * clamping, and the teardown that ends a drag in flight — are all reachable from
+ * jsdom. The browser spec covers what only a real browser can: that a pointer
+ * drag on a rendered page moves the divider, that the drag survives leaving the
+ * element, and that the measured container width is non-zero.
  *
  * jsdom has no layout, so `clientWidth` is always 0. The wiring guards with
  * `Math.max(width, 1)`, and the tests set it explicitly through
@@ -23,6 +23,21 @@ import { sharedDom, sharedWindow } from './utils/dom-harness.js'
  */
 
 const CONTAINER_WIDTH = 800
+
+/**
+ * The grow factor on one pane, as the wiring reads and writes it.
+ *
+ * The value is the **custom property**, because the `flex` shorthand that
+ * consumes it belongs to `markdown-columns.css` and the drag writes the property
+ * on every pointermove. Read through `getPropertyValue` rather than off the
+ * attribute, because `setProperty` re-serialises the attribute (it appends a
+ * `;`) and the attribute is not what the wiring touches.
+ */
+const FLEX_PROPERTY = '--rt-cols-pane-flex'
+
+function flexOf(element: HTMLElement | null | undefined): string {
+  return element?.style.getPropertyValue(FLEX_PROPERTY) ?? ''
+}
 
 interface DividerDom {
   container: HTMLElement
@@ -59,7 +74,7 @@ afterEach(() => {
  * right *form* of the assertion:
  *
  * - Not `documentElement.outerHTML`, which also compares the body, where a drag
- *   legitimately rewrites the pane's `style.flex` and the divider's
+ *   legitimately rewrites the pane's `style` and the divider's
  *   `aria-valuenow` — reporting the feature working as a failure.
  * - Not a before/after snapshot, which is **order-dependent**: a flag left set
  *   by an earlier test is in the "before" too, so the test would agree with a
@@ -79,9 +94,10 @@ function documentDataAttrs(el: Element): string[] {
  * The DOM `renderMarkdown` would have produced, expressed directly.
  *
  * Faithful to the current output, including `data-width` on every pane and the
- * grow-based `flex` on each: a fixture in the old `flex: 0 0 40%` shape would
- * test a row the render path no longer produces, and the drag assertions would
- * pass for the wrong reason.
+ * grow-factor **custom property** on each: a fixture in the old `flex: 0 0 40%`
+ * shape, or in the older `flex: N 1 0%` inline shape, would test a row the render
+ * path no longer produces, and the drag assertions would pass for the wrong
+ * reason.
  */
 function buildDom(): DividerDom {
   return buildRow([40, 60])
@@ -99,7 +115,7 @@ function buildRow(shares: number[]): DividerDom {
     parts.push(
       `<div class="rt-cols__pane" data-side="${
         shares.length === 2 ? (index === 0 ? 'left' : 'right') : 'middle'
-      }" data-width="${share}" data-index="${index}" style="flex: ${share} 1 0%">P${index}</div>`
+      }" data-width="${share}" data-index="${index}" style="--rt-cols-pane-flex: ${share}">P${index}</div>`
     )
     if (index < total) {
       parts.push(
@@ -179,8 +195,41 @@ describe('dragging a column divider resizes the left pane', () => {
     // which must become 60.
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     dom.divider.dispatchEvent(pointer('pointermove', { clientX: 160, pointerId: 1 }))
-    expect(dom.left.style.flex).toBe('60 1 0%')
+    expect(flexOf(dom.left)).toBe('60')
     expect(dom.divider.getAttribute('aria-valuenow')).toBe('60')
+  })
+
+  it('writes the grow-factor property, never an inline flex shorthand', () => {
+    /**
+     * The drag is the hot path, and it is where the dead-rule problem would come
+     * straight back.
+     *
+     * The render path was changed to emit `--rt-cols-pane-flex` so that
+     * `markdown-columns.css` could own the `flex` shorthand. A drag that wrote
+     * `style.flex` on every pointermove would put the shorthand back inline the
+     * moment a reader touched a divider — leaving the stylesheet rule dead for
+     * exactly the rows a reader has interacted with, and with every assertion
+     * above still green, because each one checks the resulting *width*.
+     */
+    const dom = buildDom()
+    attach(dom.container)
+    dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
+    dom.divider.dispatchEvent(pointer('pointermove', { clientX: 160, pointerId: 1 }))
+
+    expect(flexOf(dom.left), 'the property the stylesheet reads').toBe('60')
+    expect(dom.left.style.flex, 'an inline shorthand would make the rule dead').toBe('')
+    // Asserted on the whole attribute, so a second declaration cannot hide behind
+    // the one the previous line checks. Matched on the declaration *name*, not on
+    // the substring `flex:` — which is inside `--rt-cols-pane-flex:` and would
+    // match the feature's own property.
+    expect(
+      /(?:^|;)\s*flex(?:-grow|-shrink|-basis)?\s*:/.test(dom.left.getAttribute('style') ?? '')
+    ).toBe(false)
+    // And a keyboard step, which takes the same path, agrees.
+    dom.divider.dispatchEvent(pointer('pointerup', { clientX: 160, pointerId: 1 }))
+    dom.divider.dispatchEvent(key('keydown', 'ArrowRight'))
+    expect(flexOf(dom.left)).toBe('80')
+    expect(dom.left.style.flex).toBe('')
   })
 
   it('clamps to the grammar bounds rather than overflowing the row', () => {
@@ -189,7 +238,7 @@ describe('dragging a column divider resizes the left pane', () => {
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     // Far past the right edge: the pane must stop at 99, not at 140%.
     dom.divider.dispatchEvent(pointer('pointermove', { clientX: 5000, pointerId: 1 }))
-    expect(dom.left.style.flex).toBe('99 1 0%')
+    expect(flexOf(dom.left)).toBe('99')
     expect(dom.divider.getAttribute('aria-valuenow')).toBe('99')
   })
 
@@ -198,7 +247,7 @@ describe('dragging a column divider resizes the left pane', () => {
     attach(dom.container)
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     dom.divider.dispatchEvent(pointer('pointermove', { clientX: -5000, pointerId: 1 }))
-    expect(dom.left.style.flex).toBe('1 1 0%')
+    expect(flexOf(dom.left)).toBe('1')
   })
 
   it('captures the pointer on drag start, so a drag survives leaving the element', () => {
@@ -217,7 +266,7 @@ describe('dragging a column divider resizes the left pane', () => {
     attach(dom.container)
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 2, pointerId: 1 }))
     dom.divider.dispatchEvent(pointer('pointermove', { clientX: 160, pointerId: 1 }))
-    expect(dom.left.style.flex, 'the width must not change').toBe('40 1 0%')
+    expect(flexOf(dom.left), 'the width must not change').toBe('40')
   })
 
   it('marks the divider as dragging, and clears it on pointer up', () => {
@@ -255,7 +304,7 @@ describe('dragging a column divider resizes the left pane', () => {
     attach(dom.container)
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     dom.divider.dispatchEvent(pointer('pointermove', { clientX: 160, pointerId: 2 }))
-    expect(dom.left.style.flex, 'a second pointer must not drag').toBe('40 1 0%')
+    expect(flexOf(dom.left), 'a second pointer must not drag').toBe('40')
   })
 
   it('wires every divider of a four-pane row, not just the first', () => {
@@ -279,12 +328,12 @@ describe('dragging a column divider resizes the left pane', () => {
     second.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 3 }))
     second.dispatchEvent(pointer('pointermove', { clientX: 80, pointerId: 3 }))
     // 25 + 10% of an 800px container (80px = 10 points).
-    expect(panes[1]?.style.flex).toBe('35 1 0%')
+    expect(flexOf(panes[1])).toBe('35')
     expect(second.getAttribute('aria-valuenow')).toBe('35')
     // The untouched panes keep their authored widths.
-    expect(panes[0]?.style.flex).toBe('25 1 0%')
-    expect(panes[2]?.style.flex).toBe('25 1 0%')
-    expect(panes[3]?.style.flex).toBe('25 1 0%')
+    expect(flexOf(panes[0])).toBe('25')
+    expect(flexOf(panes[2])).toBe('25')
+    expect(flexOf(panes[3])).toBe('25')
     second.dispatchEvent(pointer('pointerup', { clientX: 80, pointerId: 3 }))
   })
 
@@ -302,12 +351,12 @@ describe('dragging a column divider resizes the left pane', () => {
     expect(innerDividers).toHaveLength(1)
 
     const innerPane = inner.root.querySelector<HTMLElement>('.rt-cols__pane') as HTMLElement
-    const before = innerPane.style.flex
+    const before = flexOf(innerPane)
     const outerDivider = outerDividers[0] as HTMLElement
     outerDivider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 4 }))
     outerDivider.dispatchEvent(pointer('pointermove', { clientX: 160, pointerId: 4 }))
     outerDivider.dispatchEvent(pointer('pointerup', { clientX: 160, pointerId: 4 }))
-    expect(innerPane.style.flex, 'the inner row must be untouched').toBe(before)
+    expect(flexOf(innerPane), 'the inner row must be untouched').toBe(before)
   })
 
   it('keeps two column blocks independent', () => {
@@ -320,11 +369,11 @@ describe('dragging a column divider resizes the left pane', () => {
     // wiring reads the authored `data-left` and keeps the announced value in
     // step, so a fixture missing it would test a shape that never occurs.
     second.innerHTML = [
-      '<div class="rt-cols__pane" data-side="left" style="flex: 70 1 0%">L2</div>',
+      '<div class="rt-cols__pane" data-side="left" style="--rt-cols-pane-flex: 70">L2</div>',
       '<div class="rt-cols__divider" role="separator" aria-orientation="vertical" ',
       'aria-label="Resize columns" aria-valuenow="70" aria-valuemin="1" aria-valuemax="99" ',
       'tabindex="0"></div>',
-      '<div class="rt-cols__pane" data-side="right" style="flex: 1 1 0%">R2</div>'
+      '<div class="rt-cols__pane" data-side="right" style="--rt-cols-pane-flex: 1">R2</div>'
     ].join('')
     Object.defineProperty(second, 'clientWidth', { value: CONTAINER_WIDTH, configurable: true })
     const secondDivider = second.querySelector('.rt-cols__divider') as HTMLElement
@@ -337,8 +386,8 @@ describe('dragging a column divider resizes the left pane', () => {
     dom.divider.dispatchEvent(pointer('pointermove', { clientX: 160, pointerId: 1 }))
     dom.divider.dispatchEvent(pointer('pointerup', { clientX: 160, pointerId: 1 }))
 
-    expect(dom.left.style.flex).toBe('60 1 0%')
-    expect(secondLeft.style.flex, 'the untouched block must keep its width').toBe('70 1 0%')
+    expect(flexOf(dom.left)).toBe('60')
+    expect(flexOf(secondLeft), 'the untouched block must keep its width').toBe('70')
     expect(secondDivider.getAttribute('aria-valuenow'), 'and its announced value').toBe('70')
   })
 })
@@ -351,23 +400,23 @@ describe('the keyboard moves the divider', () => {
     // The shared step is LAYOUT.dividerStepWidth, the same one the shell's pane
     // dividers use, so the two feel identical.
     expect(dom.divider.getAttribute('aria-valuenow')).toBe('60')
-    expect(dom.left.style.flex).toBe('60 1 0%')
+    expect(flexOf(dom.left)).toBe('60')
   })
 
   it('steps the other way with the opposite arrow', () => {
     const dom = buildDom()
     attach(dom.container)
     dom.divider.dispatchEvent(key('keydown', 'ArrowLeft'))
-    expect(dom.left.style.flex).toBe('20 1 0%')
+    expect(flexOf(dom.left)).toBe('20')
   })
 
   it('jumps to the bounds with Home and End', () => {
     const dom = buildDom()
     attach(dom.container)
     dom.divider.dispatchEvent(key('keydown', 'Home'))
-    expect(dom.left.style.flex).toBe('1 1 0%')
+    expect(flexOf(dom.left)).toBe('1')
     dom.divider.dispatchEvent(key('keydown', 'End'))
-    expect(dom.left.style.flex).toBe('99 1 0%')
+    expect(flexOf(dom.left)).toBe('99')
   })
 
   it('leaves the width alone for a key it does not own', () => {
@@ -375,7 +424,7 @@ describe('the keyboard moves the divider', () => {
     attach(dom.container)
     const event = key('keydown', 'a')
     dom.divider.dispatchEvent(event)
-    expect(dom.left.style.flex).toBe('40 1 0%')
+    expect(flexOf(dom.left)).toBe('40')
     expect(event.defaultPrevented, 'a key we ignore must not be swallowed').toBe(false)
   })
 
@@ -404,7 +453,7 @@ describe('teardown leaves nothing behind', () => {
     detach()
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     dom.divider.dispatchEvent(pointer('pointermove', { clientX: 160, pointerId: 1 }))
-    expect(dom.left.style.flex, 'a detached wiring must not respond').toBe('40 1 0%')
+    expect(flexOf(dom.left), 'a detached wiring must not respond').toBe('40')
   })
 
   it('ends a drag torn down mid-drag', () => {

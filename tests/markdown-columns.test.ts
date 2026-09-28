@@ -56,6 +56,20 @@ function allPanes(html: string): Element[] {
 }
 
 /**
+ * True when a `style` value contains a declaration **named** `flex`, or one of
+ * its longhands.
+ *
+ * Anchored on the declaration name rather than on the substring `flex:`, which
+ * would be a false positive on every pane: the property this feature emits is
+ * `--rt-cols-pane-flex`, so `flex:` is inside its very name. The point of the
+ * check is a declaration that would out-rank a stylesheet rule, and a custom
+ * property declaration does not.
+ */
+function declaresFlex(style: string): boolean {
+  return /(?:^|;)\s*flex(?:-grow|-shrink|-basis)?\s*:/.test(style)
+}
+
+/**
  * The source form used throughout: the panes are separated by a `***` thematic
  * break.
  *
@@ -91,8 +105,13 @@ describe(':::columns renders two panes with the authored widths', () => {
     // And the width is applied to the left pane, with the right taking the rest.
     // Both grow by their own share, so the rendered ratio really is 40:60 — see
     // the `renderRow` note for what happens when the last pane is left at `1 1 0%`.
-    expect(left?.getAttribute('style')).toBe('flex: 40 1 0%')
-    expect(right?.getAttribute('style')).toBe('flex: 60 1 0%')
+    //
+    // The value is a **custom property**, and the stylesheet owns the `flex`
+    // shorthand that reads it. Asserted as a string rather than through
+    // `element.style`, because `getPropertyValue` is what the drag writes and an
+    // exact attribute is what a shipped `innerHTML` will carry.
+    expect(left?.getAttribute('style')).toBe('--rt-cols-pane-flex: 40')
+    expect(right?.getAttribute('style')).toBe('--rt-cols-pane-flex: 60')
   })
 
   it('emits a focusable separator with slider semantics between the panes', () => {
@@ -516,15 +535,18 @@ describe('a column block cannot become an injection vector', () => {
     }
   })
 
-  it('the only style value it emits is a flex shorthand on a validated integer', () => {
+  it('the only style value it emits is one grow factor on a validated integer', () => {
     /**
      * DOMPurify does not sanitise `style` attribute *contents* — measured:
      * `style="width:expression(…)"` survives verbatim. So the value here is not
      * protected by the sanitiser at all, and the only thing making it safe is
      * that `markdown-columns.ts` builds it from a number it parsed itself.
      *
-     * The pattern is deliberately closed: `flex: <integer> 1 0%` and nothing
-     * else. A `px`, `%`, `rem` or `expression` in that position fails here.
+     * The pattern is deliberately closed: a **single** custom-property
+     * declaration whose value is a bare integer, and nothing else. A `px`, `%`,
+     * `rem` or `expression` in that position fails here — and so does a second
+     * declaration, which is the guard against a width smuggling a shorthand past
+     * a pattern that only looked at the first one.
      */
     for (const source of [
       columnSource('{left="expression(alert(1))"}', 'L', 'R'),
@@ -535,9 +557,35 @@ describe('a column block cannot become an injection vector', () => {
         const style = element.getAttribute('style')
         if (style === null) continue
         expect(style, 'a style value from the document reached an element').toMatch(
-          /^flex: \d+ 1 0%$/
+          /^--rt-cols-pane-flex: \d{1,3}$/
         )
       }
+    }
+  })
+
+  it('emits no flex shorthand inline, so the stylesheet rule is not dead', () => {
+    /**
+     * The half of the dead-rule guard that is about the *markup*.
+     *
+     * An inline `flex` beats every stylesheet rule, so a `flex` rule in
+     * `markdown-columns.css` would be dead weight that reads as load-bearing —
+     * and no assertion about class names, or about a string containing a class
+     * name, can see it. This is the arrangement the stylesheet half of the check
+     * in `markdown-columns-styles.test.ts` depends on: the two are only
+     * meaningful together, because each one alone passes against a dead pairing.
+     */
+    const html = renderMarkdown(columnSource('{left=40}', 'L', 'R'))
+    for (const element of parse(html).querySelectorAll('*')) {
+      const style = element.getAttribute('style')
+      if (style === null) continue
+      expect(
+        declaresFlex(style),
+        `a \`flex\` declaration on <${element.tagName.toLowerCase()}> would kill the stylesheet rule`
+      ).toBe(false)
+      // The grow factor must still be emitted, or there is nothing for the rule
+      // to read — a test that only asserted the *absence* of a shorthand would
+      // pass against a pane that had lost its width entirely.
+      expect(style, 'the grow factor must still be emitted').toContain('--rt-cols-pane-flex:')
     }
   })
 })

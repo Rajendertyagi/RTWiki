@@ -3,6 +3,7 @@ import {
   COLUMN_MAX_PERCENT,
   COLUMN_MIN_PERCENT,
   COLUMNS_DIVIDER_SELECTOR,
+  COLUMNS_PANE_FLEX_PROPERTY,
   COLUMNS_PANE_SELECTOR,
   COLUMNS_ROOT_SELECTOR
 } from './markdown-columns.js'
@@ -46,9 +47,20 @@ import {
  * one difference is `unitsPerPixel`: a shell divider's value is a pixel width
  * and passes `1`, a column divider's is a **percentage of its container**, so it
  * passes `100 / containerWidth` — which is what makes a drag across the
- * container worth the full range. The `layoutResizing` document flag that
- * suppresses transitions during a drag is set from inside the shared object, so
- * a column drag has the same effect as a shell one.
+ * container worth the full range.
+ *
+ * ## What a drag does and does not do to the document
+ *
+ * A drag is confined to two elements: the divider's own `data-dragging` and
+ * `aria-valuenow`, and the pane's `--rt-cols-pane-flex`. It writes **nothing**
+ * to `document.documentElement` and there is no `layoutResizing` flag — a
+ * document-level `data-` attribute that a shared drag used to set on
+ * `pointerdown` and clear on release, and which was **deleted**, not
+ * reimplemented (ADR-017; no stylesheet in `src/` selects it, and no layout
+ * property carries a transition anywhere, so the rule it existed to enable would
+ * have suppressed nothing). Nothing in `createDividerDrag` writes to the document
+ * either — checked, not assumed: it touches only `config.element` and the
+ * callbacks.
  */
 
 /** One pane, as the wiring needs it. */
@@ -135,7 +147,15 @@ function buildBoundaries(container: HTMLElement): Boundary[] {
         // Grow by the pane's own share. Every pane grows by its own share, so
         // the ratios across the row are what the percentages mean — see the note
         // on `renderRow` for why the last pane is not left at `1 1 0%`.
-        left.element.style.flex = `${clamped} 1 0%`
+        //
+        // The **custom property**, not the `flex` shorthand. The stylesheet owns
+        // the shorthand (`flex: var(--rt-cols-pane-flex, 1) 1 0%` in
+        // `markdown-columns.css`), and writing `style.flex` here would put the
+        // grow factor back inline on every pointermove — which is precisely the
+        // arrangement that made any stylesheet rule for it dead. The drag is the
+        // hot path, so this is the line that would have silently reintroduced the
+        // problem while looking correct.
+        left.element.style.setProperty(COLUMNS_PANE_FLEX_PROPERTY, String(clamped))
         divider.setAttribute('aria-valuenow', String(clamped))
       }
 
@@ -268,6 +288,10 @@ export function attachColumnDividers(container: HTMLElement): () => void {
    */
   const observer = new MutationObserver(() => {
     // A drag in progress belongs to nodes that are about to be discarded.
+    // Ending it here is about the drag, not about the document: the preview is
+    // replaced on every keystroke, so a drag torn down mid-flight has no
+    // `pointerup` coming, and a live drag object would still hold the pointer
+    // capture it took.
     activeBoundary?.drag.cancel()
     activeBoundary = null
     boundaries = buildBoundaries(container)
@@ -297,9 +321,10 @@ export function attachColumnDividers(container: HTMLElement): () => void {
     container.removeEventListener('lostpointercapture', onPointerEnd)
     container.removeEventListener('keydown', onKeyDown)
     observer.disconnect()
-    // A drag in flight when the preview unmounts must not leave the
-    // `layoutResizing` document flag set, which would suppress transitions for
-    // the rest of the session.
+    // A drag in flight when the preview unmounts has no `pointerup` coming, so
+    // the teardown ends it. What it must not leave behind is a stale
+    // `data-dragging` and a live capture — the drag object is the thing that
+    // holds both.
     activeBoundary?.drag.cancel()
     activeBoundary = null
     boundaries = []

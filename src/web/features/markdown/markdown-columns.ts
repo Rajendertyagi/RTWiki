@@ -70,6 +70,27 @@
  * The root keeps `left` for the **two-pane** form, where it is the one number
  * that describes that form. It is ignored when children are present, because with
  * children present the children are what have widths.
+ *
+ * ## Where the number lands, and why it is a custom property
+ *
+ * The width reaches the element as `--rt-cols-pane-flex: N` on the pane's
+ * `style`, and the stylesheet owns `flex: var(--rt-cols-pane-flex, 1) 1 0%`.
+ *
+ * It was `flex: N 1 0%` inline, and that made the stylesheet the wrong shape
+ * rather than the code wrong. An inline declaration wins every cascade contest
+ * it enters, so a `flex` rule in `markdown-columns.css` would have been **dead
+ * weight that looked load-bearing** — and nothing could have caught it: the
+ * markup is a string, there is no computed style to assert against in a unit
+ * test, and CSS coverage reports selector *matching*, never which rule won.
+ * `tests/markdown-columns-styles.test.ts` now builds the real sheet and asserts
+ * it references the property, which is the check that makes a dead rule
+ * observable.
+ *
+ * The `, 1` fallback is load-bearing, not decoration: a `var()` with no fallback
+ * makes the whole declaration invalid at computed-value time, so a pane that
+ * lost its property would collapse to zero width instead of degrading. An equal
+ * share is the right thing to degrade to, because that is what a pane with no
+ * width asked for means.
  */
 
 import { splitAtDivider, tagNameAt, topLevelSpans } from './markdown-columns-scanner.js'
@@ -108,13 +129,28 @@ export const COLUMN_MAX_PERCENT = 99
 export const COLUMN_DEFAULT_WEIGHT = 1
 
 /**
+ * The custom property that carries a pane's grow factor.
+ *
+ * Declared once, here, because it appears in three places that cannot import one
+ * another: the render string in this module, the wiring in
+ * `markdown-columns-divider.ts`, and the `var()` in `markdown-columns.css`.
+ * The stylesheet repeats it literally, exactly as it repeats the class names —
+ * a `.css` file cannot import a TypeScript constant, and a hashed name would
+ * not survive being injected as a string anyway.
+ */
+export const COLUMNS_PANE_FLEX_PROPERTY = '--rt-cols-pane-flex'
+
+/** The grow factor a pane takes when nothing set one: an equal share. */
+export const COLUMNS_PANE_FLEX_FALLBACK = COLUMN_DEFAULT_WEIGHT
+
+/**
  * Class names and selectors for the emitted structure.
  *
  * These are **global** names, not CSS-module names: the HTML is produced as a
  * string by `renderMarkdown` and injected wholesale, so the stylesheet is
- * written against `:global(...)` selectors in `markdown-columns.module.css`.
- * The names are declared once here and the stylesheet repeats them literally;
- * that repetition is inherent to emitting raw HTML with a CSS modules build.
+ * written against plain global selectors in `markdown-columns.css`. The names
+ * are declared once here and the stylesheet repeats them literally; that
+ * repetition is inherent to emitting raw HTML with a CSS modules build.
  */
 export const COLUMNS_ROOT_CLASS = 'rt-cols'
 export const COLUMNS_PANE_CLASS = 'rt-cols__pane'
@@ -249,6 +285,18 @@ function attributePercent(percent: number): string {
   return String(percent)
 }
 
+/**
+ * The pane's `style` attribute: the grow factor, and nothing else.
+ *
+ * A **custom property**, so `markdown-columns.css` keeps the `flex` shorthand and
+ * therefore keeps being the thing that decides how a pane is sized. The value is
+ * still only ever `String(an integer this module produced)` — see the module note
+ * on why the width grammar exists.
+ */
+function paneFlexStyle(percent: number): string {
+  return `${COLUMNS_PANE_FLEX_PROPERTY}: ${attributePercent(percent)}`
+}
+
 /** The parts of a directive this module needs. Keeps micromark out of it. */
 export interface ColumnDirectiveInput {
   name: string
@@ -272,11 +320,17 @@ export interface ColumnDirectiveInput {
  * outside any `::::columns` — still renders its content. Measured: that is
  * exactly the case a compile-data handoff broke.
  *
- * The width is emitted as a `data-width` **integer** and the flex style is
- * `flex: 1 1 0%`, deliberately uniform. A parent that finds N of these sets
- * each pane's real width from the collected shares; an orphan falls back to the
- * equal `1 1 0%` it was given, which is the correct reading of "no width asked
+ * The width is emitted as a `data-width` **integer** and the grow factor is
+ * reset to an equal share, deliberately uniform. A parent that finds N of these
+ * sets each pane's real width from the collected shares; an orphan falls back to
+ * the equal share it was given, which is the correct reading of "no width asked
  * for".
+ *
+ * The reset is emitted by every child, including one that declared a width,
+ * because the child cannot know its own share — the remainder distribution is the
+ * parent's. A child that emitted a number of its own here would be one pane
+ * disagreeing with the row, which is exactly the 40/41 defect documented on
+ * {@link renderRow} below.
  */
 export function renderColumnChild(
   encode: (value: string) => string,
@@ -294,7 +348,8 @@ export function renderColumnChild(
   return (
     `<div class="${COLUMNS_PANE_CLASS}" data-side="${COLUMN_SIDE_MIDDLE}" ` +
     `data-width="${width.percent === null ? '' : attributePercent(width.percent)}"` +
-    `${rejectedAttr}${labelAttr} style="flex: 1 1 0%">${notice}${directive.content ?? ''}</div>`
+    `${rejectedAttr}${labelAttr} style="${paneFlexStyle(COLUMNS_PANE_FLEX_FALLBACK)}">` +
+    `${notice}${directive.content ?? ''}</div>`
   )
 }
 
@@ -512,10 +567,11 @@ export function renderDivider(spec: DividerSpec): string {
  *
  * That is the whole sizing model, and it is easy to get wrong. The two-pane form
  * shipped first as `flex: 0 0 40%` on the left and `flex: 1 1 0%` on the right,
- * which is a *fixed* 40% basis. Replacing that with a uniform `flex: <share> 1
- * 0%` while leaving the last pane at `1 1 0%` was measured to render the
- * authored 40% as **40/41 — about 98% of the row.** Grow factors are ratios, so
- * the last pane has to carry its own share for the sum to be meaningful.
+ * which is a *fixed* 40% basis. Replacing that with a uniform
+ * `flex: <share> 1 0%` while leaving the last pane at `1 1 0%` was measured to
+ * render the authored 40% as **40/41 — about 98% of the row.** Grow factors are
+ * ratios, so the last pane has to carry its own share for the sum to be
+ * meaningful.
  *
  * With that fixed, the shares need not sum to 100 for the geometry to be right:
  * flexbox normalises them. The sum is kept at 100 anyway so the *announced*
@@ -533,7 +589,7 @@ function renderRow(panes: ColumnPane[], extraAttrs: string, label?: string | nul
     body +=
       `<div class="${COLUMNS_PANE_CLASS}" data-side="${pane.side}" ` +
       `data-width="${attributePercent(pane.percent)}" data-index="${index}" ` +
-      `style="flex: ${attributePercent(pane.percent)} 1 0%">${pane.content}</div>`
+      `style="${paneFlexStyle(pane.percent)}">${pane.content}</div>`
     if (dividers[index] !== undefined) body += dividers[index] as string
   }
   return (

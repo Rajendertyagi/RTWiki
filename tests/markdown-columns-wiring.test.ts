@@ -128,6 +128,19 @@ function stubCapture(elements: HTMLElement[]): void {
 }
 
 /**
+ * The grow factor on a pane, as the wiring reads and writes it.
+ *
+ * The **custom property**, because the `flex` shorthand that consumes it is a
+ * stylesheet rule in `markdown-columns.css` — see
+ * `markdown-columns-styles.test.ts` for the assertion that the rule ships.
+ * Read through `getPropertyValue`, because `setProperty` re-serialises the
+ * attribute and the attribute is not what the wiring touches.
+ */
+function flexOf(pane: HTMLElement | null | undefined): string {
+  return pane?.style.getPropertyValue('--rt-cols-pane-flex') ?? ''
+}
+
+/**
  * Gives the container's current row a measured width.
  *
  * jsdom has no layout, so `clientWidth` is 0 and the wiring's `unitsPerPixel`
@@ -283,7 +296,7 @@ describe('the wiring is attached to the real rendered output', () => {
 
     // The step is the shared `LAYOUT.dividerStepWidth`, 20 points.
     expect(divider.getAttribute('aria-valuenow'), 'the key must move the boundary').toBe('60')
-    expect((fixture.panes[0] as HTMLElement).style.flex).toBe('60 1 0%')
+    expect(flexOf(fixture.panes[0])).toBe('60')
   })
 
   it('moves each boundary of a four-child row independently', () => {
@@ -296,10 +309,8 @@ describe('the wiring is attached to the real rendered output', () => {
 
     expect(second.getAttribute('aria-valuenow')).toBe('45')
     // The pane to its left grew; the one before it did not.
-    expect((fixture.panes[1] as HTMLElement).style.flex).toBe('45 1 0%')
-    expect((fixture.panes[0] as HTMLElement).style.flex, 'an untouched pane keeps its width').toBe(
-      '25 1 0%'
-    )
+    expect(flexOf(fixture.panes[1])).toBe('45')
+    expect(flexOf(fixture.panes[0]), 'an untouched pane keeps its width').toBe('25')
     // And the first boundary is untouched.
     expect(fixture.dividers[0]?.getAttribute('aria-valuenow')).toBe('25')
   })
@@ -316,7 +327,7 @@ describe('the wiring is attached to the real rendered output', () => {
     divider.dispatchEvent(pointer('pointerup', { clientX: 80, pointerId: 1 }))
 
     expect(divider.getAttribute('aria-valuenow'), 'the drag must move the boundary').toBe('50')
-    expect(left.style.flex).toBe('50 1 0%')
+    expect(flexOf(left)).toBe('50')
   })
 
   it('gives the divider a hit area wide enough to press', async () => {
@@ -341,7 +352,7 @@ describe('the wiring is attached to the real rendered output', () => {
     // as a before/after snapshot. A snapshot is order-dependent: a flag left set
     // by an earlier test is in the "before" too, so it would agree with a
     // reintroduced flag and pass. `outerHTML` is no better — a drag legitimately
-    // rewrites the pane's `style.flex` and the divider's `aria-valuenow`, so it
+    // rewrites the pane's `style` and the divider's `aria-valuenow`, so it
     // would report the feature working as a failure.
     const documentDataAttrs = (): string[] =>
       root.getAttributeNames().filter((name) => name.startsWith('data-'))
@@ -391,7 +402,7 @@ describe('the wiring is attached to the real rendered output', () => {
       divider.getAttribute('aria-valuenow'),
       'a move over the pane must still drive the drag'
     ).toBe('50')
-    expect((fixture.panes[0] as HTMLElement).style.flex).toBe('50 1 0%')
+    expect(flexOf(fixture.panes[0])).toBe('50')
   })
 
   it('releases the drag from a pointerup that lands anywhere in the container', () => {

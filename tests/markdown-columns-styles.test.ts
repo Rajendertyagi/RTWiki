@@ -3,7 +3,13 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { build } from 'vite'
-import { COLUMNS_NOTICE_CLASS } from '../src/web/features/markdown/markdown-columns.js'
+import {
+  COLUMNS_NOTICE_CLASS,
+  COLUMNS_PANE_FLEX_FALLBACK,
+  COLUMNS_PANE_FLEX_PROPERTY,
+  renderColumnChild,
+  renderColumnsDirective
+} from '../src/web/features/markdown/markdown-columns.js'
 
 /**
  * The one test that could have caught the column feature being invisible.
@@ -228,3 +234,184 @@ describe('the stylesheet is wired to the module that renders it', () => {
     }
   })
 })
+
+/**
+ * ## The dead `flex` rule, and the test that can see it
+ *
+ * A pane's width is a per-instance number, so it cannot be written in a
+ * stylesheet — it has to be an inline declaration. And an inline declaration wins
+ * every cascade contest it enters. So while the width was `flex: N 1 0%` inline,
+ * a `flex` rule in this file was **dead weight that read as load-bearing**: it
+ * would have compiled, shipped, matched every pane, and changed nothing.
+ *
+ * **Nothing in the toolchain reports that.** Measured, both halves:
+ * - CSS coverage answers "did this selector match an element", which the dead rule
+ *   did. It does not answer "which declaration won".
+ * - The stylelint family has no cascade model at all, so it cannot answer it
+ *   either.
+ * - The markup is a string injected through `dangerouslySetInnerHTML`, so there is
+ *   no DOM to measure and no computed style to assert against.
+ *
+ * The fix was to route the number through a custom property, which moves the
+ * shorthand into this file and leaves only a variable to pass across. That is
+ * what makes the pairing **checkable**: the rule and the property are two pieces
+ * of text in two different files, and this file builds the real one and then
+ * checks that it names the other.
+ *
+ * Each half is necessary and neither is sufficient. A rule with no property is
+ * dead and still passes a class-name check; a property with no rule is ignored
+ * and still passes an emit check.
+ */
+describe('the pane width is routed to the stylesheet, not around it', () => {
+  it('ships a flex rule for the pane, and it references the property', () => {
+    /**
+     * The assertion that would have caught a dead rule, stated on the CSS that
+     * **came out of the build** rather than on the source.
+     *
+     * On the source this is true of any `flex` declaration whatsoever, dead or
+     * not — which is exactly the blind spot. On the emitted CSS it is a statement
+     * about what a browser will parse, and it can only be made here because this
+     * file runs the real pipeline.
+     */
+    expect(paneFlexDeclaration(), 'the pane has no shipped flex declaration').not.toBeNull()
+    expect(
+      paneFlexDeclaration(),
+      'the shipped flex rule must read the property, or the rule cannot win'
+    ).toContain(`var(${COLUMNS_PANE_FLEX_PROPERTY}`)
+  })
+
+  it('emits the property on every pane, and no inline shorthand to beat the rule', () => {
+    /**
+     * The other half, and the one that makes the first half mean something.
+     *
+     * Checked against the **render path** rather than a hand-written fixture,
+     * because that is the whole lesson of `markdown-columns-wiring.test.ts`: a
+     * fixture can agree with the emitter while the emitter is wrong, and then
+     * every interaction assertion passes against a row that is never produced.
+     */
+    // A child, as `renderColumnChild` writes it — the orphan/reset shape.
+    const child = renderColumnChild((value) => value, {
+      name: 'column',
+      content: 'A',
+      type: 'containerDirective'
+    })
+    // A row, as `renderColumnsDirective` writes it, with the pane flexed 40/60.
+    const row = renderColumnsDirective((value) => value, {
+      name: 'columns',
+      attributes: { left: '40' },
+      content: '<p>L</p>\n<hr />\n<p>R</p>',
+      type: 'containerDirective'
+    })
+    for (const html of [child, row]) {
+      expect(html, 'the pane must carry the grow factor').toContain(
+        `${COLUMNS_PANE_FLEX_PROPERTY}: `
+      )
+      // An inline shorthand is what made the rule dead. This is the only
+      // assertion in the suite that could have said so, and it says it about the
+      // real emitter.
+      expect(html, 'an inline flex shorthand would beat the stylesheet rule').not.toContain(
+        'style="flex'
+      )
+    }
+  })
+
+  it('resolves a pane with no property to an equal share, not to an invalid rule', () => {
+    /**
+     * The `, 1` in the `var()`, and why it is load-bearing.
+     *
+     * A `var()` with **no** fallback makes the whole declaration invalid at
+     * computed-value time, and each longhand then takes its *initial* value
+     * rather than a previous declaration. With the fallback removed, a browser
+     * resolves this to **`0 1 auto`** — measured, not assumed: `flex-grow: 0`, so
+     * the panes stop growing to share the row and size to their content instead.
+     * It is not a zero-width collapse, which is the wrong guess and worth
+     * correcting here, because the wrong guess is what makes a reader look for
+     * the fault somewhere else.
+     *
+     * With the fallback, a pane whose property went missing takes an equal
+     * share, which is what "no width asked for" means everywhere else in this
+     * feature.
+     *
+     * The consequence above is settled in a real engine by
+     * `tests/browser/markdown-columns-sizing.pwspec.ts`, which removes the
+     * property from a live pane and asserts the resolved value and the real
+     * widths. This test cannot observe it and does not pretend to.
+     *
+     * **The limit of this test, stated plainly:** it is a resolver written here,
+     * not a layout engine. jsdom cannot back it — measured, its
+     * `getComputedStyle` returns the *unsubstituted* `var(--rt-cols-pane-flex, 1)
+     * 1 0%`, so no unit test in this repo can observe real cascade resolution for
+     * a custom property. What this pins is the shape of the shipped declaration
+     * (the fallback is present and is the value the renderer uses as its reset)
+     * and that the two forms differ. The only thing that can settle the resolved
+     * value in a real engine is a browser `getComputedStyle` assertion, which this
+     * suite does not run.
+     */
+    const shipped = paneFlexDeclaration()
+    expect(shipped, 'the shipped rule must be readable for this to mean anything').not.toBeNull()
+
+    // The fallback the stylesheet actually ships, extracted rather than restated.
+    const fallback = /var\(\s*--rt-cols-pane-flex\s*,\s*([^)]*)\)/.exec(shipped as string)?.[1]
+    expect(fallback, 'the shipped var() must carry a fallback').toBeDefined()
+    expect(fallback?.trim(), 'the fallback must be the value the renderer resets a pane to').toBe(
+      String(COLUMNS_PANE_FLEX_FALLBACK)
+    )
+
+    // A pane with no property: a valid declaration, an equal share.
+    expect(resolveFlex(shipped as string, null)).toBe('1 1 0%')
+    // A pane with one: the authored share.
+    expect(resolveFlex(shipped as string, '40')).toBe('40 1 0%')
+    // The same declaration with the fallback removed, for contrast. This is the
+    // shape that fails, and the assertion says it fails, so the fallback cannot
+    // be dropped without a test going red.
+    expect(resolveFlex('var(--rt-cols-pane-flex) 1 0%', null)).toBeNull()
+  })
+})
+
+/**
+ * The `flex` declaration on `.rt-cols__pane`, **as the build emitted it**.
+ *
+ * Read out of the built CSS rather than restated, so that dropping the rule, or
+ * changing its fallback, fails the assertions above instead of being papered over
+ * by a literal in this file.
+ */
+function paneFlexDeclaration(): string | null {
+  let found: string | null = null
+  for (const match of selectors.matchAll(/\.rt-cols__pane(?![-\w])[^{]*\{([^}]*)\}/g)) {
+    const body = match[1] as string
+    const declaration = /(?:^|;)\s*flex\s*:\s*([^;]+)/.exec(body)
+    // Several rules target the pane (the media query is one of them); the one that
+    // carries a `flex` declaration is the one under test.
+    if (declaration !== null) found = (declaration[1] as string).trim()
+  }
+  return found
+}
+
+/**
+ * Resolves one `flex` declaration the way a browser does, for the only two cases
+ * this stylesheet can be in.
+ *
+ * Implements the two rules that matter and nothing else, deliberately:
+ * - a `var()` whose property the element sets is replaced by that value;
+ * - a `var()` with a fallback, and no property, is replaced by the fallback;
+ * - a `var()` with **no** fallback, and no property, makes the declaration
+ *   invalid at computed-value time, which is returned as `null` because that is
+ *   what a browser does to it — not "the previous value", not "0".
+ */
+function resolveFlex(declaration: string, customValue: string | null): string | null {
+  let invalid = false
+  const substituted = declaration.replace(
+    // `name` is captured but not read: the substitution keys off whether the
+    // element sets *a* value, not off which property was named, because this
+    // stylesheet has exactly one. Kept in the pattern so the fallback group
+    // stays the second capture.
+    /var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)/g,
+    (_whole, _name: string, fallback?: string) => {
+      if (customValue !== null) return customValue
+      if (fallback !== undefined) return fallback.trim()
+      invalid = true
+      return ''
+    }
+  )
+  return invalid ? null : substituted.replace(/\s+/g, ' ').trim()
+}
