@@ -167,17 +167,31 @@ export async function performRestore(
     copyFileSync(source, live)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
-    // A partial swap is the one state this cannot leave behind. If the copy
-    // failed after the move, the previous wiki is intact under the pre-restore
-    // name, so put it back rather than leaving RTWiki with no database at all.
-    if (!existsSync(live) && existsSync(preRestore)) {
+
+    // A partial swap is the one state this cannot leave behind, so the previous
+    // wiki is put back and the half-written `live` is removed.
+    //
+    // The condition is `existsSync(preRestore)`, not `!existsSync(live)`. A
+    // failed `copyFileSync` very often leaves a truncated destination behind --
+    // that is what a full disk does -- and the earlier form skipped the rollback
+    // for exactly that case, leaving RTWiki pointed at a 200-byte file that
+    // cannot be opened while the only intact copy sat under the pre-restore name.
+    // Whether `live` currently exists says nothing about whether it is valid;
+    // whether the pre-restore copy exists says whether there is something to
+    // roll back to.
+    if (existsSync(preRestore)) {
       try {
+        // The partial `live` goes first. On Windows a rename over an existing
+        // file succeeds, so moving the pre-restore main file into place would
+        // otherwise work -- but only after `live` is gone, and leaving a
+        // truncated file in either name is not a rollback.
+        rmSync(live, { force: true })
         for (const suffix of PRE_RESTORE_SIDECARS) {
-          if (existsSync(`${preRestore}${suffix}`))
+          if (existsSync(`${preRestore}${suffix}`)) {
             renameSync(`${preRestore}${suffix}`, `${live}${suffix}`)
+          }
         }
-        rmSync(source, { force: true })
-        getDatabaseLogger().error('Restore rolled back after a failed copy', {
+        getDatabaseLogger().error('Restore rolled back after a failed replacement', {
           event: 'restore_rollback'
         })
       } catch (rollbackError) {
@@ -190,6 +204,12 @@ export async function performRestore(
         )
       }
     }
+
+    // The backup is NOT touched. Deleting it here would be the worst possible
+    // outcome: the user asked to restore from it, the restore failed, and the
+    // one intact copy of their data would be gone with nothing to retry from.
+    // The module's invariant is that nothing is deleted during a restore, and
+    // the rollback is part of the restore.
     return { ok: false, reason: { kind: 'swap-failed', detail } }
   }
 
