@@ -606,7 +606,52 @@ export const UI_TEXT = {
   maximizeWindow: 'Maximize window',
   restoreWindow: 'Restore window',
   closeWindow: 'Close window',
-  saveButton: 'Save'
+  saveButton: 'Save',
+  // Backup and restore section (docs/BACKUP_PLAN.md §9). Every user-facing
+  // string for the feature lives here; the panel and the confirm modal hold no
+  // literals of their own.
+  settingsBackup: 'Backup',
+  backupIntro:
+    'RTWiki keeps up to three backups in its data folder, one for each period. Each is replaced when the next one is taken.',
+  backupPeriodDaily: 'Daily',
+  backupPeriodWeekly: 'Weekly',
+  backupPeriodMonthly: 'Monthly',
+  backupEveryHours: 'Every {hours} hours',
+  backupRunNow: 'Back up now',
+  backupRunning: 'Backing up…',
+  backupTaken: 'Backup saved ({size}).',
+  backupRestore: 'Restore',
+  backupNeverTaken: 'No backup yet',
+  backupLastTaken: 'Last taken {when}',
+  backupScheduledOff: 'Off',
+  backupUnreadable: 'This backup could not be read.',
+  backupRestoredReopen: 'Restored. Close and reopen RTWiki.',
+  // Failure reasons. The server returns a code from BACKUP_VALIDATION_REASONS or
+  // a BackupFailure; the panel maps it to one of these, so a refusal always
+  // names which check failed rather than saying "something went wrong".
+  backupFailedNotAFile: 'That file no longer exists.',
+  backupFailedNotADatabase: 'That file is not an RTWiki backup.',
+  backupFailedCorrupt: 'That backup is damaged and cannot be restored.',
+  backupFailedForeignKey: 'That backup is inconsistent and cannot be restored.',
+  backupFailedSchemaTooNew: 'That backup is from a newer version of RTWiki.',
+  backupFailedSchemaMissing: 'That backup is from an older version of RTWiki.',
+  backupFailedMidMigration:
+    'RTWiki is still moving attachments into its database, so a backup taken now would be incomplete. Restart RTWiki and try again.',
+  backupFailedDiskSpace: 'There is not enough free space to write this backup.',
+  backupFailedWrite: 'The backup could not be written.',
+  backupFailedUnavailable: 'Backups are unavailable in this session.',
+  // Restore confirmation. Separate from the delete dialog because restore
+  // replaces the live database, which is more destructive than deleting a page.
+  backupRestoreTitle: 'Restore from backup',
+  backupRestoreIntro: 'Restore RTWiki from {file}?',
+  backupRestoreWhen: 'Taken {when} · {size}',
+  backupRestoreReplaces: 'Your current notes will be replaced by the contents of this backup.',
+  backupRestoreMoveAside:
+    'Your current notes are not deleted. They are moved to {path} first, so you can recover them yourself if this goes wrong.',
+  backupRestoreShutsDown: 'RTWiki will close when the restore finishes. Open it again to carry on.',
+  backupRestoreConfirm: 'Restore and close RTWiki',
+  backupRestoreCancel: 'Cancel',
+  backupRestoreRefused: 'This backup cannot be restored, so nothing has been changed.'
 } as const
 
 export const STATUS_TEXT = {

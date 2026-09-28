@@ -19,6 +19,7 @@ import {
   IconAlertCircle,
   IconAppWindow,
   IconCalendarEvent,
+  IconDeviceFloppy,
   IconFileAnalytics,
   IconLayoutSidebar,
   IconPalette,
@@ -62,10 +63,11 @@ import {
   type SchedulerPreferences,
   saveSchedulerPreferences
 } from '../workspace/scheduler-preferences.js'
+import { BackupPanel } from './backup-panel.js'
 import { DebugLogViewer } from './debug-log-viewer.js'
 import classes from './settings.module.css'
 
-type Section = 'appearance' | 'layout' | 'editor' | 'debugLogs' | 'scheduler' | 'desktop'
+type Section = 'appearance' | 'layout' | 'editor' | 'debugLogs' | 'scheduler' | 'desktop' | 'backup'
 
 /**
  * The two independently-failing server-side reads, and one failed load of each.
@@ -109,6 +111,7 @@ const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ size?:
   { id: 'editor', label: UI_TEXT.settingsEditor, icon: IconTextCaption },
   { id: 'scheduler', label: UI_TEXT.settingsScheduler, icon: IconCalendarEvent },
   { id: 'desktop', label: UI_TEXT.settingsDesktop, icon: IconAppWindow },
+  { id: 'backup', label: UI_TEXT.settingsBackup, icon: IconDeviceFloppy },
   { id: 'debugLogs', label: UI_TEXT.settingsDebugLogs, icon: IconFileAnalytics }
 ]
 
@@ -578,6 +581,17 @@ export function SettingsWorkspace({
               >
                 {UI_TEXT.schedulerTest}
               </Button>
+            </Stack>
+          ) : null}
+
+          {section === 'backup' ? (
+            <Stack gap="sm" className={classes.section}>
+              <Title order={5}>{UI_TEXT.settingsBackup}</Title>
+              {/* Mounted only while the section is open, exactly as
+                  DebugLogViewer is below: the panel fetches on mount, so keeping
+                  it always mounted would poll /api/backup on every settings
+                  visit. */}
+              <BackupPanel />
             </Stack>
           ) : null}
 
