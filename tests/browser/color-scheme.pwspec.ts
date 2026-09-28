@@ -26,6 +26,50 @@ function appearanceOption(page: Page, label: string) {
     .filter({ hasText: new RegExp(`^${label}$`) })
 }
 
+/**
+ * This spec needs the page tree to exist, so it seeds a page rather than
+ * assuming one.
+ *
+ * `Sidebar` renders `<PageTree>` only when the collection is non-empty
+ * (`src/web/layout/sidebar.tsx:150`); against an empty database it renders the
+ * empty state instead, so `data-testid="page-tree"` is never in the DOM and
+ * every readiness check below fails with "element(s) not found". That is
+ * correct product behaviour - a wiki with no pages has nothing to show - so
+ * the spec supplies its own precondition rather than the app being changed to
+ * satisfy a test. Nothing seeds `data/` (it is gitignored), so on a fresh
+ * checkout or a CI runner the database is empty and this spec could not pass
+ * without it.
+ *
+ * One page, seeded once for the file: four of the five tests only navigate to
+ * Settings and one reloads, so none of them alters the tree, and per-test
+ * seeding would buy nothing but five extra round trips. This is the file-scope
+ * form of the `seedOwnedPage` fixture `tree-dnd.pwspec.ts` uses per test, and
+ * keeps its invariant - teardown deletes exactly the IDs recorded here, so an
+ * unrelated page, or one another spec left behind, is never touched.
+ */
+const seededPageIds: string[] = []
+
+test.beforeAll(async ({ request }) => {
+  const res = await request.post('/api/pages', {
+    data: { title: `Color Scheme Fixture ${Date.now()}`, pageType: 'rich', content: '' }
+  })
+  if (res.status() !== 201) {
+    throw new Error(`seed page failed: ${res.status()} ${await res.text()}`)
+  }
+  const body = (await res.json()) as { page: { id: string } }
+  seededPageIds.push(body.page.id)
+})
+
+test.afterAll(async ({ request }) => {
+  for (const id of seededPageIds) {
+    try {
+      await request.delete(`/api/pages/${id}`)
+    } catch {
+      // Already deleted - ignore.
+    }
+  }
+})
+
 async function openApp(page: Page): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')

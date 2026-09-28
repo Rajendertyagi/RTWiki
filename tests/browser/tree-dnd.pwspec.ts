@@ -1,4 +1,5 @@
 import { type APIRequestContext, test as baseTest, expect, type Page } from '@playwright/test'
+import { PAGE_LIST_BATCH_LIMIT } from '../../src/web/services/pages-api.js'
 import { waitForRow } from './utils/row-visibility.js'
 
 /**
@@ -24,8 +25,18 @@ interface SeededPage {
 
 let titleSeq = 0
 
-/** Fill volume that pushes the tree past the API's default 50-row window. */
-const PAGE_WINDOW_REGRESSION_SIZE = 50
+/**
+ * Roots seeded purely as filler by the window-regression test.
+ *
+ * Derived from the shipped `PAGE_LIST_BATCH_LIMIT` rather than restated, so the
+ * test cannot silently stop covering the window if the constant moves. The
+ * margin over the limit is what makes the assertion meaningful: the server
+ * orders the list `updated_at DESC`, so the *oldest* seeds are the ones a
+ * single-window fetch would drop. Ten past the limit guarantees the oldest
+ * filler is outside the first window even after five non-filler pages are
+ * added.
+ */
+const WINDOW_FILLER_COUNT = PAGE_LIST_BATCH_LIMIT + 10
 
 function uniqueTitle(base: string): string {
   titleSeq += 1
@@ -93,13 +104,74 @@ async function dragRowOnto(
 
 /** Expands a collapsed parent row so its children become visible. */
 async function expandRow(page: Page, pageId: string): Promise<void> {
-  await waitForRow(page, pageId)
+  await scrollToRow(page, pageId)
   const row = rowLocator(page, pageId)
   await row.scrollIntoViewIfNeeded()
   const expand = row.locator('[aria-label="Expand"]')
   if ((await expand.count()) > 0) {
     await expand.click()
     await expect(row).toHaveAttribute('aria-expanded', 'true')
+  }
+}
+
+/**
+ * Scrolls the virtualised tree down until `pageId` is scrolled into view, and
+ * leaves the viewport there.
+ *
+ * `waitForRow` (utils/row-visibility.ts) steps the scroller by a fixed
+ * **3000 px** and returns as soon as the row is *attached*. Neither is safe for
+ * this spec, and both were measured failing here:
+ *
+ * - The stride. On a database that has accumulated thousands of rows 3000 px is
+ *   a reasonable stride, but this test deliberately builds a tree only ~2000 px
+ *   tall, so one step jumps from the top straight past the bottom and every row
+ *   in between is skipped. Observed: `fillers[30]` and `fillers[56]` never
+ *   materialising at all while their neighbours rendered. Stepping by a fraction
+ *   of the viewport cannot skip a band.
+ * - Attachment. Wunderbaum keeps an overscan buffer, so a row can be attached
+ *   while sitting entirely outside the viewport. Observed: the row resolving 33
+ *   times with an intersection ratio of 0.
+ *
+ * Scrolling is one-directional, so callers must check rows in increasing tree
+ * depth.
+ */
+async function scrollToRow(page: Page, pageId: string, timeoutMs = 20_000): Promise<void> {
+  const tree = page.getByTestId('page-tree')
+  const deadline = Date.now() + timeoutMs
+
+  // Presence in the DOM is not enough. Wunderbaum keeps an overscan buffer, so a
+  // row can be attached while sitting entirely above the viewport — measured
+  // here as the row resolving 33 times with an intersection ratio of 0. Compare
+  // the row's box against the scroller's own, which is also cheaper than a
+  // Playwright visibility round trip per step.
+  const visible = (): Promise<boolean> =>
+    tree.evaluate((el: HTMLElement, id: string) => {
+      const row = el.querySelector(`[role="treeitem"][data-page-id="${id}"]`)
+      if (!row) return false
+      const r = row.getBoundingClientRect()
+      const s = el.getBoundingClientRect()
+      return r.bottom > s.top && r.top < s.bottom
+    }, pageId)
+
+  while (Date.now() < deadline) {
+    if (await visible()) return
+    const moved = await tree.evaluate((el: HTMLElement) => {
+      const step = Math.max(200, Math.floor(el.clientHeight * 0.8))
+      const before = el.scrollTop
+      el.scrollTop = before + step
+      return { before, after: el.scrollTop, end: el.scrollTop + el.clientHeight >= el.scrollHeight }
+    })
+    // Past the last row and still not visible: it is not in the tree at all.
+    if (moved.after === moved.before && moved.end) break
+    await page.waitForTimeout(120)
+  }
+
+  if (!(await visible())) {
+    throw new Error(
+      `Tree row for page ${pageId} never scrolled into view, even at the end of the tree. ` +
+        `Attached = ${await rowLocator(page, pageId).count()}, total tree rows = ` +
+        `${await page.locator('[role="treeitem"][data-page-id]').count()}.`
+    )
   }
 }
 
@@ -529,11 +601,12 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     page.on('request', (req) => {
       if (req.method() === 'PATCH') patchCalls.push(req.url())
     })
-    // Fill the tree past the API's 50-row default window entirely within
-    // this test, so coverage never depends on scenarios that ran earlier.
-    // Use fewer fillers to keep the test within timeout bounds.
+    // Fill the tree past the client's retrieval window entirely within this
+    // test, so coverage never depends on scenarios that ran earlier. The volume
+    // comes from the shipped batch limit, not a hand-picked number, so the
+    // test keeps covering the window if that constant changes.
     const fillers: SeededPage[] = []
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < WINDOW_FILLER_COUNT; i++) {
       fillers.push(await seedOwnedPage(uniqueTitle(`Filler${i}`)))
     }
     const parent = await seedOwnedPage(uniqueTitle('WindowParent'))
@@ -543,60 +616,106 @@ test.describe('Page tree drag-and-drop (core-only POC)', () => {
     const c = await seedOwnedPage(uniqueTitle('DeepC'))
 
     await page.goto('/')
-    // Wait for API to confirm all pages exist before looking for rows.
+
+    // Wait for the API to confirm the seeds exist before looking for rows.
+    //
+    // Walked in windows rather than read through the default one, because that
+    // is the whole subject: `listPages` issues a bare `GET /api/pages`, which the
+    // server caps at one window of the *newest* rows, and `fillers[0]` is by
+    // construction the oldest. The previous gate therefore could never pass
+    // once this test seeded more than a window — it was asking the default
+    // window to contain the one page the default window is defined to exclude.
     await expect
       .poll(
         async () => {
-          const pages = await listPages(request)
+          const seen = new Set<string>()
+          for (let offset = 0; ; offset += PAGE_LIST_BATCH_LIMIT) {
+            const res = await request.get(
+              `/api/pages?limit=${PAGE_LIST_BATCH_LIMIT}&offset=${offset}`
+            )
+            expect(res.status()).toBe(200)
+            const body = (await res.json()) as { pages: Array<{ id: string }>; total: number }
+            for (const row of body.pages) seen.add(row.id)
+            if (seen.size >= body.total || body.pages.length === 0) break
+          }
           return {
-            c: pages.some((p) => p.id === c.id),
-            f0: pages.some((p) => p.id === fillers[0].id),
-            p: pages.some((p) => p.id === parent.id)
+            c: seen.has(c.id),
+            f0: seen.has(fillers[0].id),
+            p: seen.has(parent.id)
           }
         },
         { timeout: 10_000 }
       )
       .toMatchObject({ c: true, f0: true, p: true })
-    await page.waitForTimeout(500)
-    await waitForRow(page, c.id)
-    await waitForRow(page, fillers[0].id)
-    await waitForRow(page, parent.id)
 
-    // Pages sorted outside the first response window stay in the hierarchy:
-    // the oldest filler must render even though it cannot be in the window.
-    // Scroll to bottom to surface the oldest fillers.
+    // ## What this asserts, and what it used to assert
+    //
+    // The claim under test is about **this test's own data**: a client that
+    // fetched one window would hold only the newest `PAGE_LIST_BATCH_LIMIT`
+    // pages, so a page it seeded *first* — the oldest, therefore last in the
+    // server's `updated_at DESC` order — could not be in the tree at all.
+    //
+    // The old version asserted a **global** page count
+    // (`expect(allPages.length).toBeGreaterThan(50 - 10)`) that was satisfied
+    // by pages other scenarios had left behind. Against an empty database it
+    // read 25 and failed, even though the test had passed on any machine whose
+    // database happened to be large. So the assertion was really "someone else
+    // seeded enough pages", and the window it claimed to protect was never
+    // exercised: 20 fillers + 5 nodes never crossed 50 in the first place.
+    //
+    // Three things replace it, and the first is the one that keeps the rest
+    // honest.
+
+    // 1. The premise, checked against the server rather than assumed: this
+    //    test's seeds alone exceed one window, and the server's first window
+    //    really does exclude the oldest seed. If the ordering ever changed so
+    //    that the oldest seed fell *inside* the first window, the render
+    //    assertion below would pass for the wrong reason; this fails instead.
+    const seededIds = [...fillers, parent, kid, a, b, c].map((seeded) => seeded.id)
+    expect(seededIds.length).toBeGreaterThan(PAGE_LIST_BATCH_LIMIT)
+
+    const firstWindow = (await (await request.get('/api/pages')).json()) as {
+      pages: Array<{ id: string }>
+      total: number
+    }
+    expect(firstWindow.pages.length).toBe(PAGE_LIST_BATCH_LIMIT)
+    expect(firstWindow.total).toBeGreaterThan(PAGE_LIST_BATCH_LIMIT)
+    // fillers[0] is seeded first, so it is the oldest and sorts last.
+    expect(firstWindow.pages.map((p) => p.id)).not.toContain(fillers[0].id)
+
+    // The tree is virtualised, so wait for it rather than assuming the first
+    // row is attached after `goto`. The scroll container is the `page-tree`
+    // element itself: Wunderbaum puts its `wunderbaum` class on that node rather
+    // than on a child of it, so the measured DOM has
+    // `page-tree.querySelectorAll('.wunderbaum').length === 0` and the host is
+    // what carries `overflow-y: scroll`.
     const tree = page.getByTestId('page-tree')
+    await expect(tree).toBeVisible({ timeout: 20_000 })
     await tree.evaluate((el: HTMLElement) => {
-      const wb = el.querySelector('.wunderbaum') as HTMLElement | null
-      if (wb) wb.scrollTop = wb.scrollHeight
+      el.scrollTop = 0
     })
-    await page.waitForTimeout(500)
-    await expect(rowLocator(page, fillers[0].id)).toBeVisible()
 
-    // A parent/child relationship spanning the window boundary survives.
+    // 2. The oldest seed renders anyway — proof the controller walked past the
+    //    first window. It is the oldest of this test's seeds, so it is the one
+    //    the first window provably cannot hold, and it is the row to look for.
+    await scrollToRow(page, fillers[0].id)
+
+    // 3. A spread across the seeded range, not every row. The tree keeps only
+    //    about 25 rows in the DOM plus an overscan; a full sweep of the seeds
+    //    measured 155 s with `waitForRow`, so it cannot run in a 30 s budget.
+    //    The oldest seed is the load-bearing row; these two bound the middle
+    //    and the far end of what this test created.
+    for (const index of [Math.floor(WINDOW_FILLER_COUNT / 2), WINDOW_FILLER_COUNT - 1]) {
+      await scrollToRow(page, fillers[index].id)
+    }
+
+    // A parent/child relationship spanning the window boundary survives. The
+    // parent is seeded after every filler, so it sits below all of them.
     await expandRow(page, parent.id)
     await expect(rowLocator(page, kid.id)).toBeVisible()
 
-    // Every one of this test's seeded nodes renders. The seeds alone exceed
-    // one default window, so the oldest fillers can only be visible if the
-    // controller retrieved the complete collection rather than the most
-    // recent 50 rows.
-    const allPages: Array<{ id: string }> = []
-    for (let offset = 0; ; offset += 100) {
-      const res = await request.get(`/api/pages?limit=100&offset=${offset}`)
-      expect(res.status()).toBe(200)
-      const body = (await res.json()) as { pages: Array<{ id: string }>; total: number }
-      allPages.push(...body.pages)
-      if (allPages.length >= body.total || body.pages.length === 0) break
-    }
-    expect(allPages.length).toBeGreaterThan(PAGE_WINDOW_REGRESSION_SIZE - 10)
-    for (const seeded of [...fillers, parent, kid, a, b, c]) {
-      await waitForRow(page, seeded.id)
-      await expect(rowLocator(page, seeded.id)).toBeVisible()
-    }
-
     // Open page A so it becomes the active selection with its editor mounted.
-    await waitForRow(page, a.id)
+    await scrollToRow(page, a.id)
     await rowLocator(page, a.id).click()
     await page.keyboard.press('Enter')
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
