@@ -3,11 +3,14 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import {
   APP_VERSION,
   ATTACHMENTS_DIR,
+  BACKUPS_DIR,
   DEBUG_LOG_FILENAME,
   DEBUG_LOG_MAX_BYTES,
   DEBUG_LOG_MAX_ROTATED_FILES
 } from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
+import { sweepPartialBackups } from './backup/backup-service.js'
+import { type BackupSchedule, startBackupSchedule } from './backup/schedule.js'
 import { joinPaths, type RuntimePaths, resolveRuntimePaths } from './config/index.js'
 import {
   checkIntegrity,
@@ -49,6 +52,8 @@ export interface Runtime {
   db: Database
   shutdownToken: string
   coordinator: ShutdownCoordinator
+  /** Null when there is no data directory (the default test instance). */
+  backupSchedule: BackupSchedule | null
   /** Shorthand for coordinator.requestShutdown(). */
   shutdown: () => Promise<void>
 }
@@ -178,7 +183,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   const port = options.port ?? readServerPort(dataDir)
   let boundPort = port
   const attachmentsDir = joinPaths(dataDir, ATTACHMENTS_DIR)
-  const backupsDir = joinPaths(dataDir, 'backups')
+  const backupsDir = joinPaths(dataDir, BACKUPS_DIR)
 
   // ADR-005 portable layout plus one legacy directory: `attachments/` is where a
   // database created before ADR-014 still keeps its image files, and the
@@ -263,6 +268,9 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
         logError: () => {},
         closeLogger: async () => {}
       }),
+      // The second process has no server and no database, so it takes no
+      // backups. The instance that is already running owns the schedule.
+      backupSchedule: null,
       shutdown: async () => {}
     }
   }
@@ -290,11 +298,31 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     throw new Error('Database integrity check failed')
   }
 
+  // Deletes backups a previous run left half-written. "Delete on failure" does
+  // not cover a hard kill, and SQLite states an interrupted `VACUUM INTO` "might
+  // be incomplete and corrupt" -- so without this a crashed run leaves a corrupt
+  // file sitting where a backup belongs. Runs after migrations, which need the
+  // write lock first.
+  sweepPartialBackups(dataDir)
+
   // 1. Create coordinator with late-bound server-stop capability.
   let serverRef: Awaited<ReturnType<typeof Bun.serve>> | null = null
+
+  // The backup schedule. Started here rather than after the server binds so
+  // that a long backup cannot begin before the runtime is ready, and stopped in
+  // `stopGracefully` so a shutdown does not leave a timer holding the process
+  // open. `startBackupSchedule` returns null when there is no data directory,
+  // which is the default test instance -- it must never write to a real path.
+  const backupSchedule = startBackupSchedule({
+    dataDir,
+    getDb: () => db,
+    logger
+  })
+
   const coordinator = new ShutdownCoordinator({
     stopGracefully: async () => {
       if (!serverRef) throw new Error('Server not yet attached')
+      backupSchedule?.stop()
       await serverRef.stop()
     },
     closeDatabase: async () => {
@@ -358,6 +386,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     db,
     shutdownToken,
     coordinator,
+    // Exposed so a test can run a due slot without waiting for the kickoff.
+    backupSchedule,
     shutdown: async () => {
       await coordinator.requestShutdown()
     }

@@ -2,10 +2,37 @@ import { readFileSync } from 'node:fs'
 import { joinPaths } from '../config/index.js'
 import { ensureStoragePragmas, getDatabaseLogger, type getDb } from './index.js'
 
+/**
+ * The migration names this build has established as present, recorded as
+ * `runMigrations` walks them rather than declared as a second list.
+ *
+ * Restore validation compares a backup's `_migrations` against the running
+ * build to reject a backup that is too new, or missing one the build expects.
+ * A hand-maintained list of names would be a second source of truth that drifts
+ * the moment a migration is added -- and would drift silently, because a
+ * validation list that is one migration behind still passes every check it is
+ * given. Deriving it from the calls themselves cannot drift.
+ */
+const establishedMigrations = new Set<string>()
+
+/**
+ * Migration names this build requires, in application order. Populated by
+ * `runMigrations`, so it reflects what is actually in `_migrations` rather than
+ * what a list claims should be.
+ */
+export function appliedMigrationNames(): string[] {
+  return [...establishedMigrations]
+}
+
 export async function runMigrations(
   db: ReturnType<typeof getDb>,
   attachmentsDir = ''
 ): Promise<void> {
+  // Recomputed per run so a second bootstrap in one process (which the tests
+  // do, against a fresh temp dataDir) reports its own migrations and not the
+  // previous instance's.
+  establishedMigrations.clear()
+
   await applyMigration(db, '001_create_pages', (db) => {
     db.run(`
       CREATE TABLE IF NOT EXISTS _migrations (
@@ -55,6 +82,17 @@ export async function runMigrations(
     // Deterministic backfill: every living page becomes a root positioned to
     // mirror the previous flat display order (updated_at DESC, rowid DESC).
     // Soft-deleted rows are excluded from sibling arithmetic.
+    //
+    // The `rowid` comparison below is a one-time data fix, not a live query
+    // dependency: it reads the rowids this database happens to have now, and
+    // the `position` values it writes are what every later ordering query
+    // actually uses. Worth recording because `rowid` is *not* preserved by
+    // `VACUUM INTO` -- a backup taken before this migration and restored after it
+    // would compute different positions from the same pages. That is harmless
+    // (positions only need to be a consistent total order) and cannot happen
+    // twice, because a migration runs once. The live rowid tie-breaks that DO
+    // matter across a restore are the five in `page-repository.ts`, each of which
+    // carries a comment saying so. See docs/BACKUP_PLAN.md 3.3.
     db.run(`
       UPDATE pages
       SET position = (
@@ -231,7 +269,15 @@ async function migrateAttachmentBytesToBlobs(
   attachmentsDir: string
 ): Promise<void> {
   const logger = getDatabaseLogger()
-  if (db.query('SELECT id FROM _migrations WHERE name = ?').get('007_attachment_blobs')) {
+  // Named once: this string is the migration's identity in `_migrations`, and
+  // restore validation compares that table against the build's required set, so
+  // it must not be spelled two ways.
+  const name = '007_attachment_blobs'
+  // Recorded at entry, unconditionally, and that is sound: this function either
+  // finds the migration already applied and returns, or applies it. No path
+  // leaves it out of `_migrations`.
+  establishedMigrations.add(name)
+  if (db.query('SELECT id FROM _migrations WHERE name = ?').get(name)) {
     // Already applied, but auto_vacuum may still need converting on a database
     // created before ADR-014, so the check below runs regardless.
     ensureAutoVacuum(db, logger)
@@ -243,8 +289,8 @@ async function migrateAttachmentBytesToBlobs(
 
   // Step 2: add the column. Existing rows stay fully readable.
   db.run('ALTER TABLE attachments ADD COLUMN data BLOB')
-  db.run(`INSERT INTO _migrations (name) VALUES ('007_attachment_blobs')`)
-  logger.info('Attachment blob column added', { event: 'migration', name: '007_attachment_blobs' })
+  db.run(`INSERT INTO _migrations (name) VALUES ('${name}')`)
+  logger.info('Attachment blob column added', { event: 'migration', name })
 
   // Step 3: copy the bytes, checking each against what the catalogue recorded.
   const pending = db
@@ -322,7 +368,11 @@ async function migrateAttachmentBytesToBlobs(
  */
 function dropStoredName(db: ReturnType<typeof getDb>): void {
   const logger = getDatabaseLogger()
-  if (db.query('SELECT id FROM _migrations WHERE name = ?').get('008_drop_stored_name')) return
+  const name = '008_drop_stored_name'
+  if (db.query('SELECT id FROM _migrations WHERE name = ?').get(name)) {
+    establishedMigrations.add(name)
+    return
+  }
 
   const stillMissing = db
     .query('SELECT count(*) AS n FROM attachments WHERE data IS NULL')
@@ -330,6 +380,12 @@ function dropStoredName(db: ReturnType<typeof getDb>): void {
   if (stillMissing.n > 0) {
     // The column stays. The application keeps working, because every row still
     // has a file on disk to be served from.
+    //
+    // Deliberately NOT recorded as established: this build's database really
+    // does still carry `008` as outstanding, so a restore must be compared
+    // against a required set that includes it. Recording it here would make a
+    // mid-migration database look fully migrated and restore would then
+    // "re-apply" the drop to a database whose bytes were never backfilled.
     logger.warn('stored_name retained: some attachments have no bytes yet', {
       event: 'attachment_backfill_incomplete',
       pending: String(stillMissing.n)
@@ -364,18 +420,22 @@ function dropStoredName(db: ReturnType<typeof getDb>): void {
     db.run('DROP TABLE attachments')
     db.run('ALTER TABLE attachments_migrated RENAME TO attachments')
     db.run('CREATE INDEX idx_attachments_created_at ON attachments(created_at)')
-    db.run('INSERT INTO _migrations (name) VALUES (?)', ['008_drop_stored_name'])
+    db.run('INSERT INTO _migrations (name) VALUES (?)', [name])
     db.run('COMMIT')
+    // Recorded only here, after the commit: the catch below swallows a failure
+    // and leaves the database correct-but-incomplete, so a name recorded on the
+    // failure path would claim a migration this build never actually applied.
+    establishedMigrations.add(name)
     logger.info('Attachment filename column removed', {
       event: 'migration',
-      name: '008_drop_stored_name',
+      name,
       rows: String(moved.n)
     })
   } catch (err) {
     db.run('ROLLBACK')
     logger.error('Could not remove the attachment filename column', {
       event: 'migration',
-      name: '008_drop_stored_name',
+      name,
       error: err instanceof Error ? err.message : String(err)
     })
     // Not thrown: the database is still correct and the application still works,
@@ -433,6 +493,11 @@ async function applyMigration(
       )
     `)
     const existing = db.query('SELECT id FROM _migrations WHERE name = ?').get(name)
+    // Recorded on both paths. A migration already in `_migrations` is just as
+    // much a part of the required set as one applied a moment ago, and the
+    // early return below would otherwise lose it -- which is exactly the case
+    // every run after the first upgrade hits.
+    establishedMigrations.add(name)
     if (existing) {
       db.run('COMMIT')
       getDatabaseLogger().info('Migration already applied', {

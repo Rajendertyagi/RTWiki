@@ -1,49 +1,15 @@
-import { MAX_SCHEDULE_JSON_BODY_BYTES } from '@rtwiki/shared/constants'
 import { reminderSchema, scheduleEntrySchema } from '@rtwiki/shared/schemas/schedule'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { getDb } from '../database/index.js'
 import * as service from '../services/schedule-service.js'
+import { type JsonBodyResult, readJson } from '../utils/read-json.js'
 
-const requestTextEncoder = new TextEncoder()
-
-/** A JSON body that was read and parsed, or a response the caller must return. */
-export type JsonBodyResult = { ok: true; body: unknown } | { ok: false; response: Response }
-
-/**
- * Reads a schedule/preset JSON request body under an enforced byte ceiling.
- *
- * Shared by the schedule and schedule-preset routes so the ceiling has exactly
- * one definition: Content-Length is checked first (a cheap refusal that never
- * reads the body), then the byte length of the text actually read (authoritative,
- * and the only check that applies to a chunked request with no declared length).
- * Malformed and empty bodies stay 400s — a client that sent bad JSON must not be
- * told it sent too much and go looking in the wrong place.
- *
- * This is the same contract as `readJsonBody` in `routes/pages.ts`, which is
- * currently owned by a separate in-flight change and still carries its own
- * private copy. When that file is next editable both should read this one; the
- * seam is here rather than in a third copy of the same check.
- */
-export async function readJson(c: Context): Promise<JsonBodyResult> {
-  const contentLength = Number(c.req.header('content-length') ?? '0')
-  if (Number.isFinite(contentLength) && contentLength > MAX_SCHEDULE_JSON_BODY_BYTES) {
-    return { ok: false, response: c.json({ error: 'Request body too large' }, 413) }
-  }
-
-  const text = await c.req.text()
-  if (requestTextEncoder.encode(text).byteLength > MAX_SCHEDULE_JSON_BODY_BYTES) {
-    return { ok: false, response: c.json({ error: 'Request body too large' }, 413) }
-  }
-  if (text.length === 0) {
-    return { ok: false, response: c.json({ error: 'Empty request body' }, 400) }
-  }
-  try {
-    return { ok: true, body: JSON.parse(text) as unknown }
-  } catch {
-    return { ok: false, response: c.json({ error: 'Invalid JSON' }, 400) }
-  }
-}
+export type { JsonBodyResult }
+// Re-exported so `schedule-presets.ts` keeps importing the reader from here,
+// as it did before the reader moved to `utils/read-json.ts` to be shared with
+// the backup routes. There is still exactly one implementation.
+export { readJson }
 
 function badRequest(c: Context, message: string): Response {
   return c.json({ error: message }, 400)

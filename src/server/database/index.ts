@@ -98,6 +98,26 @@ export function initDatabase(dataDir: string): Database {
   sqlite.exec('PRAGMA foreign_keys = ON')
   sqlite.exec('PRAGMA busy_timeout = 5000')
 
+  // FULL, not NORMAL, and not left unset.
+  //
+  // `synchronous` is a connection setting, not a property of the file, so it
+  // must be set on every connection and it is set here once because this is the
+  // one place a connection is created.
+  //
+  // It is load-bearing for backup. SQLite documents that for `VACUUM INTO`,
+  // "if the PRAGMA synchronous setting of the original database is NORMAL or
+  // FULL, then SQLite invokes fsync() to sync the output database to disk after
+  // it has been written" -- so a power loss after a backup completes cannot
+  // corrupt it. Left unset, that guarantee rests on a compile-time default
+  // inside the bundled SQLite, which this project does not control.
+  //
+  // NORMAL is the tempting choice because it is the usual performance trade: in
+  // WAL mode it still survives an application crash, trading only power-loss
+  // durability for throughput. That is the wrong trade here. Autosave commits
+  // every PROVISIONAL_AUTOSAVE_DEBOUNCE_MS, so the fsync cost is a handful per
+  // second and negligible, and the thing being protected is someone's notes.
+  sqlite.exec('PRAGMA synchronous = FULL')
+
   if (notApplied.length > 0) {
     // A database that already had tables. The page size in particular cannot be
     // recovered without recreating the file, so this says so plainly rather than

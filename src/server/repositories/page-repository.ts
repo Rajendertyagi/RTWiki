@@ -357,6 +357,15 @@ export function listPages(
 
   if (search && search.trim().length > 0) {
     const term = search.trim()
+    // The `rowid` in this ORDER BY is a tie-break on `updated_at`, and it is not
+    // stable across a backup: SQLite documents that a VACUUM "may change the
+    // ROWIDs of entries in any tables that do not have an explicit INTEGER
+    // PRIMARY KEY", and `pages` is `id TEXT PRIMARY KEY`. `VACUUM INTO` works
+    // the same way, so a page restored from a backup can come back in a
+    // different order among pages whose `updated_at` is identical to the
+    // millisecond. No content is affected, and a tie needs a shared timestamp to
+    // happen at all -- but if you are reading this to change the ordering, the
+    // tie-break is not the stable thing to build on. See docs/BACKUP_PLAN.md 3.3.
     const pages = db
       .query(
         `SELECT p.id, p.title, p.content, p.page_type, p.parent_id, p.position, p.created_at, p.updated_at, p.deleted_at, p.version
@@ -377,6 +386,10 @@ export function listPages(
     return { pages, total: countRow.count }
   }
 
+  // Same tie-break caveat as the search query above: `rowid` breaks ties on
+  // `updated_at` and is not preserved by `VACUUM INTO`, so the order of pages
+  // sharing a timestamp can differ between the live database and one restored
+  // from a backup. Content is unaffected. See docs/BACKUP_PLAN.md 3.3.
   const pages = db
     .query(
       'SELECT id, title, content, page_type, parent_id, position, created_at, updated_at, deleted_at, version FROM pages WHERE deleted_at IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ? OFFSET ?'
@@ -421,7 +434,24 @@ export function getParentId(db: Database, pageId: string): string | null | undef
   return row.parent_id || null
 }
 
-/** Living children of a parent (null = roots), ordered by position then rowid. */
+/**
+ * Living children of a parent (null = roots), ordered by position then rowid.
+ *
+ * `rowid` is the tie-break when two siblings share a `position`, and it is not
+ * preserved by `VACUUM INTO` -- SQLite documents that a VACUUM "may change the
+ * ROWIDs of entries in any tables that do not have an explicit INTEGER PRIMARY
+ * KEY", and `pages` is `id TEXT PRIMARY KEY`. So a restore can swap two tied
+ * siblings in the tree.
+ *
+ * This is bounded, and deliberately not fixed here. `(parent_id, position)` is
+ * not `UNIQUE` in the schema, so a tie is possible in principle, but every
+ * writer of `position` sits inside a `BEGIN IMMEDIATE` transaction and a
+ * duplicate-position query over the working databases returns zero rows. The
+ * `UNIQUE` index that would make the tie-break unreachable by construction needs
+ * its own migration and a cleanup pass over real user data, which is separate
+ * work. The residual risk is a future unprotected writer, not the code here.
+ * See docs/BACKUP_PLAN.md 3.3.
+ */
 export function listChildRefs(db: Database, parentId: string | null): SiblingRef[] {
   const rows =
     parentId === null

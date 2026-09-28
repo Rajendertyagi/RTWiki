@@ -147,3 +147,85 @@ export const SHUTDOWN_REQUEST_FILENAME = 'shutdown-requested' as const
 export const CLOSE_BEHAVIORS = ['ask', 'minimize', 'quit'] as const
 
 export type CloseBehavior = (typeof CLOSE_BEHAVIORS)[number]
+
+// ---------------------------------------------------------------------------
+// Backup and restore (docs/BACKUP_PLAN.md)
+// ---------------------------------------------------------------------------
+
+/**
+ * The three fixed backup slots. Each owns exactly one file and overwrites only
+ * itself, so storage is bounded at three files with no retention setting to get
+ * wrong. The period name is the filename, not a timestamp, which is what makes
+ * the bound hold.
+ */
+export const BACKUP_SLOTS = ['daily', 'weekly', 'monthly'] as const
+
+export type BackupSlot = (typeof BACKUP_SLOTS)[number]
+
+/**
+ * Default age at which each slot becomes due, in hours.
+ *
+ * These are defaults, not policy: the intervals are user-configurable and stored
+ * per slot. They exist so a fresh install has a sane schedule before anyone
+ * opens Settings.
+ */
+export const BACKUP_DEFAULT_INTERVAL_HOURS: Readonly<Record<BackupSlot, number>> = {
+  daily: 24,
+  weekly: 24 * 7,
+  monthly: 24 * 30
+}
+
+/** Ceiling and floor on a configured interval, in hours. */
+export const MIN_BACKUP_INTERVAL_HOURS = 1
+export const MAX_BACKUP_INTERVAL_HOURS = 24 * 365
+
+/**
+ * Suffix on an in-progress backup. `VACUUM INTO` requires the target not to
+ * exist, so a backup is always written under this name and moved onto the slot
+ * only once it has completed. Swept at startup, because "delete on failure"
+ * does not run when the process is killed.
+ */
+export const BACKUP_PARTIAL_SUFFIX = '.partial' as const
+
+/** `rtwiki-backup-daily` — the period name, per BACKUP_SLOTS. */
+export const BACKUP_FILENAME_PREFIX = 'rtwiki-backup-' as const
+
+/**
+ * The live database, moved aside before a restore so a bad restore is
+ * recoverable by hand. Lives in `data/`, not in the backup directory, so it is
+ * never itself a backup candidate.
+ */
+export const PRE_RESTORE_FILENAME_PREFIX = 'rtwiki.pre-restore-' as const
+
+/**
+ * Backup settings live in their own file beside `server.json`, not in it.
+ * `writeServerPort` replaces `server.json` wholesale with `{ port }`, so
+ * sharing the file would mean every port change silently erased the schedule.
+ */
+export const BACKUP_SETTINGS_FILENAME = 'backups.json' as const
+
+// Schedule cadence. A short periodic check plus a kickoff shortly after
+// startup: a fixed slot means catching up overwrites rather than accumulates,
+// so a long startup delay costs nothing and a missed run is picked up by the
+// first check after it.
+export const BACKUP_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+export const BACKUP_STARTUP_KICKOFF_MS = 5 * 60 * 1000
+
+/**
+ * Classified reasons a backup file is refused.
+ *
+ * Codes, not prose: the server returns one of these and the UI resolves it
+ * through `UI_TEXT`, so a rejected restore always says which of the seven
+ * validation steps failed rather than "invalid file".
+ */
+export const BACKUP_VALIDATION_REASONS = [
+  'not-a-file',
+  'not-a-database',
+  'corrupt',
+  'foreign-key-violation',
+  'schema-too-new',
+  'schema-missing-migration',
+  'mid-migration-attachments'
+] as const
+
+export type BackupValidationReason = (typeof BACKUP_VALIDATION_REASONS)[number]

@@ -10,6 +10,7 @@ import { NONCE, type SecureHeadersVariables, secureHeaders } from 'hono/secure-h
 import { createAttachmentRoutes } from './attachments/attachment-routes.js'
 import { checkIntegrity, getDb } from './database/index.js'
 import { createConsoleLogger, type Logger } from './logging/index.js'
+import { createBackupRoutes } from './routes/backup.js'
 import { createClientDebugEventRoutes, type DebugEventSink } from './routes/client-debug-events.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
 import { createPageRoutes } from './routes/pages.js'
@@ -226,6 +227,20 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
       getDb: deps.getDb,
       logger: deps.logger,
       available: Boolean(deps.dataDir)
+    })
+  )
+  // Backup and restore. Behind the same cross-origin guard as everything else;
+  // `POST /restore` additionally requires the shutdown token, because it
+  // replaces the database and stops the process. Reports unavailability rather
+  // than writing anywhere when there is no data directory, as with attachments.
+  app.route(
+    '/api/backup',
+    createBackupRoutes({
+      getDb: deps.getDb,
+      dataDir: deps.dataDir ?? '',
+      token: deps.token,
+      logger: deps.logger,
+      coordinator: deps.coordinator
     })
   )
   app.route(
