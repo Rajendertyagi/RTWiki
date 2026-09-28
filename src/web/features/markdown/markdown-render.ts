@@ -14,6 +14,7 @@ import {
   renderUnknownDirective,
   setColumnsDividerLabel
 } from './markdown-columns.js'
+import { mermaidHtml } from './markdown-mermaid.js'
 import { mathTextGithubRule } from './math-inline-github-rule.js'
 
 /**
@@ -164,7 +165,12 @@ const MARKDOWN_OPTIONS = {
     // so the order is not load-bearing, and keeping our own after the packages
     // makes the composition read top-down as "GFM, maths, then RTWiki's own".
     directiveHtml(DIRECTIVE_HTML_OPTIONS),
-    mathHtml({ throwOnError: false, trust: false })
+    mathHtml({ throwOnError: false, trust: false }),
+    // ` ```mermaid ` fences, as a placeholder. It replaces three of micromark's
+    // own fenced-code handlers so it can read the info string and choose, and it
+    // captures the default output rather than rewriting it — see that module for
+    // why a fence that is not a diagram is still byte-identical.
+    mermaidHtml()
   ]
 }
 
