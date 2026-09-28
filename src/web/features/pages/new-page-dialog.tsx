@@ -89,6 +89,29 @@ export function NewPageDialog({
           onKeyDown={(event) => {
             if (event.key === 'Enter') handleSubmit()
           }}
+          // BOTH are required, and `autoFocus` alone is not sufficient.
+          //
+          // Mantine's `Modal` wraps its content in a focus trap
+          // (`useFocusTrap`, node_modules/@mantine/hooks) that picks an initial
+          // target on a `setTimeout(0)`, i.e. one macrotask AFTER React has
+          // already applied `autoFocus`. Its selection is: an element carrying
+          // `data-autofocus`, else the first tabbable descendant. This Modal
+          // renders a `title`, so `withCloseButton` defaults to true and the
+          // close button precedes the body in DOM order - it was therefore
+          // first tabbable, and the trap moved focus onto the CLOSE BUTTON.
+          //
+          // The consequence is the same one the Ctrl+K finder had and fixed in
+          // f145259: the first characters of a title were swallowed, and any
+          // Space activated the focused button. Here that means `onClose` fired
+          // and the dialog vanished mid-title - no data loss, since a title is
+          // not a document, but the field looks like it is ignoring the
+          // keyboard. `data-autofocus` makes the trap and `autoFocus` agree;
+          // `autoFocus` stays as the fallback for a no-trap render.
+          //
+          // The finder's other half - the editor's focus poll reclaiming the
+          // caret from a button while a dialog is open - is already in place
+          // (`rich-editor.tsx:423`), so it does not need repeating here.
+          data-autofocus
           autoFocus
           maxLength={200}
           aria-label={UI_TEXT.titleLabel}

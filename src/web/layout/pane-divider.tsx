@@ -26,9 +26,7 @@ import classes from './pane-divider.module.css'
  * in this app - there is no island infrastructure to hang one on.
  *
  * So there is one implementation, used two ways: this component binds it to
- * props, and the Markdown path binds it to delegated DOM listeners. The
- * document-level `layoutResizing` flag is set from inside the shared object, so
- * both paths get the transition suppression the app shell and sidebar rely on.
+ * props, and the Markdown path binds it to delegated DOM listeners.
  */
 
 export interface PaneDividerProps {
@@ -84,22 +82,13 @@ export interface DividerDrag {
   pointerEnd(event: PointerEvent): void
   keyDown(event: KeyboardEvent): void
   /**
-   * Ends any drag in progress and clears the document flag. A caller must
-   * invoke this on teardown: a drag started on an unmounted divider would
-   * otherwise leave `layoutResizing` set for the rest of the session.
+   * Ends any drag in progress without committing. A caller must invoke this on
+   * teardown: a drag started on a divider that is then unmounted has no
+   * `pointerup` coming, and would otherwise leave the divider reporting itself
+   * as dragging.
    */
   cancel(): void
   isDragging(): boolean
-}
-
-/**
- * The document-level flag the app shell and sidebar read to suppress CSS
- * transitions while any pane is being dragged. Set from the shared drag object
- * so a Markdown column divider has the same effect as the shell's.
- */
-function setResizingFlag(on: boolean): void {
-  if (on) document.documentElement.dataset.layoutResizing = ''
-  else delete document.documentElement.dataset.layoutResizing
 }
 
 /**
@@ -118,7 +107,6 @@ export function createDividerDrag(config: DividerDragConfig): DividerDrag {
   const endDrag = (pointerId: number): void => {
     if (!drag || drag.pointerId !== pointerId) return
     drag = null
-    setResizingFlag(false)
     config.onDraggingChange?.(false)
     config.onCommit(clamp(config.getValue()))
   }
@@ -133,7 +121,6 @@ export function createDividerDrag(config: DividerDragConfig): DividerDrag {
         startX: event.clientX,
         startValue: config.getValue()
       }
-      setResizingFlag(true)
       config.onDraggingChange?.(true)
     },
 
@@ -170,7 +157,6 @@ export function createDividerDrag(config: DividerDragConfig): DividerDrag {
 
     cancel() {
       drag = null
-      setResizingFlag(false)
       config.onDraggingChange?.(false)
     },
 
@@ -219,8 +205,9 @@ export function PaneDivider({
   config.onCommit = onCommit
   const drag = useRef<DividerDrag>(createDividerDrag(config)).current
 
-  // A drag started on an unmounted-then-removed divider must not leave the
-  // flag set for the rest of the session.
+  // A drag in flight when the divider unmounts has no `pointerup` coming, so
+  // it must be ended here: otherwise the node keeps reporting itself as
+  // dragging, and a stale drag would still hold the pointer capture.
   useEffect(() => {
     return () => {
       drag.cancel()

@@ -437,12 +437,43 @@ alone and owns only the preview element's identity. `attributes` is deliberately
 `applyPercent` writes `style` and `aria-valuenow` during a drag and re-scanning on those would discard
 the value being dragged.
 
-The `layoutResizing` document flag is set from inside the shared drag object, so a column drag sets it
-exactly as a shell one does. **No stylesheet reads it.** Measured across every stylesheet in `src/web`:
-there is not one `transition` on a layout property, so the rule the flag exists to enable
-(`transition: none` during a drag) would suppress nothing and only cost a style recalculation over the
-whole document. The flag and the three comments describing it as active are inert pending an owner
-decision on whether RTWiki wants layout-transition suppression at all.
+### The `layoutResizing` document flag is deleted, not implemented
+
+**Decision: deleted.** A shared drag used to set `document.documentElement.dataset.layoutResizing` on
+`pointerdown` and clear it on release, from inside `createDividerDrag`, so a column drag set it exactly as
+a shell one did. **No stylesheet in `src/` selects it.** Measured across every stylesheet: there is not one
+`transition` on a layout property — `width`, `height`, `flex`, `grid-template-columns`, `margin`, `gap` and
+the offsets are all transition-free — so the rule the flag existed to enable (`transition: none` during a
+drag) would have suppressed nothing, while costing a style recalculation over the whole document on every
+drag start.
+
+**It was deleted rather than implemented** because it was simultaneously a live API with no consumer, tested
+as though it worked, and recorded here as a pending decision. That combination misleads: a reader of the
+tests would conclude the app shell suppresses transitions during a drag, and no reader would notice there
+is no rule that does.
+
+**The tests now assert the absence instead**, and they assert it by reading the attribute outright rather
+than by diffing a before/after snapshot. That distinction was measured, not assumed: the snapshot form
+passed against a build with the flag reinstated, because a flag left set by an earlier test is in the
+"before" too and the assertion agreed with the reintroduced code. `documentElement.outerHTML` is no
+better — a drag legitimately rewrites the pane's `style.flex` and the divider's `aria-valuenow`, so it
+reports the feature working as a failure.
+
+**Reversible, at a cost of roughly six lines and two test edits.** If animated resizing is wanted later,
+the correct shape is:
+
+- Scope the rule to the pane classes — the shell's page-tree pane and sidebar, and the Markdown `.rt-cols`
+  row — and **not** `* { transition: none !important }`. Transitions are not confined to colour and
+  shadow: there are three live `transform` transitions that a document-wide reset would kill, all of them
+  affordances a drag is not the subject of — the dashboard card lift (`page-card.module.css`, 150 ms), the
+  tree row's chevron rotate (`page-tree.module.css`, 120 ms) and the debug log's row chevron
+  (`debug-log-viewer.module.css`, 120 ms). The tab strip already models the right instinct locally:
+  `.tabScroller [data-dragging="true"] { transition: none }` suppresses only the element being dragged, and
+  the comment there records why the neighbours keep theirs.
+- Animate `transform` rather than `width`. `width` animation forces a layout pass on every frame of the
+  drag, which is the cost the drag was avoiding; `transform` stays on the compositor.
+- Give the flag a second consumer or leave it out. A document-level flag that nothing selects is the defect,
+  not the neutral form.
 
 ## Consequences
 

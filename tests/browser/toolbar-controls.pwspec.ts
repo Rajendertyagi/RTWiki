@@ -381,7 +381,12 @@ test.describe('Rich Note toolbar controls', () => {
       await expect(page.getByTestId(key), `${key} must stay reachable`).toBeVisible()
     }
     await expect(page.getByTestId('insert-menu-button')).toHaveCount(0)
-    // Narrow screens scroll the row; controls stay usable.
+    // The row does **not** scroll - the three assertions above say so directly
+    // (`overflow-x: hidden`, and no overflow to scroll to). What makes a control
+    // usable at 480px is the more menu, which is already open here, so
+    // `clickControl` uses it rather than opening it again. (It used to say
+    // "narrow screens scroll the row", which this test contradicts twelve lines
+    // earlier and which is the belief that made the overflow menu look optional.)
     await clickControl(page, 'insert-quote')
     await expect(page.locator(`${EDITABLE} blockquote`).first()).toBeVisible()
   })

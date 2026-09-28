@@ -53,6 +53,29 @@ afterEach(() => {
 })
 
 /**
+ * The `data-*` attributes on `<html>`.
+ *
+ * The right granularity for "a drag wrote nothing to the document", and the
+ * right *form* of the assertion:
+ *
+ * - Not `documentElement.outerHTML`, which also compares the body, where a drag
+ *   legitimately rewrites the pane's `style.flex` and the divider's
+ *   `aria-valuenow` — reporting the feature working as a failure.
+ * - Not a before/after snapshot, which is **order-dependent**: a flag left set
+ *   by an earlier test is in the "before" too, so the test would agree with a
+ *   reintroduced flag and pass. Checked, not assumed — the snapshot version of
+ *   these assertions passed against code that had the flag back in it, and only
+ *   the one that read the attribute outright failed.
+ *
+ * `<html>` carries no `data-*` attributes in this app: this file's own
+ * `layoutResizing` flag was the sole exception and is gone (ADR-017). Asserted by
+ * absence, so a document-level write has to come back here and name its consumer.
+ */
+function documentDataAttrs(el: Element): string[] {
+  return el.getAttributeNames().filter((name) => name.startsWith('data-'))
+}
+
+/**
  * The DOM `renderMarkdown` would have produced, expressed directly.
  *
  * Faithful to the current output, including `data-width` on every pane and the
@@ -200,21 +223,31 @@ describe('dragging a column divider resizes the left pane', () => {
   it('marks the divider as dragging, and clears it on pointer up', () => {
     const dom = buildDom()
     attach(dom.container)
+    const root = dom.document.documentElement
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     expect(dom.divider.getAttribute('data-dragging')).toBe('true')
-    // The document-level flag the app shell reads to suppress transitions.
-    expect(dom.document.documentElement.dataset.layoutResizing).toBeDefined()
+    // No document-level write. The `layoutResizing` flag that used to be set
+    // here was deleted: no stylesheet in `src/` selects it and no layout
+    // property has a transition anywhere, so the rule it existed to enable
+    // would have suppressed nothing. See ADR-017 for the reversible alternative.
+    // A column drag now has exactly the effect a shell drag has - the divider's
+    // own attribute, and nothing else.
+    expect(documentDataAttrs(root), 'a drag must not flag the document').toEqual([])
     dom.divider.dispatchEvent(pointer('pointerup', { clientX: 160, pointerId: 1 }))
     expect(dom.divider.getAttribute('data-dragging')).toBe('false')
-    expect(dom.document.documentElement.dataset.layoutResizing).toBeUndefined()
+    expect(documentDataAttrs(root), 'and must leave no document flag behind').toEqual([])
   })
 
-  it('clears the document flag on pointer cancel, not only on a clean release', () => {
+  it('ends the drag on pointer cancel, not only on a clean release', () => {
     const dom = buildDom()
     attach(dom.container)
+    const root = dom.document.documentElement
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     dom.divider.dispatchEvent(pointer('pointercancel', { clientX: 10, pointerId: 1 }))
-    expect(dom.document.documentElement.dataset.layoutResizing).toBeUndefined()
+    // The cancel path must still leave the divider not-dragging, which is what
+    // it did when it cleared the document flag.
+    expect(dom.divider.getAttribute('data-dragging')).toBe('false')
+    expect(documentDataAttrs(root), 'and must leave no document flag behind').toEqual([])
   })
 
   it('ignores move and up events from a different pointer', () => {
@@ -374,19 +407,27 @@ describe('teardown leaves nothing behind', () => {
     expect(dom.left.style.flex, 'a detached wiring must not respond').toBe('40 1 0%')
   })
 
-  it('clears the document flag when torn down mid-drag', () => {
+  it('ends a drag torn down mid-drag', () => {
     /**
      * The one teardown case that cannot be left to a pointer event: the preview
      * is replaced on every keystroke, so a drag in flight when it unmounts has
-     * no `pointerup` coming. A surviving `layoutResizing` flag would suppress
-     * transitions across the whole app for the rest of the session.
+     * no `pointerup` coming. This asserted a `layoutResizing` document flag was
+     * cleared here; the flag itself is gone (no stylesheet in `src/` selects it,
+     * and no layout property has a transition anywhere - see ADR-017). What
+     * survives is the teardown behaviour it was standing in for: the drag is
+     * ended, so a stale one cannot still hold the pointer capture.
      */
     const dom = buildDom()
     const detach = attach(dom.container)
     dom.divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
-    expect(dom.document.documentElement.dataset.layoutResizing).toBeDefined()
+    expect(dom.divider.getAttribute('data-dragging'), 'the drag is live before the teardown').toBe(
+      'true'
+    )
     detach()
-    expect(dom.document.documentElement.dataset.layoutResizing).toBeUndefined()
+    expect(dom.divider.getAttribute('data-dragging'), 'and ended by the teardown').toBe('false')
+    // Nothing document-level is left behind either, which is what the deleted
+    // flag used to guarantee for the rest of the session.
+    expect(documentDataAttrs(dom.document.documentElement)).toEqual([])
   })
 
   it('is safe to call twice', () => {

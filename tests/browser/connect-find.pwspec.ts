@@ -384,6 +384,61 @@ test.describe('connect and find', () => {
     expect(await getStoredContent(request, stored.id)).not.toContain(needle)
   })
 
+  /**
+   * UNRUN. Written to be run; not executed. The Playwright suite was already in
+   * flight on this machine when the fix landed, and this change was not allowed
+   * to start a second run or a web build. Nothing below has been observed to
+   * pass, and the reasoning it encodes has not been confirmed against a trace
+   * the way the finder's was - it is carried over from `f145259`, where the
+   * identical mechanism was measured to the millisecond in a real browser.
+   *
+   * A regression pin for a keyboard-trap defect, not a new-page test. The same
+   * defect that made Ctrl+K type into the document was live here: the Modal
+   * renders a `title`, so `withCloseButton` defaults true, the close button
+   * precedes the body in DOM order, and `useFocusTrap` chose its initial target
+   * on a `setTimeout(0)` - one macrotask *after* React applied `autoFocus` - with
+   * no `[data-autofocus]` to point it at the field. So `autoFocus` was
+   * decorative, the close button held focus, and typing lost the leading
+   * characters to it. Worse here than in the finder: a Space activates a
+   * `<button>`, so the dialog called `onClose` and vanished mid-title.
+   */
+  test('typing a New page title reaches the field, not the dialog close button', async ({
+    page
+  }) => {
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    const title = dialog.getByLabel('Title')
+
+    // Focus, not just visibility. The trap resolves its initial target one
+    // macrotask after React applies `autoFocus`, so the field is visible for a
+    // beat before it is the focused element - and typing inside that window is
+    // precisely how the first characters were lost. Wait for the invariant a
+    // user relies on, not for the paint.
+    await expect(title).toBeFocused()
+
+    // Typed, never `fill()`. `fill()` assigns a value and emits no key events
+    // at all, so it needs no focus and could never have caught this. The space
+    // is in the needle on purpose: it is what a `<button>` is activated by, so
+    // on the unfixed build it both drops characters and closes the dialog.
+    const needle = `${uniqueTitle('Title Typing')} middle word`
+    await page.keyboard.type(needle)
+
+    // Both halves of the same failure as the finder's, asserted in the order
+    // that tells them apart. On the unfixed build the Space activates the close
+    // button, so the field is **unmounted** and a bare `toHaveValue` would just
+    // report "element not found" - which says nothing about focus. The liveness
+    // checks come first so the diagnosis is the right one, then the value.
+    await expect(title).toHaveCount(1)
+    await expect(dialog).toBeVisible()
+    await expect(title).toHaveValue(needle)
+    // Still focused at the end: the trap took focus once on mount and only
+    // handles Tab thereafter, so it cannot have taken it back. If it ever does,
+    // this is the assertion that notices.
+    await expect(title).toBeFocused()
+  })
+
   test('recent pages persist across reload and respect the 20-item bound', async ({
     page,
     request

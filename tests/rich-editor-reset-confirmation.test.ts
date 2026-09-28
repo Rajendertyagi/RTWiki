@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { JSDOM } from 'jsdom'
 import { UI_TEXT } from '../src/web/config/index.js'
+import { sharedDom } from './utils/dom-harness.js'
 
 /**
  * The crash-recovery screen once offered a single "Reset document" click that
@@ -13,35 +13,48 @@ import { UI_TEXT } from '../src/web/config/index.js'
  * buttons, because the defect was in the *wiring* between the control and the
  * destructive callback — a dictionary test, or a test that only read the
  * strings, would have passed while the button was still one click away.
+ *
+ * ## Why the DOM is the shared one, and never closed
+ *
+ * This file used to build its own `new JSDOM()` and call `dom.window.close()` in
+ * `afterAll`, which is a live hazard rather than a tidy teardown. `markdown-render.ts`
+ * creates its DOMPurify instance **at import time**, bound to whatever `window`
+ * is ambient then; ESM caches a module for the life of the process, so that
+ * binding is made exactly once and every later file inherits it. A file that
+ * closes its own window therefore pulls the document out from under the
+ * sanitiser for every file that runs after it — measured at 26 pre-existing
+ * failures, every one of them a null or empty result from a sanitiser whose
+ * document had been closed underneath it.
+ *
+ * Nothing collided, only because this file does not import `markdown-render`.
+ * That is one incidental import away from a red suite in a file that has nothing
+ * to do with the change. So the DOM is the shared one, and `afterAll` no longer
+ * closes anything. `utils/dom-harness.ts` carries the full reasoning.
  */
 
-let dom: JSDOM
+let dom: ReturnType<typeof sharedDom>
 let boundaryModule: typeof import('../src/web/features/rich-editor/editor-error-boundary.js')
 
 /** Installed before the module import: Mantine reads the ambient document. */
 beforeAll(async () => {
-  dom = new JSDOM('<!doctype html><html><body></body></html>')
+  // Creates the process-wide DOM on first use and installs `window`, `document`
+  // and the node constructors. Only the globals this file alone needs are set
+  // here, so that ownership stays visible rather than duplicated.
+  dom = sharedDom()
   const globals = globalThis as unknown as Record<string, unknown>
-  globals.window = dom.window
-  globals.document = dom.window.document
-  globals.Node = dom.window.Node
-  globals.Element = dom.window.Element
-  globals.HTMLElement = dom.window.HTMLElement
-  globals.DocumentFragment = dom.window.DocumentFragment
   globals.Event = dom.window.Event
   globals.MouseEvent = dom.window.MouseEvent
   globals.navigator = dom.window.navigator
-  globals.trustedTypes = undefined
   globals.IS_REACT_ACT_ENVIRONMENT = true
   console.error = () => {}
   boundaryModule = await import('../src/web/features/rich-editor/editor-error-boundary.js')
 })
 
 afterAll(() => {
-  dom.window.close()
-  const globals = globalThis as unknown as Record<string, unknown>
-  delete globals.window
-  delete globals.document
+  // Only the console is restored. The DOM globals are deliberately left alone:
+  // they are the shared harness's now, and deleting them would break every file
+  // that runs after this one — the exact failure mode this file used to cause
+  // by closing the window instead.
   console.error = realConsoleError
 })
 

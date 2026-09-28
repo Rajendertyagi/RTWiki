@@ -14,7 +14,7 @@ import { sharedDom, sharedWindow } from './utils/dom-harness.js'
  *
  * What is asserted here is the **behaviour**, not the previous implementation:
  * a pointer drag resizes, arrows step, Home/End jump to the bounds, a
- * non-primary button is ignored, the document flag is set and cleared, and a
+ * non-primary button is ignored, the drag writes nothing to the document, and a
  * teardown mid-drag leaves nothing behind. If the extraction changed any of
  * that, this fails.
  */
@@ -209,14 +209,41 @@ describe('the shared drag resizes through onChange and commits on release', () =
   })
 })
 
-describe('the shared drag sets and clears the document resizing flag', () => {
-  it('sets it on start and clears it on release', () => {
+describe('the shared drag reports dragging state and leaves the document alone', () => {
+  /**
+   * The `layoutResizing` document flag used to be set on `pointerdown` and
+   * cleared on release, and this block asserted it. It was deleted rather than
+   * implemented, because **no stylesheet in `src/` selects it** and no layout
+   * property has a transition anywhere, so a `transition: none` rule keyed on it
+   * would have suppressed nothing. The flag was a live API with no consumer,
+   * tested as though it worked, and documented as a pending decision.
+   *
+   * A drag now touches the document not at all. That is the assertion, and it is
+   * worth keeping: a future change that reintroduces a document-level write
+   * during a drag has to come back here and say what consumes it.
+   *
+   * All three tests in this block are kept, restated against what a drag
+   * actually does, so the count is unchanged and the coverage is not quietly
+   * reduced. The flag had a real cost — a style recalculation over the whole
+   * document on every drag start — and the reversible alternative is recorded in
+   * ADR-017, not left implicit.
+   */
+  it('touches no document state on start or release', () => {
     const h = harness()
+    // The `data-*` attributes on `<html>`, asserted by **absence** rather than
+    // as a before/after snapshot. A snapshot is order-dependent: a flag left set
+    // by an earlier test is in the "before" too, so it would agree with a
+    // reintroduced flag and pass. (Checked, not assumed — the snapshot version
+    // of this assertion passed against code that had the flag back in it.)
+    // `<html>` carries no `data-*` attributes in this app at all; this file's
+    // `layoutResizing` flag was the sole exception and is gone.
+    const root = h.document.documentElement
+    const documentDataAttrs = (): string[] =>
+      root.getAttributeNames().filter((name) => name.startsWith('data-'))
     h.drag.pointerDown(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
-    // Read by the app shell and the sidebar to suppress transitions.
-    expect(h.document.documentElement.dataset.layoutResizing).toBeDefined()
+    expect(documentDataAttrs(), 'a drag must not flag the document').toEqual([])
     h.drag.pointerEnd(pointer('pointerup', { clientX: 0, pointerId: 1 }))
-    expect(h.document.documentElement.dataset.layoutResizing).toBeUndefined()
+    expect(documentDataAttrs(), 'and must leave no document flag behind').toEqual([])
   })
 
   it('reports dragging state to the caller, for the data-dragging attribute', () => {
@@ -226,13 +253,13 @@ describe('the shared drag sets and clears the document resizing flag', () => {
     expect(h.dragging).toEqual([true, false])
   })
 
-  it('cancel clears the flag, which is what teardown relies on', () => {
+  it('cancel ends the drag without committing, which is what teardown relies on', () => {
     // A drag in flight when a divider unmounts has no `pointerup` coming. If
-    // this did not clear, `layoutResizing` would stay set for the session.
+    // `cancel` did not end it, the node would keep reporting itself as dragging.
     const h = harness()
     h.drag.pointerDown(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
     h.drag.cancel()
-    expect(h.document.documentElement.dataset.layoutResizing).toBeUndefined()
+    expect(h.dragging).toEqual([true, false])
     expect(h.drag.isDragging()).toBe(false)
   })
 

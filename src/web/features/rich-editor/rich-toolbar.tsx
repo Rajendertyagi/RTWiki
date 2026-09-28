@@ -603,9 +603,24 @@ export function RichToolbar({ editor, linkablePages = [] }: RichToolbarProps): J
    *
    * `Children.toArray` above assigns a key to every child, so each control
    * already has one. Keying the wrapper by that rather than by array position
-   * means a control keeps its DOM node when the split moves — which is what
-   * stops a control being torn down and rebuilt, losing its own state, every
-   * time the window is resized.
+   * keeps a control's node across a re-render **among its siblings** — which is
+   * what stops it being torn down and rebuilt every time the split moves by one
+   * and the indices below it all shift.
+   *
+   * Scope matters, and it is a real limit. React keys are compared within a
+   * single parent, and a control that crosses the split does change parent: it
+   * renders under `<span className={classes.slot}>` on the bar and under
+   * `<span className={classes.moreItem}>` inside the portalled panel, which are
+   * two different parents in two different subtrees. Moving between them **does**
+   * unmount and remount the control and everything it owns. No key, at any level,
+   * can prevent that, because there is no shared parent to be a sibling of.
+   *
+   * It is not currently a defect. The only state a control carries is what its
+   * own popover or menu holds, and those are mounted on demand, so a rebuild at
+   * the moment a control enters or leaves the overflow costs nothing the user
+   * can see. It is recorded because a future stateful control must not assume
+   * otherwise: the fix would be to keep one parent and move the child within it,
+   * not to reach for a different key.
    */
   const keyFor = (item: ReactNode): string =>
     isValidElement(item) && item.key !== null ? String(item.key) : ''

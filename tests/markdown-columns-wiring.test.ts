@@ -317,8 +317,6 @@ describe('the wiring is attached to the real rendered output', () => {
 
     expect(divider.getAttribute('aria-valuenow'), 'the drag must move the boundary').toBe('50')
     expect(left.style.flex).toBe('50 1 0%')
-    // The document flag the app shell reads is set and cleared around the drag.
-    expect(sharedDom().window.document.documentElement.dataset.layoutResizing).toBeUndefined()
   })
 
   it('gives the divider a hit area wide enough to press', async () => {
@@ -334,16 +332,33 @@ describe('the wiring is attached to the real rendered output', () => {
     )
   })
 
-  it('sets the document resizing flag during a drag and clears it after', () => {
+  it('writes nothing to the document during a drag', () => {
     const fixture = mount(TWO_PANES)
     stubCapture(fixture.dividers)
     const divider = fixture.dividers[0] as HTMLElement
     const root = sharedDom().window.document.documentElement
+    // The `data-*` attributes on `<html>`, asserted by **absence** rather than
+    // as a before/after snapshot. A snapshot is order-dependent: a flag left set
+    // by an earlier test is in the "before" too, so it would agree with a
+    // reintroduced flag and pass. `outerHTML` is no better — a drag legitimately
+    // rewrites the pane's `style.flex` and the divider's `aria-valuenow`, so it
+    // would report the feature working as a failure.
+    const documentDataAttrs = (): string[] =>
+      root.getAttributeNames().filter((name) => name.startsWith('data-'))
 
     divider.dispatchEvent(pointer('pointerdown', { clientX: 0, button: 0, pointerId: 1 }))
-    expect(root.dataset.layoutResizing, 'a drag suppresses transitions app-wide').toBeDefined()
+    // The `layoutResizing` document flag that used to be asserted here was
+    // deleted, not implemented: no stylesheet in `src/` selects it, and no
+    // layout property carries a transition anywhere, so a `transition: none`
+    // rule keyed on it would have suppressed nothing while costing a style
+    // recalculation over the whole document. The reversible alternative is
+    // recorded in ADR-017.
+    //
+    // What is left is the claim worth pinning: a drag is confined to the
+    // dividers' own attributes, which is what a real rendered drag should do.
+    expect(documentDataAttrs(), 'a drag must not flag the document').toEqual([])
     divider.dispatchEvent(pointer('pointerup', { clientX: 0, pointerId: 1 }))
-    expect(root.dataset.layoutResizing, 'and the flag is cleared on release').toBeUndefined()
+    expect(documentDataAttrs(), 'and must leave no document flag behind').toEqual([])
   })
 
   it('keeps dragging when the move arrives on a descendant, not the divider', () => {
