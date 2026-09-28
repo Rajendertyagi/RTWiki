@@ -108,9 +108,28 @@ export function startBackupSchedule(opts: BackupScheduleOptions): BackupSchedule
           })
         }
       }
-    })().finally(() => {
-      inFlight = null
-    })
+    })()
+      .catch((error: unknown) => {
+        // The run body must not reject. Both timers call `void runDue()`, and a
+        // discarded rejected promise is an unhandled rejection -- one per
+        // interval, forever, for as long as the fault lasts.
+        //
+        // Measured with the settings file made unwritable (a directory in its
+        // place, so `recordBackupRun`'s write-then-rename fails): 22 unhandled
+        // rejections in 900 ms on a 40 ms interval. Under a stricter rejection
+        // policy that is a process that dies on a timer.
+        //
+        // Recorded rather than rethrown, and the remaining slots are still
+        // skipped -- which is what a throw did before, so the control flow is
+        // unchanged. Only the reporting is fixed.
+        logger.error('Scheduled backup run failed', {
+          event: 'backup_schedule_error',
+          detail: error instanceof Error ? error.message : String(error)
+        })
+      })
+      .finally(() => {
+        inFlight = null
+      })
     return inFlight
   }
 

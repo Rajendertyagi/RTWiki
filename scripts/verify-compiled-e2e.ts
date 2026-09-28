@@ -21,12 +21,15 @@
  * Runs against a throwaway copy of the executable, so the real workspace is
  * never touched.
  */
+
+import { Database } from 'bun:sqlite'
 import { spawn } from 'node:child_process'
 import {
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync
@@ -36,7 +39,10 @@ import { join } from 'node:path'
 
 const PORT = Number(process.env.RTWiki_E2E_PORT ?? 8199)
 const BASE = `http://127.0.0.1:${PORT}`
-const BUILD_DIR = 'D:/Temp/RTWiki/build/server'
+// Overridable for the same reason PORT is: so this can be pointed at a build
+// staged elsewhere, which is what lets it run while `build/server/RTWiki.exe` is
+// in use by a running application and therefore cannot be rebuilt over.
+const BUILD_DIR = process.env.RTWiki_E2E_BUILD_DIR ?? 'D:/Temp/RTWiki/build/server'
 const ORIGIN = BASE
 
 let passed = 0
@@ -460,6 +466,241 @@ async function main(): Promise<void> {
       'its text is still reachable',
       (notesText as { text: string }).text.includes('study notes'),
       JSON.stringify(notesText).slice(0, 80)
+    )
+
+    /**
+     * Backup and restore, through the COMPILED server.
+     *
+     * Present here because the defect this covers only ever appeared outside the
+     * unit tests: a backup taken on a database that had already run its
+     * migrations was refused as `schema-too-new`, and every backup test built a
+     * *fresh* database, which is the one case that hides it. A compiled
+     * executable starting against a data directory that already holds a
+     * database is exactly the situation that failed, so it is the situation
+     * worth asserting -- and it is the situation the shipped product is always
+     * in after its first run.
+     */
+    console.log('\n=== backup and restore, through the COMPILED server ===')
+
+    const json = async (
+      route: string,
+      init?: RequestInit
+    ): Promise<{ status: number; body: Record<string, unknown> | null }> => {
+      const res = await fetch(`${BASE}${route}`, {
+        ...init,
+        // These endpoints reject cross-origin requests, so the Origin must match.
+        headers: { Origin: ORIGIN, ...(init?.headers ?? {}) }
+      })
+      const text = await res.text()
+      let body: Record<string, unknown> | null = null
+      try {
+        body = JSON.parse(text) as Record<string, unknown>
+      } catch {
+        body = null
+      }
+      return { status: res.status, body }
+    }
+
+    const newPage = async (title: string): Promise<number> => {
+      const res = await json('/api/pages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title, content: `body of ${title}` })
+      })
+      return res.status
+    }
+
+    const titlesViaHttp = async (): Promise<string[]> => {
+      const res = await json('/api/pages?limit=100')
+      const body = res.body as { pages?: Array<{ title: string }> } | null
+      return (body?.pages ?? []).map((p) => p.title)
+    }
+
+    const beforeCreated = await newPage('Before the backup')
+    check(
+      'a page can be created for the backup to capture',
+      beforeCreated === 201,
+      `status ${beforeCreated}`
+    )
+
+    const run = await json('/api/backup/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ slot: 'daily' })
+    })
+    check('daily backup taken', run.status === 200 && run.body?.ok === true, `status ${run.status}`)
+
+    const overview = await json('/api/backup')
+    const slots = (overview.body?.backups ?? []) as Array<{
+      slot: string
+      byteSize: number | null
+    }>
+    const daily = slots.find((s) => s.slot === 'daily')
+    check('the daily slot reports a file', (daily?.byteSize ?? 0) > 0, JSON.stringify(daily))
+    check('all three slots are listed', slots.length === 3, `saw ${slots.length}`)
+
+    // The point of the whole block: a backup of the database this server is
+    // running on must be acceptable to that same server.
+    const inspect = await json('/api/backup/inspect?file=rtwiki-backup-daily')
+    check(
+      'a backup of this running database is accepted for restore',
+      inspect.status === 200 && inspect.body?.ok === true,
+      JSON.stringify(inspect.body).slice(0, 120)
+    )
+
+    // A file that is not a backup, refused with a named reason. Two cases, because
+    // they are refused by different checks and only the second reaches the
+    // 16-byte header: a name that does not exist, and a file that does.
+    const missing = await json('/api/backup/inspect?file=never-existed.sqlite')
+    check(
+      'a file that does not exist is refused as not-a-file',
+      missing.body?.ok === false && missing.body?.reason === 'not-a-file',
+      JSON.stringify(missing.body).slice(0, 100)
+    )
+
+    // Written into the staged data directory, so the header check is what
+    // refuses it rather than the stat that precedes it.
+    writeFileSync(join(stage, 'data', 'backups', 'not-a-database.sqlite'), 'this is not a database')
+    const junk = await json('/api/backup/inspect?file=not-a-database.sqlite')
+    check(
+      'a file that exists but is not a database is refused as not-a-database',
+      junk.body?.ok === false && junk.body?.reason === 'not-a-database',
+      JSON.stringify(junk.body).slice(0, 100)
+    )
+
+    const traversal = await json('/api/backup/inspect?file=..%2F..%2Fserver.json')
+    check(
+      'a traversal filename is refused',
+      traversal.body?.kind === 'path-outside-backups' || traversal.status !== 200,
+      `status ${traversal.status} ${JSON.stringify(traversal.body).slice(0, 80)}`
+    )
+
+    // Change the wiki after the backup, so a restore is visibly a rollback.
+    const afterCreated = await newPage('After the backup')
+    check('a page can be created after the backup', afterCreated === 201, `status ${afterCreated}`)
+    const beforeRestore = await titlesViaHttp()
+    check(
+      'both pages are present before the restore',
+      beforeRestore.includes('After the backup') && beforeRestore.includes('Before the backup'),
+      beforeRestore.join(',').slice(0, 90)
+    )
+
+    const tokenRes = await json('/api/shutdown/token')
+    const token = String(tokenRes.body?.token ?? '')
+    check('a shutdown token is available', token.length > 0)
+
+    const noToken = await json('/api/backup/restore', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'rtwiki-backup-daily' })
+    })
+    check(
+      'restore without the token is refused',
+      noToken.status === 403,
+      `status ${noToken.status}`
+    )
+
+    const badFile = await json('/api/backup/restore', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-rtwiki-shutdown-token': token },
+      body: JSON.stringify({ file: 'not-a-database.sqlite' })
+    })
+    check(
+      'a refused candidate is refused before anything moves',
+      badFile.status === 409 && badFile.body?.ok === false,
+      `status ${badFile.status} ${JSON.stringify(badFile.body).slice(0, 90)}`
+    )
+    check(
+      'the refused restore left the wiki alone',
+      (await titlesViaHttp()).includes('After the backup')
+    )
+
+    const restored = await json('/api/backup/restore', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-rtwiki-shutdown-token': token },
+      body: JSON.stringify({ file: 'rtwiki-backup-daily' })
+    })
+    check(
+      'restore accepted with the token',
+      restored.status === 202 && restored.body?.ok === true,
+      `status ${restored.status} ${JSON.stringify(restored.body).slice(0, 100)}`
+    )
+    check(
+      'restore reports where the previous database went',
+      typeof restored.body?.preRestore === 'string' &&
+        String(restored.body.preRestore).includes('rtwiki.pre-restore-'),
+      String(restored.body?.preRestore)
+    )
+    check(
+      'the backup survives the restore',
+      existsSync(join(stage, 'data', 'backups', 'rtwiki-backup-daily'))
+    )
+
+    // The server stops itself after a restore, so nothing more can be asked of it
+    // over HTTP. What remains is on disk, and that is what the rest checks.
+    await Bun.sleep(1500)
+    let stillListening = true
+    try {
+      await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(500) })
+    } catch {
+      stillListening = false
+    }
+    check('the server shut itself down after the restore', stillListening === false)
+
+    const dataDir = join(stage, 'data')
+    const preRestores = existsSync(dataDir)
+      ? readdirSync(dataDir).filter(
+          (f) => f.startsWith('rtwiki.pre-restore-') && f.endsWith('.sqlite')
+        )
+      : []
+    check(
+      'the previous database was kept, not deleted',
+      preRestores.length === 1,
+      preRestores.join(',')
+    )
+
+    if (preRestores.length === 1) {
+      // The kept copy must be a usable database holding the later state, since
+      // that is the wiki as it stood immediately before the restore.
+      const kept = new Database(join(dataDir, preRestores[0]), { readonly: true })
+      const keptTitles = (
+        kept.query('SELECT title FROM pages').all() as Array<{ title: string }>
+      ).map((r) => r.title)
+      const keptIntegrity = kept.query('PRAGMA integrity_check').all()
+      kept.close()
+      check('the kept database is sound', keptIntegrity.length === 1, JSON.stringify(keptIntegrity))
+      check(
+        'the kept database holds the state from before the restore',
+        keptTitles.includes('After the backup') && keptTitles.includes('Before the backup'),
+        keptTitles.join(',').slice(0, 90)
+      )
+    }
+
+    const live = new Database(join(dataDir, 'rtwiki.sqlite'), { readonly: true })
+    const liveTitles = (
+      live.query('SELECT title FROM pages').all() as Array<{ title: string }>
+    ).map((r) => r.title)
+    const liveIntegrity = live.query('PRAGMA integrity_check').all()
+    const liveMigrations = (
+      live.query('SELECT count(*) AS n FROM _migrations').all() as Array<{
+        n: number
+      }>
+    )[0]?.n
+    live.close()
+    check(
+      'the restored database is sound',
+      liveIntegrity.length === 1,
+      JSON.stringify(liveIntegrity)
+    )
+    check(
+      'the restore rolled the wiki back to the backup',
+      liveTitles.includes('Before the backup') && !liveTitles.includes('After the backup'),
+      liveTitles.join(',').slice(0, 90)
+    )
+    check(
+      'the restored database kept its schema',
+      liveMigrations === 9,
+      `migrations ${liveMigrations}`
     )
   } finally {
     // `stopServer` rather than `server.kill`, so every exit path — including a

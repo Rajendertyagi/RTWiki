@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { slotFilename, slotPath } from '../src/server/backup/backup-service.js'
 import { performRestore } from '../src/server/backup/restore-service.js'
-import { closeDatabase, initDatabase, type Database as Db } from '../src/server/database/index.js'
+import { closeDatabase, type Database as Db, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import { DATABASE_FILENAME } from '../src/shared/constants/index.js'
 
@@ -125,7 +125,9 @@ function titlesOf(path: string): string[] {
   const handle = new Database(path, { readonly: true })
   try {
     return (
-      handle.query('SELECT title FROM pages WHERE deleted_at IS NULL ORDER BY title').all() as Array<{
+      handle
+        .query('SELECT title FROM pages WHERE deleted_at IS NULL ORDER BY title')
+        .all() as Array<{
         title: string
       }>
     ).map((r) => r.title)
