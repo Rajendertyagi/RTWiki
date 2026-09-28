@@ -183,10 +183,17 @@ export function checkIntegrity(): boolean {
 }
 
 export async function closeDatabase(): Promise<void> {
+  // `dbPath` is cleared whether or not a handle was open. It is only reachable
+  // from inside the `if` when there is a handle, which is the case this feature
+  // creates: a restore closes the connection before swapping the file, so
+  // `dbInstance` is already null on a second call and the cached path would
+  // survive it -- leaving the module reporting the path of a database it no
+  // longer has open, and pointing a later `initDatabase` at a file another
+  // test (or another restore) has moved away.
+  dbPath = null
   if (dbInstance) {
     dbInstance.close()
     dbInstance = null
-    dbPath = null
     databaseLog.info('Database connection closed', { event: 'db_close' })
   }
 }

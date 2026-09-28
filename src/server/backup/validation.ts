@@ -19,7 +19,7 @@ import { Database } from 'bun:sqlite'
 import { closeSync, openSync, readSync, statSync } from 'node:fs'
 import type { BackupValidationReason } from '@rtwiki/shared/constants'
 import { getDatabaseLogger } from '../database/index.js'
-import { appliedMigrationNames } from '../database/migrations.js'
+import { requiredMigrationNames } from '../database/migrations.js'
 
 /** Bytes 0-15 of every SQLite file: "SQLite format 3" plus a NUL terminator. */
 const SQLITE_HEADER = 'SQLite format 3\u0000'
@@ -134,12 +134,12 @@ function schemaMatchesBuild(db: Database): BackupValidationReason | null {
       (row) => row.name
     )
   )
-  const required = appliedMigrationNames()
+  const required = requiredMigrationNames()
   if (required.length === 0) {
     // A programming error, not a bad file: migrations have not run in this
     // process, so there is no correct set to compare against. Refusing is the
     // safe direction -- a restore that cannot be validated must not proceed.
-    getDatabaseLogger().error('Cannot validate backup schema: no migrations established')
+    getDatabaseLogger().error('Cannot validate backup schema: no migrations required by this build')
     return 'schema-missing-migration'
   }
 

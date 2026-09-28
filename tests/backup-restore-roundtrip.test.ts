@@ -1,12 +1,13 @@
 import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createBackup, slotFilename } from '../src/server/backup/backup-service.js'
 import { performRestore } from '../src/server/backup/restore-service.js'
+import { validateBackupFile } from '../src/server/backup/validation.js'
 import { closeDatabase, type Database as Db, initDatabase } from '../src/server/database/index.js'
-import { runMigrations } from '../src/server/database/migrations.js'
+import { requiredMigrationNames, runMigrations } from '../src/server/database/migrations.js'
 import { createPage, nextChildPosition } from '../src/server/repositories/page-repository.js'
 import { DATABASE_FILENAME } from '../src/shared/constants/index.js'
 
@@ -228,6 +229,125 @@ describe('the round trip', () => {
     )
     expect(monotonic).toBe(true)
     expect([...after.map((p) => p.title)]).toEqual([...before.map((p) => p.title)])
+  })
+})
+
+describe('an existing installation', () => {
+  it('a database that has already run its migrations can back up and restore', async () => {
+    // Regression. The schema check compares a backup's `_migrations` against the
+    // set of migrations this build *requires*. That set used to be populated
+    // only as migrations were applied or found present, and
+    // `008_drop_stored_name` is reached solely through the code path that
+    // applies `007` for the first time. So on any database where `007` had
+    // already run -- which is every database that had been started before this
+    // build -- the required set held 8 names while `_migrations` held 9, and
+    // every backup the server took was refused as `schema-too-new`.
+    //
+    // Every other test here builds a fresh temporary database, which is exactly
+    // the case that hid it. This one restarts against the same data directory,
+    // so `007` is already applied and the already-applied path is the one taken.
+    const dataDir = tempDir
+
+    // The page is written on the first boot, through the connection `beforeEach`
+    // already opened and migrated.
+    db.run(
+      `INSERT INTO pages (id, title, content, page_type, parent_id, position, created_at, updated_at, version)
+       VALUES ('kept', 'Written before the restart', 'body text', 'rich', NULL, 0,
+               '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 0)`
+    )
+
+    // Restart. `initDatabase` here replaces the handle, so the old one must be
+    // closed first or its file stays locked and the directory cannot be removed.
+    await closeDatabase()
+    const restarted = initDatabase(dataDir)
+    await runMigrations(restarted, join(dataDir, 'attachments'))
+
+    // The required set and the table must agree, in both directions.
+    const required = requiredMigrationNames()
+    const reader = new Database(join(dataDir, DATABASE_FILENAME), { readonly: true })
+    const present = (
+      reader.query('SELECT name FROM _migrations').all() as Array<{
+        name: string
+      }>
+    ).map((r) => r.name)
+    reader.close()
+    expect(present.filter((name) => !required.includes(name))).toEqual([])
+    expect(required.filter((name) => !present.includes(name))).toEqual([])
+
+    // And the round trip actually closes, on the restarted database.
+    const backup = await createBackup(dataDir, restarted, 'daily')
+    expect(backup.ok).toBe(true)
+    if (!backup.ok) return
+    expect(validateBackupFile(backup.path).ok).toBe(true)
+
+    restarted.run('DELETE FROM pages')
+    expect(readPages(restarted)).toHaveLength(0)
+
+    const restored = await performRestore(dataDir, slotFilename('daily'))
+    expect(restored.ok).toBe(true)
+    if (!restored.ok) return
+
+    // Every handle closed before reading, or Windows refuses to delete the
+    // temporary directory afterwards.
+    const after = new Database(join(dataDir, DATABASE_FILENAME), { readonly: true })
+    const rows = after
+      .query('SELECT title, content FROM pages WHERE deleted_at IS NULL')
+      .all() as Array<{ title: string; content: string }>
+    after.close()
+    expect(rows).toEqual([{ title: 'Written before the restart', content: 'body text' }])
+  })
+
+  it('a database still mid-migration is refused rather than backed up', async () => {
+    // The counterpart, and the reason 008 is recorded as *required* rather than
+    // as *applied*. When the attachment backfill cannot finish, 008 stays
+    // outstanding and a backup of that database must be refused -- which the
+    // schema check now does on its own, in addition to the attachment-byte
+    // check in `createBackup`.
+    db.exec('PRAGMA foreign_keys = OFF')
+    db.exec(`DELETE FROM _migrations WHERE name = '008_drop_stored_name'`)
+    db.exec('ALTER TABLE attachments RENAME TO attachments_settled')
+    db.exec(`
+      CREATE TABLE attachments (
+        id TEXT PRIMARY KEY, mime_type TEXT NOT NULL, byte_size INTEGER NOT NULL,
+        original_name TEXT, checksum TEXT, created_at TEXT NOT NULL,
+        stored_name TEXT NOT NULL, data BLOB
+      )
+    `)
+    db.exec(`
+      INSERT INTO attachments (id, mime_type, byte_size, original_name, checksum, created_at, stored_name, data)
+      VALUES ('mid', 'image/png', 4, 'a.png', NULL, '2026-01-01T00:00:00.000Z', 'a.png', NULL)
+    `)
+    db.exec('DROP TABLE attachments_settled')
+    db.exec('PRAGMA foreign_keys = ON')
+
+    // The required set still contains 008 even though the table does not.
+    expect(requiredMigrationNames()).toContain('008_drop_stored_name')
+
+    const refused = await createBackup(tempDir, db, 'daily')
+    expect(refused.ok).toBe(false)
+    if (refused.ok) return
+    expect(refused.reason).toBe('mid-migration-attachments')
+  })
+
+  it('a backup of a mid-migration database is refused by the schema check too', async () => {
+    // The schema check refuses independently of the attachment-byte check, so
+    // neither is the only thing standing between a half-migrated database and a
+    // backup that claims to be complete. The fixture is a healthy backup whose
+    // `_migrations` has been rolled back one step.
+    const backup = await createBackup(tempDir, db, 'daily')
+    expect(backup.ok).toBe(true)
+    if (!backup.ok) return
+
+    const doctored = join(tempDir, 'backups', 'rtwiki-backup-behind')
+    copyFileSync(backup.path, doctored)
+    const handle = new Database(doctored)
+    handle.exec(`DELETE FROM _migrations WHERE name = '008_drop_stored_name'`)
+    handle.close()
+
+    expect(validateBackupFile(doctored)).toEqual({
+      ok: false,
+      reason: 'schema-missing-migration'
+    })
   })
 })
 

@@ -377,7 +377,7 @@ Before any restore operation begins, the backup service validates:
 5. **Schema compatibility is checked against the `_migrations` table, not `user_version`.**
    `user_version` is never used anywhere in `src/`, so `_migrations` is the only authority that
    reflects what this build actually did. The required set is derived from the migration calls
-   themselves (`appliedMigrationNames()`), not from a hand-maintained list that would drift without
+   themselves (`requiredMigrationNames()`), not from a hand-maintained list that would drift without
    failing anything. Rejected in **both** directions: a backup carrying an unknown migration was
    written by a newer RTWiki, and one missing an expected migration would restore a half-migrated
    schema. The two report distinct reasons (`schema-too-new`, `schema-missing-migration`).

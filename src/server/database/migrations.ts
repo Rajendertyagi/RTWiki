@@ -3,25 +3,34 @@ import { joinPaths } from '../config/index.js'
 import { ensureStoragePragmas, getDatabaseLogger, type getDb } from './index.js'
 
 /**
- * The migration names this build has established as present, recorded as
- * `runMigrations` walks them rather than declared as a second list.
+ * The migration names this build **requires**, recorded as `runMigrations`
+ * walks them rather than declared as a second list.
  *
- * Restore validation compares a backup's `_migrations` against the running
- * build to reject a backup that is too new, or missing one the build expects.
- * A hand-maintained list of names would be a second source of truth that drifts
+ * Restore validation compares a backup's `_migrations` against this set to
+ * reject a backup that is too new, or missing one the build expects. A
+ * hand-maintained list of names would be a second source of truth that drifts
  * the moment a migration is added -- and would drift silently, because a
  * validation list that is one migration behind still passes every check it is
  * given. Deriving it from the calls themselves cannot drift.
+ *
+ * "Required" is deliberately not the same as "present in `_migrations` right
+ * now". A migration this build will insist on applying is required even while
+ * it is still outstanding -- that is precisely the case a restore must refuse,
+ * and recording it only once applied turns a half-migrated database into a
+ * backup the build believes it understands. The previous version conflated the
+ * two, and the result was that `008_drop_stored_name` went unrecorded on every
+ * database where `007_attachment_blobs` had already run, so a backup of a
+ * perfectly healthy existing database was rejected as `schema-too-new`.
  */
-const establishedMigrations = new Set<string>()
+const requiredMigrations = new Set<string>()
 
 /**
  * Migration names this build requires, in application order. Populated by
- * `runMigrations`, so it reflects what is actually in `_migrations` rather than
+ * `runMigrations`, so it reflects what this build will insist on rather than
  * what a list claims should be.
  */
-export function appliedMigrationNames(): string[] {
-  return [...establishedMigrations]
+export function requiredMigrationNames(): string[] {
+  return [...requiredMigrations]
 }
 
 export async function runMigrations(
@@ -31,7 +40,7 @@ export async function runMigrations(
   // Recomputed per run so a second bootstrap in one process (which the tests
   // do, against a fresh temp dataDir) reports its own migrations and not the
   // previous instance's.
-  establishedMigrations.clear()
+  requiredMigrations.clear()
 
   await applyMigration(db, '001_create_pages', (db) => {
     db.run(`
@@ -273,10 +282,19 @@ async function migrateAttachmentBytesToBlobs(
   // restore validation compares that table against the build's required set, so
   // it must not be spelled two ways.
   const name = '007_attachment_blobs'
-  // Recorded at entry, unconditionally, and that is sound: this function either
-  // finds the migration already applied and returns, or applies it. No path
-  // leaves it out of `_migrations`.
-  establishedMigrations.add(name)
+  // Both migrations this function owns are recorded at entry, unconditionally.
+  // They are required by this build whether or not they are still outstanding,
+  // and every path below applies or confirms them.
+  //
+  // 008 is recorded HERE as well as inside `dropStoredName` because that
+  // function is only reached when 007 still has work to do. Without this line,
+  // a database where 007 was applied on an earlier run would return from the
+  // `if` below without ever entering `dropStoredName`, leaving 008 out of the
+  // required set while its `_migrations` row is present -- and every backup of
+  // that database would be refused as `schema-too-new`.
+  const dropName = '008_drop_stored_name'
+  requiredMigrations.add(name)
+  requiredMigrations.add(dropName)
   if (db.query('SELECT id FROM _migrations WHERE name = ?').get(name)) {
     // Already applied, but auto_vacuum may still need converting on a database
     // created before ADR-014, so the check below runs regardless.
@@ -369,8 +387,18 @@ async function migrateAttachmentBytesToBlobs(
 function dropStoredName(db: ReturnType<typeof getDb>): void {
   const logger = getDatabaseLogger()
   const name = '008_drop_stored_name'
+  // Recorded here, on the path that owns this migration, and only when it is
+  // genuinely reached.
+  //
+  // `dropStoredName` is called from `migrateAttachmentBytesToBlobs`, which
+  // returns early when 007 is already applied -- so on every database that has
+  // run 007 before, this function is never entered and `008` would go
+  // unrecorded. The required set would then hold 8 names while `_migrations`
+  // holds 9, and every backup of a healthy existing database would be refused
+  // as `schema-too-new`. That is the bug this call is the fix for; the caller
+  // records 008 on its early-return path for exactly that reason.
+  requiredMigrations.add(name)
   if (db.query('SELECT id FROM _migrations WHERE name = ?').get(name)) {
-    establishedMigrations.add(name)
     return
   }
 
@@ -381,11 +409,12 @@ function dropStoredName(db: ReturnType<typeof getDb>): void {
     // The column stays. The application keeps working, because every row still
     // has a file on disk to be served from.
     //
-    // Deliberately NOT recorded as established: this build's database really
-    // does still carry `008` as outstanding, so a restore must be compared
-    // against a required set that includes it. Recording it here would make a
-    // mid-migration database look fully migrated and restore would then
-    // "re-apply" the drop to a database whose bytes were never backfilled.
+    // 008 is still recorded as required above, and that is deliberate: this
+    // build will keep trying to apply it, so a restore must be compared against
+    // a required set that includes it. A backup of a database in this state is
+    // refused by the schema check, and independently by the attachment-byte
+    // check in `createBackup` -- two independent refusals pointing the same way,
+    // which is the correct outcome for a database that is mid-migration.
     logger.warn('stored_name retained: some attachments have no bytes yet', {
       event: 'attachment_backfill_incomplete',
       pending: String(stillMissing.n)
@@ -422,10 +451,11 @@ function dropStoredName(db: ReturnType<typeof getDb>): void {
     db.run('CREATE INDEX idx_attachments_created_at ON attachments(created_at)')
     db.run('INSERT INTO _migrations (name) VALUES (?)', [name])
     db.run('COMMIT')
-    // Recorded only here, after the commit: the catch below swallows a failure
-    // and leaves the database correct-but-incomplete, so a name recorded on the
-    // failure path would claim a migration this build never actually applied.
-    establishedMigrations.add(name)
+    // No recording needed here: `name` was already added to the required set
+    // when `migrateAttachmentBytesToBlobs` was entered, before this function
+    // was called. Recording on the commit path only would be the original bug,
+    // in miniature -- a name that is required by the build but recorded only
+    // when it happens to succeed.
     logger.info('Attachment filename column removed', {
       event: 'migration',
       name,
@@ -497,7 +527,7 @@ async function applyMigration(
     // much a part of the required set as one applied a moment ago, and the
     // early return below would otherwise lose it -- which is exactly the case
     // every run after the first upgrade hits.
-    establishedMigrations.add(name)
+    requiredMigrations.add(name)
     if (existing) {
       db.run('COMMIT')
       getDatabaseLogger().info('Migration already applied', {
