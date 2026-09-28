@@ -4,7 +4,7 @@ import {
   type BackupSlot,
   type BackupValidationReason
 } from '@rtwiki/shared/constants'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import {
   type BackupFailure,
@@ -83,9 +83,22 @@ export function BackupPanel(): JSX.Element {
   const [confirming, setConfirming] = useState<BackupSlotFile | null>(null)
   const [restoring, setRestoring] = useState(false)
   const [reopened, setReopened] = useState(false)
+  /**
+   * The last interval the server confirmed, per period.
+   *
+   * Kept apart from `overview` on purpose: `overview` is the live form state and
+   * changes on every keystroke, so it cannot answer "has this been saved?".
+   */
+  const persistedIntervals = useRef<Partial<Record<BackupSlot, number>>>({})
 
   const reload = useCallback(async () => {
-    setOverview(await fetchBackups())
+    const next = await fetchBackups()
+    setOverview(next)
+    if (next !== null) {
+      for (const slot of BACKUP_SLOTS) {
+        persistedIntervals.current[slot] = next.settings.slots[slot].intervalHours
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -109,10 +122,16 @@ export function BackupPanel(): JSX.Element {
 
   async function handleInterval(slot: BackupSlot, hours: number): Promise<void> {
     if (!overview) return
-    const current = overview.settings.slots[slot].intervalHours
     // Applied on blur rather than per keystroke: an interval is a whole number
     // of hours, so there is nothing meaningful to save while it is half-typed.
-    if (!Number.isInteger(hours) || hours === current) return
+    if (!Number.isInteger(hours)) return
+    // Compared against the last value the SERVER confirmed, never against
+    // `overview`. The field's onChange writes every keystroke straight into
+    // `overview`, so by the time blur fires that already holds what was typed --
+    // and comparing it against itself meant this check always matched and the
+    // value was silently never saved. A typed setting that does not persist is
+    // the worst kind: it looks applied.
+    if (persistedIntervals.current[slot] === hours) return
     const next = {
       ...overview.settings.slots,
       [slot]: { ...overview.settings.slots[slot], intervalHours: hours }
@@ -123,6 +142,7 @@ export function BackupPanel(): JSX.Element {
       setProblem(UI_TEXT.backupFailedWrite)
       return
     }
+    persistedIntervals.current[slot] = hours
     setOverview({ ...overview, settings: { slots: saved.slots } })
   }
 

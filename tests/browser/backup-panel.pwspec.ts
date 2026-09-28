@@ -43,15 +43,30 @@ test('the backup section is in the settings list and loads on demand', async ({ 
   // Mounted conditionally, so the panel exists only while the section is open.
   await expect(page.getByTestId('backup-table')).toBeVisible()
 
-  // All three periods are offered, each with its own toggle and its own button.
+  // All three periods are offered, each with its own toggle, interval and button.
   for (const slot of ['daily', 'weekly', 'monthly']) {
     await expect(page.getByTestId(`backup-enabled-${slot}`)).toBeVisible()
     await expect(page.getByTestId(`backup-run-${slot}`)).toBeVisible()
+    await expect(page.getByTestId(`backup-interval-${slot}`)).toBeVisible()
   }
 
-  // A fresh install has no backups yet, and says so per period rather than
-  // showing an empty table with no explanation.
-  await expect(page.getByTestId('backup-when-daily')).toHaveText(/No backup yet/i)
+  // The taken / not-taken line is asserted against what the server reports
+  // rather than against a fresh install. This suite runs against the real data
+  // directory, so a previous run's backup may legitimately exist; asserting
+  // "No backup yet" unconditionally made the first assertion depend on whether
+  // anything had ever run before it -- a test defect indistinguishable from a
+  // product defect. Driving it from the API checks the same mapping honestly.
+  const overview = (await (await page.request.get('/api/backup')).json()) as {
+    backups: Array<{ slot: string; byteSize: number | null }>
+  }
+  for (const entry of overview.backups) {
+    const label = page.getByTestId(`backup-when-${entry.slot}`)
+    if (entry.byteSize === null) {
+      await expect(label).toHaveText(/No backup yet/i)
+    } else {
+      await expect(label).toHaveText(/Last taken/i)
+    }
+  }
 })
 
 test('a period can be switched off and the choice survives reopening Settings', async ({
@@ -60,8 +75,26 @@ test('a period can be switched off and the choice survives reopening Settings', 
   await openBackupSection(page)
 
   const monthly = page.getByTestId('backup-enabled-monthly')
+  // Put the period into a known state first. The suite runs against the real
+  // data directory, so a previous run may already have switched this off, and
+  // asserting "it starts on" would then be testing the order tests happen to
+  // run in rather than the behaviour.
+  await page.request.put('/api/backup/settings', {
+    data: { slots: { monthly: { enabled: true, intervalHours: 720 } } }
+  })
+  await page.reload()
+  await openBackupSection(page)
   await expect(monthly).toBeChecked()
-  await monthly.click()
+  // Mantine's Switch hides its `<input>` and paints a track over it, so a click
+  // aimed at the input is intercepted by `mantine-Switch-trackLabel` and
+  // Playwright's actionability check refuses it forever. That is a TEST defect,
+  // not a product one: a person clicks the visible track, and the enclosing
+  // `<label>` forwards that to the input. So the click is aimed at the label,
+  // which is what a real pointer press lands on.
+  await page.locator('label:has([data-testid="backup-enabled-monthly"])').click()
+  // The state actually changed, rather than the click merely having been sent --
+  // so if the control ever stops responding, this fails as a product defect
+  // rather than being papered over.
   await expect(monthly).not.toBeChecked()
 
   // The interval field follows the toggle, so a disabled period cannot be
@@ -76,10 +109,22 @@ test('a period can be switched off and the choice survives reopening Settings', 
 })
 
 test('an interval typed by hand is saved on blur', async ({ page }) => {
-  await openBackupSection(page)
+  // Start from a known value. This suite runs against the real data directory,
+  // so a previous run may already have left 48 in place -- and then typing 48
+  // would satisfy the assertion whether or not anything was saved, which is how
+  // this test came to pass against the broken panel.
+  await page.request.put('/api/backup/settings', {
+    data: { slots: { daily: { enabled: true, intervalHours: 24 } } }
+  })
 
+  await openBackupSection(page)
   const field = page.getByTestId('backup-interval-daily')
+  await expect(field).toHaveValue('24')
   await field.click()
+  // Select the existing value before typing. The field arrives pre-filled with
+  // the default, and appending to it yields 2448 rather than 48 -- a TEST defect
+  // that is indistinguishable from a product defect if left alone.
+  await field.press('Control+a')
   // pressSequentially, not fill: a value set without key events never exercises
   // the field the way a person does.
   await field.pressSequentially('48')
