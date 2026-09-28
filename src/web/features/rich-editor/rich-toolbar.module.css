@@ -12,7 +12,12 @@
   width: 1px;
   height: 20px;
   margin: 0 4px;
-  background: var(--mantine-color-default-border);
+  /* The divider colour was the one value here with a named source in
+     customization.css that nothing referenced, so this rule restated
+     --mantine-color-default-border literally. The token resolves to exactly
+     that, so this is behaviour-neutral and the named source is now the one in
+     use. Do not restate the value here. */
+  background: var(--rtwiki-chrome-divider);
 }
 
 /*
