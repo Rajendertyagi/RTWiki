@@ -346,33 +346,67 @@ constant is not evidence that the limit it named now exists.
 
 ## 8. Backup Validation
 
-**Not implemented.** Measured: 0 matches for a backup or restore feature in `src/`. The directory `data/backups/` is real and is created at startup (`src/server/bootstrap.ts:181,188`; `src/server/config/index.ts:93`), but nothing is ever written to it. `VACUUM` appears once, at `src/server/database/migrations.ts:405`, and only to re-apply `auto_vacuum`.
+**Built.** The backup service is `src/server/backup/` and the restore endpoint is
+`src/server/routes/backup.ts`. Before any restore moves a file, the candidate is validated by
+`src/server/backup/validation.ts`, which runs the steps below in order and stops at the first
+failure, returning a classified reason from `BACKUP_VALIDATION_REASONS` rather than a free-text
+message.
 
-The requirements below are unbuilt security work. **They must be satisfied before a restore endpoint exists** — a restore that validates nothing is a data-corruption and code-execution vector, which is why this section is kept rather than removed.
+A restore is the one operation in RTWiki that can destroy a working wiki, so the shape of this
+feature is deliberately conservative: the current database is **moved aside, never deleted**, and —
+because nothing in this codebase respawns the server — the user is told plainly to close and reopen
+RTWiki. There is no relaunch, so no restart handshake is assumed.
 
-Before any restore operation begins, the backup service must validate:
+The container is a **bare SQLite file**: no archive, no zip, no `manifest.json`.
+[AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) §3 describes a `.rtwiki.zip` note-package, but that is
+the content-import feature and a different one; a restore here reads a plain database, which is why
+the steps below are file checks rather than archive checks.
 
-1. The ZIP archive is readable and not corrupted (CRC check).
-2. The archive contains a valid `manifest.json` with expected structure.
-3. The `rtwiki_version` in the manifest matches a compatible version range.
-4. The SQLite database inside the archive opens, is a database, and passes `integrity_check` — **and a throw counts as failure**, per §7. `integrity_check` alone is not sufficient even when it passes cleanly.
-5. `PRAGMA foreign_key_check` returns zero rows. **Not covered by step 4** — SQLite documents that `integrity_check` "does not find FOREIGN KEY errors", and `foreign_keys = ON` (`src/server/database/index.ts:98`) means a restore leaving orphaned rows would otherwise pass. This is a separate, required step.
-6. All attachment references in the manifest point to existing files in the archive.
-7. **Schema compatibility is checked against the `_migrations` table, not `user_version`.** `user_version`
-   is never used anywhere in `src/`; the ordered list of applied migrations is
-   `src/server/database/migrations.ts`, guarded by `SELECT id FROM _migrations WHERE name = ?`
-   (`:435`). Reject if the backup's highest applied migration is unknown to the running build, or if
-   the build expects a migration the backup lacks. Both `user_version` and `_migrations` survive a
-   `VACUUM INTO`, so either would work — but only one authority should be used, and it must be the
-   one the runtime actually reads.
+Before any restore operation begins, the backup service validates:
 
-If any validation step fails, the restore is aborted and the user is shown a clear error message.
+1. **The 16-byte SQLite header.** Checked before opening, so a user who picks a photograph is told
+   "this is not a database" instead of being handed SQLite's own wording for the same fact.
+2. **The file opens as a database, through its own read-only connection** — never the live one, so
+   validating a candidate can never corrupt the database a restore would replace.
+3. **`PRAGMA integrity_check` returns a single `ok`.** **A throw counts as failure**, per §7.
+   `integrity_check` alone is not sufficient even when it passes cleanly.
+4. **`PRAGMA foreign_key_check` returns zero rows.** **Not covered by step 3** — SQLite documents
+   that `integrity_check` "does not find FOREIGN KEY errors", and `foreign_keys = ON`
+   (`src/server/database/index.ts:98`) means a restore leaving orphaned rows would otherwise pass.
+   This is a separate, required step.
+5. **Schema compatibility is checked against the `_migrations` table, not `user_version`.**
+   `user_version` is never used anywhere in `src/`, so `_migrations` is the only authority that
+   reflects what this build actually did. The required set is derived from the migration calls
+   themselves (`appliedMigrationNames()`), not from a hand-maintained list that would drift without
+   failing anything. Rejected in **both** directions: a backup carrying an unknown migration was
+   written by a newer RTWiki, and one missing an expected migration would restore a half-migrated
+   schema. The two report distinct reasons (`schema-too-new`, `schema-missing-migration`).
+6. **User confirmation**, naming the file, its date and its size, and stating that the current data
+   is moved aside rather than deleted. This is a decision, not a check, and lives in the UI — the
+   route does not act on a passing validation without it having happened.
+7. **Path containment.** A path from a client is a request to *name* a file, not permission to reach
+   one. The name is taken as a basename before any path is built, and the result is re-checked with
+   `path.relative` rather than a prefix comparison, because a prefix test does not hold at a drive
+   root. The candidate is therefore always inside `data/backups/`, which is also why it can never be
+   the live database.
 
-The one pre-existing safeguard this depends on is already real: `PRAGMA integrity_check` runs on
-startup and the check helper requires a single `"ok"` row (`src/server/database/index.ts:125-131`) —
-with the throw behaviour in §7 as the gap in it.
+If any validation step fails, the restore is aborted, **nothing has been moved**, and the user is
+shown which check failed.
 
-### 8.1 How a backup must be taken — measured constraints on unbuilt work
+**A backup contains no deleted page content.** This is documented SQLite behaviour, not merely a
+local observation: `VACUUM INTO` leaves *"all deleted content purged from the backup, leaving behind
+no forensic traces"* — see [lang_vacuum.html](https://www.sqlite.org/lang_vacuum.html). Measured on
+two functionally identical databases after deleting a row, a plain file copy still held the deleted
+text in dead pages (40,960 bytes) while the `VACUUM INTO` output did not (8,192 bytes); both opened
+cleanly with `integrity_check = ok`. For a private-notes wiki that is a deliberate property, recorded
+here so it is not later mistaken for an accident. There is nothing to scrub.
+
+**Backups carry no attachment bytes held outside the database.** A fully migrated database needs
+exactly one file. The exception is a database caught mid-migration by `dropStoredName()`, where some
+rows still have `data IS NULL` and their bytes remain in `data/attachments/`. The backup service
+**refuses** in that state rather than producing a file that looks complete and is not — see §8.1.
+
+### 8.1 How a backup is taken — measured constraints, now enforced
 
 The list above says what to validate. These are the measured facts that constrain *how to produce*
 the thing being validated, and each one closes off an approach that looks reasonable.
@@ -399,15 +433,41 @@ that while `VACUUM` is a write operation requiring the lock, **`VACUUM INTO` is 
 no exclusive lock and does not block writers. Measured on a live, actively-written WAL database:
 the command succeeded, the connection stayed open and writable, and the output returned
 `integrity_check = ok`. It has no `-wal` of its own, which removes a whole class of restore mistake.
-Two operational constraints come with it: the target "must not previously exist, or else it must be
-an empty file", and an interrupted run "might be incomplete and corrupt" — so a partial output must
-be deleted rather than offered for restore. It is not incremental, and it is not synchronised
-unless `PRAGMA synchronous` is `NORMAL` or `FULL`.
+Three operational constraints come with it, all now enforced in `src/server/backup/backup-service.ts`:
 
-**`PRAGMA synchronous` is currently never set** — 0 matches in `src/` or `scripts/`, so SQLite's
-compiled default applies. It is `FULL` in practice, which satisfies the guarantee above, but that
-rests on a build flag in a dependency RTWiki does not control. **Setting it explicitly would remove
-the assumption**, and is worth doing for a backup feature specifically.
+- The target "must not previously exist, or else it must be an empty file". Measured on this
+  machine: a second `VACUUM INTO` over an existing target fails with
+  `SQLiteError: output file already exists`. So a backup is written to `rtwiki-backup-<period>.partial`
+  and **moved onto its slot only on success** — forced by the API, not merely the safer style. A
+  backup that failed halfway through while overwriting a slot would destroy the previous good copy,
+  which is the one needed precisely when backups are failing.
+- An interrupted run "might be incomplete and corrupt", so a leftover `.partial` is a corrupt file
+  sitting where a backup belongs. They are swept at startup, because "delete on failure" does not run
+  when the process is killed. Measured on this machine: `fs.rename` over an existing *file* succeeds
+  on Windows, so no delete-then-rename fallback is written; renaming onto a *directory* fails
+  `EPERM`, which is unreachable here because the slot name comes from a fixed list.
+- It is not incremental, and it is not synchronised unless `PRAGMA synchronous` is `NORMAL` or
+  `FULL` — see below.
+
+**The open-transaction question is not settled by the documentation, and was measured instead.**
+SQLite documents that *"a VACUUM will fail if there is an open transaction on the database connection
+that is attempting to run the VACUUM"*, and that unfinalized statements typically hold a read
+transaction open. Whether that applies to `VACUUM INTO` is **not stated**: the same page says it
+"works the same way except that it uses the file named on the INTO clause", which is an inference,
+and the very next sentence says `VACUUM` (but not `VACUUM INTO`) is a write operation — which is
+precisely what that rule protects. The backup is therefore never invoked from inside a transaction,
+and a `VACUUM INTO` that fails transiently is reported rather than retried into silence.
+
+**`PRAGMA synchronous` is now set explicitly to `FULL`** (`src/server/database/index.ts`, in
+`initDatabase`). It was previously never set anywhere in `src/` or `scripts/`, so SQLite's
+compiled default applied — `FULL` in practice, which happened to satisfy the guarantee above, but
+only by resting on a build flag in a dependency RTWiki does not control. On `VACUUM INTO` the
+setting is load-bearing rather than cosmetic: SQLite's documented guarantee that the output is
+fsync'd is conditional on it, so leaving it unset would have made every backup's durability a
+property of the Bun build. `FULL` rather than `NORMAL` deliberately: autosave commits every
+`PROVISIONAL_AUTOSAVE_DEBOUNCE_MS`, so the fsync cost is a handful per second and negligible,
+whereas `NORMAL` in WAL mode trades power-loss durability for throughput. The wrong trade for
+someone's notes.
 
 **Attachments are BLOBs, so a fully migrated database needs exactly one file — with one measured
 exception.** Bytes live in `attachments.data` (`src/server/database/migrations.ts:245`) and no route
@@ -417,6 +477,14 @@ has `data IS NULL`, and logs `attachment_backfill_incomplete`. A database in tha
 bytes in `data/attachments/`, so **that** database needs the directory too. A backup routine must
 detect it with `SELECT count(*) FROM attachments WHERE data IS NULL` and either back up the directory
 or refuse — silently omitting it is exactly the content loss `AGENTS.md` §4 forbids.
+**It refuses**, and says so: `countAttachmentsAwaitingBytes()` in
+`src/server/backup/validation.ts` makes a one-file backup a two-part backup and double the restore
+path, which is the worse trade for a state that resolves on the next boot. Note the window is narrow
+and easy to misjudge — migration `008_drop_stored_name` rebuilds the table with `data BLOB NOT NULL`,
+so on a fully-migrated database the `data IS NULL` check cannot match at all. It is reachable only
+between `007_attachment_blobs` (which adds a *nullable* column) and `008` (which is deliberately
+skipped while any row still has bytes on disk). A guard that refused unconditionally would therefore
+stop every backup forever.
 
 **A standing check, not a one-off:** the bundled SQLite version is a property of the **Bun**
 version, not of anything `package.json` pins, so no dependency bump would ever flag it. Measured

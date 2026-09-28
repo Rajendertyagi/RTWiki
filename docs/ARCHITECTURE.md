@@ -75,8 +75,11 @@ Each layer has a single responsibility and communicates only with its adjacent l
   - `DELETE /api/attachments/:id` — remove an image or document
   - `GET /api/pages/:id/attachments` — **not implemented.** Attachments are not yet associated with a page, so there is nothing to list per page. Tracked in [KNOWN_BUGS.md](KNOWN_BUGS.md)
   - `GET /api/search?q=...` — full-text search
-  - `POST /api/backup/create` — create backup archive
-  - `POST /api/backup/restore` — restore from archive
+  - `GET /api/backup` — the three fixed slots, the schedule, and which are due
+  - `GET /api/backup/inspect?file=...` — validate one candidate and report date and size, so the confirmation dialog can show them **before** the user commits
+  - `PUT /api/backup/settings` — which periods run, and how often
+  - `POST /api/backup/run` — take one period's backup now
+  - `POST /api/backup/restore` — replace the database from a backup, then stop. **Requires the per-process shutdown token**, the same one and the same constant-time comparison `/api/shutdown` uses, because it is the one request that can destroy a working wiki. The candidate is fully validated first, the current database is moved aside rather than deleted, and the user is told to close and reopen RTWiki — nothing in this codebase respawns the server. See [SECURITY.md](SECURITY.md) §8 and [BACKUP_PLAN.md](BACKUP_PLAN.md).
   - `POST /api/v1/import/pages` — localhost-only import of AI-generated pages / note-packages (documented target; see [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) and [AI Content Import](AI_CONTENT_IMPORT.md))
 - **Constraint:** Every route validates inputs. No raw user input reaches the database.
 

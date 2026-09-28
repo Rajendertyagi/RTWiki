@@ -134,7 +134,47 @@ Allowed attachments are stored under `data/attachments/`. The storage path for e
 > snapshot of the database, taken with `VACUUM INTO`. It no longer has to gather an attachments
 > directory alongside it, which removes the possibility of a backup whose database and files disagree.
 
-User-created backups are stored under `data/backups/`. A backup archive includes the database file and all attachments. Ordinary log files are **excluded** from backups.
+**Built** (`src/server/backup/`, `docs/BACKUP_PLAN.md`). The layout is:
+
+```text
+data/
+├── rtwiki.sqlite
+├── rtwiki.pre-restore-<timestamp>.sqlite   <- the database a restore replaced, moved aside
+├── rtwiki.pre-restore-<timestamp>.sqlite-wal
+├── rtwiki.pre-restore-<timestamp>.sqlite-shm
+├── attachments/
+└── backups/
+    ├── rtwiki-backup-daily
+    ├── rtwiki-backup-weekly
+    └── rtwiki-backup-monthly
+```
+
+**Three fixed slots, one file each, overwritten in place.** The filename is the period, not a
+timestamp, which is what bounds storage at three files with no retention setting to configure and
+stops one period overwriting another. There is deliberately no pruning code. The cost — a mistake
+that persists across a backup window overwrites that period's last good copy — is recorded in the
+plan rather than argued about here.
+
+**A backup in progress is written as `rtwiki-backup-<period>.partial`** and moved onto its slot only
+once complete. This is forced by the API rather than chosen for safety: `VACUUM INTO` refuses a
+target that already exists, so a slot cannot be written in place at all. Leftover `.partial` files
+are swept at startup, because "delete on failure" does not run when the process is killed and an
+interrupted `VACUUM INTO` "might be incomplete and corrupt".
+
+**The pre-restore copy is not a backup and is not treated as one.** It lives in `data/`, not
+`data/backups/`, precisely so it is never a backup candidate and never swept as one. It is written by
+restore and is never deleted: a bad restore is recoverable by hand. It carries the `-wal` and `-shm`
+sidecars under matching names, because a working WAL database is three files and replacing only the
+main one would leave the previous database's WAL to be replayed over the restored one. To recover,
+rename all three back.
+
+Logs are **excluded** from backups, as they always have been. There is no backup *or restore* feature
+that gathers `logs/`; the statement is retained because it is still true, not because anything
+implements it.
+
+The one exception to "a backup is one file": a database caught mid-migration by `dropStoredName()`
+has attachment bytes still in `data/attachments/`, and the backup service **refuses** rather than
+producing a backup that looks complete and is not. See [SECURITY.md](../SECURITY.md) §8.1.
 
 ### Logs
 
