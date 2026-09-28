@@ -1,0 +1,73 @@
+/*
+ * A ` ```mermaid ` fence on a Markdown page - the diagram the placeholder becomes.
+ *
+ * ## Why this is a PLAIN stylesheet, and not a CSS module
+ *
+ * Same two measured facts as `markdown-columns.css`, and the same two costs:
+ * `renderMarkdown` emits the placeholder as an HTML **string** injected through
+ * `dangerouslySetInnerHTML`, so a hashed module class cannot be substituted into
+ * it; and a bare side-effect import of a `*.module.css` emits no CSS at all in
+ * this build, while a bare import of a plain `.css` does. Hence fixed `rt-mermaid*`
+ * globals and a plain `.css` imported for its side effect.
+ *
+ * **Do not add `:global(...)` here.** That syntax is only understood by the
+ * CSS-modules compiler; in a plain stylesheet it reaches the browser verbatim,
+ * where it is an unknown pseudo-class matching nothing. Measured, and asserted by
+ * `tests/markdown-mermaid-styles.test.ts`.
+ *
+ * The class names appear here as selectors and in `markdown-mermaid-hydrate.ts`
+ * as constants, because a stylesheet cannot import a TypeScript constant. That
+ * duplication is inherent to emitting raw HTML, and the same test that runs the
+ * real Vite CSS pipeline over this file also checks the two agree.
+ *
+ * ## The `[data-rt-state]` rules are the whole no-layout-hole design
+ *
+ * The source element is hidden with the `hidden` attribute, not removed, so the
+ * three states need no CSS to stay honest: `pending` shows the source (which is
+ * why there is no hole in the layout while Mermaid renders), `error` shows the
+ * source plus a message, and `rendered` hides the source and shows the SVG. The
+ * rules below are layout and colour only, and the states are asserted in
+ * `tests/markdown-mermaid-hydrate.test.ts`.
+ */
+
+/* The diagram's box. Centred, and never wider than the page. */
+.rt-mermaid {
+  margin: 0 0 0.75em;
+  text-align: center;
+  /* A diagram is one block; a wide one must not push the page sideways. */
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/*
+ * The diagram itself.
+ *
+ * Mermaid emits an intrinsic `width`/`height` on the `<svg>` and a `max-width`
+ * inline style, so `max-width: 100%` here is what lets a wide diagram shrink to
+ * the page rather than overflow it, and `height: auto` keeps its aspect ratio
+ * when it does. `display: block` drops the baseline gap an inline replaced
+ * element would otherwise leave under it.
+ */
+.rt-mermaid > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/*
+ * A diagram that would not draw.
+ *
+ * Reads as a problem without being one: the note's own content is intact and
+ * readable directly underneath, which is the recovery. The same tone as
+ * `UI_TEXT.diagramErrorTitle`, which is the text it carries.
+ */
+.rt-mermaid__error {
+  margin: 0 0 0.35em;
+  padding: 4px 8px;
+  border-left: 3px solid var(--mantine-color-red-filled);
+  background: var(--mantine-color-red-light);
+  color: var(--mantine-color-red-text);
+  font-size: 0.9em;
+  text-align: start;
+}

@@ -1,4 +1,4 @@
-import { Button, Group, Text } from '@mantine/core'
+import { Button, Group, Text, useComputedColorScheme } from '@mantine/core'
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content'
 import { IconDownload, IconEye, IconPencil } from '@tabler/icons-react'
 // KaTeX's stylesheet, imported here so maths are styled on a **Markdown** page.
@@ -19,12 +19,14 @@ import { updatePage } from '../../services/pages-api.js'
 import { downloadTextFile, sanitizeFileName } from '../../util/file-download.js'
 import { CodeEditor } from '../html-editor/code-editor.js'
 import type { EditorStatus } from '../html-editor/use-codemirror.js'
+import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
 import { isAutosaveDirty, mapAutosaveStatus } from '../workspace/save-state.js'
 import { attachColumnDividers } from './markdown-columns-divider.js'
+import { attachMermaidDiagrams } from './markdown-mermaid-hydrate.js'
 import { extractMarkdownOutline, MARKDOWN_HEADING_SELECTOR } from './markdown-outline.js'
 import { renderMarkdown } from './markdown-render.js'
 import classes from './markdown-workspace.module.css'
@@ -44,6 +46,18 @@ import classes from './markdown-workspace.module.css'
  * browser, where it matches nothing.
  */
 import './markdown-columns.css'
+
+/**
+ * The ` ```mermaid ` diagram stylesheet, imported for its side effect, and
+ * **after** the `:::columns` one deliberately.
+ *
+ * `tests/markdown-columns-styles.test.ts` discovers the column stylesheet by
+ * reading the *first* bare `.css` import in this file, so putting this one ahead
+ * of it would silently repoint that test at the wrong file. Both are plain
+ * `.css` side-effect imports for the same measured reason; see the header of
+ * `markdown-mermaid.css`.
+ */
+import './markdown-mermaid.css'
 
 export interface MarkdownPageWorkspaceProps {
   pageId: string
@@ -96,6 +110,12 @@ export default function MarkdownPageWorkspace({
     selectedChars: 0,
     formatError: null
   })
+
+  // The reader's colour scheme, read the same way the editor's Diagram block
+  // reads it. Mermaid bakes the theme into the SVG it emits, so this is a
+  // **render input** and not something CSS can answer: the same diagram, drawn
+  // twice, has two different documents.
+  const colorScheme = useComputedColorScheme('light')
 
   const handleSave = async (pid: string, content: string): Promise<void> => {
     if (onSaveContent) {
@@ -190,6 +210,46 @@ export default function MarkdownPageWorkspace({
     if (!preview) return
     return attachColumnDividers(preview)
   }, [mode])
+
+  /*
+   * Renders every ` ```mermaid ` fence in the preview.
+   *
+   * **The same shape as the divider wiring above, and for the same reasons**:
+   * the preview's `innerHTML` is replaced from scratch whenever the rendered
+   * Markdown changes, so nothing React owns may live inside it, and the signal
+   * that the contents changed is a `MutationObserver` on the container rather
+   * than a React dependency. `attachMermaidDiagrams` owns that observer.
+   *
+   * Measured for this effect, with the hydration module instrumented: the
+   * framework writes the preview's children at 1105 ms, the first scan runs at
+   * 1115 ms and does find the placeholder, and the framework writes the children
+   * **again** at 1164 ms with new nodes. A render started by the first scan
+   * therefore lands in a node nobody can see. With the observer removed, every
+   * test in `tests/browser/markdown-mermaid.pwspec.ts` fails - not only the
+   * re-rendering one.
+   *
+   * Keyed on `mode` **and** `colorScheme`, and both are load-bearing:
+   *
+   * - `mode` is the identity of the preview element, which only this changes.
+   * - `colorScheme` is the render input. Mermaid's theme is baked into the SVG it
+   *   emits, so a scheme change cannot be handled in CSS and has to be a
+   *   re-render. The teardown aborts the renders in flight and the fresh attach
+   *   re-renders every fence, which is also why `attachMermaidDiagrams` resets a
+   *   placeholder to its pre-render state before starting.
+   *
+   * `renderMermaidSvg` is the editor's single renderer, passed in rather than
+   * wrapped, so this feature cannot grow a second Mermaid configuration.
+   */
+  useEffect(() => {
+    if (mode !== 'preview') return
+    const preview = previewRef.current
+    if (!preview) return
+    return attachMermaidDiagrams(preview, {
+      pageId,
+      theme: colorScheme === 'dark' ? 'dark' : 'default',
+      render: renderMermaidSvg
+    })
+  }, [mode, colorScheme, pageId])
 
   useEffect(() => {
     if (pendingHeading === null) return
