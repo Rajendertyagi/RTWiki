@@ -187,6 +187,11 @@ afterAll(async () => {
 
 describe('document upload', () => {
   it('accepts a real PDF and records its type from the bytes', async () => {
+    // This is the first test in the file to run document detection, so it pays
+    // the whole cold start: measured at 11.4s on a GitHub Windows runner, which
+    // is over Bun's 5s default and failed there as a timeout. The very next test
+    // (DOCX) passes in 22ms on the same run, so the cost is one-off warm-up, not
+    // per-call work. The assertions are unchanged; only the budget is stated.
     const response = await upload(REAL_PDF, 'lecture.pdf', 'application/pdf')
     expect(response.status).toBe(201)
     const payload = (await response.json()) as {
@@ -195,7 +200,7 @@ describe('document upload', () => {
     expect(payload.attachment.mimeType).toBe('application/pdf')
     expect(payload.attachment.kind).toBe('document')
     expect(payload.attachment.signatureless).toBe(false)
-  })
+  }, 30_000)
 
   it('accepts a real DOCX, which is a ZIP container', async () => {
     const response = await upload(
