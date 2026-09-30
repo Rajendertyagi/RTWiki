@@ -1,8 +1,13 @@
 import { UI_TEXT } from '../../config/index.js'
+// From the catalogue, NOT from `./blocks/diagram-template-bar.js`. The component
+// re-exports these names, but importing it from here would drag its
+// `.module.css` back into any Node-side consumer - which is exactly how
+// `tests/browser/diagram-templates.pwspec.ts` came to fail parsing a stylesheet
+// as JavaScript. Data must be imported from the module that owns the data.
 import {
   type DiagramTemplateOption,
   diagramTemplateOptions
-} from './blocks/diagram-template-bar.js'
+} from './blocks/diagram-template-catalog.js'
 import { pickDocument } from './blocks/document-picker.js'
 import { uploadDocument } from './blocks/document-upload.js'
 import { pickImage } from './blocks/image-picker.js'

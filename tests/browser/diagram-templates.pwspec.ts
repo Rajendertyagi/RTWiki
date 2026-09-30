@@ -329,9 +329,18 @@ test.describe('diagram templates', () => {
     // Shrinking the window does not do it: the page layout clamps its own minimum,
     // so the bar keeps its width. Constrain the bar itself instead - this is the
     // component's overflow behaviour under test, and the product code is untouched.
+    //
+    // `flex`, not `width`. `.templateBar` is `flex: 1 1 auto`, so it stretches to
+    // fill its container and `el.style.width` is overridden by flex layout: the
+    // assignment below silently did nothing, clientWidth stayed at the full row,
+    // and `flowchart` was never pushed out. Measured with this diagnostic before
+    // the fix: at `width: 40px` the bar still held 5 controls and the dropdown
+    // started at `sankey`, so `template-row-flowchart` could not exist. Flex
+    // resolves `flex-basis`, so constraining that is what actually reduces the
+    // room `useToolbarOverflow` measures.
     const bar = page.getByTestId('template-bar')
     await bar.evaluate((el) => {
-      el.style.width = '40px'
+      el.style.flex = '0 0 40px'
     })
     await page.waitForTimeout(500)
 
