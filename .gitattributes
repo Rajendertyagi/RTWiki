@@ -1,0 +1,40 @@
+# Normalise line endings at the repository boundary.
+#
+## Why this file exists
+#
+# `biome.json` sets `"lineEnding": "lf"`, so `bun run format:check` requires LF.
+# Without a `.gitattributes`, the line ending a file gets is whatever the
+# cloning machine's `core.autocrlf` happens to be. This repository was
+# developed on Windows, where `core.autocrlf=true` is common (it is set at
+# system level on the development machine), so a fresh clone rewrote every LF
+# blob to CRLF on checkout and Biome rejected all ~399 code files.
+#
+# That is why `format:check` failed on every CI run on `main` from 2026-09-05
+# onward, while passing in the original working tree, where the files had
+# never been round-tripped through a fresh checkout.
+#
+# Declaring the endings here makes the result depend on the repository rather
+# than on whoever clones it. The blobs in git were already LF; this keeps them
+# LF on the way out, for every platform.
+
+* text=auto eol=lf
+
+# Windows-native binaries must never be translated, or git will corrupt them.
+*.exe binary
+*.dll binary
+*.sqlite binary
+*.sqlite-wal binary
+*.sqlite-shm binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+# Lockfiles and generated assets are not worth normalising.
+bun.lockb binary
