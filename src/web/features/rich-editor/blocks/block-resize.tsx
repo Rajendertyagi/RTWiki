@@ -85,7 +85,13 @@ export function clampWidth(width: number, maxWidth: number): number {
 }
 
 export function clampHeight(height: number): number {
-  return Math.min(Math.max(height, LAYOUT.blockMinHeight), LAYOUT.blockMaxHeight)
+  return Math.min(
+    // The controls floor, not the bare minimum: a box shorter than the controls it
+    // carries clips them away, and a control you cannot see is not a control.
+    // `LAYOUT.blockControlsMinHeight` explains the figure.
+    Math.max(height, LAYOUT.blockControlsMinHeight, LAYOUT.blockMinHeight),
+    LAYOUT.blockMaxHeight
+  )
 }
 
 /**

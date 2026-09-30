@@ -26,7 +26,61 @@
   width: 100%;
   height: 100%;
   min-width: 0;
+  /*
+   * `flex: 1 1 auto` alongside `height: 100%`, and the two are not alternatives.
+   *
+   * `height: 100%` is what a note needs, where the host's parent is a plain block
+   * carrying the block's stored height. On the Diagram page the host is the second
+   * row of a flex **column** whose first row is the card's action bar, and there
+   * `height: 100%` resolves against the whole card rather than the space below that
+   * bar: the host claimed 140px inside a 140px card that had already spent 27px on
+   * the bar, overflowed it, and the card clipped the excess. The controls anchored
+   * to the host's bottom were then measured against a bottom edge 27px below the
+   * card, so the control pad rode up over the action bar - measured at 21px of
+   * overlap once the block was at its shortest allowed height.
+   *
+   * Growing and shrinking as a flex item is what makes it take the *remaining* row
+   * on that surface, while `height: 100%` still does the job on the note. The
+   * `min-height: 0` above is the other half of it: a flex item refuses to shrink
+   * below its contents without it.
+   */
+  flex: 1 1 auto;
+  /*
+   * The host is never shorter than the controls anchored inside it.
+   *
+   * This is where the floor has to be, and putting it on the block alone was not
+   * enough. The control pad is positioned against **this** element, so this is the
+   * box that has to contain it. When the block has no stored height the whole chain
+   * above resolves to `auto` -- the container's `height` computes to `auto` (its
+   * `min-height` does not make a percentage resolvable), so the card, the canvas and
+   * this host are all sized by their contents. The host then measured 91px, the pad
+   * needs 112, and the difference did not vanish: the pad hung 21px above the host
+   * and landed on the Diagram page's action bar.
+   *
+   * It is a `min-height`, so a block the user has made tall is unaffected, and a
+   * short diagram gets a box tall enough to hold its own controls rather than a box
+   * that swallows them. `min-height: 0` above would otherwise be what a flex item
+   * refuses to shrink below, and it has to give way: the floor *is* the floor.
+   */
+  min-height: var(--rtwiki-block-controls-min-height, 140px);
+}
+
+/**
+ * What the layer sits in.
+ *
+ * Exists so the layer can be lifted out of it for full screen while the block keeps
+ * the height the layer was giving it. `--stage-height` is written by the component
+ * for exactly as long as the layer is away, and removed on close, so the steady state
+ * is content-sized as before. It is a custom property rather than an inline `height`
+ * because the project's rule keeps inline style objects to custom properties only.
+ */
+.stage {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
+  height: var(--stage-height, auto);
 }
 
 /**
@@ -47,8 +101,14 @@
   min-height: 0;
   /* The pan offset and zoom arrive as custom properties, written by the component on
    * pointer-driven state. The project's rule keeps inline style objects to custom
-   * properties only, so the transform itself is composed here. */
-  transform: translate(var(--view-x, 0px), var(--view-y, 0px)) scale(var(--view-scale, 1));
+   * properties only, so the transform itself is composed here.
+   *
+   * `--view-fit` is the extra scale full screen applies, measured by the component
+   * against the overlay, and it is 1 everywhere else. It is multiplied in rather than
+   * replacing `--view-scale` so the reader's own zoom and the screen fit compose
+   * instead of one overwriting the other. */
+  transform: translate(var(--view-x, 0px), var(--view-y, 0px))
+    scale(calc(var(--view-scale, 1) * var(--view-fit, 1)));
   transform-origin: center center;
   will-change: transform;
 }
@@ -153,6 +213,14 @@
   background: var(--rtwiki-canvas);
 }
 
+/*
+ * The layer inside the overlay fills it, and `--view-fit` — measured against this
+ * box by the component — is what makes the diagram fill the layer.
+ *
+ * These two rules are the whole fix for "full screen shows a small diagram on a huge
+ * empty canvas". Before them the layer kept the height it had in the block, so at a
+ * 1600x950 window the overlay showed a 426x414 drawing and the rest was background.
+ */
 .fullscreen .layer {
   width: 100%;
   height: 100%;

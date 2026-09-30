@@ -41,6 +41,7 @@ import { Children, isValidElement, useState } from 'react'
 import { LAYOUT, OVERLAY_OWNER_ATTR, UI_TEXT } from '../../config/index.js'
 import { useToolbarOverflow } from '../../hooks/use-toolbar-overflow.js'
 import type { CSSVars } from '../../style-props.js'
+import { TemplateFamilyIcon } from './blocks/diagram-template-bar.js'
 import { getInsertEntries, INSERT_RUNS, type InsertEntry, runInsertEntry } from './insert-blocks.js'
 import classes from './rich-toolbar.module.css'
 import type { AnyRichEditor } from './schema.js'
@@ -67,6 +68,14 @@ const INSERT_ICONS = {
 
 /** Width reserved for the trailing "more" button when deciding the split. */
 const MORE_BUTTON_WIDTH = 28
+
+/**
+ * Icon size inside a menu row. Text scale, not toolbar scale, because a row in a
+ * dropdown is read as a line of text rather than as a button. The template bar
+ * reaches the same conclusion independently and declares the same figure there;
+ * they are separate surfaces and neither imports the other's constant.
+ */
+const MENU_ICON_SIZE = 18
 
 function isDivider(node: ReactNode): boolean {
   return (
@@ -136,11 +145,15 @@ function InsertSubmenuButton({
       rows.push(<Menu.Divider key={`divider-${option.family}`} />)
     }
     lastFamily = option.family
-    const Icon = option.Icon
     rows.push(
       <Menu.Item
         key={option.id}
-        leftSection={<Icon size={16} />}
+        // The same coloured glyph the Diagram page's template bar shows for this
+        // template. This row used to draw the icon itself at 16px in the default
+        // text colour, so the richest list of diagram types in the application was
+        // also the least recognisable: the same template looked like a different
+        // thing here than on the page whose whole job is showing diagram types.
+        leftSection={<TemplateFamilyIcon option={option} size={MENU_ICON_SIZE} />}
         data-testid={`${entry.key}-option-${option.id}`}
         onClick={() => entry.insertSource(editor, option.source)}
       >

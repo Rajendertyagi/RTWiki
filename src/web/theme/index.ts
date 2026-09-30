@@ -66,7 +66,13 @@ export function createThemeCssVariablesResolver(theme: AppTheme): CSSVariablesRe
       '--rtwiki-divider-step-width': `${LAYOUT.dividerStepWidth}px`,
       '--rtwiki-mobile-drawer-width': `${LAYOUT.mobileDrawerWidth}px`,
       '--rtwiki-status-bar-height': `${LAYOUT.statusBarHeight}px`,
-      '--rtwiki-workspace-min-width': `${LAYOUT.workspaceMinWidth}px`
+      '--rtwiki-workspace-min-width': `${LAYOUT.workspaceMinWidth}px`,
+      // The shortest a diagram block may render, which is the height of the controls
+      // it carries. Published rather than written into a stylesheet because the same
+      // number also clamps the drag and the keyboard in `block-resize.tsx`; a block
+      // with **no stored height** can only be floored here, since nothing in the
+      // commit path ever sees a number to clamp.
+      '--rtwiki-block-controls-min-height': `${LAYOUT.blockControlsMinHeight}px`
     },
     light: buildVariantVariables(theme.variants.light),
     dark: buildVariantVariables(theme.variants.dark)

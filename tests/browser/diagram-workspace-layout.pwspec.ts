@@ -996,9 +996,17 @@ test.describe('Diagram page layout', () => {
     ).toBeLessThan(24)
   })
 
-  test('size presets sit below the block action row, not on top of it', async ({ page }) => {
+  test('the size presets cover neither the action row nor the diagram', async ({ page }) => {
     // Both surfaces that use the resize container put a toolbar at the top of the
-    // block, and the presets were drawn over it at `top: 2px`.
+    // block, and the presets were drawn over it. They were then moved to the
+    // bottom-left corner, which is the one corner nothing else occupies, and this
+    // asserts the property that move was for rather than a position: **no overlap**.
+    //
+    // Asserting the position instead is what made the old arrangement survive here,
+    // because "below the action row" was satisfied by a row that sat on top of the
+    // diagram instead. Measured before the move, on a note block, the preset row
+    // overlapped the rendered SVG by 106x22 at every size; on the Diagram page it
+    // sat on the card's own action bar and covered the block label.
     await newDiagramPage(page, 'PresetOverlap')
     await addTemplate(page, 'sequence', 1)
 
@@ -1012,26 +1020,49 @@ test.describe('Diagram page layout', () => {
         const el = document.querySelector(sel)
         return el ? el.getBoundingClientRect() : null
       }
+      const row = r('[data-testid="diagram-block-1-preset-medium"]')
+      const edit = r('[data-testid="diagram-block-edit-1"]')
+      const remove = r('[data-testid="diagram-block-remove-1"]')
+      const svg = r('[data-testid="diagram-block-1-svg"] svg')
+      // Overlap on both axes at once. A row that clears a control vertically can
+      // still sit on top of it horizontally, which is a different bug.
+      const overlap = (a: DOMRect | null, b: DOMRect | null): { x: number; y: number } => {
+        if (!a || !b) return { x: -1, y: -1 }
+        return {
+          x: Math.round(Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))),
+          y: Math.round(Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)))
+        }
+      }
       return {
-        preset: r('[data-testid="diagram-block-1-preset-medium"]'),
-        // The action row's testids are `${pageType}-block-<action>-${index}`, so
-        // the edit control on the second block is `diagram-block-edit-1`. An
-        // earlier version of this test guessed `diagram-block-1-edit-1`, found
-        // nothing, and reported a missing control instead of a wrong selector.
-        edit: r('[data-testid="diagram-block-edit-1"]'),
-        remove: r('[data-testid="diagram-block-remove-1"]')
+        edit: Boolean(edit),
+        remove: Boolean(remove),
+        hasSvg: Boolean(svg),
+        vsEdit: overlap(row, edit),
+        vsRemove: overlap(row, remove),
+        vsDiagram: overlap(row, svg)
       }
     })
-    expect(geom.preset, 'the preset row must have a box').not.toBeNull()
-    expect(geom.edit, 'the block edit control must exist').not.toBeNull()
-    // The preset row starts below the action controls it used to cover.
+    expect(geom.edit, 'the block edit control must exist').toBe(true)
+    expect(geom.remove, 'the block remove control must exist').toBe(true)
+    expect(geom.hasSvg, 'the diagram must exist').toBe(true)
+    // "Does not cover" is the intersection being empty, so **one** axis being clear is
+    // enough. Requiring both to be zero would be a stronger claim than the
+    // requirement, and a false one: the preset row and the block's action row share
+    // the same horizontal band by construction and are separated vertically, and the
+    // preset row can share the diagram's vertical band while sitting beside it.
+    const covers = (o: { x: number; y: number }): boolean => o.x > 0 && o.y > 0
     expect(
-      geom.preset?.top ?? 0,
-      'presets must not overlap the block action row'
-    ).toBeGreaterThanOrEqual(geom.edit?.bottom ?? 0)
-    // Including the last control in that row, which is the one most likely to be
-    // reached for.
-    expect(geom.preset?.top ?? 0).toBeGreaterThanOrEqual(geom.remove?.bottom ?? 0)
+      covers(geom.vsEdit),
+      `presets must not cover the action row: ${JSON.stringify(geom.vsEdit)}`
+    ).toBe(false)
+    expect(
+      covers(geom.vsRemove),
+      `presets must not cover the action row: ${JSON.stringify(geom.vsRemove)}`
+    ).toBe(false)
+    expect(
+      covers(geom.vsDiagram),
+      `presets must not cover the diagram: ${JSON.stringify(geom.vsDiagram)}`
+    ).toBe(false)
   })
 
   test('a size preset resizes the block, which is the keyboard-reachable path', async ({

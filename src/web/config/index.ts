@@ -57,7 +57,26 @@ export const LAYOUT = {
   blockMinWidth: 240,
   blockMaxWidth: 1600,
   blockMinHeight: 120,
-  blockMaxHeight: 2000
+  blockMaxHeight: 2000,
+  /**
+   * The shortest a visual block may be, in practice, whatever the user asks for.
+   *
+   * A block carries its own controls: the eight view buttons in the bottom-right
+   * corner and the size presets. Both are anchored inside the block, and the block
+   * clips anything that hangs past its edge, so a block shorter than its controls
+   * **loses** them. Measured on a note block at the Auto height preset: a 78px box
+   * left the 90x90 control pad entirely outside the block and therefore invisible —
+   * no pan, no zoom, no full screen, and no way to undo the zoom that had caused it.
+   * The same 78px box on the Diagram page left the size-preset row sitting on top of
+   * the card's own action bar.
+   *
+   * The figure covers the control pad (3 rows of 26px plus gaps, raised 22px to
+   * clear the corner grip) *and* the Diagram page's action row, which sits inside
+   * the same box above the canvas. Every size preset is taller than this already
+   * (the smallest is 240), so the only case it changes is Auto height on a short
+   * diagram — which is precisely the case that was broken.
+   */
+  blockControlsMinHeight: 140
 } as const
 
 /**

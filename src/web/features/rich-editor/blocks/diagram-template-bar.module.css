@@ -10,19 +10,29 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  /* `0 1 auto`, not `0 0 auto`.
+  /* `flex: 1 1 auto`, and this is the fix for a bar that would never grow again.
    *
    * `useToolbarOverflow` decides how many controls fit by reading this element's
-   * `clientWidth`. With `flex: 0 0 auto` the bar is always exactly as wide as its
-   * contents, so `clientWidth` always equalled the full width of all 30 templates,
-   * the budget was never exceeded, and the trailing "more" menu could never appear.
-   * Measured at a 900px window: the bar's content was 1093px wide inside a 564px row
-   * and spilled past the window edge, with no overflow control anywhere.
+   * `clientWidth` and nothing else, so `clientWidth` has to mean "the room there
+   * is", not "the room my contents happen to take up".
    *
-   * Allowing it to shrink is what gives the measurement something to measure
-   * against. `0` on grow keeps the bar content-width when there is room, so a wide
-   * window looks exactly as it did. */
-  flex: 0 1 auto;
+   * `0 0 auto` broke that outright: the bar was always exactly as wide as all 30
+   * templates, the budget was never exceeded, and the trailing "more" menu could
+   * never appear. Measured at a 900px window: 1093px of content in a 564px row,
+   * spilling past the window edge with no overflow control anywhere.
+   *
+   * `0 1 auto` fixed that and created the opposite fault, which is subtler. Once a
+   * split is applied the tail is no longer in the bar, so the bar's content is
+   * narrower than the row, and a shrink-to-fit element then *is* its content: the
+   * measurement collapses to whatever survived the split and stops tracking the
+   * window entirely. Measured: 504px at a 1000px window, still 504px after widening
+   * to 1800px with the "more" button still showing, and still 319px after widening
+   * again from a narrower window. `1` on grow is what makes the bar report the row's
+   * width, so widening the window brings the split controls back.
+   *
+   * A wide window looks exactly as it did: the bar's contents are left-aligned, so
+   * filling the row changes nothing until there is something to put in it. */
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
 }
@@ -41,29 +51,42 @@
 }
 
 /* Colour carries the family, so a glance tells you the kind of diagram before
-   you hover for the name. Outline icons were tried first and read badly at
-   this length; filled shapes plus colour is what makes the row legible. */
-.templateButton[data-family="flow"] {
+ * you hover for the name. Outline icons were tried first and read badly at this
+ * length; filled shapes plus colour is what makes the row legible.
+ *
+ * One class, applied to the icon wherever it is shown, because the same template
+ * is drawn in three places and they used to disagree:
+ *
+ *   - on the bar, as a 24px coloured button;
+ *   - in the bar's own trailing overflow dropdown, as an 18px icon in a text row;
+ *   - in the Rich Note's Insert -> Diagram menu, likewise.
+ *
+ * The two menu rows were plain black while the bar was coloured, so a control
+ * changed its appearance the moment it moved into the dropdown beside it. Measured
+ * on the Diagram page: bar icons `rgb(76, 141, 255)` by family, dropdown rows
+ * `rgb(0, 0, 0)`. A control that looks different in the place it moved to is
+ * harder to recognise, which defeats the reason the bar is coloured at all.
+ */ .familyIcon[data-family="flow"] {
   color: var(--rtwiki-tpl-flow, #4c8dff);
 }
 
-.templateButton[data-family="structures"] {
+.familyIcon[data-family="structures"] {
   color: var(--rtwiki-tpl-structures, #9d7bff);
 }
 
-.templateButton[data-family="timing"] {
+.familyIcon[data-family="timing"] {
   color: var(--rtwiki-tpl-timing, #2fb87a);
 }
 
-.templateButton[data-family="thinking"] {
+.familyIcon[data-family="thinking"] {
   color: var(--rtwiki-tpl-thinking, #d9a13a);
 }
 
-.templateButton[data-family="analysis"] {
+.familyIcon[data-family="analysis"] {
   color: var(--rtwiki-tpl-analysis, #e0648c);
 }
 
-.templateButton[data-family="data"] {
+.familyIcon[data-family="data"] {
   color: var(--rtwiki-tpl-data, #35b8c4);
 }
 

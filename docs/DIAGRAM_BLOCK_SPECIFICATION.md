@@ -177,7 +177,7 @@ application does today.
 
 | # | What the user does | What must happen | Currently |
 |---|---|---|---|
-| 1 | Opens a note with a diagram, no size set | Diagram drawn at its natural size, box snug around it | Correct — box 719, diagram 703 |
+| 1 | Opens a note with a diagram, no size set | Diagram drawn at its natural size, box snug around it | Correct |
 | 2 | Hovers a block | Grip and size buttons appear | Correct |
 | 3 | Clicks the grip, releases without moving | **Nothing is saved** | Correct |
 | 4 | Drags the grip down to make the box shorter | Box shrinks, **diagram scales down to fit** | Correct — fixed, see 5.4 |
@@ -186,20 +186,23 @@ application does today.
 | 7 | Releases the grip | The size reached is saved to the note | Correct, after the debounce window |
 | 8 | Presses Small / Medium / Large | The **diagram** visibly changes size, not just the border | Correct on both — 360 / 640 / 820 |
 | 9 | Presses Full width | Box fills the column, height 400 | Correct |
-| 10 | Presses Auto height | Box hugs the diagram, no empty space, nothing cut off | Correct — box 719, diagram 703 |
+| 10 | Presses Auto height | Box hugs the diagram, no empty space, nothing cut off | Correct, and never so short it loses its own controls — see 5.10 |
 | 11 | Focuses the grip, presses arrow keys | Box resizes in 40px steps | Correct — fixed, see 5.6 |
-| 12 | Hovers a diagram | The eight view buttons fade in | Correct |
+| 12 | Hovers a diagram | The eight view buttons fade in | Correct, and always present — see 5.10 |
 | 13 | Presses zoom in three times | Diagram grows, box unchanged, nothing saved | Correct |
-| 14 | Presses a pan arrow | Diagram shifts one step | Correct |
+| 14 | Presses a pan arrow | Diagram shifts one step **in the direction the arrow names** | Correct — fixed, see 5.11 |
 | 15 | Presses reset | Position and magnification back to normal | Correct |
-| 16 | Presses full screen | Diagram fills the screen; the box behind is unchanged | Correct |
-| 17 | Presses Escape in full screen | Returns to the box, same zoom, same position, diagram still there | Correct — did not reproduce (5.3) |
+| 16 | Presses full screen | Diagram **grows to fill the screen**, carries the same eight controls, and the box behind is unchanged | Correct — fixed, see 5.12 |
+| 17 | Presses Escape in full screen | Returns to the box, same zoom, same position, diagram still there | Correct — fixed, see 5.12 |
 | 18 | Zooms, then reloads the page | Diagram is back at its normal size; the note is unchanged | Correct, and required |
 | 19 | Resizes a block, then opens that note in a second window | Same size, same scaled diagram | Not checked (5.8) |
 | 20 | Resizes the box so the diagram is much taller than the box | Whole diagram reachable, never cropped with no recourse | Correct — fixed, see 5.4 |
 | 21 | Makes a diagram small, then presses zoom in repeatedly | Cannot zoom into invisibility | Correct |
 | 22 | Narrows the window after sizing a block | Box shrinks to fit the window; the **stored** size is not overwritten by the narrow rendering | Correct — drawn 504px at a 700px window, stored still 640 |
 | 23 | Sizes a block, then closes the note within two seconds | The change is still saved | Correct, but nothing on screen says "not yet" |
+| 24 | Reads any of the thirty templates on either surface | Whole, labelled, fitted, and drawn the same size on both surfaces | Correct — see the [diagram tracker](DIAGRAM_TEMPLATE_TRACKER.md) |
+| 25 | Widens the window after the toolbar has split | The controls that moved into the dropdown come back out | Correct — fixed, see 5.13 |
+| 26 | Finds a template in the bar, in its dropdown, or in a note's Insert menu | The same icon, the same colour, wherever it is | Correct — fixed, see 5.14 |
 
 ---
 
@@ -338,6 +341,88 @@ is a flake or it depends on run order, and this document should not claim a suit
 strength of five runs when a sixth once disagreed. Anyone picking this up should run the suite
 rather than trust the count.
 
+### 5.10 A short block lost its own controls
+
+**Measured.** Auto height on a short diagram gave a note block a box of **78px**. The eight view
+buttons are a 90x90 pad anchored to the bottom of that box, and the block clips anything past its
+edge — so the pad fell **entirely outside**. The block had no pan, no zoom, no full screen, and no
+way to undo a zoom. On the Diagram page the same block lost its size-preset row to the card's own
+action bar.
+
+**Why it is worse than it looks.** This is the reported "full screen then back and the diagram is
+gone", reached by a route other than full screen. With no controls inside the overlay (5.12) the
+only way to make a diagram bigger there was the zoom, which is shared with the box; and with the
+pad clipped away in the box there was then no way back from it. Neither fault reproduces on its
+own — opening and closing full screen on a normally-sized block leaves the diagram untouched, which
+is what 5.3 records — but the two together produce the report exactly.
+
+**Fixed** by making a block never shorter than the controls it carries
+(`LAYOUT.blockControlsMinHeight`, published to the stylesheet as
+`--rtwiki-block-controls-min-height`). The floor has to sit on two things, and putting it on one
+was not enough: on the commit path, which clamps a dragged, keyed or preset height, and on the view
+host, which is the box the pad is positioned against. A block with **no stored height** never passes
+through the first — Auto height stores `''` and the box is sized by its contents — which is why the
+host needed it as well.
+
+### 5.11 Pan up moved the picture down
+
+**Measured.** One press of pan-up set the vertical offset to `+40px`, which moves the picture down;
+pan-down set `-40px`. Left and right were correct, so the pair read as a rendering fault rather than
+as two swapped signs, and it was wrong on both surfaces at once because they share one component.
+
+**Fixed.** The vertical offsets are now named constants with their direction in the name
+(`PAN_UP_Y` is negative, because the Y axis points down).
+`tests/browser/diagram-view-controls.pwspec.ts` asserts the **painted** position rather than the
+custom property, so a sign error in the transform itself cannot satisfy it.
+
+### 5.12 Full screen was a dead end, and duplicated the diagram
+
+**Three faults, one chain, all measured.**
+
+- The overlay carried **no** controls: zero zoom buttons inside it. The only way out was the X.
+- The picture did not grow. At a 1600x950 window the overlay covered the viewport and the diagram sat
+  in the middle of it at **426x414** — exactly its size in the box.
+- The same element was rendered into both places, so the document held **two copies** of the diagram
+  while the overlay was open: **24 element ids present twice**, and Mermaid addresses its markers and
+  clip paths by id, so the two renderings were not independent of each other.
+
+**Fixed.** There is now **one** layer node, re-parented into the overlay and back, so "come back to it
+exactly as it was" is true by construction rather than by keeping two copies in step. The overlay
+carries the same eight controls. The picture is scaled to the overlay by a measured `--view-fit` that
+multiplies into the same transform as the reader's own zoom.
+
+**The trap in the fix, recorded because it is the reported symptom.** The screen-fit scale is written
+straight to the element's style, and React does not manage a property it did not render — so the
+first version never removed it, and the diagram came back from full screen magnified and cropped.
+That is "full screen then back and the diagram is not visible", introduced by the fix for it. The
+close path now removes it explicitly, and the test asserts the drawn size is byte-for-byte the size
+it had before full screen opened.
+
+### 5.13 The template bar never grew again
+
+**Measured.** The bar reported `clientWidth` 504px at a 1000px window. Widening to 1800px left it at
+504px with the "more" dropdown still open; widening again after narrowing left it at 319px.
+
+**Cause.** `useToolbarOverflow` decides how many controls fit by reading the bar's `clientWidth` and
+nothing else, so that number has to mean "the room there is". The bar was shrink-to-fit inside a
+shrink-to-fit group, which made it mean "the width of whatever is still in it" — and once a split was
+applied the tail had left, so the measurement collapsed and stopped tracking the window.
+
+**Fixed** by letting the group and the bar fill the row (`flex: 1 1 auto`), which is what the Rich
+Note's toolbar already did and which is why it never had the fault.
+`tests/browser/diagram-template-bar-layout.pwspec.ts`.
+
+### 5.14 A template looked different depending on where it was shown
+
+**Measured.** The bar drew a 24px icon coloured by family. Its own overflow dropdown and the Rich
+Note's Insert menu drew an 18px icon in the default text colour: `rgb(76, 141, 255)` on the bar,
+`rgb(0, 0, 0)` in the dropdown. Three renderings of one list, and a control changed its appearance
+the moment the window narrowed and pushed it into the dropdown beside it.
+
+**Fixed** with one `TemplateFamilyIcon` used by all three surfaces, carrying the family colour. Icon
+*size* still differs between a text row and a 40px toolbar row, because those genuinely want
+different sizes; colour and shape do not.
+
 ---
 
 ## 6. Decisions needed before fixing
@@ -429,15 +514,27 @@ fix:
 | 5.4 | A note's diagram was cropped by its own box — 82px unreachable | `diagram-note-scale-to-fit.pwspec.ts` |
 | 5.5 | A note's diagram could not be widened sideways at all | `diagram-note-scale-to-fit.pwspec.ts` |
 | 5.6 | Arrow Right shrank an unsized block, 820px to 280px | `diagram-note-scale-to-fit.pwspec.ts` |
+| 5.10 | A short block's control pad was clipped away entirely | `diagram-view-controls.pwspec.ts` |
+| 5.11 | Pan up moved the picture down | `diagram-view-controls.pwspec.ts` |
+| 5.12 | Full screen was a dead end, did not grow the picture, and duplicated the diagram (24 ids) | `diagram-view-controls.pwspec.ts` |
+| 5.13 | The template bar never grew again when the window widened | `diagram-template-bar-layout.pwspec.ts` |
+| 5.14 | A template looked different in the bar, its dropdown, and a note's Insert menu | `diagram-template-bar-layout.pwspec.ts` |
+| — | The Diagram page stretched a diagram to 2.3x its natural size while a note fitted it | `diagram-fit-consistency.pwspec.ts`, `diagram-template-fidelity.pwspec.ts` |
+| — | The size-preset row covered the diagram, and the Diagram page's action bar | `diagram-workspace-layout.pwspec.ts` |
+
+Per-template status for all thirty types, on both surfaces, is recorded in the
+[diagram tracker](DIAGRAM_TEMPLATE_TRACKER.md). That document is a snapshot of a
+measurement; the spec that produces it is what keeps it honest.
 
 **Open:**
 
 | Item | Status |
 |---|---|
 | 5.2 | Did not reproduce. The likely cause is the two-second debounce; unexplained otherwise |
-| 5.3 | Did not reproduce. Needs the steps written down if it is still seen |
+| 5.3 | Did not reproduce as reported. The chain in 5.10 and 5.12 reaches the same symptom from another direction, which is a better explanation but was not the one in the report |
 | 5.7 | Use case 19, opening a resized block in a second window, not tested |
 | 5.9 | One run of 3 unexplained failures, not reproduced in five subsequent runs |
+| — | `info` has no `viewBox` and so no intrinsic size; drawn at the 300x150 replaced-element default. Recorded in the tracker, section 4 |
 
 **Withdrawn as wrong:** two claims in earlier drafts of this document — that the grip was
 unreachable by keyboard, and that the size buttons were too. Both came from a faulty check rather

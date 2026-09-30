@@ -35,6 +35,37 @@ export {
   diagramTemplatePresentationIds
 } from './diagram-template-catalog.js'
 
+/**
+ * One template's icon, at whatever size the surface around it uses.
+ *
+ * The single definition of how a template looks, used on the bar, in the bar's own
+ * overflow dropdown and in the Rich Note's Insert menu. Those were three renderings
+ * of the same list and they had drifted: the bar drew a 24px icon coloured by
+ * family, and both menus drew an 18px icon in the default text colour, so the same
+ * template looked like a different thing depending on which row of controls it had
+ * been pushed into. `size` is the only thing that varies, because a text row and a
+ * 40px toolbar row genuinely want different icon sizes; the colour and the shape do
+ * not.
+ *
+ * `aria-hidden` because every surface that uses this already names the template in
+ * text - a tooltip, a menu row's label, or the button's own `aria-label` - and an
+ * icon announced on its own would just repeat it.
+ */
+export function TemplateFamilyIcon({
+  option,
+  size
+}: {
+  option: Pick<DiagramTemplateOption, 'Icon' | 'family'>
+  size: number
+}): JSX.Element {
+  const { Icon, family } = option
+  return (
+    <span className={classes.familyIcon} data-family={family} aria-hidden="true">
+      <Icon size={size} />
+    </span>
+  )
+}
+
 export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => void }): JSX.Element {
   const [moreOpen, setMoreOpen] = useState(false)
 
@@ -46,13 +77,16 @@ export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => voi
    */
   const barButton = (id: string): ReactNode => {
     const def = diagramTemplateFor(id)
-    const { Icon } = presentationFor(id)
+    const { Icon, family } = presentationFor(id)
     const button = (
       <ActionIcon
         variant="subtle"
         size={BUTTON_SIZE}
-        className={classes.templateButton}
-        data-family={presentationFor(id).family}
+        // `familyIcon` on the button itself, not on the icon inside it, so the
+        // colour comes from `currentColor` exactly as it does in the menu rows. One
+        // class for all three surfaces is the point; see `TemplateFamilyIcon`.
+        className={`${classes.templateButton} ${classes.familyIcon}`}
+        data-family={family}
         aria-label={def.label}
         // A native title rather than a Mantine Tooltip when this button is a
         // Menu.Target: the Tooltip sits between the target and the DOM node and
@@ -82,8 +116,12 @@ export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => voi
   /** One row inside the trailing dropdown, as a real menu item. */
   const menuRow = (id: string): ReactNode => {
     const def = diagramTemplateFor(id)
-    const { Icon, variants } = presentationFor(id)
-    const section = <Icon size={ROW_ICON_SIZE} />
+    const { Icon, family, variants } = presentationFor(id)
+    // The same coloured glyph the bar shows, at text scale. It was a bare
+    // `<Icon size={18} />` before, which Mantine painted in the default text
+    // colour, so every template in this dropdown looked like every other one and
+    // unlike itself on the bar.
+    const section = <TemplateFamilyIcon option={{ Icon, family }} size={ROW_ICON_SIZE} />
     if (!variants || variants.length < 2) {
       return (
         <Menu.Item

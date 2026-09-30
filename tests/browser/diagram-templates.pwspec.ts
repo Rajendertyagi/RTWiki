@@ -342,7 +342,14 @@ test.describe('diagram templates', () => {
     await bar.evaluate((el) => {
       el.style.flex = '0 0 40px'
     })
-    await page.waitForTimeout(500)
+    // Wait for the constraint to actually be in force, rather than for a fixed pause.
+    // `useToolbarOverflow` reads `clientWidth` from a ResizeObserver callback, so the
+    // split lands a frame or two after the layout changes - and how many frames
+    // depends on what else the browser is doing. A fixed pause passed in isolation
+    // and failed once in a full-suite run, which is the definition of a racy wait.
+    await expect
+      .poll(async () => bar.evaluate((el) => el.clientWidth), { timeout: 10_000 })
+      .toBe(40)
 
     const more = page.getByTestId('template-more')
     await expect(more, 'the bar must overflow when constrained this hard').toBeVisible()

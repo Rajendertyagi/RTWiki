@@ -28,10 +28,22 @@
 }
 
 /* The Diagram page's two creation actions, side by side at the left of the row.
- * `min-width: 0` so the template bar beside it can shrink into its overflow
- * dropdown instead of pushing the row wider than the window — the bar measures
- * itself, so the constraint only has to be allowed, not computed here. */
-.diagramCreateRow {
+ *
+ * `flex: 1 1 auto` and `min-width: 0`, and both are load-bearing.
+ *
+ * The row must let this group **fill** the width it is given, because
+ * `useToolbarOverflow` decides how many template buttons fit by reading the bar's
+ * `clientWidth` and nothing else. A shrink-to-fit group reports the width of its own
+ * contents, and a shrink-to-fit bar inside it reports the width of the buttons that
+ * have not been split off yet. That is a loop: split the tail out, the content gets
+ * narrower, the measurement then says it fits, and the bar can never grow again.
+ *
+ * Measured, before this: at a 1000px window the bar reported 504px. Widening the
+ * window to 1800px left it reporting 504px with the "more" dropdown still open, and
+ * widening again after a narrowing left it stuck at 319px. The Rich Note's toolbar
+ * does not have this fault, because its bar fills the row.
+ */ .diagramCreateRow {
+  flex: 1 1 auto;
   min-width: 0;
   align-items: center;
 }

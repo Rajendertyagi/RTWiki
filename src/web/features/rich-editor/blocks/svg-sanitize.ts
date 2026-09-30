@@ -74,6 +74,7 @@ export function sanitizeDiagramSvg(svg: string): string {
     root.style.removeProperty('max-width')
   }
   const viewBox = root.getAttribute('viewBox')
+  let gaveIntrinsicSize = false
   if (viewBox !== null) {
     const parts = viewBox
       .trim()
@@ -87,6 +88,30 @@ export function sanitizeDiagramSvg(svg: string): string {
     ) {
       root.setAttribute('width', String(Math.round(parts[2])))
       root.setAttribute('height', String(Math.round(parts[3])))
+      gaveIntrinsicSize = true
+    }
+  }
+
+  /*
+   * No usable `viewBox`: a percentage width is not an intrinsic size.
+   *
+   * One of the thirty templates is in this case - Mermaid emits `info` with
+   * `width="100%"` and no `viewBox` at all - and it leaves behind precisely the
+   * attribute the block above exists to remove. A percentage cannot be an intrinsic
+   * length, so CSS `width: auto` falls through to the replaced-element default of
+   * 300px and the diagram is drawn at a size that has nothing to do with its
+   * contents: measured, `info` rendered 300x150 whatever box it was given.
+   *
+   * Removing it is the honest option rather than inventing a size. There is no
+   * viewBox to derive an intrinsic size from, and attaching the element to measure
+   * its content is not something a sanitizer should do. What is left is an SVG with
+   * no size of its own, which the stylesheet then sizes: shrunk to fit its box, never
+   * cropped, centred, and no longer carrying a claim to fill its container that the
+   * stylesheet is one rule change away from honouring.
+   */
+  if (!gaveIntrinsicSize) {
+    if (root.getAttribute('width')?.trim().endsWith('%')) {
+      root.removeAttribute('width')
     }
   }
 

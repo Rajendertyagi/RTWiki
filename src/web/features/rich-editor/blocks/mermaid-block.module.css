@@ -135,21 +135,44 @@
    * (rich note and Diagram page) resolve to the stored size exactly as before. */
   width: var(--block-width-live, var(--block-width, auto));
   height: var(--block-height-live, var(--block-height, auto));
+  /*
+   * The floor, and it has to be here rather than in the commit path.
+   *
+   * `LAYOUT.blockControlsMinHeight` clamps the drag and the keyboard in
+   * `block-resize.tsx`, but a block with **no stored height** never passes through
+   * that code: Auto height stores `''`, and the box is then sized by its contents.
+   * Measured before this: a short diagram on Auto height gave a 78px box, and the
+   * 90x90 control pad - anchored to the bottom of that box, and clipped by it - fell
+   * entirely outside. No pan, no zoom, no full screen, and no way to undo whatever
+   * zoom had caused it. The Diagram page lost its size-preset row the same way, to
+   * the card's own action bar.
+   *
+   * The figure is published from `LAYOUT` by the theme resolver, so this and the
+   * TypeScript clamp are one number rather than two that can drift.
+   */
+  min-height: var(--rtwiki-block-controls-min-height);
 }
 
 /* The size presets, shown on hover.
  *
- * Offset 30px from the top, not 2px, so they sit **below** a block's own action
- * row rather than on top of it. Both surfaces that use this container put a
- * toolbar of controls at the top of the block ΓÇö the Diagram page's card and the
- * rich note's block wrapper ΓÇö and at `top: 2px` the presets were drawn directly
- * over the first few of those buttons, so hovering a block hid its own controls
- * behind a second set. 30px clears a ~26px padded action row with a small gap.
+ * Anchored to the BOTTOM-left corner, not the top. The top was occupied, and the
+ * row landed on two other things, both measured rather than imagined:
  *
- * Left offset is unchanged. */
+ *  - The diagram itself. On a note the row sat over the drawing at every size:
+ *    `overlap 106x22` against the rendered SVG for Small, Medium, Large, Full width
+ *    and Auto height alike, covering the first node of a flowchart.
+ *  - The Diagram page's card action row, which is the first thing inside the same
+ *    box. The row landed on that bar and covered the block's own label and its
+ *    drag handle.
+ *
+ * The bottom-left corner is the one corner nothing else wants: the caption and the
+ * block's toolbar are at the top, the corner grip and the eight view buttons are at
+ * the bottom-right. Measured at the narrowest box a user can make (240px) there is
+ * still 34px of clear space between this row and the view buttons.
+ */
 .sizePresets {
   position: absolute;
-  top: 30px;
+  bottom: 4px;
   left: 4px;
   z-index: 3;
   display: flex;

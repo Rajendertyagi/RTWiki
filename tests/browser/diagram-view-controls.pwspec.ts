@@ -240,4 +240,228 @@ test.describe('diagram view controls', () => {
     await expect(page.getByTestId('mindMap-zoom-in')).toHaveCount(1)
     await expect(page.getByTestId('note-view-zoom-in')).toHaveCount(1)
   })
+
+  // The three tests below each guard one reported fault. Every one was reproduced
+  // on screen first and the measurement is in the comment, because a fault that
+  // "looks inverted" and a fault caused by two swapped signs produce the same test
+  // if the assertion is written from the code rather than from what a person saw.
+
+  test('pan up moves the picture up, and pan down moves it down', async ({ page, request }) => {
+    // Measured before the fix: one press of pan-up set `--view-y` to `40px`, which
+    // moves the picture DOWN, and pan-down set it to `-40px`. Left and right were
+    // correct, which is why this read as a rendering problem rather than a swapped
+    // pair of signs, and it was wrong on both surfaces at once because they share
+    // this component.
+    const title = `VC pan ${Date.now()}`
+    await seedNote(request, title, { type: 'diagram', content: DIAGRAM })
+    await page.setViewportSize({ width: 1600, height: 950 })
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible({
+      timeout: 20_000
+    })
+    await page.waitForTimeout(400)
+    await page.locator('[data-testid="diagram-preview"]').hover()
+
+    // Asserted on the *painted* position, not on the custom property. The property
+    // is an implementation detail; what a person checks is whether the drawing
+    // moved, and a sign error in the transform itself would satisfy a test that only
+    // read the variable.
+    const edge = async (axis: 'top' | 'left'): Promise<number> =>
+      await page
+        .locator('[data-testid="diagram-svg"] > svg')
+        .first()
+        .evaluate(
+          (el: SVGElement, which: 'top' | 'left') => Math.round(el.getBoundingClientRect()[which]),
+          axis
+        )
+
+    const startTop = await edge('top')
+    await page.getByTestId('note-view-pan-up').click()
+    await page.waitForTimeout(200)
+    expect(await edge('top'), 'pan up must move the picture toward the top').toBeLessThan(startTop)
+
+    await page.getByTestId('note-view-pan-down').click()
+    await page.waitForTimeout(200)
+    expect(await edge('top'), 'pan down must undo pan up').toBe(startTop)
+
+    // The horizontal pair, which was already right and must stay right.
+    const startLeft = await edge('left')
+    await page.getByTestId('note-view-pan-right').click()
+    await page.waitForTimeout(200)
+    expect(await edge('left'), 'pan right must move the picture right').toBeGreaterThan(startLeft)
+    await page.getByTestId('note-view-pan-left').click()
+    await page.waitForTimeout(200)
+    expect(await edge('left'), 'pan left must undo pan right').toBe(startLeft)
+  })
+
+  test('full screen grows the diagram, carries its own controls, and comes back exactly', async ({
+    page,
+    request
+  }) => {
+    // Three faults in one, because they are one chain.
+    //
+    // 1. The overlay carried **no** controls - measured, zero zoom buttons inside it
+    //    - so the only way out was the X. Full screen was a dead end for anything
+    //    except looking.
+    // 2. The picture did not grow: at a 1600x950 window the overlay covered the
+    //    viewport and the diagram sat in the middle of it at 426x414, exactly the
+    //    size it had in the box.
+    // 3. The same element was rendered into both places, so the document held two
+    //    copies of the diagram while the overlay was open - measured at 24 element
+    //    ids present twice, and Mermaid addresses its markers and clip paths by id.
+    const title = `VC fs ${Date.now()}`
+    await seedNote(request, title, { type: 'diagram', content: DIAGRAM })
+    await page.setViewportSize({ width: 1600, height: 950 })
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible({
+      timeout: 20_000
+    })
+    await page.waitForTimeout(400)
+
+    const read = async (): Promise<{
+      svgCount: number
+      duplicateIds: number
+      box: string
+      diagram: string
+      padInOverlay: number
+    }> =>
+      await page.evaluate(() => {
+        const container = document.querySelector('[data-testid="diagram-container"]') as HTMLElement
+        const overlay = document.querySelector('[data-testid="note-view-full-screen-open"]')
+        const svgs = [...document.querySelectorAll('[data-testid="diagram-svg"] > svg')]
+        const seen = new Map<string, number>()
+        for (const s of svgs) {
+          for (const el of [s, ...s.querySelectorAll('[id]')]) {
+            if (el.id) seen.set(el.id, (seen.get(el.id) ?? 0) + 1)
+          }
+        }
+        const b = container.getBoundingClientRect()
+        const r = svgs[0]?.getBoundingClientRect()
+        return {
+          svgCount: svgs.length,
+          duplicateIds: [...seen.values()].filter((n) => n > 1).length,
+          box: `${Math.round(b.width)}x${Math.round(b.height)}`,
+          diagram: r ? `${Math.round(r.width)}x${Math.round(r.height)}` : 'none',
+          padInOverlay: overlay
+            ? overlay.querySelectorAll('[data-testid="note-view-zoom-in"]').length
+            : 0
+        }
+      })
+
+    const before = await read()
+    expect(before.svgCount, 'one diagram in the document').toBe(1)
+
+    await page.locator('[data-testid="diagram-preview"]').hover()
+    await page.getByTestId('note-view-full-screen').click()
+    await expect(page.getByTestId('note-view-full-screen-open')).toBeVisible()
+    await page.waitForTimeout(600)
+
+    const during = await read()
+    expect(during.padInOverlay, 'full screen must carry the view controls').toBe(1)
+    expect(during.svgCount, 'full screen must not duplicate the diagram').toBe(1)
+    expect(during.duplicateIds, 'no element id may appear twice').toBe(0)
+    // The box behind is untouched: a block that resized itself when the overlay
+    // opened would come back a different shape.
+    expect(during.box, 'the block keeps its size while full screen is open').toBe(before.box)
+    // And the picture is genuinely bigger, which is the whole point of the button.
+    const [duringW, duringH] = during.diagram.split('x').map(Number)
+    const [beforeW, beforeH] = before.diagram.split('x').map(Number)
+    expect(
+      duringH ?? 0,
+      `the diagram must grow in full screen: ${before.diagram} -> ${during.diagram}`
+    ).toBeGreaterThan(beforeH ?? 0)
+    expect(
+      duringW ?? 0,
+      `the diagram must grow in full screen: ${before.diagram} -> ${during.diagram}`
+    ).toBeGreaterThan(beforeW ?? 0)
+
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('note-view-full-screen-open')).toHaveCount(0)
+    await page.waitForTimeout(600)
+
+    // Back exactly as it was. This is the assertion that catches the trap the first
+    // attempt at the fit fell into: it multiplied a screen-fit scale into the
+    // transform and never took it out again, so the diagram came back magnified and
+    // cropped - which is the reported symptom, reintroduced by the fix for it.
+    const after = await read()
+    expect(after.svgCount, 'one diagram again').toBe(1)
+    expect(after.diagram, 'the diagram returns to the size it had').toBe(before.diagram)
+    expect(after.box, 'the block is unchanged').toBe(before.box)
+  })
+
+  test('a short block keeps its own controls instead of clipping them away', async ({
+    page,
+    request
+  }) => {
+    // Auto height on a short diagram gave a 78px box. The control pad is 90x90 and
+    // anchored inside that box, which clips it, so the pad fell **entirely
+    // outside**: no pan, no zoom, no full screen - and no way to undo a zoom applied
+    // in full screen, where there were no controls to apply it with. That chain is
+    // the reported "full screen then back and the diagram is gone", and it is *not*
+    // reproducible from full screen alone: measured, open and Escape leaves the
+    // diagram exactly where it was. It takes a short block to reach it.
+    const title = `VC short ${Date.now()}`
+    await seedNote(request, title, {
+      type: 'diagram',
+      content: 'flowchart LR\n    A --> B --> C --> D'
+    })
+    await page.setViewportSize({ width: 1600, height: 950 })
+    await page.goto('/')
+    await page.getByRole('button', { name: `Open ${title}`, exact: true }).click()
+    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible({
+      timeout: 20_000
+    })
+    await page.waitForTimeout(400)
+
+    await page.locator('[data-testid="diagram-preview"]').hover()
+    await page.getByTestId('diagram-preset-fit').click({ force: true })
+    await page.waitForTimeout(700)
+
+    const measured = await page
+      .getByTestId('note-view-pan-up')
+      .locator('..')
+      .evaluate((el: HTMLElement) => {
+        const container = document.querySelector('[data-testid="diagram-container"]') as HTMLElement
+        const p = el.getBoundingClientRect()
+        const c = container.getBoundingClientRect()
+        const button = el.querySelector('[data-testid="note-view-zoom-in"]')
+        const b = button?.getBoundingClientRect()
+        return {
+          pad: `${Math.round(p.width)}x${Math.round(p.height)}`,
+          container: Math.round(c.height),
+          padInsideBlock: p.top >= c.top - 1 && p.bottom <= c.bottom + 1 && p.left >= c.left - 1,
+          zoomButtonReachable: b !== null && b !== undefined && b.height > 0 && b.top >= c.top - 1
+        }
+      })
+
+    expect(measured.pad, 'the control pad has a real size').not.toBe('0x0')
+    expect(
+      measured.padInsideBlock,
+      `the ${measured.pad} control pad must sit inside the ${measured.container}px block that clips it`
+    ).toBe(true)
+    expect(measured.zoomButtonReachable, 'zoom must be reachable on a short block').toBe(true)
+
+    // And usable, which a geometry check cannot see. This is the undo that was
+    // missing: with the pad gone there was no way back from a zoom.
+    //
+    // The pointer has to be over the diagram first. The pad is revealed on hover by
+    // design, and the pointer is currently on the preset button, which lives outside
+    // the pad's host - so without this the buttons are present but inert, and the
+    // click lands on the diagram underneath.
+    await page.locator('[data-testid="diagram-preview"]').hover()
+    const width = async (): Promise<number> =>
+      await page
+        .locator('[data-testid="diagram-svg"] > svg')
+        .first()
+        .evaluate((el: SVGElement) => Math.round(el.getBoundingClientRect().width))
+    const beforeZoom = await width()
+    await page.getByTestId('note-view-zoom-in').click()
+    await page.waitForTimeout(250)
+    expect(await width(), 'zoom must do something on a short block').toBeGreaterThan(beforeZoom)
+    await page.getByTestId('note-view-reset-view').click()
+    await page.waitForTimeout(250)
+    expect(await width(), 'reset must undo it again').toBe(beforeZoom)
+  })
 })
