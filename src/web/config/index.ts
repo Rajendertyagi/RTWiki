@@ -319,6 +319,8 @@ export const UI_TEXT = {
   diagramMoveBlockDownLabel: 'Move this diagram down',
   /** Position of a diagram on its page, e.g. "Diagram 2 of 3". */
   diagramBlockLabel: 'Diagram {position} of {total}',
+  /** The grip that reorders blocks on a Diagram page. */
+  diagramDragBlockLabel: 'Drag to reorder',
   imageSvgNotSupported:
     'SVG images are not supported, because an SVG can carry scripts. Try a PNG, JPEG, GIF, WebP, AVIF or BMP file.',
   imageTooManyPixels:
@@ -382,6 +384,20 @@ export const UI_TEXT = {
   diagramRetryLabel: 'Retry render',
   diagramFitLabel: 'Fit width',
   diagramActualSizeLabel: 'Actual size',
+  /**
+   * The diagram's own view controls. Distinct from the *block's* size controls,
+   * which are the corner handle and the size presets: these move and scale the
+   * picture, those change the box around it, and neither affects the other.
+   */
+  diagramPanUpLabel: 'Pan up',
+  diagramPanDownLabel: 'Pan down',
+  diagramPanLeftLabel: 'Pan left',
+  diagramPanRightLabel: 'Pan right',
+  diagramZoomInLabel: 'Zoom in',
+  diagramZoomOutLabel: 'Zoom out',
+  diagramResetViewLabel: 'Reset view',
+  diagramFullScreenLabel: 'Full screen',
+  diagramCloseFullScreenLabel: 'Close full screen',
   diagramTemplateLabel: 'Starter template',
   mindMapFitLabel: 'Fit width',
   mindMapActualSizeLabel: 'Actual size',
@@ -465,8 +481,23 @@ export const UI_TEXT = {
     'Desktop settings could not be loaded. The window close options below are showing a default, not your saved choice.',
   markdownImportLabel: 'Import Markdown',
   markdownImportErrorType: 'Please choose a .md or .markdown file.',
-  markdownImportErrorSize: 'That file is too large to import.',
+  /**
+   * Kept, and used, for a file too big to read into memory. Distinct from the
+   * character limit below: one is a transport ceiling, one is a content policy, and
+   * conflating them is what produced an import that always failed.
+   */
+  markdownImportErrorTooLarge: 'That file is too large to read. Try a smaller one.',
+  /** Names the real limit, so a user who is over it can act on it. */
+  markdownImportErrorTooLong:
+    'That note is longer than the 100,000 character limit. Split it into smaller notes, or import it as a file attachment instead.',
   markdownImportErrorRead: 'Could not read that file.',
+  /**
+   * The server refused the create. Distinct from the above because nothing was wrong
+   * with the file: the request was made and declined, and saying nothing made the
+   * import look like it had worked.
+   */
+  markdownImportErrorCreateFailed:
+    'That file could not be imported. Nothing was created — try again, or import it as a file attachment instead.',
   markdownExportLabel: 'Export .md',
   settingsCloseLabel: 'Close settings',
   settingsAppearance: 'Appearance',

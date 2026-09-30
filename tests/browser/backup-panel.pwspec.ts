@@ -19,9 +19,32 @@ import { railSettings } from './utils/shell.js'
  * value is typed.
  */
 
+/**
+ * Creates one page, so this file does not depend on ambient database contents.
+ *
+ * The browser suite now runs against a **fresh data directory per run**
+ * (`scripts/serve-browser-tests.ts`), which is what made a hidden data dependency
+ * in this spec visible: `openSettings` used `page-tree` as its "the app has
+ * finished loading" signal, and `src/web/layout/sidebar.tsx:151` renders an empty
+ * state *instead of* the tree when there are no pages. With the development
+ * database carrying thousands of pages that assertion always passed; on an empty
+ * one it failed before the test touched a single backup control.
+ *
+ * Seeding is the fix, and it makes the spec stronger rather than weaker: it now
+ * says what it needs instead of inheriting whatever happened to be there.
+ */
+test.beforeAll(async ({ request }) => {
+  const res = await request.post('/api/pages', {
+    data: { title: `Backup panel fixture ${Date.now()}`, pageType: 'rich', content: '[]' }
+  })
+  expect(res.status(), 'the fixture page must be created').toBe(201)
+})
+
 async function openSettings(page: import('@playwright/test').Page): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
+  // The tree, which `sidebar.tsx` only renders once there is at least one page —
+  // hence the fixture above rather than a weaker wait on the rail.
   await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
   await railSettings(page).click()
   await expect(page.getByTestId('settings-workspace')).toBeVisible({ timeout: 10_000 })

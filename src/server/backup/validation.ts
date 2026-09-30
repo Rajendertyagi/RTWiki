@@ -218,17 +218,55 @@ export function validateBackupFile(path: string): ValidationOutcome {
  * Called before a backup is taken, not on a candidate. The plan's answer is to
  * refuse loudly rather than make the backup two-part: a partial backup that
  * looks complete is the failure worth avoiding.
+ *
+ * ## Why `bytes_stored` is part of the condition
+ *
+ * `data IS NULL` on its own stopped meaning "missing bytes" once signature-less
+ * documents stopped storing them (migration `011`). A `.txt`, `.md` or `.html`
+ * upload is *supposed* to have no bytes: its type can never be established from
+ * them, so the serving path refuses them anyway and keeping them only duplicated
+ * unreachable content into every backup.
+ *
+ * Counting those rows as mid-migration would have meant **every backup failing for
+ * good** the first time anyone attached a plain text file. `bytes_stored` is what
+ * separates the two cases in the row itself: `0` is a deliberate absence, `1` with
+ * no bytes is the corruption this function exists to catch. The refusal is
+ * unchanged for a genuinely incomplete database — only a row that claims to have
+ * bytes and does not still trips it.
+ *
+ * ## Why a missing column falls back to the old condition
+ *
+ * `bytes_stored` arrives with migration `011`, so a database that has not been migrated
+ * yet has no such column. On *that* schema `data IS NULL` has only ever meant one thing —
+ * a row still holding its bytes on disk — so the old, broader condition is exactly right
+ * for it. Falling back to it rather than returning 0 is what keeps the refusal working on
+ * a database mid-upgrade, which is the one moment it is most needed.
  */
 export function countAttachmentsAwaitingBytes(db: Database): number {
+  const condition = columnExists(db, 'attachments', 'bytes_stored')
+    ? 'data IS NULL AND bytes_stored = 1'
+    : // Pre-011: on this schema every NULL data row is a row whose bytes are still on
+      // disk, which is the only thing this function has ever been able to mean.
+      'data IS NULL'
   try {
-    const row = db.query('SELECT count(*) AS n FROM attachments WHERE data IS NULL').get() as {
+    const row = db.query(`SELECT count(*) AS n FROM attachments WHERE ${condition}`).get() as {
       n: number
     } | null
     return row?.n ?? 0
   } catch {
-    // No `attachments` table, or no `data` column: nothing is mid-migration as
-    // far as this build is concerned. A database that predates ADR-014 keeps its
-    // bytes in files, but it also has no rows the column could be missing for.
+    // No `attachments` table, or no `data` column: nothing is mid-migration as far as
+    // this build is concerned. A database that predates ADR-014 keeps its bytes in
+    // files, but it also has no rows the column could be missing for.
     return 0
+  }
+}
+
+/** Whether `table` has a column named `column`, without assuming the table exists. */
+function columnExists(db: Database, table: string, column: string): boolean {
+  try {
+    const rows = db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+    return rows.some((r) => r.name === column)
+  } catch {
+    return false
   }
 }

@@ -1,5 +1,10 @@
 import { Alert, Loader, NavLink, Stack, Text } from '@mantine/core'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
+import {
+  classifyMarkdownImport,
+  MARKDOWN_IMPORT_ACCEPT_ATTRIBUTE,
+  type MarkdownImportRejection
+} from '@rtwiki/shared/import/policy'
 import { IconAlertCircle, IconHome } from '@tabler/icons-react'
 import { useRef, useState } from 'react'
 import { SearchInput } from '../components/search-input.js'
@@ -7,7 +12,25 @@ import { UI_TEXT } from '../config/index.js'
 import { PageTree } from '../features/sidebar/page-tree.js'
 import classes from './sidebar.module.css'
 
-const IMPORT_MAX_BYTES = 1_000_000
+/**
+ * One message per refusal reason, each naming the actual limit where there is one.
+ *
+ * The previous single "that file is too large" message covered two different problems —
+ * a file too big to read, and a note too long to store — and named neither number. The
+ * user could not tell which they had hit, or what to do about it.
+ */
+function markdownImportErrorText(reason: MarkdownImportRejection): string {
+  switch (reason) {
+    case 'not_markdown':
+      return UI_TEXT.markdownImportErrorType
+    case 'too_large_to_read':
+      return UI_TEXT.markdownImportErrorTooLarge
+    case 'too_long':
+      return UI_TEXT.markdownImportErrorTooLong
+    case 'read_failed':
+      return UI_TEXT.markdownImportErrorRead
+  }
+}
 
 interface SidebarProps {
   pages: Page[]
@@ -40,8 +63,14 @@ interface SidebarProps {
   seedExpandedIds?: ReadonlySet<string>
   /** Expansion observation for session persistence. */
   onExpandedChange?: (ids: ReadonlySet<string>) => void
-  /** Imports a local .md file as a new Markdown Page (filename → title). */
-  onImportMarkdown: (fileName: string, source: string) => void
+  /**
+   * Imports a local Markdown file as a new Markdown Page (filename → title).
+   *
+   * Returns whether the page was created. The picker shows a failure, so a rejected
+   * import has to be reportable here rather than vanishing; see `handleImportMarkdown`
+   * in `App.tsx`.
+   */
+  onImportMarkdown: (fileName: string, source: string) => Promise<boolean>
   /** Exports the given page (context-menu action). */
   onExportPage: (pageId: string) => void
 }
@@ -79,24 +108,36 @@ export function Sidebar({
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    const isMd =
-      /\.(md|markdown)$/i.test(file.name) ||
-      file.type === 'text/markdown' ||
-      file.type === 'text/plain'
-    if (!isMd) {
-      setImportError(UI_TEXT.markdownImportErrorType)
-      return
-    }
-    if (file.size > IMPORT_MAX_BYTES) {
-      setImportError(UI_TEXT.markdownImportErrorSize)
+    // Cheap rejections first, so a 40 MB file is never handed to FileReader.
+    const preRead = classifyMarkdownImport(file)
+    if (preRead !== null) {
+      setImportError(markdownImportErrorText(preRead))
       return
     }
     const reader = new FileReader()
-    reader.onerror = () => setImportError(UI_TEXT.markdownImportErrorRead)
+    reader.onerror = () => setImportError(markdownImportErrorText('read_failed'))
     reader.onload = () => {
       const text = typeof reader.result === 'string' ? reader.result : ''
+      // The authoritative check, against the same character limit the server will
+      // apply. Previously only the byte size was checked here, which is why a 150 KB
+      // file could be read, posted, and refused.
+      const rejection = classifyMarkdownImport(file, text)
+      if (rejection !== null) {
+        setImportError(markdownImportErrorText(rejection))
+        return
+      }
       setImportError(null)
-      onImportMarkdown(file.name, text)
+      // The create can still be refused by the server; report that too rather than
+      // leaving the user with a file that silently did not become a note.
+      void onImportMarkdown(file.name, text)
+        .then((created) => {
+          if (!created) setImportError(UI_TEXT.markdownImportErrorCreateFailed)
+        })
+        .catch((err: unknown) => {
+          setImportError(
+            err instanceof Error ? err.message : UI_TEXT.markdownImportErrorCreateFailed
+          )
+        })
     }
     reader.readAsText(file)
   }
@@ -195,7 +236,7 @@ export function Sidebar({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".md,.markdown,text/markdown,text/plain"
+        accept={MARKDOWN_IMPORT_ACCEPT_ATTRIBUTE}
         onChange={handleFileChosen}
         className={classes.hiddenFileInput}
         tabIndex={-1}

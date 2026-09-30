@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DIAGRAM_STARTER_SOURCE, MINDMAP_STARTER_SOURCE } from '../constants/index.js'
+import { DIAGRAM_STARTER_SOURCE } from '../constants/index.js'
 
 /**
  * Canonical stored content for the dedicated Diagram and Mind Map page types.
@@ -21,9 +21,30 @@ import { DIAGRAM_STARTER_SOURCE, MINDMAP_STARTER_SOURCE } from '../constants/ind
  * the version.
  */
 
-export const VISUAL_PAGE_TYPES = ['diagram', 'mindmap'] as const
+/**
+ * The dedicated visual page types RTWiki writes.
+ *
+ * Diagram is the only one. The Mind Map page was retired: it differed from the
+ * Diagram page by one ternary and two starter strings, and Mermaid's `mindmap` is
+ * an ordinary diagram type already offered from the shared template list.
+ */
+export const VISUAL_PAGE_TYPES = ['diagram'] as const
 
 export type VisualPageType = (typeof VISUAL_PAGE_TYPES)[number]
+
+/**
+ * Values accepted when *reading* stored content, including retired ones.
+ *
+ * A stored page records its own `type` inside its JSON, independently of the
+ * `pages.page_type` column that migration 010 rewrites. Narrowing the read schema
+ * to {@link VISUAL_PAGE_TYPES} would therefore reject a Mind Map page's content
+ * even after its row had been migrated. So the legacy value is accepted on read
+ * and normalised away in {@link parseVisualPageContent}, which means the rewrite
+ * needs no JSON surgery in SQL and cannot fail in a second, separate place.
+ */
+const LEGACY_VISUAL_PAGE_TYPES = ['mindmap'] as const
+
+const STORED_VISUAL_PAGE_TYPES = [...VISUAL_PAGE_TYPES, ...LEGACY_VISUAL_PAGE_TYPES] as const
 
 /**
  * Upper bound on blocks per page.
@@ -40,7 +61,20 @@ const MAX_VISUAL_SOURCE_LENGTH = 100_000
 /** One diagram or mind map on a page. */
 export const VisualPageBlockSchema = z.object({
   id: z.string().min(1).max(64),
-  source: z.string().max(MAX_VISUAL_SOURCE_LENGTH)
+  source: z.string().max(MAX_VISUAL_SOURCE_LENGTH),
+  /**
+   * The block's own box, as pixel strings. Both optional, and a block that has
+   * neither is laid out by the workspace rather than by a stored size.
+   *
+   * Optional rather than defaulted to a number, so a page written before the
+   * workspace gained resizing needs no migration and no rewrite: the field is
+   * simply absent, which the layout reads as "not resized". Stored as a string
+   * for the same reason the rich editor stores its block dimensions as strings —
+   * the value goes straight into a CSS length, and round-tripping it through a
+   * number would lose units and invent precision that means nothing.
+   */
+  width: z.string().max(16).optional(),
+  height: z.string().max(16).optional()
 })
 
 export type VisualPageBlock = z.infer<typeof VisualPageBlockSchema>
@@ -48,7 +82,7 @@ export type VisualPageBlock = z.infer<typeof VisualPageBlockSchema>
 /** v2: an ordered list of blocks. */
 export const VisualPageContentV2Schema = z.object({
   version: z.literal(2),
-  type: z.enum(VISUAL_PAGE_TYPES),
+  type: z.enum(STORED_VISUAL_PAGE_TYPES),
   blocks: z.array(VisualPageBlockSchema).min(1).max(MAX_VISUAL_PAGE_BLOCKS)
 })
 
@@ -58,7 +92,7 @@ export const VisualPageContentV2Schema = z.object({
  */
 const VisualPageContentV1Schema = z.object({
   version: z.literal(1),
-  type: z.enum(VISUAL_PAGE_TYPES),
+  type: z.enum(STORED_VISUAL_PAGE_TYPES),
   source: z.string().max(MAX_VISUAL_SOURCE_LENGTH)
 })
 
@@ -91,6 +125,18 @@ export type ParseVisualPageResult =
   | { ok: false; error: string }
 
 /**
+ * Maps a stored type marker onto the canonical one.
+ *
+ * Anything the schemas above rejected never reaches this. What is left is either
+ * a canonical value or a retired one, and a retired one is reported as the page
+ * type that replaced it — so a migrated Mind Map page reads as a Diagram page
+ * from the first load, with no write-back needed.
+ */
+function toCanonicalVisualPageType(stored: string): VisualPageType {
+  return VISUAL_PAGE_TYPES.find((candidate) => candidate === stored) ?? VISUAL_PAGE_TYPES[0]
+}
+
+/**
  * Parses stored visual-page content into blocks, accepting both versions.
  *
  * Total: malformed or foreign content yields a contained error rather than a
@@ -109,14 +155,20 @@ export function parseVisualPageContent(stored: string): ParseVisualPageResult {
   }
   const asV2 = VisualPageContentV2Schema.safeParse(raw)
   if (asV2.success) {
-    return { ok: true, value: { type: asV2.data.type, blocks: asV2.data.blocks } }
+    return {
+      ok: true,
+      value: {
+        type: toCanonicalVisualPageType(asV2.data.type),
+        blocks: asV2.data.blocks
+      }
+    }
   }
   const asV1 = VisualPageContentV1Schema.safeParse(raw)
   if (asV1.success) {
     return {
       ok: true,
       value: {
-        type: asV1.data.type,
+        type: toCanonicalVisualPageType(asV1.data.type),
         blocks: [{ id: LEGACY_SINGLE_BLOCK_ID, source: asV1.data.source }]
       }
     }
@@ -136,12 +188,18 @@ export function serializeVisualPageBlocks(
   })
 }
 
-/** Starter content used when a dedicated Diagram / Mind Map page is created. */
-export function createStarterVisualContent(pageType: VisualPageType): string {
-  return serializeVisualPageBlocks(pageType, [
+/**
+ * Starter content used when a dedicated Diagram page is created.
+ *
+ * Takes no page type: Diagram is the only visual page there is, so the starter is
+ * a constant rather than a choice. A caller that reaches here with something else
+ * has already failed the {@link VISUAL_PAGE_TYPES} check upstream.
+ */
+export function createStarterVisualContent(): string {
+  return serializeVisualPageBlocks(VISUAL_PAGE_TYPES[0], [
     {
       id: LEGACY_SINGLE_BLOCK_ID,
-      source: pageType === 'diagram' ? DIAGRAM_STARTER_SOURCE : MINDMAP_STARTER_SOURCE
+      source: DIAGRAM_STARTER_SOURCE
     }
   ])
 }

@@ -1,7 +1,7 @@
 import { createReactBlockSpec } from '@blocknote/react'
 import { Button, Group, Loader, Modal, Stack, Text, Textarea } from '@mantine/core'
 import { IconDownload, IconEye, IconFileText } from '@tabler/icons-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   ACCEPTED_DOCUMENT_EXTENSIONS,
   ACCEPTED_DOCUMENT_MIME_TYPES
@@ -74,37 +74,27 @@ export const createReactDocumentSpec = () =>
       },
       render: ({ block, contentRef }) => {
         const url = (block.props.url as string) ?? ''
-        const pickedName = (block.props.name as string) ?? ''
+        // The name shown on the card is the block's own `props.name`, written at insert
+        // time from the file the user picked. That is authoritative.
+        //
+        // This used to be refined by fetching `/api/attachments/:id/text` on mount and
+        // reading an `originalName` from the response. **That field does not exist** —
+        // the route has always returned `{ text, kind }` — so `readString` returned
+        // null, `setStoredName` was never called, and the state could only ever equal
+        // `props.name`. It was a network request per document block on every note open
+        // that could not change what was displayed, with a `.catch` that hid the fact.
+        //
+        // The `/text` route keeps its narrow contract: extracted text and kind, for
+        // "View text". Serving a filename from it as well would mean every note carrying
+        // a document costs a request to learn a name the note already holds.
+        const storedName = (block.props.name as string) ?? ''
         const [text, setText] = useState<string | null>(null)
         const [textState, setTextState] = useState<
           'idle' | 'loading' | 'ready' | 'empty' | 'error'
         >('idle')
-        const [storedName, setStoredName] = useState(pickedName)
         const [textOpen, setTextOpen] = useState(false)
 
         const attachmentId = attachmentIdFrom(url)
-
-        // The stored name comes from the catalogue rather than the block, so it is
-        // correct even if the block was written by an older version that stored
-        // nothing. A failure here is not worth reporting: the picked name is
-        // already on screen and this only ever refines it.
-        useEffect(() => {
-          if (!attachmentId) return
-          let cancelled = false
-          void fetch(`/api/attachments/${attachmentId}/text`)
-            .then((res) => (res.ok ? res.json() : null))
-            .then((body: unknown) => {
-              if (cancelled) return
-              const name = readString(body, 'originalName')
-              if (name) setStoredName(name)
-            })
-            .catch(() => {
-              // Deliberately silent. See above.
-            })
-          return () => {
-            cancelled = true
-          }
-        }, [attachmentId])
 
         // The text is fetched when the user asks for it, not on mount: a note can
         // hold many attachments and none of them should cost a request until

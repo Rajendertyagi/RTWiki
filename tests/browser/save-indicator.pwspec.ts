@@ -113,7 +113,7 @@ test('the unsaved window survives a slow save rather than being skipped', async 
     await p.waitForTimeout(250)
   }
   // eslint-disable-next-line no-console
-  console.log('SAVEWINDOW ' + JSON.stringify(seen))
+  console.log(`SAVEWINDOW ${JSON.stringify(seen)}`)
   // Every sample is inside the 2000ms debounce, so every one must be pending.
   for (const sample of seen) {
     expect(sample, `sampled inside the debounce window: ${sample}`).toContain('Unsaved changes')

@@ -121,7 +121,8 @@ Implemented by `src/server/attachments/`, `src/shared/attachments/image-formats.
 | **Document format allowlist** | PDF, DOCX, PPTX, XLSX, and the OpenDocument equivalents — `document-formats.ts:70-91` |
 | **SVG refused** | SVG is XML that can carry `<script>`, event handlers and external references. Serving one inline is document execution, which this model forbids for uploaded content. Refusing it is simpler and safer than sanitising arbitrary SVG |
 | **Size limit** | `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` (50 MB), enforced by Hono's `bodyLimit` middleware *before* the body is parsed, so an oversized upload is never buffered |
-| **Id-addressed serving** | Requests name an opaque `id`. The server looks up the row and serves the `stored_name` it generated, so no user-supplied string reaches the filesystem. A traversal attempt has nothing to traverse — stronger than sanitising a filename and re-checking the resolved path |
+| **Decompression limits** | The size limit above bounds what *arrives*, which is the wrong bound for a compressed format. Every document parse is given `decompressionLimits` — `DOCUMENT_MAX_UNCOMPRESSED_BYTES` (512 MB uncompressed), `DOCUMENT_MAX_ZIP_ENTRIES` (10 000) and `DOCUMENT_MAX_TABLE_CELLS` (1 000 000) — so a small archive cannot ask the parser for an unbounded allocation. Passing them explicitly is the point: they were previously inherited from `officeparser`'s own defaults, which made the application have no guard of its own. The table-cell ceiling is separate because ODF expands cell *repeats* while building the AST, long after the archive's bytes and entries have both been accepted. A tripped ceiling is refused, and reported as `extract_failed` rather than `unsupported_type` — the file type is supported; this file could not be opened |
+| **Id-addressed serving** | Requests name an opaque `id`, and the bytes come out of the `attachments` row itself (ADR-014). No user-supplied string and no generated filename reaches the filesystem, because there is no filesystem path to reach — stronger than sanitising a filename and re-checking the resolved path |
 | **Generated filenames** | `<UUID>.<ext>`, with the extension chosen from the detected type. The uploader's filename is recorded for display only, with separators and control characters removed |
 | **Type pinning on serve** | The `Content-Type` sent is the recorded, detected type. `X-Content-Type-Options: nosniff` stops a browser second-guessing it and reinterpreting the bytes |
 | **No execution** | Uploaded files are stored and served as static content only. No script interpretation occurs |
@@ -216,9 +217,11 @@ The Hono backend sets the following headers on every response via the official
 | `Referrer-Policy` | `no-referrer` | Prevent leaking internal paths |
 | `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` | Deny powerful web platform features |
 
-### 5.0 `Cache-Control` — partial coverage
+### 5.0 `Cache-Control` — covered, by a gap-filler rather than a blanket rule
 
-The table above lists what `secureHeaders` sets. **`Cache-Control` is not among them**, and the middleware sets none of its own — verified in `node_modules/hono/dist/middleware/secure-headers/secure-headers.js`, where the string does not appear in `HEADERS_MAP` or `DEFAULT_OPTIONS`. Every header in the table is therefore covered; `Cache-Control` is covered only where it is set by hand, at **exactly four sites**:
+The table above lists what `secureHeaders` sets. **`Cache-Control` is not among them**, and the middleware sets none of its own — verified in `node_modules/hono/dist/middleware/secure-headers/secure-headers.js`, where the string does not appear in `HEADERS_MAP` or `DEFAULT_OPTIONS`. So it cannot come from Hono, and RTWiki supplies it in two ways.
+
+**Four hand-set sites, each with a reason.** These are unchanged and are *not* to be removed in favour of the rule below:
 
 | Site | Value | Why |
 |------|-------|-----|
@@ -227,9 +230,17 @@ The table above lists what `secureHeaders` sets. **`Cache-Control` is not among 
 | `src/server/attachments/attachment-routes.ts:214` | `private, no-cache` | Attachments are addressed by id, so a shared cache must never hand one attachment's bytes to another URL |
 | `src/server/attachments/attachment-routes.ts:282` | `private, no-cache` | As above, for the second serving route |
 
-**Not covered: the entire JSON API.** `GET /api/pages` (titles), `GET /api/pages/:id` (full page JSON), `GET /api/pages?q=`, `GET /api/attachments/:id/text`, and the `onError` (`src/server/app.ts:213`) and `notFound` (`:218`) handlers all return page or error data with **no cache directives at all**. `src/server/routes/pages.ts` contains zero occurrences of the word `cache`.
+**And one gap-filler for `/api/*`** — `src/server/app.ts`, `app.use('/api/*', …)`, added 2026-09-29. It runs after `next()` and sets `no-store` **only when the handler set no `Cache-Control` of its own**, so the four sites above and any future deliberate policy keep their decisions.
 
-The requirement stands; this is unbuilt work. The concrete risk is private page content sitting in a shared cache. It is **latent** in the default configuration, because the server binds loopback only (§4) and so has no shared cache to leak into — and it becomes live the moment LAN binding is authorized ([ADR-001](adr/ADR-001-browser-first-local-application.md)). **It must be closed before that phase, not during it.**
+Three properties of it are load-bearing, and each was got wrong on the first attempt:
+
+- **Scoped to `/api/*`, not `*`.** The two static policies are correct and *opposite* — `no-store` for a document carrying a nonce, `immutable` for hashed assets. A blanket rule would either break asset caching or be silently undone by it. `/health` is therefore also outside the scope, deliberately: a poller should re-request rather than be served a cached `ok`.
+- **Registered before the `Host` guard, not after.** That guard answers without calling `next()`, so middleware registered beneath it never runs for a refused request. A cached `403` is its own small problem — a browser holding one would keep rejecting a legitimate request after the user fixed their hosts file.
+- **A `has()` check, not an unconditional set.** Attachment content is addressed by an immutable id, where revalidation is meaningful, so overwriting `private, no-cache` with `no-store` would be a regression dressed as a fix.
+
+**What it covers that nothing did before:** `GET /api/pages`, `GET /api/pages/:id`, `GET /api/pages?q=`, every 404, the `onError` and `notFound` handlers, and any JSON route added later. All of it is private note content or an error derived from it, and a cached `GET /api/pages` could be shown after the user deleted the note, with nothing in the app able to correct it. Verified by `tests/api-cache-control.test.ts`, which asserts the filling, the preservation, and the `/health` exclusion.
+
+**The risk this closed was latent in the default configuration,** because the server binds loopback only (§4) and so has no shared cache to leak into — but it becomes live the moment LAN binding is authorized ([ADR-001](adr/ADR-001-browser-first-local-application.md)). It is now closed ahead of that phase rather than during it.
 
 ### 5.1 Per-Response CSP Nonce (Phase 4A)
 

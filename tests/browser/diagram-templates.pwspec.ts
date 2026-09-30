@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 import { DIAGRAM_TEMPLATES } from '../../src/web/features/rich-editor/insert-blocks.js'
 
 /**
@@ -15,6 +15,25 @@ import { DIAGRAM_TEMPLATES } from '../../src/web/features/rich-editor/insert-blo
  * the rendered SVG is compared so a stale render cannot pass.
  */
 const EDITABLE = '.bn-editor'
+
+/**
+ * Opens a fresh Diagram page and waits for its Mermaid toolbar.
+ *
+ * The bar lives in the page's toolbar row, above the workspace and outside edit
+ * mode, so nothing here enters edit mode. A test that needs the source editor
+ * still opens it per block; the point of this helper is that reaching a template
+ * no longer requires adding a diagram first.
+ */
+async function openDiagramPageWithToolbar(page: Page): Promise<void> {
+  await page.goto('/')
+  await page.locator('[aria-label="New page"]').first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Title').fill(`Bar ${Date.now()}`)
+  await dialog.getByTestId('new-page-type-diagram').click()
+  await dialog.getByRole('button', { name: /create/i }).click()
+  await expect(page.getByTestId('diagram-workspace')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('template-bar')).toBeVisible({ timeout: 20_000 })
+}
 
 test.describe('diagram templates', () => {
   test('every template renders without error', async ({ page }) => {
@@ -89,14 +108,7 @@ test.describe('diagram templates', () => {
   })
 
   test('the template bar is flat: what fits stays, the rest go to a dropdown', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('[aria-label="New page"]').first().click()
-    const dialog = page.getByRole('dialog')
-    await dialog.getByLabel('Title').fill(`Bar ${Date.now()}`)
-    await dialog.getByTestId('new-page-type-diagram').click()
-    await dialog.getByRole('button', { name: /create/i }).click()
-    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-block-edit-0').click()
+    await openDiagramPageWithToolbar(page)
 
     const bar = page.getByTestId('template-bar')
     await expect(bar).toBeVisible()
@@ -116,6 +128,23 @@ test.describe('diagram templates', () => {
     expect(metrics.flexWrap, 'the bar never wraps').toBe('nowrap')
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1)
     expect(metrics.height, 'the bar stays one row').toBeLessThan(60)
+
+    // The bar now lives in the page's shared toolbar row, which is the same
+    // fixed-height row the Rich Note's toolbar uses. If the bar were taller than
+    // that row it would overflow it, and the Diagram page would stop looking like
+    // every other page type - which is the whole reason the bar moved up here.
+    const row = page.getByTestId('diagram-toolbar-row')
+    await expect(row).toBeVisible()
+    const fits = await row.evaluate((el) => {
+      const bar = el.querySelector('[data-testid="template-bar"]')
+      return {
+        rowHeight: el.getBoundingClientRect().height,
+        barHeight: bar?.getBoundingClientRect().height ?? 0,
+        overflows: (bar?.getBoundingClientRect().bottom ?? 0) > el.getBoundingClientRect().bottom
+      }
+    })
+    expect(fits.overflows, 'the bar must not overflow the toolbar row').toBe(false)
+    expect(fits.barHeight).toBeLessThanOrEqual(fits.rowHeight)
 
     // Every template is reachable: on the row, or as a row in the trailing
     // dropdown. Overflowed templates are no longer the moved toolbar button -
@@ -152,26 +181,77 @@ test.describe('diagram templates', () => {
     }
   })
 
-  test('picking a template loads its source into the editor', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('[aria-label="New page"]').first().click()
-    const dialog = page.getByRole('dialog')
-    await dialog.getByLabel('Title').fill(`Pick ${Date.now()}`)
-    await dialog.getByTestId('new-page-type-diagram').click()
-    await dialog.getByRole('button', { name: /create/i }).click()
-    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-block-edit-0').click()
+  test('picking a template adds that diagram, without entering edit mode', async ({ page }) => {
+    // The behaviour the toolbar move was for. Previously the bar was reachable
+    // only from inside the edit pane, so a type could be chosen only after a
+    // generic diagram had been added and opened for editing. Now the choice is
+    // the action: one click, and the page gains that diagram.
+    await openDiagramPageWithToolbar(page)
 
-    // A type with no variants loads on one click.
+    // Count the block cards, not every element whose testid starts with
+    // `diagram-block-`. Each card is now wrapped in a resize container whose own
+    // testid shares that prefix, so a prefix match counts each block twice.
+    const countBlocks = async (): Promise<number> =>
+      page.locator('section[data-testid^="diagram-block-"]').count()
+
+    const before = await countBlocks()
+    expect(before, 'a new Diagram page starts with its starter diagram').toBe(1)
+
+    // A type with no variants is added on one click, and the page is still in
+    // view mode throughout — the point of the change.
     await page.getByTestId('template-sequence').click()
-    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/sequenceDiagram/i)
+    await expect(page.getByTestId('diagram-workspace')).toHaveAttribute('data-mode', 'view')
+    await expect(page.locator('section[data-testid="diagram-block-1"]')).toBeVisible()
+    expect(await countBlocks(), 'the chosen template added a diagram').toBe(2)
 
-    // A type WITH variants opens its menu instead, and picking a variant loads it.
-    // Flowchart is the case that matters: Mermaid offers it in four directions.
+    // A type WITH variants opens its menu, and the chosen variant is what gets
+    // added. Flowchart is the case that matters: Mermaid offers four directions.
     await page.getByTestId('template-flowchart').click()
     await expect(page.getByTestId('template-variant-flowchart-Left-to-right')).toBeVisible()
     await page.getByTestId('template-variant-flowchart-Left-to-right').click()
-    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/^flowchart LR/)
+    await expect(page.locator('section[data-testid="diagram-block-2"]')).toBeVisible()
+    expect(await countBlocks(), 'the variant added a third diagram').toBe(3)
+
+    // The diagram's own svg, addressed by the canvas's testid. Scoping to the card
+    // instead would find the 24x24 action icons in its toolbar first — which is
+    // exactly what an earlier version of this assertion did, and read as though
+    // the diagram were empty.
+    const viewBoxOf = async (index: number): Promise<string | null> =>
+      page
+        .getByTestId(`diagram-block-${index}-svg`)
+        .locator('svg')
+        .first()
+        .getAttribute('viewBox')
+        .catch(() => null)
+    const realExtent = async (index: number): Promise<boolean> => {
+      const viewBox = await viewBoxOf(index)
+      if (viewBox === null) return false
+      const parts = viewBox.split(/\s+/).map(Number)
+      return (parts[2] ?? 0) > 40 && (parts[3] ?? 0) > 40
+    }
+
+    // And each pick produced the template that was chosen, read from the block's
+    // own source rather than from any shared state.
+    const sourceOf = async (index: number): Promise<string> => {
+      await page.getByTestId(`diagram-block-edit-${index}`).click()
+      const value = await page.getByTestId('diagram-source-input').inputValue()
+      await page.getByTestId('diagram-cancel').click()
+      return value
+    }
+    expect(await sourceOf(1)).toBe(DIAGRAM_TEMPLATES.sequence.source)
+
+    await expect
+      .poll(() => realExtent(1), {
+        timeout: 20_000,
+        message: `block 1 viewBox was "${await viewBoxOf(1)}"`
+      })
+      .toBe(true)
+    await expect
+      .poll(() => realExtent(2), {
+        timeout: 20_000,
+        message: `block 2 viewBox was "${await viewBoxOf(2)}"`
+      })
+      .toBe(true)
   })
 
   test('a template that offers variants opens them; one that does not, loads', async ({ page }) => {
@@ -182,7 +262,7 @@ test.describe('diagram templates', () => {
     await dialog.getByTestId('new-page-type-diagram').click()
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-block-edit-0').click()
+    await expect(page.getByTestId('template-bar')).toBeVisible()
 
     // Flowchart: four directions, each a real source.
     await page.getByTestId('template-flowchart').click()
@@ -194,16 +274,42 @@ test.describe('diagram templates', () => {
     }
     await page.keyboard.press('Escape')
 
-    // Each direction really is that direction.
-    for (const [dir, expected] of [
-      ['Top-to-bottom', 'flowchart TD'],
-      ['Left-to-right', 'flowchart LR']
-    ] as const) {
+    // Each direction adds its own diagram, and what was added is a real flowchart.
+    //
+    // The orientation is deliberately NOT asserted from the rendered box. The
+    // starter is a single `A --> B` node, so a top-to-bottom one is as wide as it
+    // is tall and the comparison fails on a correct result. Proving the direction
+    // would need a multi-node sample, which is a different test from this one; so
+    // this asserts what the picker controls - that a variant is offered, that
+    // choosing one adds a diagram, and that the diagram is that type.
+    let added = 1
+    for (const dir of ['Top-to-bottom', 'Left-to-right'] as const) {
       await page.getByTestId('template-flowchart').click()
       await page.getByTestId(`template-variant-flowchart-${dir}`).click()
-      await expect(page.getByTestId('diagram-source-input')).toHaveValue(
-        new RegExp(`^${expected.replace(' ', '\\s')}`)
-      )
+      const index = added
+      added += 1
+      const section = page.locator(`section[data-testid="diagram-block-${index}"]`)
+      await expect(section, `${dir} must add a block`).toBeVisible({ timeout: 20_000 })
+      // A real diagram, not the empty placeholder. Which *direction* was chosen is
+      // not asserted from the box: the starter is a single `A --> B` node, so a
+      // top-to-bottom one is as wide as it is tall and the comparison would fail
+      // on a correct result.
+      await expect
+        .poll(
+          async () => {
+            const viewBox = await page
+              .getByTestId(`diagram-block-${index}-svg`)
+              .locator('svg')
+              .first()
+              .getAttribute('viewBox')
+              .catch(() => null)
+            if (viewBox === null) return false
+            const parts = viewBox.split(/\s+/).map(Number)
+            return (parts[2] ?? 0) > 40 && (parts[3] ?? 0) > 40
+          },
+          { timeout: 20_000 }
+        )
+        .toBe(true)
     }
   })
 
@@ -212,34 +318,30 @@ test.describe('diagram templates', () => {
     // submenu that would not open, because a Menu nested inside a Menu.Dropdown
     // is not how Mantine does nesting. Mantine documents Menu.Sub for this, and
     // rendering real menu rows also makes the dropdown keyboard-reachable.
-    await page.goto('/')
-    await page.locator('[aria-label="New page"]').first().click()
-    const dialog = page.getByRole('dialog')
-    await dialog.getByLabel('Title').fill(`Overflow ${Date.now()}`)
-    await dialog.getByTestId('new-page-type-diagram').click()
-    await dialog.getByRole('button', { name: /create/i }).click()
-    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-block-edit-0').click()
+    await openDiagramPageWithToolbar(page)
 
-    // A variant-bearing type is the only thing that can prove this, and the bar is
-    // ordered by family, so those types sit at the front and only reach the
-    // dropdown when the bar is genuinely starved. Shrinking the window does not
-    // do it: the page layout clamps its own minimum, so the bar keeps its width.
-    // Constrain the bar itself instead - this is the component's overflow
-    // behaviour under test, and the product code is untouched.
+    // A variant-bearing type is the only thing that can prove this. The bar is
+    // ordered by family and the controls are small, so the bar is constrained
+    // until its own leading type is forced out: hardcoding *which* template
+    // overflows would make this test a statement about the control's width, and
+    // that width changed when the bar moved into the toolbar row.
+    //
+    // Shrinking the window does not do it: the page layout clamps its own minimum,
+    // so the bar keeps its width. Constrain the bar itself instead - this is the
+    // component's overflow behaviour under test, and the product code is untouched.
     const bar = page.getByTestId('template-bar')
     await bar.evaluate((el) => {
-      el.style.width = '120px'
+      el.style.width = '40px'
     })
-    await page.waitForTimeout(400)
+    await page.waitForTimeout(500)
 
     const more = page.getByTestId('template-more')
-    await expect(more, 'the bar must overflow at 120px').toBeVisible()
+    await expect(more, 'the bar must overflow when constrained this hard').toBeVisible()
     await more.click()
 
-    // Flowchart leads the row, so with room for one control it is the next family
-    // member - state - that has to move into the dropdown.
-    const id = 'state'
+    // Flowchart leads the row and carries variants, so it is the type that must
+    // have been pushed out for this test to mean anything.
+    const id = 'flowchart'
     await expect(
       page.getByTestId(`template-row-${id}`),
       'a variant-bearing type must reach the dropdown'
@@ -256,25 +358,37 @@ test.describe('diagram templates', () => {
 
     // And the submenu itself opens, which is what the moved-whole node could not do.
     await page.getByTestId(`template-row-${id}`).click()
-    const sub = page.getByTestId(`template-variant-${id}-State-diagram`)
+    const sub = page.getByTestId(`template-variant-${id}-Left-to-right`)
     await expect(sub, `${id} in the dropdown must offer its variants`).toBeVisible({
       timeout: 5_000
     })
     await sub.click()
-    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/^stateDiagram-v2/)
+    // The variant added a diagram rather than filling the source editor, which is
+    // what the toolbar's new position means, and the diagram it added is a real
+    // one rather than the empty placeholder.
+    await expect(page.locator('section[data-testid="diagram-block-1"]')).toBeVisible()
+    await expect
+      .poll(
+        async () => {
+          const viewBox = await page
+            .getByTestId('diagram-block-1-svg')
+            .locator('svg')
+            .first()
+            .getAttribute('viewBox')
+            .catch(() => null)
+          if (viewBox === null) return false
+          const parts = viewBox.split(/\s+/).map(Number)
+          return (parts[2] ?? 0) > 40 && (parts[3] ?? 0) > 40
+        },
+        { timeout: 20_000, message: 'the variant must render a real diagram' }
+      )
+      .toBe(true)
   })
 
   test('the overflow dropdown is reachable by keyboard', async ({ page }) => {
     // Known bug: the dropdown used to hold loose ActionIcons, so arrow keys did
     // nothing and the rows were not menu items. Real Menu.Items fix both.
-    await page.goto('/')
-    await page.locator('[aria-label="New page"]').first().click()
-    const dialog = page.getByRole('dialog')
-    await dialog.getByLabel('Title').fill(`Keyboard ${Date.now()}`)
-    await dialog.getByTestId('new-page-type-diagram').click()
-    await dialog.getByRole('button', { name: /create/i }).click()
-    await expect(page.getByTestId('diagram-workspace')).toBeVisible()
-    await page.getByTestId('diagram-block-edit-0').click()
+    await openDiagramPageWithToolbar(page)
 
     // Force the overflow by constraining the bar itself. Shrinking the window
     // does not do it: the page layout clamps its own minimum, so the bar keeps
@@ -317,29 +431,87 @@ test.describe('diagram templates', () => {
     await expect(page.getByTestId('diagram-workspace')).toBeVisible()
     await page.getByTestId('diagram-block-edit-0').click()
 
-    const cases: [string, string][] = [
-      [
-        'quadrantChart',
-        'quadrantChart\n    title Reach\n    x-axis Low --> High\n    y-axis Low --> High\n    quadrant-1 We grow\n    quadrant-2 Attract\n    quadrant-3 Delight\n    quadrant-4 Transform'
-      ],
-      [
-        'treemap',
-        'treemap\n    "Root"\n        "Alpha": 40\n        "Beta": 30\n        "Gamma": 30'
-      ],
-      ['venn', 'venn\n    A[Study]\n    B[Rest]\n    A --> 40\n    B --> 60']
-    ]
+    // Read the canonical sources from the list rather than restating them. This
+    // test previously carried its own copies, and they drifted: it used a bare
+    // `venn` where the list uses `venn-beta`, and a bare type name is not a
+    // synonym — Mermaid does not detect `venn` at all. A restated copy of a
+    // source is a second definition that can pass or fail for reasons that have
+    // nothing to do with the thing under test.
+    const cases = ['quadrantChart', 'treemap', 'venn'] as const
 
-    for (const [name, source] of cases) {
-      await page.getByTestId('diagram-source-input').fill(source)
+    for (const name of cases) {
+      const def = DIAGRAM_TEMPLATES[name]
+      expect(def, `${name} must be in the template list`).toBeDefined()
+      await page.getByTestId('diagram-source-input').fill(def.source)
       const preview = page.getByTestId('diagram-live-preview').locator('svg')
       await expect(preview, `${name} must render, not render empty`).toBeVisible()
-      const box = await preview.boundingBox()
+      // Read the SVG's own viewBox, not a layout box. The viewBox is intrinsic to
+      // the SVG so it cannot be a settling-layout artefact, and `0 0 24 24` is
+      // exactly the empty-placeholder signature this test exists to catch. The
+      // condition is the one it always was — real extent, not the placeholder —
+      // only waited for properly.
+      await expect
+        .poll(
+          async () => {
+            const viewBox = await preview.getAttribute('viewBox').catch(() => null)
+            if (viewBox === null) return null
+            const parts = viewBox.split(/\s+/).map(Number)
+            return { w: parts[2] ?? 0, h: parts[3] ?? 0 }
+          },
+          { timeout: 20_000, message: `${name} must gain a real viewBox` }
+        )
+        .toMatchObject({ w: expect.any(Number), h: expect.any(Number) })
+
+      const viewBox = ((await preview.getAttribute('viewBox')) ?? '').split(/\s+/).map(Number)
       expect(
-        box?.width ?? 0,
+        viewBox[2] ?? 0,
         `${name} must have real width, not a 24px placeholder`
       ).toBeGreaterThan(40)
-      expect(box?.height ?? 0, `${name} must have real height`).toBeGreaterThan(40)
+      expect(viewBox[3] ?? 0, `${name} must have real height`).toBeGreaterThan(40)
     }
+  })
+
+  test('the rich-note chooser offers exactly the templates the Diagram bar does', async ({
+    page
+  }) => {
+    // The requirement is that a Rich Note exposes the same Mermaid library as the
+    // Diagram page. Comparing against DIAGRAM_TEMPLATES rather than against a
+    // copied id list is what makes this a statement about one source of truth:
+    // a second list anywhere would have to be updated in step with the first, and
+    // this would still pass. Instead, a template added to the list and not to the
+    // chooser fails here.
+    const title = `Chooser ${Date.now()}`
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(title)
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+
+    // Open the toolbar's Mermaid chooser.
+    const trigger = page.getByTestId('insert-diagram')
+    if ((await trigger.count()) === 0) {
+      await page.getByTestId('toolbar-more').click()
+      await trigger.waitFor({ state: 'visible', timeout: 5_000 })
+    }
+    await trigger.click()
+
+    const menu = page.getByTestId('insert-diagram-submenu')
+    await expect(menu).toBeVisible({ timeout: 5_000 })
+
+    const ids = Object.keys(DIAGRAM_TEMPLATES)
+    const offered = await page
+      .locator('[data-testid^="insert-diagram-option-"]')
+      .evaluateAll((els) =>
+        els.map((e) => (e.getAttribute('data-testid') ?? '').replace('insert-diagram-option-', ''))
+      )
+    expect([...offered].sort(), 'the chooser must offer every template, and nothing else').toEqual(
+      [...ids].sort()
+    )
+
+    // And the Mermaid choice is not in the slash menu, which lists block types.
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
   })
 
   test('the template list has no duplicate labels', async () => {

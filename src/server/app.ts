@@ -143,6 +143,42 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   // HTML-serving handlers execute.
   app.use('*', securityHeaders)
 
+  // `Cache-Control` for the JSON API, which otherwise set none at all.
+  //
+  // `secureHeaders` sets five headers but not this one, and `AGENTS.md` §9 lists
+  // `Cache-Control` among the mandatory security headers — so the whole API
+  // surface was an uncovered part of a requirement, not a missing feature.
+  //
+  // Scoped to `/api/*` rather than `*` on purpose:
+  //
+  //  - The SPA document and hashed assets set their own policy in `static.ts`
+  //    (`no-store` for the document, `immutable` for assets). Those are correct and
+  //    opposite, so a blanket rule would either break asset caching or be silently
+  //    undone by it.
+  //  - The API has no such per-resource reasoning. Every response is either page
+  //    content, page metadata, or an error derived from page content, and all of it
+  //    is private to one user on one machine. A browser or intermediary cache that
+  //    stored a `GET /api/pages` response could show it after the user deleted the
+  //    note, or after a failed write, and nothing in the app can correct it.
+  //
+  // Applied *after* `next()` and only when the handler set nothing, so a route with
+  // a deliberate policy keeps it: the attachment routes answer `private, no-cache`
+  // because their content is addressed by an immutable id and revalidation is
+  // meaningful. `c.res.headers.has` is the check, rather than an unconditional set,
+  // so this fills the gap instead of overriding a decision a route already made.
+  //
+  // Registered **before** the Host guard below, not after. That guard answers
+  // without calling `next()`, so anything registered beneath it never runs for a
+  // refused request — and a cached 403 is its own small problem: a browser
+  // holding one would keep rejecting a legitimate request after the user fixed
+  // their hosts file.
+  app.use('/api/*', async (c, next) => {
+    await next()
+    if (!c.res.headers.has('Cache-Control')) {
+      c.header('Cache-Control', 'no-store')
+    }
+  })
+
   // Cross-origin request rejection, for every request. Two independent checks,
   // because they stop two different attacks and neither substitutes for the other:
   //
@@ -177,6 +213,24 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
     await next()
   })
 
+  // `Cache-Control` for the JSON API, which otherwise set none at all.
+  //
+  // `secureHeaders` sets five headers but not this one, and `AGENTS.md` §9 lists
+  // `Cache-Control` among the mandatory security headers — so the whole API
+  // surface was an uncovered part of a requirement, not a missing feature.
+  //
+  // Scoped to `/api/*` rather than `*` on purpose:
+  //
+  //  - The SPA document and hashed assets set their own policy in `static.ts`
+  //    (`no-store` for the document, `immutable` for assets). Those are correct and
+  //    opposite, so a blanket rule would either break asset caching or be silently
+  //    undone by it.
+  //  - The API has no such per-resource reasoning. Every response is either page
+  //    content, page metadata, or an error derived from page content, and all of it
+  //    is private to one user on one machine. A browser or intermediary cache that
+  //    stored a `GET /api/pages` response could show it after the user deleted the
+  //    note, or after a failed write, and nothing in the app can correct it.
+  //
   app.get(HEALTH_PATH, (c) => {
     const timestamp = new Date().toISOString()
     try {

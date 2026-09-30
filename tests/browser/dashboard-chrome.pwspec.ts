@@ -82,7 +82,7 @@ test.describe('Dashboard chrome', () => {
       }
     })
     expect(m).not.toBeNull()
-    expect(m!.gapBelow, 'the active tab must meet the band floor').toBeLessThanOrEqual(1)
+    expect(m?.gapBelow, 'the active tab must meet the band floor').toBeLessThanOrEqual(1)
   })
 
   test('the status bar shows where you are on the dashboard', async ({ page }) => {

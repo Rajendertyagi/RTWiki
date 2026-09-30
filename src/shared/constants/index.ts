@@ -25,11 +25,90 @@ export const MAX_PAGE_JSON_BODY_BYTES = 4 * 1024 * 1024
 // than enforced: no request path read it, and 100 MB is above every ceiling
 // actually enforced, so it could not have changed any reachable outcome.
 export const MAX_SCHEDULE_JSON_BODY_BYTES = 1024 * 1024
+
+/**
+ * The authoritative limit on a Markdown page's **source**, in characters.
+ *
+ * This is the one number the whole import path agrees on. It was previously implicit
+ * in two places that disagreed by an order of magnitude — a 100,000-character ceiling
+ * inside the stored-content schema, and a 1,000,000-*byte* ceiling in the sidebar's
+ * Markdown picker. A ~150 KB file passed the picker, was posted in full, and was
+ * refused by the server with a message that named neither the limit nor the file. The
+ * user could start an import the backend was always going to reject.
+ *
+ * Characters, not bytes, because characters are what the schema validates and what the
+ * user sees in an editor. The two are related but not interchangeable: 100,000
+ * characters is at most 400 KB of UTF-8 and at least 100 KB of ASCII.
+ *
+ * Enforced at the schema (`MarkdownPageContentSchema`) and therefore at **every**
+ * server write path — create, update and autosave alike. It used to be enforced on
+ * create only, so autosave could push a note past the point its own editor could read
+ * it back.
+ */
+export const MAX_MARKDOWN_SOURCE_CHARS = 100_000
+
+/**
+ * Largest Markdown file the picker will *read into memory*.
+ *
+ * A transport concern, distinct from `MAX_MARKDOWN_SOURCE_CHARS` above and deliberately
+ * larger: 100,000 characters cannot exceed 400 KB of UTF-8, so anything past this is
+ * certainly over the content limit, and refusing it before decoding avoids handing a
+ * 50 MB file to `FileReader` for a check that was always going to fail.
+ */
+export const MARKDOWN_IMPORT_MAX_FILE_BYTES = 1024 * 1024
 // Live-preview rebuild delay for editable HTML pages: applied after the last
 // keystroke so typing never rebuilds the sandboxed document per keystroke.
 export const PREVIEW_REBUILD_DEBOUNCE_MS = 800 as const
 export const PROVISIONAL_AUTOSAVE_DEBOUNCE_MS = 2000 as const
 export const PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024
+
+/**
+ * Ceiling on the **uncompressed** size of a document's ZIP container.
+ *
+ * `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` above bounds what *arrives*, which is the wrong
+ * bound for a ZIP-backed format: a DOCX, XLSX, PPTX, ODT, ODS, ODP or EPUB is a compressed
+ * archive, so a file comfortably inside the upload limit can ask the parser to materialise
+ * far more than it. The classic case is a run of identical bytes — a repeated string, or an
+ * empty entry a million rows tall — which costs almost nothing to store and everything to
+ * expand.
+ *
+ * RTWiki previously took whatever `officeparser`'s own default happened to be, which is a
+ * library's internal default rather than a decision recorded anywhere in this project. It is
+ * now stated here, so a change to it is a deliberate act with a diff and a review, and so
+ * the SECURITY.md claim about limits applying *before* parsing is backed by a number.
+ *
+ * The value matches the library default, deliberately: it is set explicitly rather than
+ * inherited so RTWiki's ceiling does not move silently when the dependency's does. 512 MB of
+ * uncompressed content is far above any real note, and the ceiling is reached by the same
+ * ratio no legitimate document approaches.
+ */
+export const DOCUMENT_MAX_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
+
+/**
+ * Ceiling on the number of entries in a document's ZIP container.
+ *
+ * The second half of the same guard, and the one that catches an archive built from many
+ * small files rather than one large one — a shape the byte ceiling above never sees, because
+ * thousands of empty or tiny entries compress to almost nothing.
+ *
+ * Also stated rather than inherited; the library default is the same figure.
+ */
+export const DOCUMENT_MAX_ZIP_ENTRIES = 10_000
+
+/**
+ * Ceiling on table cells materialised from a single document.
+ *
+ * Distinct from the ZIP limits above, and they cannot catch it: ODF encodes runs of identical
+ * cells as `table:number-columns-repeated` rather than repeating the markup, so a few hundred
+ * bytes of XML can request an arbitrary number of nodes — and because rows and columns
+ * multiply, a row repeat times a column repeat compounds it. The archive is tiny *before*
+ * decompression, so this expansion happens while the AST is built, long after the byte and
+ * entry ceilings have both been satisfied.
+ *
+ * On reaching it the parser warns and returns what it has rather than refusing the document,
+ * so a genuinely enormous sheet still yields usable output.
+ */
+export const DOCUMENT_MAX_TABLE_CELLS = 1_000_000
 // Ceiling on total pixels (width x height) of an uploaded image, enforced at
 // ingest from the file's own header. This bounds what the browser must decode
 // when the note is opened: 50 MP is about 8000x6000, which comfortably admits a
@@ -74,11 +153,13 @@ export const DEBUG_LOG_MAX_CONSECUTIVE_FAILURES = 5 as const
 // preservation payload is never indexed or surfaced as readable text.
 export const UNSUPPORTED_BLOCK_MARKER = '[unsupported block preserved below]' as const
 
-// Starter Mermaid sources shared by the rich-editor insertion entries and the
-// dedicated Diagram / Mind Map page starters. Defined exactly once.
+// Starter Mermaid source shared by the rich-editor insertion entries and the
+// dedicated Diagram page starter. Defined exactly once.
+//
+// A mind map needs no starter of its own: Mermaid's `mindmap` is one of the
+// templates in the shared template list, so it is inserted by choosing it rather
+// than by a second hard-coded string.
 export const DIAGRAM_STARTER_SOURCE = 'graph TD\n    A[Start] --> B[End]' as const
-export const MINDMAP_STARTER_SOURCE =
-  'mindmap\n  root((Main topic))\n    Topic A\n    Topic B' as const
 
 // Study timetable / calendar (Slice 1). Single source of truth for the allowed
 // event colors and default notification preferences. Colors are Mantine theme

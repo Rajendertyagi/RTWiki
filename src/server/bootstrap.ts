@@ -9,6 +9,7 @@ import {
   DEBUG_LOG_MAX_ROTATED_FILES
 } from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
+import { reclaimUnreferencedAttachments } from './attachments/attachment-retention.js'
 import { sweepPartialBackups } from './backup/backup-service.js'
 import { type BackupSchedule, startBackupSchedule } from './backup/schedule.js'
 import { joinPaths, type RuntimePaths, resolveRuntimePaths } from './config/index.js'
@@ -304,6 +305,42 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   // file sitting where a backup belongs. Runs after migrations, which need the
   // write lock first.
   sweepPartialBackups(dataDir)
+
+  // Reclaims attachments no document refers to (KNOWN_BUGS item 6). Runs once at
+  // startup rather than on a timer: the leak only grows when a note is deleted, and
+  // a startup pass costs one table scan, whereas a timer would keep re-scanning for
+  // a condition that has not changed. The 30-day default means an image deleted
+  // along with its note survives a month before anything touches it.
+  //
+  // Reported rather than thrown. A pass that cannot reclaim everything must not
+  // stop the application from starting — the data is merely still there, which is
+  // the same state as before this ran.
+  try {
+    const reclaimed = reclaimUnreferencedAttachments(db)
+    if (reclaimed.reclaimed.length > 0 || reclaimed.failed.length > 0) {
+      logger.info('Reclaimed unreferenced attachments', {
+        event: 'startup',
+        action: 'reclaim_attachments',
+        reclaimed: reclaimed.reclaimed.length,
+        bytes: reclaimed.bytes,
+        failed: reclaimed.failed.length,
+        tooYoung: reclaimed.tooYoung.length
+      })
+    }
+    for (const failure of reclaimed.failed) {
+      logger.warn('Could not reclaim an unreferenced attachment', {
+        event: 'startup',
+        action: 'reclaim_attachments',
+        detail: failure.reason
+      })
+    }
+  } catch (err) {
+    logger.warn('Attachment reclaim pass failed', {
+      event: 'startup',
+      action: 'reclaim_attachments',
+      detail: err instanceof Error ? err.message : String(err)
+    })
+  }
 
   // 1. Create coordinator with late-bound server-stop capability.
   let serverRef: Awaited<ReturnType<typeof Bun.serve>> | null = null

@@ -12,6 +12,11 @@ import {
   normaliseMimeType,
   signaturelessDocumentFormatFor
 } from '../../shared/attachments/document-formats.js'
+import {
+  DOCUMENT_MAX_TABLE_CELLS,
+  DOCUMENT_MAX_UNCOMPRESSED_BYTES,
+  DOCUMENT_MAX_ZIP_ENTRIES
+} from '../../shared/constants/index.js'
 
 /**
  * Identifies an uploaded document and extracts its text for the search index.
@@ -34,8 +39,95 @@ import {
 /** Why an upload was refused. */
 export type DocumentRejectionReason = 'unsupported_type' | 'empty' | 'extract_failed'
 
+/**
+ * Why a recognised container could not be opened.
+ *
+ * A diagnostic, not a fourth rejection reason: both values produce the same user-facing
+ * refusal, because both are answered by "this file could not be opened". The distinction
+ * earns its place by making the resource guard **observable** — without it, "a bomb was
+ * refused" and "the parser did not recognise my hand-built fixture" are indistinguishable,
+ * and a test asserting only that a bomb is refused would pass whether or not any limit was
+ * ever configured.
+ */
+export type DocumentRefusalDetail = 'limit_exceeded' | 'malformed'
+
+/**
+ * How a container parse ended.
+ *
+ * Three outcomes, not two, and the third is the reason this is a type rather than a
+ * `null`: a parser that refuses a ZIP because it would expand past the ceiling is not
+ * saying "this is not a document", and reporting it that way tells a user their valid
+ * DOCX is an unsupported file type. Keeping the outcomes apart lets the caller answer
+ * each for what it is.
+ */
+type ContainerParse =
+  | { outcome: 'parsed'; type: string | null; text: string }
+  /** The parser did not recognise a document here. See the note on the old `null`. */
+  | { outcome: 'not_a_document' }
+  /** A real container was recognised and then refused. */
+  | { outcome: 'refused'; detail: DocumentRefusalDetail }
+
 /** Provisional cap on extracted text per document, mirroring the page cap. */
 export const DOCUMENT_TEXT_MAX_CHARS = 100_000 as const
+
+/**
+ * Resource ceilings applied to a document parse.
+ *
+ * Named as a type because the shape is the library's, but the *values* are RTWiki's.
+ */
+export interface DocumentResourceLimits {
+  maxUncompressedBytes: number
+  maxZipEntries: number
+  maxTableCells: number
+}
+
+/**
+ * The ceilings every production parse uses.
+ *
+ * Frozen so nothing downstream can weaken them by assignment, and exposed as a default
+ * parameter rather than read at each call site, so there is exactly one place a limit is
+ * written and exactly one place a caller could raise it deliberately.
+ */
+export const DOCUMENT_RESOURCE_LIMITS: Readonly<DocumentResourceLimits> = Object.freeze({
+  maxUncompressedBytes: DOCUMENT_MAX_UNCOMPRESSED_BYTES,
+  maxZipEntries: DOCUMENT_MAX_ZIP_ENTRIES,
+  maxTableCells: DOCUMENT_MAX_TABLE_CELLS
+})
+
+/**
+ * The parser's own codes for a refusal caused by a ceiling being reached.
+ *
+ * Matched on the structured code rather than on message text: the parser brands every
+ * error it raises with `officeIssue.code`, and that is the documented way to branch on it.
+ * A truncated archive raises a *different* code, so the two are not conflated — a
+ * malformed file is not reported as too large, and a genuine bomb is not reported as
+ * merely broken.
+ */
+const LIMIT_EXCEEDED_CODES = new Set(['ZIP_SIZE_LIMIT_EXCEEDED', 'ZIP_ENTRY_COUNT_LIMIT_EXCEEDED'])
+
+/**
+ * Whether the bytes *are* a document container, judged from their first four bytes.
+ *
+ * This exists because a thrown parse error cannot distinguish two very different things:
+ * "this is a DOCX I recognised and could not open" and "this is a PNG, which is not a
+ * document at all". Both make the parser throw. Treating the throw as a refusal would refuse
+ * every image upload in the application.
+ *
+ * So the evidence is taken from the bytes instead, on the same principle the rest of this
+ * module follows — the declared type and the parser's opinion of the file are both claims,
+ * and the leading magic number is the only thing here that is not. ZIP covers DOCX, XLSX,
+ * PPTX, ODT, ODS, ODP, ODG and EPUB, all of which are `PK\x03\x04`; PDF is `%PDF`.
+ *
+ * RTF is deliberately absent: it is a text format with no signature, so RTWiki treats it
+ * the way it treats `.txt` — recognised from the reported type, never from its bytes — and
+ * there is no magic number to check.
+ */
+function looksLikeAContainer(bytes: Uint8Array): boolean {
+  if (bytes.length < 4) return false
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
+  const isPdf = bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
+  return isZip || isPdf
+}
 
 /**
  * How many leading bytes are read for format detection.
@@ -53,7 +145,7 @@ export type DocumentInspection =
       /** Readable text, for the search index. Empty when none could be read. */
       text: string
     }
-  | { ok: false; reason: DocumentRejectionReason }
+  | { ok: false; reason: DocumentRejectionReason; detail?: DocumentRefusalDetail }
 
 /**
  * Parses an upload far enough to know what it is and what it says.
@@ -62,10 +154,16 @@ export type DocumentInspection =
  * a document the user cannot search for, which for a study tool is most of its
  * value. A failure is therefore reported as its own reason rather than being
  * quietly reduced to "stored, but unfindable".
+ *
+ * `limits` exists so a test can prove the resource ceilings are actually wired to the
+ * parser rather than inherited: the real ceiling is 512 MB of uncompressed content, and a
+ * fixture that reaches it would have to *be* 512 MB. The production path passes nothing
+ * and therefore cannot accidentally be given a weaker guard.
  */
 export async function inspectDocumentUpload(
   bytes: Uint8Array,
-  reportedType?: string | null
+  reportedType?: string | null,
+  limits: Readonly<DocumentResourceLimits> = DOCUMENT_RESOURCE_LIMITS
 ): Promise<DocumentInspection> {
   if (bytes.length === 0) return { ok: false, reason: 'empty' }
 
@@ -79,12 +177,32 @@ export async function inspectDocumentUpload(
   // reached when the bytes turned out *not* to be a recognisable document. That
   // inverts the obvious order deliberately, and it is the reason a mislabelled
   // upload is stored as what it actually is.
-  const parsed = await tryParseContainer(bytes)
-  if (parsed) {
+  const parsed = await tryParseContainer(bytes, limits)
+
+  if (parsed.outcome === 'parsed') {
     const format = acceptedDocumentFormatByExt(parsed.type)
     if (!format || format.signatureless) return { ok: false, reason: 'unsupported_type' }
     return { ok: true, format, text: parsed.text }
   }
+
+  // A container that was recognised and then refused is not "not a document". Falling
+  // through to the signature-less branch would consult the *reported* type for bytes that
+  // are demonstrably a ZIP or a PDF — which is the same error, in a milder form, as the
+  // ordering inversion above: letting a claim outrank evidence. It is refused here
+  // instead, and as `extract_failed` rather than `unsupported_type`, because the user's
+  // file type is supported; it is this file that could not be opened.
+  if (parsed.outcome === 'refused')
+    return { ok: false, reason: 'extract_failed', detail: parsed.detail }
+
+  // ## Why the detail is not surfaced to the user
+  //
+  // Reaching a decompression ceiling and finding a truncated archive are both "this file
+  // could not be opened", and both are refused identically. A separate user-facing reason
+  // would say *why* a limit tripped, which tells a user nothing they can act on about a
+  // file they can only fix by making it smaller. The distinction is not discarded: it
+  // travels on the rejection as `detail`, which is what makes the guard testable — a
+  // refusal asserted without it would not distinguish a tripped ceiling from a parser that
+  // simply did not recognise the bytes.
 
   // Only now may the reported type be consulted, and only for a format the
   // allowlist itself marks as having no signature. That is what stops this path
@@ -106,16 +224,26 @@ export async function inspectDocumentUpload(
 }
 
 /**
- * Identifies a real container and reads its text, or returns `null` when the
- * bytes are not a container this application accepts.
+ * Identifies a real container and reads its text, or reports why it could not.
  *
- * `null` is ambiguous on purpose: it means "the parser did not recognise a
- * document here", which covers both an unrecognised binary and a genuinely
- * signature-less text file. The caller resolves the two.
+ * The three outcomes are distinguished because the caller must treat them
+ * differently: an unrecognised buffer may still be a signature-less text file
+ * (which is accepted on its reported type), while a recognised container the
+ * parser *refused* is a failed upload and must not be downgraded to either
+ * "unsupported type" or a text read.
+ *
+ * ## Resource ceilings
+ *
+ * `decompressionLimits` is passed on every parse, and it is the only thing standing
+ * between a small upload and an unbounded allocation. `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES`
+ * bounds what arrives; it does not bound what a compressed archive asks the parser to
+ * expand it into. Both ZIP-backed formats and PDF are affected, and a repeated byte
+ * run is the cheap way to cross the gap.
  */
 async function tryParseContainer(
-  bytes: Uint8Array
-): Promise<{ type: string | null; text: string } | null> {
+  bytes: Uint8Array,
+  limits: Readonly<DocumentResourceLimits>
+): Promise<ContainerParse> {
   // The format is detected here, by `file-type`, and handed to the parser as a
   // hint rather than letting the parser detect it for itself.
   //
@@ -134,15 +262,40 @@ async function tryParseContainer(
 
   let ast: unknown
   try {
-    ast = detected
-      ? await parseOffice(bytes, { fileType: detected } as never)
-      : await parseOffice(bytes)
-  } catch {
+    ast = await parseOffice(bytes, {
+      ...(detected ? { fileType: detected } : {}),
+      decompressionLimits: {
+        maxUncompressedBytes: limits.maxUncompressedBytes,
+        maxZipEntries: limits.maxZipEntries,
+        maxTableCells: limits.maxTableCells
+      }
+    } as never)
+  } catch (err) {
     // The parser's message names the format it guessed at. That is not something
     // to show a user and must never be echoed back as an error.
-    return null
+    //
+    // The magic-number check is what stops this from firing on every image: a PNG also
+    // makes the parser throw, and reporting that as "a document I could not open" would
+    // refuse every image in the application.
+    if (!looksLikeAContainer(bytes)) return { outcome: 'not_a_document' }
+    return { outcome: 'refused', detail: refusalDetail(err) }
   }
-  return { type: detectOfficeType(ast), text: await readText(ast) }
+  return { outcome: 'parsed', type: detectOfficeType(ast), text: await readText(ast) }
+}
+
+/**
+ * Why the parser refused a container it had recognised.
+ *
+ * Read from the structured `officeIssue` the parser attaches to its errors, and read
+ * defensively: the property is not part of any type RTWiki can import, and a value of
+ * an unexpected shape must answer "malformed" rather than throw inside an error path.
+ */
+function refusalDetail(err: unknown): DocumentRefusalDetail {
+  if (typeof err !== 'object' || err === null) return 'malformed'
+  const issue = (err as { officeIssue?: unknown }).officeIssue
+  if (typeof issue !== 'object' || issue === null) return 'malformed'
+  const code = (issue as { code?: unknown }).code
+  return typeof code === 'string' && LIMIT_EXCEEDED_CODES.has(code) ? 'limit_exceeded' : 'malformed'
 }
 
 /**

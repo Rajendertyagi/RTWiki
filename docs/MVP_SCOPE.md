@@ -44,7 +44,7 @@ The MVP implements every requirement in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIR
 
 | Area | Deliverable |
 |------|------------|
-| Full-text search | SQLite FTS5-powered local search across all page content |
+| Full-text search | Local full-text search across all page content, over a derived-text index. The mechanism is `LIKE` matching on the `search_index` table, not FTS5 — see [ADR-020](adr/ADR-020-search-and-conversion-boundary.md); adopting FTS5 remains an open, separate decision |
 | Backup | Single-archive workspace backup with metadata |
 | Restore | Validated backup restore |
 | Error handling | Centralized error boundaries, user-friendly error messages |

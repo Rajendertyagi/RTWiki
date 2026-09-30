@@ -1,13 +1,12 @@
 import type { PageType } from '@rtwiki/shared/contracts/pages'
-import { IconFileText, IconGitFork, IconLetterM, IconNetwork, IconWorld } from '@tabler/icons-react'
+import { IconFileText, IconLetterM, IconNetwork, IconWorld } from '@tabler/icons-react'
 import type { JSX } from 'react'
 
 const ICONS: Record<PageType, typeof IconFileText> = {
   rich: IconFileText,
   html: IconWorld,
   markdown: IconLetterM,
-  diagram: IconNetwork,
-  mindmap: IconGitFork
+  diagram: IconNetwork
 }
 
 /** Single React source of truth for the small page-type icon in chrome. */

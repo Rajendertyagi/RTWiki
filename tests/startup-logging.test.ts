@@ -145,6 +145,34 @@ describe('runtime lifecycle logging', () => {
     cleanup(dir)
   })
 
+  it('does not wait for a keypress when there is no console to wait on', async () => {
+    // The fix for "a double-clicked RTWiki.exe closes the window its own error
+    // message is printed in" holds the process open — guarded on stdin being a TTY.
+    //
+    // This test IS the non-TTY case, because a test runner has no console. So it
+    // asserts the guard from the side that matters for CI: the call returns. If
+    // the direction of the guard were ever reversed, this suite would hang
+    // instead of failing, which is why the assertion is written as a race rather
+    // than a plain `await` — a hang inside a test is a timeout with no message
+    // about which expectation was being set up.
+    const dir = makeTempDir()
+    const logPath = join(dir, 'logs', 'rtwiki.log')
+    const started = Date.now()
+    await Promise.race([
+      reportFatalStartupError(new Error('no console'), logPath),
+      // A guard that failed to return would leave the promise pending forever, so
+      // the race is what turns "hung" into "failed".
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('fatal report blocked on a non-TTY stdin')), 5_000)
+      )
+    ])
+    expect(Date.now() - started).toBeLessThan(5_000)
+    // And it still reported, which is the part that must not be traded away for
+    // the wait: the log write happens before the wait is even considered.
+    expect(readEvents(logPath)[0]?.event).toBe('startup_fatal')
+    cleanup(dir)
+  })
+
   it('module import does not create development log files', async () => {
     const target = resolveRuntimePaths().logPath
     const existedBefore = existsSync(target)

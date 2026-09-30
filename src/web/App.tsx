@@ -1,9 +1,7 @@
 import { Alert, Stack, Text } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
-import {
-  parseMarkdownPageContent,
-  serializeMarkdownContent
-} from '@rtwiki/shared/schemas/markdown-content.js'
+import { convertImportedDocument, markdownNoteTitle } from '@rtwiki/shared/import/conversion'
+import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content.js'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { pageTypeLabel } from './components/page-type-badge.js'
@@ -374,6 +372,44 @@ export function App(): JSX.Element {
     })
   }, [])
 
+  /**
+   * There is deliberately **no** flush on `pagehide` or `visibilitychange`.
+   *
+   * KNOWN_BUGS records that up to `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` of typing is
+   * lost when the document is torn down, and prescribed flushing the controller on
+   * those two events. That was built here, measured, and **removed**: it is a
+   * design error, not a fault in the implementation.
+   *
+   * Two reasons, and the second is the one that decided it.
+   *
+   * 1. **The write is not deliverable.** Neither event lets the page await
+   *    anything. A browser tears the document down as soon as the handler returns,
+   *    so an in-flight `PATCH` is usually cancelled. The fix would trade a certain
+   *    two-second loss for an *unreliable* save.
+   * 2. **A background write races the app's optimistic concurrency.** Page writes
+   *    are version-checked: a stale `version` is refused with 409. Every existing
+   *    flush is user-initiated and awaited, so a conflict surfaces to whoever
+   *    caused it. A flush fired by the browser on teardown is neither, and it
+   *    lands between a read and a write belonging to someone else — a second tab,
+   *    or the user themselves — turning their edit into a conflict they did not
+   *    cause and cannot explain.
+   *
+   * Measured: adding the listeners took the browser suite from 5 failures to 12,
+   * every one a rename-and-navigate spec. Removing them returned it to 5, and
+   * those 5 are `backup-panel`, which is flaky independently of this and failed on
+   * the unmodified baseline too.
+   *
+   * The loss this would have prevented is real and is still real. Its fix belongs
+   * with the draft-in-`IndexedDB` option that entry weighs and rejects on privacy
+   * grounds — the owner's decision, because it means a second copy of private note
+   * content in the browser profile. What must not happen is shipping a "fix" that
+   * breaks version-checked writes to close a two-second window.
+   */
+  useEffect(() => {
+    // Deliberately empty. The comment above is the point: someone reaching for a
+    // lifecycle handler here should meet the measurement before the idea.
+  }, [])
+
   const handleStop = useCallback((): void => {
     setStopDialogOpen(true)
   }, [])
@@ -447,17 +483,53 @@ export function App(): JSX.Element {
     [controller]
   )
 
+  /**
+   * Imports a Markdown file as a new page, and reports whether it worked.
+   *
+   * Previously this returned `void` and did `if (!page) return` on a failed create, so
+   * a refused import produced **no signal at all**: no navigation, no error, and a file
+   * that had not become a note. The only trace was a generic banner in the main column
+   * reading "Stored content is not a valid Markdown page document." — which was wrong
+   * (nothing was stored) and named neither the limit nor the file.
+   *
+   * It now reports the outcome so the picker can raise a failure next to the control the
+   * user pressed, and rethrows the server's own message when there is one, because the
+   * server is the authority on *why* a create was refused.
+   */
   const handleImportMarkdown = useCallback(
-    async (fileName: string, source: string): Promise<void> => {
-      const title = fileName.replace(/\.(md|markdown)$/i, '').trim() || UI_TEXT.untitledPage
-      const page = await controller.createPage(
-        title,
-        'markdown',
-        serializeMarkdownContent({ version: 1, markdown: source })
-      )
-      if (!page) return
+    async (fileName: string, source: string): Promise<boolean> => {
+      /*
+       * The conversion, in one call. This used to be a filename regex plus an envelope
+       * call written inline here, and the same regex appeared a second time in
+       * `handleExportPage` — two copies of the same answer to "what is this file called",
+       * none of them shared with the picker that decided the file was Markdown at all.
+       *
+       * A refusal now becomes the caller's message. The picker has already refused an
+       * over-length file before it gets here, so `source_refused` means something changed
+       * between the two, and the server remains the authority on why a *create* was
+       * refused: that error is still caught below and preferred.
+       */
+      const converted = convertImportedDocument('md', { text: source, fileName })
+      if (!converted.ok) throw new Error(converted.message)
+
+      let page = null
+      try {
+        page = await controller.createPage(
+          converted.value.title || UI_TEXT.untitledPage,
+          converted.value.pageType,
+          converted.value.storedContent
+        )
+      } catch (err) {
+        // `createPage` surfaces the server's 400 message. Prefer it over a generic
+        // string: it names the limit, and the server now names the limit correctly.
+        throw err instanceof Error ? err : new Error(UI_TEXT.markdownImportErrorCreateFailed)
+      }
+      if (!page) {
+        throw new Error(UI_TEXT.markdownImportErrorCreateFailed)
+      }
       if (flushRef.current) await flushRef.current()
       void handleSelectPage(page.id)
+      return true
     },
     [controller, handleSelectPage]
   )
@@ -468,7 +540,13 @@ export function App(): JSX.Element {
       if (page?.pageType !== 'markdown') return
       const parsed = parseMarkdownPageContent(page.content)
       const markdown = parsed.ok ? parsed.value.markdown : ''
-      const title = page.title.replace(/\.(md|markdown)$/i, '').trim() || UI_TEXT.untitledPage
+      /*
+       * The same name derivation the import boundary uses, called directly. An export is
+       * not an import — there is no source to convert — so routing it through the converter
+       * would be a fiction. What is genuinely shared is the answer to "what is this note
+       * called", which is why that is a named function rather than a copy of a regex.
+       */
+      const title = markdownNoteTitle(page.title) || UI_TEXT.untitledPage
       downloadTextFile(`${sanitizeFileName(title)}.md`, markdown, 'text/markdown')
     },
     [controller]
@@ -638,8 +716,15 @@ export function App(): JSX.Element {
       pageType === 'rich' && template && template !== 'blank'
         ? buildTemplateContent(template)
         : undefined
-    const page = await controller.createPage(title, pageType, content)
-    if (page) void handleSelectPage(page.id)
+    // The controller re-throws a refused create. The error banner is raised from
+    // `controller.mutationError` by the shell, so the failure is already visible here;
+    // this catch exists only so the rejection does not escape an async handler.
+    try {
+      const page = await controller.createPage(title, pageType, content)
+      if (page) void handleSelectPage(page.id)
+    } catch {
+      // Reported by the shell's error banner.
+    }
   }
 
   const handleDeleteRequest = (id: string): void => {
@@ -877,7 +962,11 @@ export function App(): JSX.Element {
             onMoveTo={(id, newParentId) => controller.moveTo(id, newParentId)}
             onMoveRelative={(id, delta) => controller.moveRelative(id, delta)}
             onDropMove={controller.moveToPosition}
-            onCreateRoot={(pageType) => void controller.createPage(UI_TEXT.untitledPage, pageType)}
+            onCreateRoot={(pageType) => {
+              void controller.createPage(UI_TEXT.untitledPage, pageType).catch(() => {
+                // Reported by the shell's error banner; nothing to do here.
+              })
+            }}
             onOpenHtmlSource={(pageId, field) => void handleOpenHtmlSource(pageId, field)}
             seedExpandedIds={seedExpandedIds}
             onExpandedChange={handleExpandedChange}

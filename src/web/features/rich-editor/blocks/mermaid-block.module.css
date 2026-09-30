@@ -1,37 +1,83 @@
+/*
+ * The diagram block's surface.
+ *
+ * These are the Diagram page's own tokens (`--rtwiki-pane`, `--rtwiki-border`), not
+ * Mantine's. The two surfaces that show a diagram had drifted apart: this block was
+ * `var(--mantine-color-body)` with a `var(--mantine-color-default-border)` edge, which
+ * in light mode is a **white block on a white canvas** separated only by a hairline,
+ * while the Diagram page's card is the app's pane grey. Same content, two different
+ * surfaces, which is what "the note and the diagram page look different" was.
+ *
+ * The app ramp is the single source for surface colours (`src/web/theme/registry.ts`),
+ * so both surfaces move together when the theme or the colour scheme changes.
+ */
+/*
+ * The block's surface.
+ *
+ * **No border and no background.** A note's diagram sits on the page the way its text
+ * does, rather than in a raised card. The border was never load-bearing — its only
+ * recorded reason was to match the Diagram page's card, and the standalone reference
+ * this was built from has no frame either. A diagram that draws its own box (flowcharts
+ * do) inside a second drawn box reads as a picture-in-a-picture and the diagram stops
+ * belonging to the note.
+ *
+ * `overflow: hidden` is kept, and load-bearing: the size-preset chip and the corner grip
+ * are positioned relative to this element, and anything hanging past it must be clipped
+ * rather than bleeding over the surrounding text. It was also what silently cut a pair
+ * of experimental side grips in half.
+ */
 .previewPane {
   position: relative;
   width: 100%;
   padding: var(--mantine-spacing-xs);
   border-radius: var(--mantine-radius-md);
-  border: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
+  overflow: hidden;
 }
 
+/*
+ * The floating control cluster.
+ *
+ * Opaque rather than dimmed to 0.7 until hover: the Diagram page's actions sit in the
+ * card's bar at full strength, and a control that is hard to see until the pointer
+ * arrives is a control people do not find. The translucency is kept for the resting
+ * state, where it should not fight the diagram underneath.
+ */
 .previewToolbar {
   position: absolute;
   top: 4px;
   right: 4px;
-  z-index: 2;
+  /*
+   * Above the diagram's own view controls, which are z-index 3 in
+   * `diagram-view.module.css`. A short, wide diagram leaves no room for both this
+   * toolbar and a 54px control pad — a mind map renders in roughly 100px of height —
+   * and the two overlap there. Geometry cannot separate them at that size, so stacking
+   * does. Measured on screen before this change: the pad's pan-right button was sitting
+   * on top of the edit button, which is why clicking "edit" timed out and the pad looked
+   * painted under the top of the block.
+   */
+  z-index: 5;
   padding: 2px 4px;
   border-radius: var(--mantine-radius-sm);
-  background: color-mix(in srgb, var(--mantine-color-body) 80%, transparent);
-  opacity: 0.7;
+  background: color-mix(in srgb, var(--rtwiki-pane, var(--mantine-color-body)) 88%, transparent);
 }
 
 .previewPane:hover .previewToolbar,
 .previewToolbar:focus-within {
-  opacity: 1;
+  background: var(--rtwiki-pane, var(--mantine-color-body));
 }
 
+/*
+ * The block's label, matching the Diagram page's block label: sentence case, the app's
+ * muted colour, no letterspacing. The uppercase micro-label was a third visual language
+ * for the same idea, and it was the loudest thing on the block.
+ */
 .caption {
   position: absolute;
   top: 6px;
   left: 8px;
-  z-index: 2;
-  color: var(--mantine-color-dimmed);
+  z-index: 5;
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   pointer-events: none;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .editButton {
@@ -43,7 +89,23 @@
   opacity: 1;
 }
 
-/* Scroll container for the rendered diagram; never clips the SVG. */
+/*
+ * The wrapper around the rendered SVG. A block-level scroller; the diagram is centred
+ * by `margin: 0 auto` on the SVG itself, which is what the Diagram page does too.
+ *
+ * Centring was checked rather than assumed: a flex wrapper was tried here as well,
+ * on the theory that this was left-aligned while the Diagram page centred, and it
+ * changed nothing ΓÇö measured gaps were identical with and without it, because
+ * `margin: 0 auto` already does the work. It was removed rather than left in as
+ * decoration.
+ *
+ * `overflow-x: auto` remains for the **unsized** case: a block with no stored size is
+ * drawn at the diagram's natural size, and one narrower than its diagram has to scroll
+ * rather than be squeezed. That is a real difference from the Diagram page and is
+ * deliberate.
+ *
+ * **A block with a stored size scales instead.** See `.sizeContainerSized` below.
+ */
 .previewScroll {
   width: 100%;
   overflow-x: auto;
@@ -60,21 +122,53 @@
   position: relative;
   max-width: 100%;
   min-width: 0;
-  /* Drag-resized dimensions arrive as custom properties; the box lives here. */
-  width: var(--block-width, auto);
-  height: var(--block-height, auto);
+  /* Drag-resized dimensions arrive as custom properties; the box lives here.
+   *
+   * An in-flight drag is published as `--block-width-live` / `--block-height-live` on
+   * an ancestor and inherits down, taking precedence over the stored size. It has to
+   * reach this element at all because this element is capped to `max-width: 100%` of
+   * that ancestor: when the ancestor is a flex item in a wrapping row, a container
+   * that can grow on its own is not enough, and the drag tracks only the vertical
+   * axis and snaps to the dragged width on release.
+   *
+   * Backwards compatible ΓÇö only a drag sets the live properties, so both surfaces
+   * (rich note and Diagram page) resolve to the stored size exactly as before. */
+  width: var(--block-width-live, var(--block-width, auto));
+  height: var(--block-height-live, var(--block-height, auto));
 }
 
+/* The size presets, shown on hover.
+ *
+ * Offset 30px from the top, not 2px, so they sit **below** a block's own action
+ * row rather than on top of it. Both surfaces that use this container put a
+ * toolbar of controls at the top of the block ΓÇö the Diagram page's card and the
+ * rich note's block wrapper ΓÇö and at `top: 2px` the presets were drawn directly
+ * over the first few of those buttons, so hovering a block hid its own controls
+ * behind a second set. 30px clears a ~26px padded action row with a small gap.
+ *
+ * Left offset is unchanged. */
 .sizePresets {
   position: absolute;
-  top: 2px;
+  top: 30px;
   left: 4px;
   z-index: 3;
   display: flex;
   gap: 2px;
   padding: 1px 3px;
   border-radius: var(--mantine-radius-sm);
-  background: color-mix(in srgb, var(--mantine-color-body) 80%, transparent);
+  /*
+   * A real surface, opaque, with an edge and a shadow.
+   *
+   * This chip used to be `--rtwiki-pane` at 80% opacity — a tint of the very
+   * background it sits on. It was therefore invisible as a *button row*: measured on
+   * screen, five bar glyphs floating on the block with nothing behind them, reading as
+   * stray marks rather than as controls. A control you cannot tell is a control, does
+   * not get used. `--rtwiki-elevated` plus a hairline is the same treatment the
+   * Diagram page's own action bar uses.
+   */
+  background: var(--rtwiki-elevated, var(--mantine-color-body));
+  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.1);
   opacity: 0;
 }
 
@@ -83,6 +177,15 @@
   opacity: 1;
 }
 
+/*
+ * The corner grip.
+ *
+ * One handle in the bottom-right corner, driving both axes at once. It sits *on* the
+ * corner rather than overhanging it, because the block's frame clips anything extending
+ * past it (`overflow: hidden` on `.previewPane`). A pair of side grips positioned at
+ * `left/right: -4px` was sliced in half by that clip, and a handle you can only half see
+ * is a handle a person cannot find.
+ */
 .resizeHandle {
   position: absolute;
   right: 0;
@@ -94,7 +197,7 @@
   width: 18px;
   height: 18px;
   cursor: nwse-resize;
-  color: var(--mantine-color-dimmed);
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   border-radius: var(--mantine-radius-xs) 0 0 0;
   touch-action: none;
   opacity: 0.6;
@@ -116,10 +219,56 @@
   width: 100%;
 }
 
-/* Fit-to-width (default): SVG scales to the host. */
+/*
+ * A block with a stored **height** must not crop its diagram.
+ *
+ * The Diagram page has always scaled to fit (`.blockCanvasSized` in
+ * `mermaid-workspace.module.css`) and a note did not, so the box shrank to its stored
+ * height while the diagram kept its natural size: measured, a 400px box holding a
+ * 549px diagram, overhanging the bottom by 82px with no way to see the rest. See
+ * docs/DIAGRAM_BLOCK_SPECIFICATION.md section 5.4.
+ *
+ * **`width`/`height` stay `auto` here, and that is the whole point of the rule.** An
+ * earlier version forced `width: 100%; height: 100%` to fill the box. That fixed the
+ * crop and replaced it with the opposite fault: every diagram with a stored height was
+ * *enlarged* to fill it. Measured on screen - the Large preset (960x560) drew a 196px
+ * flowchart at 822px wide with label text the height of a headline. `object-fit:
+ * contain` does not rescue it; it only letterboxes the drawing inside an element that
+ * has already been stretched.
+ *
+ * So the constraint is `max-*` only: the diagram keeps its own size and shrinks when,
+ * and only when, the box is smaller than it is. `max-height: 100%` needs a *definite*
+ * ancestor height to resolve against, which is what the first rule supplies.
+ */
+.sizeContainerSized .zoomHost,
+.sizeContainerSized .svgHost {
+  height: 100%;
+  min-height: 0;
+}
+
+.sizeContainerSized .fit :global(svg) {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+/*
+ * Fit (the default): the diagram at its own size, shrunk only when the box is narrower.
+ *
+ * `width: 100%` used to stretch the picture to the full column. That was invisible
+ * while Mermaid stamped an inline `max-width` on the SVG and silently overrode this
+ * rule (see svg-sanitize.ts, which now strips it) - so the moment that cap was
+ * correctly removed, every diagram in every note blew up to 820px wide with text the
+ * size of a headline. Measured in the app before this fix: a 196px flowchart drawn at
+ * 820px.
+ *
+ * Fit now means what a person expects: never larger than the diagram's own size, never
+ * cropped, shrinking only when it has to. The distinction from `actual` below is then
+ * real - `fit` shrinks to the box, `actual` keeps natural size and scrolls.
+ */
 .fit :global(svg) {
   max-width: 100%;
-  width: 100%;
+  width: auto;
   height: auto;
   display: block;
   margin: 0 auto;

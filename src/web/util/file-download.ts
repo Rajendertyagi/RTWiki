@@ -5,6 +5,8 @@
  * content is ever executed: import only reads text, export only writes text.
  */
 
+import { markdownNoteTitle } from '@rtwiki/shared/import/conversion'
+
 /**
  * Predictable, filesystem-safe filename from an arbitrary page title. Strips the
  * markdown extension if present, removes characters that are illegal in common
@@ -12,7 +14,18 @@
  * stay portable across OSes. Never returns an empty string.
  */
 export function sanitizeFileName(name: string): string {
-  const withoutExt = name.trim().replace(/\.(md|markdown)$/i, '')
+  /*
+   * The Markdown extension is removed by the shared derivation, built from the import
+   * policy's extension list. This used to be a third hand-written copy of the same regex
+   * that the import and export handlers each carried.
+   *
+   * `name.trim()` first, deliberately, and not for tidiness. This call site trimmed
+   * *before* stripping while the other two stripped before trimming, and the two orders
+   * disagree for a name with whitespace against the extension: `"a.md "` strips to `"a"`
+   * when trimmed first and to `"a.md"` when stripped first — which would have exported as
+   * `a.md.md`. Passing the trimmed name keeps this function byte-identical to what it was.
+   */
+  const withoutExt = markdownNoteTitle(name.trim())
   const cleaned = withoutExt
     .replace(/[\\/:*?"<>|]+/g, '-')
     .replace(/\s+/g, ' ')

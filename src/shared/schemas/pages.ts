@@ -2,7 +2,11 @@ import { z } from 'zod'
 
 export const CreatePageSchema = z.object({
   title: z.string().min(1).max(200),
-  pageType: z.enum(['rich', 'html', 'diagram', 'mindmap', 'markdown']).default('rich'),
+  // `mindmap` is gone from this enum. Migration 010 rewrites any surviving row to
+  // `diagram`, so a row that still holds it is a corrupted database and is
+  // rejected rather than silently coerced. Rejecting is deliberate and the blast
+  // radius is the whole response, which is exactly why the migration exists.
+  pageType: z.enum(['rich', 'html', 'diagram', 'markdown']).default('rich'),
   content: z.string().default(''),
   // Optional parent: omitted/NULL creates a root page. Validated against a
   // living parent inside the creation transaction.

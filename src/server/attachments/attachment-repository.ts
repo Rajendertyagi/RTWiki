@@ -70,13 +70,25 @@ export function insertAttachment(
   db: Database,
   record: Omit<AttachmentRecord, 'createdAt'> & { data: Uint8Array | null }
 ): AttachmentRecord {
-  // The bytes and the metadata go in as one statement, so an attachment can
-  // never exist as one without the other. `data` is nullable only for a
-  // signature-less document, whose text is stored but whose bytes are never
-  // served because they could never be identified.
+  /*
+   * The bytes and the metadata go in as one statement, so an attachment can never exist
+   * as one without the other.
+   *
+   * `data` is null only for a **signature-less** document (`.txt`, `.md`, `.html`),
+   * whose text is stored and whose bytes are neither served nor kept — they could never
+   * be identified, so the serving path refused them anyway, and holding them only
+   * duplicated dead weight into every backup. `bytes_stored` is written alongside
+   * precisely so that this row is not mistaken for a half-finished ADR-014 migration;
+   * backup refuses to run over `data IS NULL` without it.
+   *
+   * The two must agree, so one is derived from the other here rather than trusted from
+   * the caller: a row claiming bytes it does not have is the exact corruption the flag
+   * exists to make visible.
+   */
+  const bytesStored = record.data === null ? 0 : 1
   db.run(
-    `INSERT INTO attachments (id, mime_type, byte_size, kind, extracted_text, original_name, checksum, data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO attachments (id, mime_type, byte_size, kind, extracted_text, original_name, checksum, data, bytes_stored)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       record.id,
       record.mimeType,
@@ -85,7 +97,8 @@ export function insertAttachment(
       record.extractedText,
       record.originalName,
       record.checksum,
-      record.data
+      record.data,
+      bytesStored
     ]
   )
   const stored = getAttachment(db, record.id)

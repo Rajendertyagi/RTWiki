@@ -2,6 +2,13 @@ import { type APIRequestContext, expect, type Page, test } from '@playwright/tes
 import { purgeUntitledPages } from './utils/cleanup.js'
 import { waitForRow } from './utils/row-visibility.js'
 
+/** Narrows a value the test assumes is present, failing with a diagnostic if it is not. */
+function must<T>(value: T | null | undefined, what: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`${what} is missing - the test premise did not hold`)
+  }
+  return value
+}
 /**
  * Tree creation menus (Trilium-pattern): right-click on empty tree space
  * offers root creation; right-click on a row offers child creation plus the
@@ -213,7 +220,10 @@ test.describe('Sidebar creation menus', () => {
     // the content area is unambiguously outside it and cannot hit a page row.
     const main = await page.locator('main').boundingBox()
     expect(main, 'the main workspace region must be present').not.toBeNull()
-    await page.mouse.click(main!.x + main!.width / 2, main!.y + main!.height / 2)
+    await page.mouse.click(
+      must(main, 'main column box').x + must(main, 'main column box').width / 2,
+      must(main, 'main column box').y + must(main, 'main column box').height / 2
+    )
     await expect(page.getByTestId('tree-context-menu')).toBeHidden()
     expect((await listPages(request)).length).toBe(before)
   })

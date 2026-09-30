@@ -64,7 +64,7 @@ type Block = { id: string; source: string }
 const ONE = 'flowchart TD\n    A[First] --> B[First end]'
 const TWO = 'flowchart LR\n    C[Second] --> D[Second end]'
 const THREE = 'flowchart TD\n    E[Third] --> F[Third end]'
-const STARTER = starterSourceFor('diagram')
+const STARTER = starterSourceFor()
 
 async function seedPage(
   request: APIRequestContext,

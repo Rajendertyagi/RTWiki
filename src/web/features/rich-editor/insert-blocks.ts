@@ -1,4 +1,8 @@
 import { UI_TEXT } from '../../config/index.js'
+import {
+  type DiagramTemplateOption,
+  diagramTemplateOptions
+} from './blocks/diagram-template-bar.js'
 import { pickDocument } from './blocks/document-picker.js'
 import { uploadDocument } from './blocks/document-upload.js'
 import { pickImage } from './blocks/image-picker.js'
@@ -6,10 +10,16 @@ import { uploadImage } from './blocks/image-upload.js'
 import type { AnyRichEditor, RTWikiPartialBlock } from './schema.js'
 
 /**
- * Shared block-insertion definitions for the Rich Document toolbar Insert
- * menu and the slash menu. One source of truth: both surfaces render the
- * same entries with the same starter content, so inserted documents are
- * identical regardless of entry point.
+ * Shared block-insertion definitions for the Rich Document toolbar Insert menu
+ * and the slash menu. One source of truth for the entries themselves: both
+ * surfaces render the same {@link InsertEntry} objects, so a block inserted from
+ * either is identical.
+ *
+ * The two surfaces are not, however, required to offer the same *set*. An entry
+ * declares which surfaces it belongs on, and the Mermaid chooser is toolbar-only:
+ * a slash menu is a list of block types, and thirty-odd Mermaid templates are
+ * not block types. The content stays defined once either way — the slash menu
+ * filters these same entries rather than keeping its own list.
  *
  * Starter content is intentionally minimal and valid; users edit from a
  * working preview rather than a blank schema shape.
@@ -18,32 +28,55 @@ import type { AnyRichEditor, RTWikiPartialBlock } from './schema.js'
 type AnyEditor = AnyRichEditor
 type AnyPartialBlock = RTWikiPartialBlock
 
-/** Starter Mermaid flowchart used by the Diagram insertion. */
-export const DIAGRAM_STARTER = 'graph TD\n    A[Start] --> B[End]'
-
-/** Starter Mermaid mind map used by the Mind Map insertion. */
-export const MINDMAP_STARTER = 'mindmap\n  root((Main topic))\n    Topic A\n    Topic B'
-
 /**
  * Beginner-friendly starter templates offered inside the Diagram edit pane.
  * Each is valid Mermaid so the live preview renders immediately on selection.
- * Single source of truth for the template picker; insertion still uses
- * DIAGRAM_STARTER so the slash/Insert menu stays uncluttered.
+ * Single source of truth for the template library: the Diagram page's template
+ * bar and the rich-note toolbar's Mermaid chooser both read this list, through
+ * `diagramTemplateOptions` in blocks/diagram-template-bar.tsx, and offer
+ * identical sets. Insertion no longer uses a fixed starter when a template has
+ * been chosen.
  */
-export const DIAGRAM_TEMPLATES: Record<string, { label: string; source: string }> = {
+export const DIAGRAM_TEMPLATES = {
   // Order follows the toolbar, grouping the everyday diagram types first and
   // the specialist ones after. Keys are Mermaid diagram ids.
   //
-  // NOT every type Mermaid 12 registers is listed. Twelve were measured and
-  // removed because they render an empty 24x24 placeholder in this build:
-  // quadrantChart, treemap, treeView, venn, architecture, swimlanes, railroad,
-  // wardley, cynefin, eventModeling, agentflow and usecase. Their code chunks
-  // ARE in the bundle, so this is Mermaid 12's on-demand diagram loading not
-  // being triggered by our `parse` + `render` pipeline, not a missing feature
-  // and not a bad sample. Offering a template that cannot render is worse than
-  // not offering it, so they stay out until the loading path is fixed.
-  // `tests/browser/diagram-templates.pwspec.ts` renders every entry here, so
-  // adding one that does not work fails the build rather than the user.
+  // NOT every type Mermaid 12 registers is listed, and the omissions are of two
+  // different kinds. Both are withheld rather than offered broken, which is the
+  // rule: a template that renders an empty box is worse than one that is absent.
+  //
+  // 1. `swimlane` — a layout problem, not a rendering one. Mermaid gives
+  //    swimlanes their own layout engine, which this app's global
+  //    `layout: 'dagre'` (MERMAID_CONFIG) overrides, so `swimlane-beta` lays out
+  //    as an ordinary flowchart with no lanes at all. Fixing it means scoping the
+  //    layout per diagram, not editing here.
+  //
+  // 2. `architecture-beta` and `cynefin-beta` — a rendering problem, measured in
+  //    this application rather than in Mermaid in isolation. Both were added with
+  //    the other newer types and both render as Mermaid's empty 24x24
+  //    placeholder: no error is raised, and the diagram is simply not drawn.
+  //    `tests/browser/diagram-templates.pwspec.ts` caught this, which is what that
+  //    test is for. Both ids are present in the installed Mermaid 12.0.0 but only
+  //    inside lazily-loaded chunks, and the render warm-up in
+  //    `blocks/mermaid-render.ts` does not resolve them — so the gap is in which
+  //    definitions Mermaid force-loads, and closing it is renderer work, not a
+  //    change to this list. The other ten types added alongside them do render,
+  //    including the chunk-backed `wardley-beta`, `usecase-beta`, `agentflow-beta`
+  //    and `railroad-beta`, so this is specific to these two and not a general
+  //    consequence of lazy loading.
+  //
+  // Most of the newer types require their `-beta` keyword, and a bare type name
+  // is not a synonym for it: `venn` does not detect, `venn-beta` does. A wrong
+  // keyword THROWS at parse time rather than rendering empty, so that failure is
+  // loud — unlike case 2 above, which is silent. That is worth knowing when
+  // reading a parse error here, and it is why `railroad` nests `terminal(...)`
+  // inside `choice(...)` — its grammar has no bare-string form. Note that
+  // `eventmodeling` and `quadrantChart` are the exceptions: Mermaid 12 registers
+  // those two bare, and no `-beta` form exists for them.
+  //
+  // `tests/browser/diagram-templates.pwspec.ts` renders every entry here through
+  // the real pipeline and fails on the 24x24 placeholder, so adding one that does
+  // not work fails the build rather than the user.
   flowchart: {
     label: 'Flowchart',
     source:
@@ -142,10 +175,80 @@ export const DIAGRAM_TEMPLATES: Record<string, { label: string; source: string }
     source:
       'journey\n    title Shopping\n    section Browse\n      Search: 5: Customer\n      Compare: 3: Customer\n    section Buy\n      Checkout: 2: Customer'
   },
+  quadrantChart: {
+    label: 'Quadrant chart',
+    source:
+      'quadrantChart\n    title Reach and engagement\n    x-axis Low --> High\n    y-axis Low --> High\n    quadrant-1 We should expand\n    quadrant-2 Need to promote\n    quadrant-3 Re-evaluate\n    quadrant-4 May be improved'
+  },
+  treemap: {
+    label: 'Treemap',
+    source: 'treemap\n    "Root"\n        "Alpha": 40\n        "Beta": 35\n        "Gamma": 25'
+  },
+  treeView: {
+    label: 'Tree view',
+    // Box-drawing characters, not ASCII: treeView's parser requires them and
+    // reindents by INDENT_UNIT, so the pipe and the corner glyphs are load
+    // bearing here. They are invisible in a diff, which is why this note
+    // exists.
+    source: 'treeView-beta\nRoot\n├── Child A\n│   └── Leaf A1\n└── Child B\n    └── Leaf B1'
+  },
+  venn: {
+    label: 'Venn',
+    source: 'venn-beta\n    set A[Study]\n    set B[Rest]'
+  },
+  railroad: {
+    label: 'Railroad',
+    source: 'railroad-beta\nA = choice(terminal("Yes"), terminal("No"));\nB = terminal("Start");'
+  },
+  wardley: {
+    label: 'Wardley map',
+    source:
+      'wardley-beta\n    component "Customer" [0.75, 0.2]\n    component "Subdomain" [0.5, 0.4]\n    "Customer" --> "Subdomain"'
+  },
+  eventmodeling: {
+    label: 'Event modeling',
+    source: 'eventmodeling\nentity Order\ntf 1 command Order'
+  },
+  usecase: {
+    label: 'Use case',
+    source: 'usecase-beta\nCustomer --> PlaceOrder'
+  },
+  agentflow: {
+    label: 'Agent flow',
+    source:
+      'agentflow-beta\n    Agent1[Planner] --> Agent2[Worker]\n    Agent2 --> Agent3[Reviewer]'
+  },
   info: {
     label: 'Info',
     source: 'info'
   }
+  // `satisfies`, not a `Record<string, …>` annotation.
+  //
+  // An annotation widens the keys to `string`, which costs the one thing this
+  // list most needs: the compiler can no longer tell you a template exists. With
+  // `satisfies` the shape is still checked at every entry, but `keyof typeof
+  // DIAGRAM_TEMPLATES` is the union of the real ids — which is what lets
+  // `PRESENTATION` in blocks/diagram-template-bar.tsx be declared as a *total*
+  // `Record` over those ids. That is what makes a missing icon a compile error
+  // instead of a silent shared fallback at runtime, and it is why the nine
+  // templates that had no icon could go unnoticed in the first place.
+} satisfies Record<string, { label: string; source: string }>
+
+/** A template's id, as a compile-time-checked union rather than `string`. */
+export type DiagramTemplateId = keyof typeof DIAGRAM_TEMPLATES
+
+/**
+ * Looks a template up by id, for callers that hold a plain `string`.
+ *
+ * The single place dynamic indexing is allowed. Five call sites hold a `string`
+ * (a click handler, a menu row) because they are driven by DOM ids, and each
+ * would otherwise need its own cast. The ids they hold all originate from
+ * `Object.keys(DIAGRAM_TEMPLATES)`, so a miss is not reachable at runtime — the
+ * cast is confined here rather than repeated, and a future caller that invents an
+ * id out of thin air still gets one checked place to look at.
+ */
+export function diagramTemplateFor(id: string): { label: string; source: string } {
+  return (DIAGRAM_TEMPLATES as Record<string, { label: string; source: string }>)[id]
 }
 
 /** Starter LaTeX formula used by the Formula insertion. */
@@ -184,6 +287,16 @@ export const INSERT_RUNS = ['blocks', 'basic', 'callout'] as const
 /** One run of the toolbar, in the order `INSERT_RUNS` lists them. */
 export type InsertRun = (typeof INSERT_RUNS)[number]
 
+/**
+ * Which surface offers an Insert entry.
+ *
+ * The toolbar and the slash menu render the same entry objects, so a surface that
+ * should not see an entry says so on the entry itself rather than by each
+ * surface keeping its own exclusion list — which is how the two drifted into
+ * disagreeing about what RTWiki could insert.
+ */
+export type InsertSurface = 'toolbar' | 'slash'
+
 export interface InsertEntry {
   /** Stable machine token (also used as the debug-log code field). */
   key: string
@@ -192,7 +305,6 @@ export interface InsertEntry {
   icon:
     | 'formula'
     | 'diagram'
-    | 'mindMap'
     | 'linkedPage'
     | 'image'
     | 'document'
@@ -206,7 +318,31 @@ export interface InsertEntry {
     | 'calloutDanger'
   /** Which toolbar run this entry belongs to. */
   run: InsertRun
-  insert: (editor: AnyEditor) => void
+  /**
+   * Surfaces that offer this entry. Omitted means both.
+   *
+   * Mermaid sets this to `['toolbar']`: thirty-odd diagram types belong in a
+   * deliberate chooser, and a slash menu that filtered them by name would be
+   * listing a template library in a menu meant for block types.
+   */
+  surfaces?: readonly InsertSurface[]
+  /**
+   * When present, the toolbar button opens a chooser instead of inserting
+   * directly, and each option inserts a block with that option's own source.
+   */
+  submenu?: readonly DiagramTemplateOption[]
+  /**
+   * Inserts a specific chosen source. Present exactly when {@link submenu} is, so
+   * an entry cannot offer a chooser it has no way to act on. `insert` stays the
+   * no-choice path — the button's accessible name and its fallback.
+   */
+  insertSource?: (editor: AnyEditor, source: string) => void
+  /**
+   * Inserts without a choice. Absent on a chooser entry, which deliberately
+   * inserts nothing until a template is picked — a fallback would be an
+   * insertion nobody asked for, sitting on a button that only opens a menu.
+   */
+  insert?: (editor: AnyEditor) => void
 }
 
 function formulaEntry(): InsertEntry {
@@ -223,31 +359,34 @@ function formulaEntry(): InsertEntry {
   }
 }
 
-export function diagramEntry(starter: string): InsertEntry {
+/**
+ * The Mermaid entry: a chooser over the shared template list, not one starter.
+ *
+ * Inserting a fixed `graph TD A-->B` and making the user hunt for the type they
+ * wanted afterwards meant the template library was one level deeper than anyone
+ * went. The options come from {@link diagramTemplateOptions}, which reads the
+ * same DIAGRAM_TEMPLATES the Diagram page's bar reads, so the two surfaces
+ * cannot offer different diagrams.
+ *
+ * A Mermaid mind map is one of those options rather than a separate entry: it is
+ * the same block with a different source, and offering it twice was how it ended
+ * up with two implementations.
+ *
+ * There is no no-choice insertion. A default would be a template the user did not
+ * pick, behind a button that only opens a menu.
+ */
+export function diagramEntry(): InsertEntry {
+  const insertDiagram = (editor: AnyEditor, content: string): void => {
+    insertOrReplace(editor, { type: 'diagram', content } as never)
+  }
   return {
     key: 'insert-diagram',
     label: UI_TEXT.diagramLabel,
     icon: 'diagram',
     run: 'blocks',
-    insert: (editor) =>
-      insertOrReplace(editor, {
-        type: 'diagram',
-        content: starter
-      } as never)
-  }
-}
-
-export function mindMapEntry(starter: string): InsertEntry {
-  return {
-    key: 'insert-mind-map',
-    label: UI_TEXT.mindMapLabel,
-    icon: 'mindMap',
-    run: 'blocks',
-    insert: (editor) =>
-      insertOrReplace(editor, {
-        type: 'mindMap',
-        content: starter
-      } as never)
+    surfaces: ['toolbar'],
+    submenu: diagramTemplateOptions(),
+    insertSource: insertDiagram
   }
 }
 
@@ -393,12 +532,9 @@ function documentEntry(): InsertEntry {
 /** Entries that exist regardless of optional blocks (always-available). */
 function baseEntries(editor: AnyEditor): InsertEntry[] {
   const entries: InsertEntry[] = [formulaEntry()]
-  // Diagram/mind-map entries join when their blocks are in the schema.
+  // The Mermaid chooser joins when its block is in the schema.
   if ('diagram' in editor.schema.blockSchema) {
-    entries.push(diagramEntry(DIAGRAM_STARTER))
-  }
-  if ('mindMap' in editor.schema.blockSchema) {
-    entries.push(mindMapEntry(MINDMAP_STARTER))
+    entries.push(diagramEntry())
   }
   if ('callout' in editor.schema.blockSchema) {
     entries.push(...calloutEntries())
@@ -476,8 +612,18 @@ export function getInsertEntries(editor: AnyEditor): InsertEntry[] {
   ]
 }
 
-/** Runs an entry's insertion and returns focus to the editor. */
+/**
+ * Runs an entry's no-choice insertion and returns focus to the editor.
+ *
+ * A chooser entry has no such insertion, so it is refused here rather than
+ * inserted as a default: a guard rather than a cast, because a caller reaching
+ * this with a chooser entry has a bug, and inserting a template the user did not
+ * pick would hide it.
+ */
 export function runInsertEntry(editor: AnyEditor, entry: InsertEntry): void {
+  if (entry.insert === undefined) {
+    throw new Error(`Insert entry "${entry.key}" has no direct insertion; it offers a chooser.`)
+  }
   entry.insert(editor)
   editor.focus()
 }

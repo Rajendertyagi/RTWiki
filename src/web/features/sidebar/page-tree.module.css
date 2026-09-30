@@ -1,4 +1,8 @@
 /*
+ * biome-ignore-all lint/complexity/noImportantStyles: load-bearing overrides of a
+ * third-party stylesheet. See the note below for why each one is needed and why
+ * they are not a style to be cleaned up.
+ *
  * Wunderbaum host styling. RTWiki renders its own page-type icons and row
  * action buttons through the render hook; the Wunderbaum stylesheet is
  * imported by the host component and thematically bridged here via Mantine
@@ -8,6 +12,27 @@
  * rules on `div.wunderbaum` (and deeper). To override them we must match or
  * exceed that specificity, so the tree overrides live in a top-level
  * `div.wunderbaum` global block rather than nested under `.wbHost`.
+ *
+ * WHY THESE `!important` DECLARATIONS STAY
+ *
+ * Recorded as KNOWN_BUGS item 5, which asked for either removal or a documented
+ * suppression. This is the suppression, and the reason is that the declarations
+ * are load-bearing rather than sloppy:
+ *
+ * - The library's stylesheet is imported by the host component, so it is part of
+ *   the cascade and specificity alone cannot win against its own `!important` and
+ *   pseudo-class rules. The border and focus-ring overrides exist because the
+ *   library paints a container border that turns blue on `:focus-within`, which
+ *   puts focus on the whole tree instead of the focused row.
+ * - The subfile height and the icon-slot `display` are overrides of computed
+ *   layout the library does not expose a token for.
+ * - Each site carries its own comment saying what it overrides and what breaks
+ *   without it.
+ *
+ * So they are suppressed deliberately, and individually justified, rather than
+ * removed one at a time — which is what the KNOWN_BUGS entry warned against. The
+ * lint gate is green; a future reader sees this block rather than eleven
+ * unexplained declarations.
  */
 
 .wbHost {

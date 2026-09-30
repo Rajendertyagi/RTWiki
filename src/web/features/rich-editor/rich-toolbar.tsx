@@ -1,5 +1,5 @@
 import { useEditorState } from '@blocknote/react'
-import { ActionIcon, Button, Popover, TextInput, Tooltip } from '@mantine/core'
+import { ActionIcon, Button, Menu, Popover, TextInput, Tooltip } from '@mantine/core'
 import {
   IconAlertOctagon,
   IconAlertTriangle,
@@ -52,7 +52,6 @@ type AnyEditor = AnyRichEditor
 const INSERT_ICONS = {
   formula: IconLetterA,
   diagram: IconSitemap,
-  mindMap: IconSitemap,
   linkedPage: IconLink,
   image: IconPhoto,
   document: IconFileText,
@@ -100,8 +99,101 @@ function InsertEntryIcon({ entry }: { entry: InsertEntry }): JSX.Element {
   return <Icon size={16} />
 }
 
+/**
+ * An insertion control that offers a choice of sources rather than inserting one
+ * fixed block.
+ *
+ * The options are read off the entry, so this cannot offer a diagram the Diagram
+ * page does not offer: both read the one template list. Grouped by family with a
+ * divider at each change, which is the same grouping the bar uses, because the
+ * two are looking at the same list.
+ *
+ * Controlled rather than uncontrolled so the menu closes on use. An
+ * uncontrolled Mantine Menu does close on a click, but the bar records what
+ * happened when these controls were not: a dismissal that stole the caret, and a
+ * submenu that would not open at all. Being explicit costs one piece of state.
+ *
+ * A native `title` rather than a Mantine `Tooltip`: a Tooltip between the target
+ * and the DOM node takes the ref, and the menu then never opened. That is noted
+ * at the same place in blocks/diagram-template-bar.tsx, where it was already paid
+ * for once.
+ */
+function InsertSubmenuButton({
+  editor,
+  entry
+}: {
+  editor: AnyEditor
+  entry: InsertEntry & {
+    submenu: NonNullable<InsertEntry['submenu']>
+    insertSource: NonNullable<InsertEntry['insertSource']>
+  }
+}): JSX.Element {
+  const [opened, setOpened] = useState(false)
+  const rows: ReactNode[] = []
+  let lastFamily: string | null = null
+  for (const option of entry.submenu) {
+    if (lastFamily !== null && option.family !== lastFamily) {
+      rows.push(<Menu.Divider key={`divider-${option.family}`} />)
+    }
+    lastFamily = option.family
+    const Icon = option.Icon
+    rows.push(
+      <Menu.Item
+        key={option.id}
+        leftSection={<Icon size={16} />}
+        data-testid={`${entry.key}-option-${option.id}`}
+        onClick={() => entry.insertSource(editor, option.source)}
+      >
+        {option.label}
+      </Menu.Item>
+    )
+  }
+  return (
+    <Menu opened={opened} onChange={setOpened} position="bottom-start" withinPortal>
+      <Menu.Target>
+        <ActionIcon
+          variant="subtle"
+          aria-label={entry.label}
+          aria-haspopup="menu"
+          data-testid={entry.key}
+          title={entry.label}
+        >
+          <InsertEntryIcon entry={entry} />
+          <IconChevronDown size={10} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown data-testid={`${entry.key}-submenu`}>{rows}</Menu.Dropdown>
+    </Menu>
+  )
+}
+
 /** One always-visible insertion control on the persistent toolbar. */
-function InsertButton({ editor, entry }: { editor: AnyEditor; entry: InsertEntry }): JSX.Element {
+function InsertButton({
+  editor,
+  entry
+}: {
+  editor: AnyEditor
+  entry: InsertEntry
+}): JSX.Element | null {
+  // A chooser entry opens its menu instead of inserting a fixed block, so the
+  // entry has to carry both halves of that; anything less is not a chooser.
+  if (entry.submenu && entry.insertSource) {
+    return (
+      <InsertSubmenuButton
+        editor={editor}
+        entry={
+          entry as InsertEntry & {
+            submenu: NonNullable<InsertEntry['submenu']>
+            insertSource: NonNullable<InsertEntry['insertSource']>
+          }
+        }
+      />
+    )
+  }
+  // And an entry with neither cannot be drawn: there is nothing to click that
+  // would do anything. Returning null keeps that a visible absence rather than a
+  // dead button.
+  if (entry.insert === undefined) return null
   return (
     <Tooltip label={entry.label} position="bottom">
       <ActionIcon

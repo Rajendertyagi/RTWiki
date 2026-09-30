@@ -1,7 +1,6 @@
 import {
   ActionIcon,
   Stack,
-  Text,
   Tooltip,
   useComputedColorScheme,
   useMantineColorScheme

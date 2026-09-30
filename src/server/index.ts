@@ -9,6 +9,23 @@ interface CliFlags {
   noOpen: boolean
   /** Overrides the default listening port (8080). */
   port?: number
+  /**
+   * Overrides the data directory. **Test and automation use only.**
+   *
+   * Not an environment variable and not AppData, so the portable-layout rule is
+   * untouched, and absent means the single documented behaviour: the data
+   * directory beside the executable. This exists because the browser suite needs
+   * a database it can create pages in and throw away, and it had no way to get
+   * one — the web server it starts used the real `data/` directory, so every run
+   * added pages to the user's own database. That is why the development database
+   * held thousands of test pages, and why tree and dashboard lookups started
+   * timing out: the sidebar virtualises, so a freshly seeded page was landing
+   * outside the rendered window.
+   *
+   * `bootstrap({ dataDir })` already existed and was already used by the unit
+   * tests; this only exposes it to the harness that needed it all along.
+   */
+  dataDir?: string
 }
 
 function parseArgs(argv: string[]): CliFlags {
@@ -21,10 +38,16 @@ function parseArgs(argv: string[]): CliFlags {
       port = parsed
     }
   }
+  const dataDirIndex = argv.indexOf('--data-dir')
+  const dataDirRaw = dataDirIndex >= 0 ? argv[dataDirIndex + 1] : undefined
   return {
     smokeTest: argv.includes('--smoke-test'),
     noOpen: argv.includes('--no-open'),
-    port
+    port,
+    // A flag with no value is ignored rather than becoming an empty string,
+    // which would resolve to the current directory and put a database somewhere
+    // surprising.
+    dataDir: dataDirRaw === undefined || dataDirRaw.length === 0 ? undefined : dataDirRaw
   }
 }
 
@@ -95,7 +118,8 @@ async function main(): Promise<void> {
 
   const runtime = await bootstrap({
     openBrowser: !flags.noOpen,
-    ...(flags.port === undefined ? {} : { port: flags.port })
+    ...(flags.port === undefined ? {} : { port: flags.port }),
+    ...(flags.dataDir === undefined ? {} : { dataDir: flags.dataDir })
   })
 
   // If an existing instance was detected, bootstrap returns a null server.

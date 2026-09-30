@@ -87,11 +87,12 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 - **Responsibility:** Implement business logic. Services are pure functions or classes that operate on validated data.
 - **Examples:**
-  - `PageService` — CRUD operations, tag management, link resolution
-  - `SearchService` — FTS5 query execution and result formatting
-  - `AttachmentService` — upload, validation, storage, and retrieval
-  - `BackupService` — archive creation and restoration with integrity checks
-  - `ImportService` — orchestrates the shared import pipeline (see §3.11)
+  - `page-service.ts` — page CRUD, hierarchy, links, and the single search-row computation point
+  - `attachment-routes.ts` / `attachment-repository.ts` — upload, validation, storage, and retrieval
+  - `backup-service.ts` — archive creation and restoration with integrity checks
+  - `shared/import/conversion.ts` — the conversion boundary between an import source and editable content
+
+  **None of the `*Service` class names below are real.** `PageService`, `AttachmentService`, `BackupService`, `ImportService` and `SearchService` do not exist in `src/`: these are modules and exported functions, not classes. `ImportService` in particular must not be read as the pipeline of §3.11 existing — see [ADR-020](adr/ADR-020-search-and-conversion-boundary.md). Search has no service class either: it is a `LIKE` query issued from the pages route over the `search_index` table, composed by `search-extraction.ts` (see §3.6).
 - **Constraint:** Services are instantiated once per request or per module, not as hidden globals.
 
 ### 3.5 Database Access
@@ -102,10 +103,12 @@ Each layer has a single responsibility and communicates only with its adjacent l
 
 ### 3.6 Search
 
-- **Technology:** SQLite FTS5 virtual table
-- **Responsibility:** Index page content (BlockNote JSON converted to searchable text) and provide full-text search results.
-- **Trigger:** Index is updated after every page save.
-- **Constraint:** The FTS5 index stores only searchable text, never raw HTML or JavaScript.
+- **Technology:** an ordinary SQLite table, `search_index`, queried with `LIKE` — **not** FTS5
+- **Responsibility:** Hold the readable text derived from each page's own content plus the extracted text of every document that page references, and return matches for `GET /api/pages?q=`.
+- **Trigger:** The row is recomputed after every page save, and for every page that referenced an attachment when that attachment is deleted.
+- **Constraint:** The row holds derived text only, never raw HTML, Markdown source or JavaScript. It is size-bounded (`SEARCH_INDEX_MAX_CHARS`) and the page's own text is placed first, so a large attachment cannot displace it.
+
+**The unused `search_index_fts` table.** Migration `001` also creates `search_index_fts`, an external-content FTS5 mirror of `search_index`. **It is never written, read or queried, and no triggers maintain it — none exist in the schema.** It is kept in place deliberately; see [DATA_MODEL.md §3.6](DATA_MODEL.md) and [ADR-018](adr/ADR-018-documented-vs-built.md) for why switching to it is its own piece of work rather than a detail of this section.
 
 ### 3.7 Attachments
 
@@ -196,13 +199,35 @@ Responsibilities are split cleanly:
   tabindex focus (`focusedId`), expansion state, Enter-to-open. Keyboard focus
   is independent of active-page selection: the open page stays selected with
   its editor mounted while other rows are explored.
-- **DnD module (`tree-dnd`):** core-only
-  `@atlaskit/pragmatic-drag-and-drop@3.0.0`. Rows are draggable sources; the
-  tree container is the single drop target that resolves the hovered row and
-  edge via honey-pot-aware pointer lookup. The latest hover hint is cached and
-  committed at drop, with a drop-time recomputation fallback for sparse drag
-  event streams. No hitbox or auto-scroll layer exists — targets scroll into
-  view before drops instead.
+- **DnD (page tree):** provided by **Wunderbaum itself**, not by a separate
+  library. Rows are draggable sources and the tree container is the drop target
+  that resolves the hovered row and edge; the hover hint is cached and committed
+  at drop, with a drop-time recomputation fallback for sparse drag event streams.
+  No hitbox or auto-scroll layer exists — targets scroll into view before drops
+  instead.
+  - **Corrected 2026-09-29.** This entry previously named
+    `@atlaskit/pragmatic-drag-and-drop@3.0.0`. **That package is not in
+    `package.json` and never was** — the dependency list has no `@atlaskit/*`
+    entry at all. The claim read as an architectural decision and was wrong, which
+    is worse than an omission: it would have sent the next reader looking for a
+    module that does not exist. Verified against `package.json` and
+    `node_modules`, not inferred.
+- **DnD (Diagram page blocks):** `Reorder` from **`motion/react`**, already a
+  dependency and already used by the tab strip. `Reorder.Group` is given
+  `axis="xy"` because the block list is a **wrapping** flex row (`flex-flow: row
+  wrap`), and a single axis cannot express "put this diagram to the left of that
+  one on the next row". The installed types confirm the value exists
+  (`ReorderAxis = "x" | "y" | "xy"`).
+  - Dragging starts from a **dedicated grip**, not from the card: the card also
+    holds a corner resize handle, a pannable Mermaid canvas and a row of action
+    buttons, and a card-wide drag listener would fight all three.
+  - A drop calls the **same** `reorderByIds` path as the up/down buttons, so a
+    drag and a button press cannot diverge.
+  - The up/down buttons are **kept**. A drag needs a pointer; the buttons are
+    focusable, labelled and reachable by Tab, and they are the screen-reader
+    route.
+  - Verified against variable-size cards, wrapped and single-column layouts, and
+    resize-then-drag ordering, in `tests/browser/diagram-reorder.pwspec.ts`.
 - **Row component:** renders indent level, expand/collapse, drop-hint
   indicators, rename, and the context-menu move alternative ("Move to…",
   Move up/Move down) that shares the same validated move endpoint as DnD.
@@ -371,9 +396,14 @@ The canonical format is a **versioned, RTWiki-extended BlockNote JSON schema**:
 - When a source (rich HTML/Markdown) cannot be converted losslessly, the original rich-HTML source is stored as a typed `richHtml` block inside `pages.content` so no content is silently lost.
 - **Unknown or unrecognized block types are preserved**, not deleted. They are stored and rendered with a safe fallback, and flagged for review.
 
-### Diagram and Mind Map pages
+### Diagram page
 
-These two page types do **not** store BlockNote JSON. Their content is opaque page JSON holding
+The Diagram page is the only dedicated Mermaid page. The Mind Map page was retired: it differed from
+this one by a single ternary and two starter strings, and Mermaid's `mindmap` is an ordinary diagram
+type offered from the shared template list. See
+[ADR-019](adr/ADR-019-one-mermaid-page-and-block.md).
+
+This page type does **not** store BlockNote JSON. Its content is opaque page JSON holding
 Mermaid source, never indexed verbatim and never rendered into dashboard previews. The `pages.content`
 column is unconstrained TEXT, so changing this format requires **no database migration** — a new
 version is a new shape of the same column.
@@ -389,7 +419,12 @@ A v1 page is not rewritten when it is read. It reads as a one-block page and bec
 time it is saved, which is why an old page and a new page can sit in the same database with no
 migration step.
 
-**Current state:** a Diagram or Mind Map page renders every block it holds, each as its own card with
+A page written as a Mind Map page records `type: "mindmap"` inside its own JSON, independently of the
+`pages.page_type` column that migration `010_mindmap_pages_to_diagram` rewrites. That stored value is
+accepted on read and normalised to `diagram`, so the migration needs no JSON rewrite in SQL and cannot
+fail in a second, separate place.
+
+**Current state:** a Diagram page renders every block it holds, each as its own card with
 its own render state. Actions are per block — edit, move up, move down, remove — plus an **Add
 diagram** button that appends a starter diagram. A page-level **Refresh** re-renders every block; a
 failed block offers **Retry** for itself alone, so one broken diagram no longer replaces the page's

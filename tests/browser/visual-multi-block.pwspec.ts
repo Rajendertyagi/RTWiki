@@ -1,5 +1,4 @@
-import type { APIRequestContext, Page } from '@playwright/test'
-import { expect, test } from '@playwright/test'
+import { type APIRequestContext, expect, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
 
 /**

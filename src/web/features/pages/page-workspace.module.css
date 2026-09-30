@@ -27,6 +27,26 @@
   border-bottom: 1px solid var(--rtwiki-chrome-border);
 }
 
+/* The Diagram page's two creation actions, side by side at the left of the row.
+ * `min-width: 0` so the template bar beside it can shrink into its overflow
+ * dropdown instead of pushing the row wider than the window — the bar measures
+ * itself, so the constraint only has to be allowed, not computed here. */
+.diagramCreateRow {
+  min-width: 0;
+  align-items: center;
+}
+
+/* The button must not be what absorbs the squeeze.
+ *
+ * In a `nowrap` row, a shrinking sibling takes all the pressure. With the bar
+ * beside it, the button's label was compressed to a 15px sliver at 1200px and
+ * below — measured, not guessed: the button's box went from 348..462 at 1600px to
+ * 348..363 at 1200px. `flex-shrink: 0` hands the constraint to the bar, which is
+ * the element designed to handle it. */
+.addDiagramButton {
+  flex-shrink: 0;
+}
+
 .toolbarSkeleton {
   display: flex;
   gap: var(--mantine-spacing-xs);

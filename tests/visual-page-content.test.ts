@@ -23,7 +23,7 @@ describe('visual page content', () => {
   })
 
   it('reads a v2 page as its ordered blocks', () => {
-    const stored = serializeVisualPageBlocks('mindmap', [
+    const stored = serializeVisualPageBlocks('diagram', [
       { id: 'a', source: 'mindmap\n root((One))' },
       { id: 'b', source: 'mindmap\n root((Two))' },
       { id: 'c', source: 'mindmap\n root((Three))' }
@@ -33,7 +33,44 @@ describe('visual page content', () => {
     if (!parsed.ok) return
     // Order is the author's order, and it is what reordering rewrites.
     expect(parsed.value.blocks.map((b) => b.id)).toEqual(['a', 'b', 'c'])
-    expect(parsed.value.type).toBe('mindmap')
+    expect(parsed.value.type).toBe('diagram')
+  })
+
+  // The Mind Map page is retired, but a stored page records its own type inside
+  // its JSON, independently of the `pages.page_type` column that migration 010
+  // rewrites. Rejecting that marker would make a migrated page's content
+  // unreadable, so it is accepted and reported as the page type that replaced it.
+  it('reads a retired mindmap page as a diagram, blocks and all', () => {
+    const stored = JSON.stringify({
+      version: 2,
+      type: 'mindmap',
+      blocks: [{ id: 'a', source: 'mindmap\n  root((One))' }]
+    })
+    const parsed = parseVisualPageContent(stored)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.value.type).toBe('diagram')
+    expect(parsed.value.blocks).toHaveLength(1)
+    expect(parsed.value.blocks[0].source).toBe('mindmap\n  root((One))')
+  })
+
+  it('reads a retired v1 mindmap page too', () => {
+    const stored = JSON.stringify({ version: 1, type: 'mindmap', source: 'mindmap\n  root((Old))' })
+    const parsed = parseVisualPageContent(stored)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.value.type).toBe('diagram')
+    expect(parsed.value.blocks).toEqual([{ id: 'main', source: 'mindmap\n  root((Old))' }])
+  })
+
+  it('still rejects an unknown type marker', () => {
+    const stored = JSON.stringify({
+      version: 2,
+      type: 'something-else',
+      blocks: [{ id: 'a', source: 'x' }]
+    })
+    const parsed = parseVisualPageContent(stored)
+    expect(parsed.ok).toBe(false)
   })
 
   it('writes v2 and round-trips', () => {
@@ -45,7 +82,7 @@ describe('visual page content', () => {
   })
 
   it('starts a new page with one block, already in v2', () => {
-    const parsed = parseVisualPageContent(createStarterVisualContent('diagram'))
+    const parsed = parseVisualPageContent(createStarterVisualContent())
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
     expect(parsed.value.blocks).toHaveLength(1)

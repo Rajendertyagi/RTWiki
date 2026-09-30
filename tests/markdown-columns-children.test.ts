@@ -32,7 +32,7 @@ function childSource(count: number, widths: Array<string | null> = []): string {
       ''
     ].join('\n')
   )
-  return [outer + 'columns', ...children, outer].join('\n')
+  return [`${outer}columns`, ...children, outer].join('\n')
 }
 
 let renderMarkdown: (source: string) => string

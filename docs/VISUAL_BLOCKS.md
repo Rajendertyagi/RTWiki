@@ -1,10 +1,16 @@
 # Visual Knowledge Blocks
 
 Rich Documents support four visual block types alongside BlockNote's
-defaults: **Formula**, **Diagram**, **Mind Map**, and **Callouts**. All four
-behave like ordinary document blocks — preview-first, editable on demand,
-autosaved through the standard pipeline, and stored inside the canonical
-BlockNote JSON with no schema migration ([ADR-004](adr/ADR-004-canonical-block-json-format.md)).
+defaults: **Formula**, **Diagram**, and **Callouts**, plus a **Diagram** block
+that renders any Mermaid type. All behave like ordinary document blocks —
+preview-first, editable on demand, autosaved through the standard pipeline, and
+stored inside the canonical BlockNote JSON with no schema migration
+([ADR-004](adr/ADR-004-canonical-block-json-format.md)).
+
+A mind map is not a block of its own. Mermaid's `mindmap` is one of the diagram
+types, so it is drawn by choosing that template — the same block, a different
+source. See [ADR-019](adr/ADR-019-one-mermaid-page-and-block.md) for why the
+separate Mind Map block and page type were retired.
 
 ## Blocks
 
@@ -12,17 +18,29 @@ BlockNote JSON with no schema migration ([ADR-004](adr/ADR-004-canonical-block-j
 | --- | --- | --- | --- |
 | Formula | `mathBlock` (+ inline `math`) | Plain-text content (LaTeX) | Official `@blocknote/math-block` 0.54 / KaTeX |
 | Diagram | `diagram` | Plain-text content (Mermaid) | RTWiki secure Mermaid pipeline |
-| Mind Map | `mindMap` | Plain-text content (Mermaid mindmap syntax) | RTWiki secure Mermaid pipeline |
+| Diagram (legacy read alias) | `mindMap` | Plain-text content (Mermaid mindmap syntax) | Same pipeline, plus zoom controls |
 | Callout | `callout` | Editable inline rich text + `variant` prop | Native custom block, theme-token styling |
 
+The `mindMap` row is a **read alias, not an insertion**: both names are built by
+one factory in `blocks/diagram.tsx`, nothing offers `mindMap`, and it exists so a
+document written before the retirement still loads as a live diagram. Only
+documents that already contain the block are affected by the zoom controls it
+carries.
+
 Insertion controls live directly on the persistent Rich Note toolbar — one
-compact icon per entry (Formula, Diagram, Mind Map, the five Callouts,
-Table, Quote, Code Block), grouped with separators and always visible; the
-row scrolls horizontally on narrow screens. The `/` slash menu remains
-available as an alternative surface. Diagram insertion uses a single
-flowchart starter; the six common diagram shapes (flowchart, sequence,
-class, state, entity-relationship, timeline) are offered as a **starter
-template picker** inside the Diagram edit pane.
+compact icon per entry (Formula, Diagram, the five Callouts, Table, Quote,
+Code Block), grouped with separators and always visible. The Diagram control
+opens a **template chooser** listing every Mermaid type the app offers, grouped
+into six colour-coded families with a divider at each change, and picking one
+inserts a `diagram` block already filled with that template's source. The list is
+read through the same accessor the Diagram page's template bar uses
+(`diagramTemplateOptions`), so a rich note and a Diagram page can never offer
+different diagrams.
+
+**Mermaid is deliberately not in the `/` slash menu.** A slash menu lists block
+types; a library of Mermaid templates is not a list of block types. Each insert
+entry declares which surfaces offer it, and the slash menu keeps the entries that
+include `slash`.
 
 ### Rearrangement
 
@@ -33,9 +51,9 @@ Moves preserve block ids and content, trigger autosave, return focus to the
 moved block, and never cross the document boundaries (the first block has no
 Move up; the last has no Move down).
 
-### Resizing (Diagram & Mind Map)
+### Resizing (Diagram)
 
-Embedded Diagram and Mind Map blocks expose a corner resize handle (pointer)
+Embedded Diagram blocks expose a corner resize handle (pointer)
 plus always-rendered size-preset buttons — Small, Medium, Large, Full width,
 Auto height — for keyboard users. Dimensions persist as typed block props
 (pixel strings), are clamped to min/max bounds and the document column, and
@@ -48,11 +66,11 @@ the shared overlay z-index token with collision-aware flip/shift placement,
 so they can never paint behind the sidebar or clip against scroll
 containers.
 
-### Live editing (Diagram & Mind Map)
+### Live editing (Diagram)
 
 Both blocks are preview-first. The normal view shows only the rendered,
-sanitized SVG with a compact toolbar (Edit, Fit/Actual, and zoom for Mind
-Map). Choosing **Edit** opens a split editor:
+sanitized SVG with a compact toolbar (Edit, Fit/Actual, and zoom on a legacy
+`mindMap` block). Choosing **Edit** opens a split editor:
 
 - **Source** on the left, **live rendered preview** on the right.
 - Typing re-renders the preview automatically (debounced) — you do **not**
@@ -63,8 +81,33 @@ Map). Choosing **Edit** opens a split editor:
   source stays editable, so you can fix it in place.
 - On narrow viewports the split stacks vertically (source above preview).
 - **Fit width** (default) scales the SVG to the column; **Actual size** lets
-  the pane scroll. Mind Map adds **zoom** controls (50%–200%, resize-based so
-  the SVG is never clipped).
+  the pane scroll. A legacy `mindMap` block adds **zoom** controls (50%–200%,
+  resize-based so the SVG is never clipped); a `diagram` block does not.
+
+### Diagram view controls
+
+Every rendered diagram — on the Diagram page and inside a Rich Note — carries
+its own view controls in the bottom-right corner, revealed on hover so they
+never sit on a diagram being read:
+
+- **Pan** in four directions, one step per press.
+- **Zoom in / out**, bounded so a diagram cannot be zoomed into nothing.
+- **Reset view**, returning pan and zoom to their defaults.
+- **Full screen**, opening the diagram on its own; `Escape` closes it and the
+  reader returns to the zoom and pan they had set.
+
+These are **not** the block's size. The size is the corner drag handle and the
+size presets; the view controls move and scale the picture inside the box. The
+two do not affect each other, and **nothing here is written to the document** —
+zooming in to read a wide diagram and reloading returns it to normal size.
+
+One component (`blocks/diagram-view.tsx`) and one stylesheet serve both
+surfaces. They previously had separate implementations and had drifted far
+enough apart that the same diagram looked like two different things; sharing
+them is the point, not an optimisation.
+
+Covered by `tests/browser/diagram-view-controls.pwspec.ts`, which asserts on
+both surfaces.
 
 ### Callouts
 
@@ -102,22 +145,26 @@ Hardening layers:
 Rendering failures resolve to bounded error codes (`parse_error`,
 `render_error`) contained to the block.
 
-## Dedicated Diagram and Mind Map pages
+## Dedicated Diagram page
 
-Beyond embedded blocks, **Diagram** and **Mind Map** are real page types.
-They are created from the New Page dialog, the empty-tree context menu, or
-any page-row New Child menu; they appear immediately in the tree with
-distinct icons/type labels, open in a tab, and support rename, duplicate,
-move and delete. The database stores the type as unconstrained text — no
-migration was required, and existing notes are untouched.
+Beyond embedded blocks, **Diagram** is a real page type. It is created from the
+New Page dialog, the empty-tree context menu, or any page-row New Child menu; it
+appears immediately in the tree with a distinct icon/type label, opens in a tab,
+and supports rename, duplicate, move and delete.
+
+The Mind Map page is **retired**: it was identical to this one but for a single
+ternary and two starter strings, and a mind map is now a diagram template rather
+than a page type. See [ADR-019](adr/ADR-019-one-mermaid-page-and-block.md).
+Migration `010_mindmap_pages_to_diagram` rewrites any surviving row to `diagram`;
+it rewrites the column, not the page's content, and the content's own stored type
+marker is normalised on read.
 
 Each opens a dedicated full-page workspace reusing the same secure Mermaid
 pipeline: a rendered view (Edit, Refresh, Fit/Actual, Zoom, full-screen) and
-a split edit mode (source + live debounced preview, template picker on
-Diagram pages, Apply/Cancel, contained syntax errors, shared autosave and
-save status). Stored content is opaque visual-page JSON; search indexes only
-the title, and dashboard cards show the readable type label — never Mermaid
-source or SVG.
+a split edit mode (source + live debounced preview, template picker,
+Apply/Cancel, contained syntax errors, shared autosave and save status). Stored
+content is opaque visual-page JSON; search indexes only the title, and dashboard
+cards show the readable type label — never Mermaid source or SVG.
 
 ## Source-file IDE (HTML pages)
 

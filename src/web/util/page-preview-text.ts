@@ -279,9 +279,9 @@ export function richBlocksPlainText(blocks: unknown): string {
 export function pagePlainText(page: Page): string {
   const raw = page.content ?? ''
   if (!raw) return ''
-  // Dedicated Diagram / Mind Map pages: the stored Mermaid source is never
-  // surfaced as prose — the readable type label is the summary.
-  if (page.pageType === 'diagram' || page.pageType === 'mindmap') {
+  // Dedicated Diagram pages: the stored Mermaid source is never surfaced as
+  // prose — the readable type label is the summary.
+  if (page.pageType === 'diagram') {
     return ''
   }
   try {
@@ -303,9 +303,9 @@ export function pagePlainText(page: Page): string {
 }
 
 export function pagePreviewText(page: Page, maxChars = 120): string {
-  // Dedicated Diagram / Mind Map pages: the stored Mermaid source is never
-  // surfaced on cards — the readable type label is the summary.
-  if (page.pageType === 'diagram' || page.pageType === 'mindmap') {
+  // Dedicated Diagram pages: the stored Mermaid source is never surfaced on
+  // cards — the readable type label is the summary.
+  if (page.pageType === 'diagram') {
     return ''
   }
   return pagePlainText(page).slice(0, maxChars)

@@ -1,12 +1,15 @@
-import { Box, Skeleton, Stack } from '@mantine/core'
+import { Box, Button, Group, Skeleton, Stack } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { parseHtmlContent } from '@rtwiki/shared/schemas/html-content'
+import { IconPlus } from '@tabler/icons-react'
 import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
+import { UI_TEXT } from '../../config/index.js'
 import { HtmlPlaceholder } from '../html/html-placeholder.js'
 import { HtmlEditorErrorBoundary } from '../html-editor/html-editor-error-boundary.js'
 import type { EditorStatus } from '../html-editor/use-codemirror.js'
-import { RichToolbar } from '../rich-editor/rich-toolbar.js'
+import { DiagramTemplateBar } from '../rich-editor/blocks/diagram-template-bar.js'
 import type { AnyRichEditor } from '../rich-editor/schema.js'
+import type { DiagramCreateActions } from '../visual-pages/mermaid-workspace.js'
 import type { StatusSaveState } from '../workspace/status-bar.js'
 import { EditorHeader } from './editor-header.js'
 import classes from './page-workspace.module.css'
@@ -18,6 +21,15 @@ const HtmlEditorWorkspace = lazy(() => import('../html-editor/html-editor.js'))
 // loaded as its own chunk so the initial application bundle stays lean.
 const RichEditor = lazy(() =>
   import('../rich-editor/rich-editor.js').then((m) => ({ default: m.RichEditor }))
+)
+
+// The toolbar is part of the rich-editor feature and is reached through the same
+// lazy module as the editor above, so it lands in one chunk rather than pulling
+// BlockNote and ProseMirror into the initial bundle. It only ever renders once
+// `richEditor` exists, which means that chunk has already resolved by then, so this
+// adds no request of its own.
+const RichToolbar = lazy(() =>
+  import('../rich-editor/rich-editor.js').then((m) => ({ default: m.RichToolbar }))
 )
 
 // Dedicated Diagram / Mind Map workspaces share one lazily loaded component
@@ -86,18 +98,41 @@ export function PageWorkspace({
   // their toolbar through onToolbarReady into the same row (see below).
   const [richEditor, setRichEditor] = useState<AnyRichEditor | null>(null)
   const [htmlToolbar, setHtmlToolbar] = useState<ReactNode | null>(null)
+  // The Diagram page's creation controls. Handed up by the workspace rather than
+  // rendered inside it, so the row is the same one the Rich Note and HTML page
+  // use and the three toolbars sit at the same height on every page type. Null
+  // until the workspace mounts, and null again if it unmounts.
+  //
+  // Held as an object of actions rather than as bare functions on purpose. A
+  // `setState` given a function calls it as an updater with the previous state, so
+  // storing a handler directly would invoke it with `null` the moment it arrived —
+  // which is a diagram with a null source, a rejected save, and a toolbar that
+  // never appears. An object cannot be mistaken for an updater, so both actions
+  // travel together in something the setter treats as a plain value.
+  const [diagramActions, setDiagramActions] = useState<DiagramCreateActions | null>(null)
+
+  const wantsToolbarRow =
+    page.pageType === 'rich' || page.pageType === 'html' || page.pageType === 'diagram'
 
   return (
     <div className={classes.workspace}>
-      {(page.pageType === 'rich' || page.pageType === 'html') && (
+      {wantsToolbarRow && (
         <div
           className={classes.toolbarRow}
-          data-testid="rich-toolbar-row"
+          data-testid={page.pageType === 'diagram' ? 'diagram-toolbar-row' : 'rich-toolbar-row'}
           aria-busy={page.pageType === 'rich' && !richEditor}
         >
           {page.pageType === 'rich' ? (
             richEditor ? (
-              <RichToolbar editor={richEditor} linkablePages={linkablePages} />
+              <Suspense
+                fallback={
+                  <div className={classes.toolbarSkeleton} aria-hidden="true">
+                    <span />
+                  </div>
+                }
+              >
+                <RichToolbar editor={richEditor} linkablePages={linkablePages} />
+              </Suspense>
             ) : (
               <div className={classes.toolbarSkeleton} aria-hidden="true">
                 <span />
@@ -105,8 +140,40 @@ export function PageWorkspace({
                 <span />
               </div>
             )
-          ) : (
+          ) : page.pageType === 'html' ? (
             htmlToolbar
+          ) : // Visible by default and never gated on edit mode: choosing a
+          // template adds that diagram to the page. "Add diagram" sits beside the
+          // chooser rather than in the workspace below, because both are the same
+          // kind of action — creating a diagram on this page — and splitting them
+          // across two bars meant the one that added a *specific* type was above
+          // the page header while the one that added a default was below it.
+          //
+          // Rendered only once the workspace has handed its actions up, so a click
+          // cannot land before there is anything to add to.
+          diagramActions ? (
+            <Group gap="xs" wrap="nowrap" className={classes.diagramCreateRow}>
+              <Button
+                size="compact-sm"
+                variant="light"
+                className={classes.addDiagramButton}
+                leftSection={<IconPlus size={14} />}
+                onClick={diagramActions.addDiagram}
+                // Disabled rather than failing on click: the cap is a real limit
+                // and the control should say so instead of doing nothing.
+                disabled={!diagramActions.canAdd}
+                data-testid="diagram-add-block"
+              >
+                {UI_TEXT.diagramAddBlockLabel}
+              </Button>
+              <DiagramTemplateBar onPick={diagramActions.pickTemplate} />
+            </Group>
+          ) : (
+            <div className={classes.toolbarSkeleton} aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
           )}
         </div>
       )}
@@ -137,6 +204,7 @@ export function PageWorkspace({
           onSaveStateChange={onSaveStateChange}
           onRichEditorReady={setRichEditor}
           onToolbarReady={setHtmlToolbar}
+          onDiagramCreateActionsReady={setDiagramActions}
         />
       </div>
     </div>
@@ -164,7 +232,8 @@ function PageEditors({
   onFlushRef,
   onSaveStateChange,
   onRichEditorReady,
-  onToolbarReady
+  onToolbarReady,
+  onDiagramCreateActionsReady
 }: {
   page: Page
   breadcrumb?: string[]
@@ -180,6 +249,7 @@ function PageEditors({
   onSaveStateChange: (state: { isDirty: boolean; saveState: StatusSaveState }) => void
   onRichEditorReady: (editor: AnyRichEditor | null) => void
   onToolbarReady?: (node: ReactNode | null) => void
+  onDiagramCreateActionsReady?: (actions: DiagramCreateActions | null) => void
 }): JSX.Element | null {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
@@ -209,7 +279,7 @@ function PageEditors({
       </Suspense>
     )
   }
-  if (page.pageType === 'diagram' || page.pageType === 'mindmap') {
+  if (page.pageType === 'diagram') {
     return (
       <Suspense fallback={<VisualWorkspaceSkeleton />}>
         <MermaidPageWorkspace
@@ -223,6 +293,7 @@ function PageEditors({
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}
           onOpenPage={onOpenPageLink}
+          onCreateActionsReady={onDiagramCreateActionsReady}
         />
       </Suspense>
     )

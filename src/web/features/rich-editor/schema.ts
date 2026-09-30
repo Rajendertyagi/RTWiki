@@ -1,10 +1,9 @@
 import { type BlockNoteEditor, BlockNoteSchema, type PartialBlock } from '@blocknote/core'
 import { createReactInlineMathSpec, createReactMathBlockSpec } from '@blocknote/math-block'
 import { createReactCalloutSpec } from './blocks/callout.js'
-import { createReactDiagramSpec } from './blocks/diagram.js'
+import { createReactDiagramSpec, createReactMindMapSpec } from './blocks/diagram.js'
 import { createReactDocumentSpec } from './blocks/document-block.js'
 import { createReactLinkedPageSpec } from './blocks/linked-page-block.js'
-import { createReactMindMapSpec } from './blocks/mindmap.js'
 
 /**
  * The RTWiki Rich Document schema: BlockNote's default blocks plus the
@@ -21,15 +20,19 @@ import { createReactMindMapSpec } from './blocks/mindmap.js'
  *   because BlockNote's built-in `file` block renders the name in a `div` rather
  *   than an anchor, so an attached document was not clickable at all. See ADR-016
  *   for why the view route is separate and what it costs.
+ * - `diagram` / `mindMap`: one Mermaid block under two registered names. Only
+ *   `diagram` is offered; `mindMap` is a read alias so documents written before
+ *   the Mind Map block was retired still load as live diagrams. Both come from
+ *   the single implementation in blocks/diagram.tsx.
  *
- * Diagram, mind-map and linked-page blocks join this schema in their own
- * commits.
+ * Linked-page blocks join this schema in their own commit.
  */
 export const rtwikiBlockSchema = BlockNoteSchema.create().extend({
   blockSpecs: {
     mathBlock: createReactMathBlockSpec(),
     callout: createReactCalloutSpec(),
     diagram: createReactDiagramSpec(),
+    // Read alias only. Nothing inserts or offers this type; see blocks/diagram.tsx.
     mindMap: createReactMindMapSpec(),
     linkedPage: createReactLinkedPageSpec(),
     documentBlock: createReactDocumentSpec()

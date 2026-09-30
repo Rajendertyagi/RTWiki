@@ -15,7 +15,6 @@ import {
   IconFileText,
   IconFolder,
   IconMarkdown,
-  IconSitemap,
   IconTrash
 } from '@tabler/icons-react'
 import type { CSSProperties } from 'react'
@@ -64,8 +63,7 @@ const AFTER_ITEMS: ReadonlyArray<TypeItem> = [
   },
   { action: 'afterHtml', label: UI_TEXT.newAfterHtmlPage, icon: IconCode },
   { action: 'afterMarkdown', label: UI_TEXT.newAfterMarkdownPage, icon: IconMarkdown },
-  { action: 'afterDiagram', label: UI_TEXT.newAfterDiagramPage, icon: IconChartArea },
-  { action: 'afterMindMap', label: UI_TEXT.newAfterMindMapPage, icon: IconSitemap }
+  { action: 'afterDiagram', label: UI_TEXT.newAfterDiagramPage, icon: IconChartArea }
 ]
 
 const CHILD_ITEMS: ReadonlyArray<TypeItem> = [
@@ -77,8 +75,7 @@ const CHILD_ITEMS: ReadonlyArray<TypeItem> = [
   },
   { action: 'childHtml', label: UI_TEXT.newChildHtmlPage, icon: IconCode },
   { action: 'childMarkdown', label: UI_TEXT.newChildMarkdownPage, icon: IconMarkdown },
-  { action: 'childDiagram', label: UI_TEXT.newDiagramPage, icon: IconChartArea },
-  { action: 'childMindMap', label: UI_TEXT.newMindMapPage, icon: IconSitemap }
+  { action: 'childDiagram', label: UI_TEXT.newDiagramPage, icon: IconChartArea }
 ]
 
 // Import sources. Today only Markdown; kept as a submenu so tomorrow other

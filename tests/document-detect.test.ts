@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test'
+import { deflateRawSync } from 'node:zlib'
 import {
+  DOCUMENT_RESOURCE_LIMITS,
   DOCUMENT_TEXT_MAX_CHARS,
   decodeText,
   inspectDocumentUpload,
@@ -14,6 +16,11 @@ import {
   SERVED_DOCUMENT_MIME_TYPES,
   signaturelessDocumentFormatFor
 } from '../src/shared/attachments/document-formats.js'
+import {
+  DOCUMENT_MAX_TABLE_CELLS,
+  DOCUMENT_MAX_UNCOMPRESSED_BYTES,
+  DOCUMENT_MAX_ZIP_ENTRIES
+} from '../src/shared/constants/index.js'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 
@@ -34,22 +41,36 @@ function crc32(bytes: Uint8Array): number {
   return (c ^ 0xffffffff) >>> 0
 }
 
-/** A real ZIP (stored, uncompressed) — the container a DOCX actually is. */
-function zip(files: Array<[string, string]>): Uint8Array {
+/**
+ * A real ZIP — the container a DOCX actually is.
+ *
+ * `deflate` names the entries to compress rather than store, which is what makes a
+ * decompression-bomb fixture possible at all: a stored entry's size *is* its length, so a
+ * bomb built from stored entries would have to actually be that many bytes on disk. The
+ * deflate path uses `node:zlib`, so no dependency is added to test this.
+ */
+function zip(files: Array<[string, string]>, deflate: ReadonlySet<string> = new Set()): Uint8Array {
   const parts: Uint8Array[] = []
   const central: Uint8Array[] = []
   let offset = 0
   for (const [name, content] of files) {
     const nameBytes = enc(name)
-    const data = enc(content)
-    const crc = crc32(data)
+    const raw = enc(content)
+    const compressed = deflate.has(name) ? new Uint8Array(deflateRawSync(raw)) : null
+    const data = compressed ?? raw
+    // 0 is "stored", 8 is "deflate". Recorded in the local header *and* the central
+    // directory, because the parser reads the central directory.
+    const method = compressed ? 8 : 0
+    const crc = crc32(raw)
     const local = new Uint8Array(30 + nameBytes.length)
     const dv = new DataView(local.buffer)
     dv.setUint32(0, 0x04034b50, true)
     dv.setUint16(4, 20, true)
+    dv.setUint16(8, method, true)
     dv.setUint32(14, crc, true)
+    // Compressed size is `data.length`; uncompressed is always the original.
     dv.setUint32(18, data.length, true)
-    dv.setUint32(22, data.length, true)
+    dv.setUint32(22, raw.length, true)
     dv.setUint16(26, nameBytes.length, true)
     local.set(nameBytes, 30)
     parts.push(local, data)
@@ -58,9 +79,10 @@ function zip(files: Array<[string, string]>): Uint8Array {
     cdv.setUint32(0, 0x02014b50, true)
     cdv.setUint16(4, 20, true)
     cdv.setUint16(6, 20, true)
+    cdv.setUint16(10, method, true)
     cdv.setUint32(16, crc, true)
     cdv.setUint32(20, data.length, true)
-    cdv.setUint32(24, data.length, true)
+    cdv.setUint32(24, raw.length, true)
     cdv.setUint16(28, nameBytes.length, true)
     cdv.setUint32(42, offset, true)
     cd.set(nameBytes, 46)
@@ -332,5 +354,154 @@ describe('document inspection', () => {
     const result = await inspectDocumentUpload(huge, 'text/plain')
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.text.length).toBeLessThanOrEqual(DOCUMENT_TEXT_MAX_CHARS)
+  })
+})
+
+/**
+ * Resource ceilings, and what they refuse.
+ *
+ * ## Why this suite exists
+ *
+ * `officeparser` carries its own default decompression ceilings. RTWiki used to take
+ * whatever those were, so the application had no decompression guard of its own — the guard
+ * existed only as an unstated property of a dependency version. These tests pin two things:
+ * that RTWiki's own limits are the ones passed to the parser, and that reaching one refuses
+ * the upload rather than letting it through.
+ *
+ * ## Why the limits are passed in
+ *
+ * The real ceiling is 512 MB *uncompressed*. A fixture that reached it would have to occupy
+ * that much memory to exist, so the fixtures here use a much smaller ceiling and a much
+ * larger expansion ratio: a few kilobytes of highly compressible XML against a limit of
+ * 1 KB. That is the same code path, at a scale a test can afford — and it is the only way to
+ * tell "the guard fired" apart from "the parser did not recognise these bytes", which is why
+ * the refusal carries a `detail`.
+ */
+describe('document resource limits', () => {
+  /** A real DOCX whose document part is one enormous, highly compressible run. */
+  function docxWithHugePart(bytes: number): Uint8Array {
+    const filler = 'A'.repeat(bytes)
+    return zip(
+      [
+        [
+          '[Content_Types].xml',
+          '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+        ],
+        [
+          '_rels/.rels',
+          '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+        ],
+        [
+          'word/document.xml',
+          `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${filler}</w:t></w:r></w:p></w:body></w:document>`
+        ]
+      ],
+      // Only the big part is deflated. The ZIP then costs a few kilobytes on disk while
+      // asking the parser to materialise `bytes` of XML - the whole point of the guard.
+      new Set(['word/document.xml'])
+    )
+  }
+
+  const TIGHT = Object.freeze({
+    maxUncompressedBytes: 1024,
+    maxZipEntries: 10_000,
+    maxTableCells: 1_000_000
+  })
+
+  it('refuses a container that would expand past the uncompressed ceiling', async () => {
+    const bomb = docxWithHugePart(4 * 1024 * 1024)
+    // Precondition, so a fixture that failed to compress cannot pass this test by
+    // accident: the archive really is tiny, and what it expands to really is large.
+    expect(bomb.byteLength).toBeLessThan(200 * 1024)
+
+    const result = await inspectDocumentUpload(bomb, undefined, TIGHT)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    // `extract_failed`, not `unsupported_type`: this is a real DOCX, and telling a user
+    // their file type is unsupported would be a lie they cannot act on.
+    expect(result.reason).toBe('extract_failed')
+    // And *specifically* a tripped ceiling, which is what makes this test non-vacuous.
+    expect(result.detail).toBe('limit_exceeded')
+  })
+
+  it('accepts a real document that sits just inside the ceiling', async () => {
+    // The control for the test above. Without it, a detector that refused every DOCX would
+    // pass the bomb test too.
+    const generous = { ...TIGHT, maxUncompressedBytes: 8 * 1024 * 1024 }
+    const result = await inspectDocumentUpload(REAL_DOCX, undefined, generous)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.format.ext).toBe('docx')
+    expect(result.text).toContain('Mitochondria')
+  })
+
+  it('refuses a container with more entries than the ceiling allows', async () => {
+    // The shape the byte ceiling cannot see: thousands of tiny files compress to almost
+    // nothing, so the archive stays small while the entry count is enormous.
+    const many: Array<[string, string]> = [
+      [
+        '[Content_Types].xml',
+        '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+      ],
+      [
+        '_rels/.rels',
+        '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+      ],
+      [
+        'word/document.xml',
+        '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>hello</w:t></w:r></w:p></w:body></w:document>'
+      ]
+    ]
+    for (let i = 0; i < 40; i++) many.push([`word/media/pad${i}.xml`, '<p/>'])
+    const archive = zip(many)
+    expect(archive.byteLength).toBeLessThan(64 * 1024)
+
+    const result = await inspectDocumentUpload(archive, undefined, { ...TIGHT, maxZipEntries: 8 })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('extract_failed')
+    expect(result.detail).toBe('limit_exceeded')
+  })
+
+  it('refuses a truncated archive, and does not call it too large', async () => {
+    // The distinction the `detail` exists for. A damaged file and a bomb produce the same
+    // user-facing refusal, but they are not the same event, and conflating them would make
+    // a corrupted upload look like a resource attack in the logs.
+    const truncated = REAL_DOCX.subarray(0, Math.floor(REAL_DOCX.byteLength / 2))
+    const result = await inspectDocumentUpload(truncated)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('extract_failed')
+    expect(result.detail).toBe('malformed')
+  })
+
+  it('leaves an image to the image path rather than calling it a broken document', async () => {
+    // The regression this suite nearly shipped. A parse error cannot tell "a DOCX I could
+    // not open" from "this is a PNG", and treating the throw as a refusal refused every
+    // image upload in the application.
+    const png = new Uint8Array(
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      )
+    )
+    const result = await inspectDocumentUpload(png, 'image/png')
+    // Not `refused`: that distinction is the image path's to make, from the pixels.
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('unsupported_type')
+  })
+
+  it('uses the ceilings RTWiki declares, not whatever the library defaults to', async () => {
+    // The policy assertion. These are the numbers SECURITY.md and DATA_MODEL.md cite, and
+    // a change here is a change to a documented limit rather than an invisible one.
+    expect(DOCUMENT_RESOURCE_LIMITS.maxUncompressedBytes).toBe(DOCUMENT_MAX_UNCOMPRESSED_BYTES)
+    expect(DOCUMENT_RESOURCE_LIMITS.maxZipEntries).toBe(DOCUMENT_MAX_ZIP_ENTRIES)
+    expect(DOCUMENT_RESOURCE_LIMITS.maxTableCells).toBe(DOCUMENT_MAX_TABLE_CELLS)
+    expect(Object.isFrozen(DOCUMENT_RESOURCE_LIMITS)).toBe(true)
+    // A ceiling nobody would actually choose is not a ceiling. 512 MB of *uncompressed*
+    // content is orders of magnitude above any real note, which is what makes it safe
+    // rather than arbitrary.
+    expect(DOCUMENT_MAX_UNCOMPRESSED_BYTES).toBeGreaterThan(1_000_000)
   })
 })

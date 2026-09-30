@@ -1,0 +1,180 @@
+/*
+ * The diagram's own view: the layer that zoom and pan move, and the control cluster.
+ *
+ * Shared by both surfaces that render a diagram — the Diagram page's card and the Rich
+ * Note's block — because they drifted apart badly when each had its own. The colours
+ * are the app's tokens, so a control here looks the same as one on either surface and
+ * follows the colour scheme.
+ *
+ * These are about the *picture*. The box around it is a different control, with its own
+ * corner handle, and the two deliberately do not affect each other: zooming a diagram
+ * does not resize the block, and resizing the block does not change the zoom.
+ */
+
+/**
+ * The wrapper the layer sits in.
+ *
+ * A flex container so the layer below is sized by it rather than by the diagram.
+ * `height: 100%` where an ancestor has a definite height — the Diagram page's card —
+ * and content height where none does, which is the Rich Note's case. Without this the
+ * layer's own `height: 100%` had nothing definite to resolve against and the diagram
+ * collapsed to nothing.
+ */
+.host {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/**
+ * The layer the controls move and scale.
+ *
+ * The diagram inside sizes itself as a percentage of this box, so the box has to be
+ * definite. Left to size itself from the diagram, that percentage is circular and the
+ * diagram collapses the moment the block gets a stored size — measured 0x0 after every
+ * size preset, down from a working 300x292.
+ */
+.layer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  /* The pan offset and zoom arrive as custom properties, written by the component on
+   * pointer-driven state. The project's rule keeps inline style objects to custom
+   * properties only, so the transform itself is composed here. */
+  transform: translate(var(--view-x, 0px), var(--view-y, 0px)) scale(var(--view-scale, 1));
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.layer > svg {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* The control cluster, in the diagram's own bottom-right corner, revealed on hover so
+ * it never sits on a diagram that is being read. */
+.controls {
+  position: absolute;
+  right: 6px;
+  /* Clears the block's corner resize handle, which is 18px tall and anchored at
+   * `bottom: 0`. At 24px the cluster's bottom row sat on top of it. */
+  bottom: 22px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.host:hover .controls,
+.host:focus-within .controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: color-mix(in srgb, var(--rtwiki-elevated) 92%, transparent);
+  border: 1px solid var(--rtwiki-border);
+  border-radius: var(--mantine-radius-xs);
+  cursor: pointer;
+  color: var(--rtwiki-text);
+}
+
+.button:hover {
+  background: var(--rtwiki-hover);
+  border-color: var(--rtwiki-color-blue-6, var(--rtwiki-selected));
+}
+
+.button svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/*
+ * Placed by hand rather than left to fill the grid. Auto-flow scattered the pan arrows
+ * across three rows so the pad did not read as a pad. These put the four arrows around
+ * a reset in the centre, with zoom directly above and below the right arrow and full
+ * screen under the reset. The top-middle cell is left empty on purpose, so the centre
+ * reads as a centre.
+ */
+.button:nth-child(1) {
+  grid-area: 1 / 1;
+} /* pan up    */
+.button:nth-child(2) {
+  grid-area: 2 / 1;
+} /* pan left  */
+.button:nth-child(3) {
+  grid-area: 2 / 2;
+} /* reset     */
+.button:nth-child(4) {
+  grid-area: 3 / 1;
+} /* pan down  */
+.button:nth-child(5) {
+  grid-area: 1 / 3;
+} /* zoom in   */
+.button:nth-child(6) {
+  grid-area: 2 / 3;
+} /* pan right */
+.button:nth-child(7) {
+  grid-area: 3 / 3;
+} /* zoom out  */
+.button:nth-child(8) {
+  grid-area: 3 / 2;
+} /* full screen */
+
+/* ---- full screen: the diagram alone, over everything ---- */
+.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--rtwiki-overlay-z-index, 200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rtwiki-canvas);
+}
+
+.fullscreen .layer {
+  width: 100%;
+  height: 100%;
+}
+
+.fullscreenClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--rtwiki-pane);
+  border: 1px solid var(--rtwiki-border);
+  border-radius: var(--mantine-radius-sm);
+  cursor: pointer;
+  color: var(--rtwiki-text);
+}
+
+.fullscreenClose svg {
+  width: 18px;
+  height: 18px;
+}

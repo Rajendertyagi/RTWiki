@@ -89,11 +89,19 @@ A filename *sanitiser* is the wrong tool here, and was measured: `sanitize-filen
 
 ### 7. A signature-less upload is stored as text, and is not served back
 
-`.txt`, `.md` and `.html` are accepted: their text is extracted and stored in `extracted_text`, making them searchable. Their bytes are **not** offered for download, because a `GET` of such an attachment answers 404 — there is nothing meaningful to serve, and serving it would mean serving bytes whose type was never established.
+`.txt`, `.md` and `.html` are accepted: their text is extracted and stored in `extracted_text`, and appended to the owning page's `search_index` row so the file is findable by what is inside it. Their bytes are neither offered for download nor kept: a `GET` of such an attachment answers 404, because there is nothing meaningful to serve and serving it would mean serving bytes whose type was never established. Storing bytes nothing can retrieve only duplicated unreachable content into every backup, so the row records their absence explicitly (`bytes_stored = 0`).
 
 This matches the reference implementation, which converts text to HTML on import and never stores it as a servable file. The `signatureless` flag in the allowlist makes the distinction explicit rather than implicit, and a test asserts no signature-less type is ever in the served set.
 
-### 8. A document outlives the note that referenced it
+### 8. Every parse carries RTWiki's own resource ceilings
+
+`officeparser` ships default decompression ceilings, and RTWiki now passes its own rather than inheriting them: `DOCUMENT_MAX_UNCOMPRESSED_BYTES` (512 MB uncompressed), `DOCUMENT_MAX_ZIP_ENTRIES` (10 000) and `DOCUMENT_MAX_TABLE_CELLS` (1 000 000). The values match the library defaults deliberately — what changes is that they are RTWiki's, recorded in configuration and in SECURITY.md §3, so the guard cannot move silently when the dependency's does.
+
+This is a real control rather than a restatement of the upload size limit. `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` bounds what arrives; it does not bound what a compressed archive asks the parser to expand it into, and the classic crossing of that gap — a repeated byte run — costs almost nothing to store. The table-cell ceiling is a genuinely separate guard, because ODF encodes cell repeats in the XML and expands them while building the AST, after both the byte and entry ceilings have already been satisfied.
+
+A container recognised and then refused is reported as `extract_failed`, not `unsupported_type`. The distinction matters to a user in the only way that matters: telling someone their valid DOCX is a file type this application does not accept is a claim they can do nothing about. Whether the refusal was a tripped ceiling or a damaged archive is retained on the rejection as a diagnostic and logged, never shown — both are fixed by opening the file and saving a fresh copy.
+
+### 9. A document outlives the note that referenced it
 
 Pages are soft-deleted and attachments have no page foreign key, so deleting a note does not delete its documents. This is a deliberate policy, matching the existing attachment behaviour and the reference implementation: an attachment may be uploaded before it is referenced, and a note may be deleted while its document is still wanted. A cascade would destroy documents still in use elsewhere.
 
@@ -104,7 +112,7 @@ The cost is the same one already recorded in KNOWN_BUGS §6: nothing reclaims an
 **Positive**
 
 - R-024 and AC-030/AC-031 are satisfied: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP, RTF, EPUB, TXT and MD.
-- **A document's text is searchable.** For a study tool this is most of the value: a PDF you imported becomes findable by what is in it.
+- **A document's text is searchable.** For a study tool this is most of the value: a PDF you imported becomes findable by what is in it. The text is appended to the **owning page's** `search_index` row, not given an index of its own, so a note with both prose and an attached PDF appears once in results and is found by words from either.
 - No new storage, endpoint, or backup path. One table, one upload route, one streaming path.
 - A renamed document cannot be downgraded to text, and a mislabelled upload is stored as what it actually is.
 - The download name cannot terminate a response header, and cannot be used to reverse how it displays.

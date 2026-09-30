@@ -24,6 +24,26 @@ import { type DefaultTreeAdapterTypes, parse } from 'parse5'
  */
 export const SEARCH_EXTRACTION_MAX_CHARS = 100_000 as const
 
+/**
+ * Ceiling on a page's **whole** searchable representation, page text plus the text of
+ * every document attached to it.
+ *
+ * Separate from `SEARCH_EXTRACTION_MAX_CHARS`, which caps one *source*. The cap has to
+ * exist twice over: a row is scanned by a `LIKE '%term%'` full scan on every search, so
+ * an unbounded row is a performance cliff rather than a correctness problem — and
+ * attachment text is attacker-supplied in bulk, since a page may reference many
+ * documents.
+ *
+ * The page's own text is placed first and therefore always survives. An attachment's
+ * text is added only while there is budget left, in the order the page references its
+ * documents, so the result is deterministic: re-indexing an unchanged page produces a
+ * byte-identical row.
+ */
+export const SEARCH_INDEX_MAX_CHARS = 200_000 as const
+
+/** Separator between sources, chosen so a term cannot span the boundary and match falsely. */
+const SOURCE_SEPARATOR = '\n\n'
+
 /** Elements whose entire subtree is invisible machinery, never readable text. */
 const EXCLUDED_ELEMENTS = new Set(['script', 'style', 'template'])
 
@@ -155,8 +175,10 @@ interface RichBlock {
 
 /**
  * Emits the readable text a block carries in its own `content`, applying the
- * per-type policy. Contributes nothing for formula/diagram/mindmap source,
- * unknown types, the preservation marker, or structurally empty blocks.
+ * per-type policy. Contributes nothing for formula/diagram source, unknown types,
+ * the preservation marker, or structurally empty blocks. The retired `mindMap`
+ * block is still named here because documents written before its retirement
+ * still contain it, and it is withheld on the same terms as `diagram`.
  *
  * This decides the policy for ONE level only; descending into nested blocks is
  * {@link collectBlockText}'s job, so the policy is applied identically at
@@ -248,7 +270,8 @@ function collectOwnBlockText(block: RichBlock, out: string[], depth: number): vo
       }
       return
     }
-    // mathBlock / diagram / mindMap and any unknown type: skip source.
+    // mathBlock / diagram (and the retired mindMap alias) and any unknown type:
+    // skip source.
     default:
       return
   }
@@ -325,10 +348,10 @@ export function extractSearchableRich(storedContent: string): string {
 }
 
 export function extractSearchableContent(pageType: PageType, storedContent: string): string {
-  // Dedicated Diagram / Mind Map pages: the Mermaid source is deliberately
-  // NOT indexed (same readable-text policy as embedded diagram blocks) —
-  // only the page title remains searchable.
-  if (pageType === 'diagram' || pageType === 'mindmap') {
+  // Dedicated Diagram pages: the Mermaid source is deliberately NOT indexed
+  // (same readable-text policy as embedded diagram blocks) — only the page
+  // title remains searchable.
+  if (pageType === 'diagram') {
     return ''
   }
   if (pageType === 'html') {
@@ -357,7 +380,10 @@ export function extractSearchableContent(pageType: PageType, storedContent: stri
         'markdown' in parsed &&
         typeof (parsed as { markdown: unknown }).markdown === 'string'
       ) {
-        return (parsed as { markdown: string }).markdown
+        // Capped like every other branch. This one was not: a Markdown page's whole
+        // source went into the index unbounded, while the HTML and rich branches were
+        // sliced. Same row, same scan, different ceiling.
+        return (parsed as { markdown: string }).markdown.slice(0, SEARCH_EXTRACTION_MAX_CHARS)
       }
     } catch {
       // Malformed/legacy content falls through to the empty-string contract.
@@ -366,4 +392,47 @@ export function extractSearchableContent(pageType: PageType, storedContent: stri
   }
   // Rich pages: parse BlockNote JSON into readable text (never raw JSON).
   return extractSearchableRich(storedContent)
+}
+
+/**
+ * A page's whole searchable representation: its own text, then the text of every
+ * document it references.
+ *
+ * ## Why this is one row and not a second index
+ *
+ * The product promise is that a PDF you attached becomes findable by what is inside it.
+ * The search model, though, is page-oriented: `search_index` is keyed by `page_id` and
+ * results are pages. Appending the documents' text to the owning page's row satisfies
+ * both — one result per page, and the result is the page that holds the document.
+ *
+ * The alternative, a parallel attachment index queried alongside it, would produce a
+ * *second* result for the same page whenever a page had both searchable text and an
+ * attachment, and a user would see the same note twice with no way to tell them apart.
+ *
+ * ## This is plain text
+ *
+ * The output is stored in a TEXT column and read only by a `LIKE` comparison. It is never
+ * rendered. An extracted document's text is therefore never an injection vector: there is
+ * no path from this string to markup.
+ */
+export function composeSearchableContent(
+  pageText: string,
+  attachmentTexts: readonly string[]
+): string {
+  const parts: string[] = []
+  let length = 0
+  for (const source of [pageText, ...attachmentTexts]) {
+    if (source.length === 0) continue
+    const separator = parts.length > 0 ? SOURCE_SEPARATOR.length : 0
+    if (length + separator + source.length > SEARCH_INDEX_MAX_CHARS) {
+      // Deterministic truncation: the same inputs always produce the same row, so a
+      // re-index that changes nothing is indistinguishable from one that was skipped.
+      const remaining = SEARCH_INDEX_MAX_CHARS - length - separator
+      if (remaining > 0) parts.push(source.slice(0, remaining))
+      break
+    }
+    parts.push(source)
+    length += separator + source.length
+  }
+  return parts.join(SOURCE_SEPARATOR)
 }

@@ -84,7 +84,7 @@ export function useSpellcheck(
         // The plugin reads the holder on every decoration pass, so a metadata-only
         // transaction is all it takes to make the underlines appear.
         const view = editor.prosemirrorView
-        if (view && view.dom.isConnected) refreshSpellcheckDecorations(view)
+        if (view?.dom.isConnected) refreshSpellcheckDecorations(view)
       })
     })
 

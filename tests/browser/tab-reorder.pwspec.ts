@@ -1,6 +1,20 @@
 import { expect, type Page, test } from '@playwright/test'
 
 /**
+ * Narrows a value that a test assumes is present, failing with a diagnostic if it is not.
+ *
+ * These tests measure real geometry, so `null` means the premise failed - the element
+ * was not rendered, or the page did not settle. A non-null assertion would let that
+ * surface later as an arithmetic `NaN` or a confusing matcher error; this turns it into
+ * the actual cause at the point it happens.
+ */
+function must<T>(value: T | null | undefined, what: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`${what} is missing - the test premise did not hold`)
+  }
+  return value
+}
+/**
  * Tab reordering, by pointer and by keyboard.
  *
  * These drive a real pointer. A colour or geometry assertion cannot tell
@@ -38,8 +52,8 @@ async function tabOrder(page: Page): Promise<string[]> {
 async function dragTabOver(page: Page, fromId: string, ontoId: string): Promise<void> {
   const handle = page.locator(`[data-testid="tab-drag-handle-${fromId}"]`)
   const target = page.locator(`[data-testid="tab-drag-handle-${ontoId}"]`)
-  const a = (await handle.boundingBox())!
-  const b = (await target.boundingBox())!
+  const a = must(await handle.boundingBox(), 'source tab box')
+  const b = must(await target.boundingBox(), 'target box')
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
   await page.mouse.down()
   // Move in steps: a single jump does not produce the intermediate pointer
@@ -83,13 +97,15 @@ test.describe('Tab reordering', () => {
 
     // Drag the first tab past the third.
     const ids = await tabOrder(page)
-    await dragTabOver(page, ids[0]!, ids[2]!)
+    await dragTabOver(page, must(ids[0], `tab id at 0`), must(ids[2], `tab id at 2`))
 
     const after = await tabTitles(page)
     // eslint-disable-next-line no-console
-    console.log('TABS ' + JSON.stringify({ before, after }))
+    console.log(`TABS ${JSON.stringify({ before, after })}`)
     expect(after, 'the dragged tab must end up after the one it was dropped on').not.toEqual(before)
-    expect(after.indexOf(before[0]!)).toBeGreaterThan(after.indexOf(before[2]!))
+    expect(after.indexOf(must(before[0], `tab title at 0`))).toBeGreaterThan(
+      after.indexOf(must(before[2], `tab title at 2`))
+    )
     // Nothing lost, nothing duplicated.
     expect([...after].sort()).toEqual([...before].sort())
   })
@@ -121,7 +137,7 @@ test.describe('Tab reordering', () => {
     expect(after.join()).toContain('Kept')
     expect(after.join()).not.toContain('Dropped')
     // And no reordering happened as a side effect: the survivor is still first.
-    expect(after).toEqual([before[0]!])
+    expect(after).toEqual([must(before[0], `tab title at 0`)])
   })
 
   test('Ctrl+Arrow moves a tab and announces the new position', async ({ page, request }) => {
@@ -151,7 +167,7 @@ test.describe('Tab reordering', () => {
 
     const after = await tabTitles(page)
     // eslint-disable-next-line no-console
-    console.log('TABS_KB ' + JSON.stringify({ before, after }))
+    console.log(`TABS_KB ${JSON.stringify({ before, after })}`)
     expect(after[1]).toBe(before[0])
     expect(after).toHaveLength(3)
     expect([...after].sort()).toEqual([...before].sort())
@@ -161,8 +177,8 @@ test.describe('Tab reordering', () => {
     const announced =
       (await page.locator('[data-testid="tab-reorder-announcer"]').textContent()) ?? ''
     // eslint-disable-next-line no-console
-    console.log('TABS_ANNOUNCEMENT ' + JSON.stringify(announced))
-    expect(announced).toContain(before[0]!)
+    console.log(`TABS_ANNOUNCEMENT ${JSON.stringify(announced)}`)
+    expect(announced).toContain(must(before[0], `tab title at 0`))
     expect(announced).toContain('position 2 of 3')
 
     // Focus must have travelled with the tab it moved.
@@ -172,11 +188,11 @@ test.describe('Tab reordering', () => {
     })
     const idsAfter = await tabOrder(page)
     // eslint-disable-next-line no-console
-    console.log('TABS_FOCUS_FOLLOW ' + JSON.stringify({ focusedId, idsAfter }))
+    console.log(`TABS_FOCUS_FOLLOW ${JSON.stringify({ focusedId, idsAfter })}`)
     expect(focusedId, 'focus must follow the moved tab').not.toBeNull()
     // The focused element is the one now sitting in the second slot.
     expect(idsAfter[1]).toBe(focusedId)
-    expect(after[1]).toBe(before[0]!)
+    expect(after[1]).toBe(must(before[0], `tab title at 0`))
     expect(idsAfter.length).toBe(3)
   })
 
@@ -228,7 +244,9 @@ test.describe('Tab reordering', () => {
     // assertion below would be checking the tab that was already selected.
     await page.locator(`${TAB}:has-text("${before[0]}")`).click()
     await page.waitForTimeout(350)
-    expect(await page.locator(`${TAB}[aria-selected="true"]`).textContent()).toContain(before[0]!)
+    expect(await page.locator(`${TAB}[aria-selected="true"]`).textContent()).toContain(
+      must(before[0], `tab title at 0`)
+    )
 
     await page.locator(`${TAB}[aria-selected="true"]`).focus()
     // Measured, not assumed: if focus never reached the tab, the keypress goes
@@ -242,7 +260,7 @@ test.describe('Tab reordering', () => {
       }
     })
     // eslint-disable-next-line no-console
-    console.log('TABS_FOCUS ' + JSON.stringify(focusedTag))
+    console.log(`TABS_FOCUS ${JSON.stringify(focusedTag)}`)
     expect(focusedTag.isTab, 'focus must be on the tab for the keypress to mean anything').toBe(
       true
     )
@@ -252,7 +270,7 @@ test.describe('Tab reordering', () => {
     // Selection moved, order did not.
     expect(await tabTitles(page)).toEqual(before)
     const selected = await page.locator(`${TAB}[aria-selected="true"]`).textContent()
-    expect(selected).toContain(before[1]!)
+    expect(selected).toContain(must(before[1], `tab title at 1`))
   })
 
   test('the tab strip is still a valid ARIA tablist after the change', async ({

@@ -11,8 +11,7 @@ import type { getDb } from '../database/index.js'
 // turns repository errors into HTTP, and one mapping beats two that can disagree.
 import { PageVersionConflictError } from '../repositories/page-repository.js'
 import * as service from '../services/page-service.js'
-
-const requestTextEncoder = new TextEncoder()
+import { type JsonBodyResult, readJson } from '../utils/read-json.js'
 
 /**
  * Ceiling on the `q` search term. Page search is a substring match over every
@@ -31,44 +30,16 @@ const MAX_SEARCH_QUERY_LENGTH = 200
 const PAGE_VERSION_CONFLICT_MESSAGE =
   'This page was changed in another tab or window, so your changes were not saved. Copy your text, then reload the page and add it again.'
 
-type BodyResult = { ok: true; body: unknown } | { ok: false; handled: false }
-type HandledBodyResult = { ok: false; handled: true; response: Response }
-
 /**
- * Reads the request body with an enforced byte ceiling before any parsing.
+ * Reads this route family's request body.
  *
- * The Content-Length header is checked first (cheap rejection), then the raw
- * byte length of the actually-read text (authoritative). Malformed JSON is a
- * client error (400), not a server fault.
+ * A thin call into the shared reader rather than a private copy. The byte ceiling
+ * differs from the schedule's — pages carry BlockNote JSON, which is larger than a
+ * timetable entry — so it is passed in, but the media-type rule and the refusal
+ * order are the shared ones and cannot drift from the other JSON routes.
  */
-async function readJsonBody(c: Context): Promise<BodyResult | HandledBodyResult> {
-  const contentLength = Number(c.req.header('content-length') ?? '0')
-  if (Number.isFinite(contentLength) && contentLength > MAX_PAGE_JSON_BODY_BYTES) {
-    return {
-      ok: false,
-      handled: true,
-      response: c.json({ error: 'Request body too large' }, 413)
-    }
-  }
-
-  const raw = await c.req.text()
-  if (requestTextEncoder.encode(raw).byteLength > MAX_PAGE_JSON_BODY_BYTES) {
-    return {
-      ok: false,
-      handled: true,
-      response: c.json({ error: 'Request body too large' }, 413)
-    }
-  }
-
-  try {
-    return { ok: true, body: JSON.parse(raw) as unknown }
-  } catch {
-    return {
-      ok: false,
-      handled: true,
-      response: c.json({ error: 'Invalid JSON' }, 400)
-    }
-  }
+async function readJsonBody(c: Context): Promise<JsonBodyResult> {
+  return readJson(c, MAX_PAGE_JSON_BODY_BYTES)
 }
 
 export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono {
@@ -98,11 +69,11 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
 
   routes.post('/', async (c) => {
     const bodyResult = await readJsonBody(c)
-    if (!bodyResult.ok && bodyResult.handled) {
-      return bodyResult.response
-    }
+    // The shared reader answers every failure itself, so a non-ok result is always
+    // a response to return. The private reader this replaced had a second,
+    // unreachable "not handled" branch that fell through to a generic message.
     if (!bodyResult.ok) {
-      return c.json({ error: 'Invalid input' }, 400)
+      return bodyResult.response
     }
     try {
       const parsed = CreatePageSchema.safeParse(bodyResult.body)
@@ -179,11 +150,8 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
 
   routes.patch('/:id', async (c) => {
     const bodyResult = await readJsonBody(c)
-    if (!bodyResult.ok && bodyResult.handled) {
-      return bodyResult.response
-    }
     if (!bodyResult.ok) {
-      return c.json({ error: 'Invalid input' }, 400)
+      return bodyResult.response
     }
 
     // Page-type conversion is not supported in Phase 4A. The shared update
@@ -234,11 +202,8 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
 
   routes.post('/:id/move', async (c) => {
     const bodyResult = await readJsonBody(c)
-    if (!bodyResult.ok && bodyResult.handled) {
-      return bodyResult.response
-    }
     if (!bodyResult.ok) {
-      return c.json({ error: 'Invalid input' }, 400)
+      return bodyResult.response
     }
     try {
       const parsed = PageMoveSchema.safeParse(bodyResult.body)

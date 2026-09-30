@@ -35,11 +35,7 @@ test.describe('dedicated diagram and mind map pages', () => {
     expect(pageErrors, 'no uncaught browser exceptions').toEqual([])
   })
 
-  async function createViaDialog(
-    page: Page,
-    title: string,
-    type: 'diagram' | 'mindmap'
-  ): Promise<void> {
+  async function createViaDialog(page: Page, title: string, type: 'diagram'): Promise<void> {
     await page.goto('/')
     await page.locator('[aria-label="New page"]').first().click()
     const dialog = page.getByRole('dialog')
@@ -58,8 +54,8 @@ test.describe('dedicated diagram and mind map pages', () => {
     await expect(page.locator('[role="tree"]').getByText(title)).toBeVisible()
   })
 
-  test('create a Mind Map child page from the tree context menu', async ({ page }) => {
-    const parentTitle = uniqueTitle('MindMap Parent')
+  test('create a Diagram child page from the tree context menu', async ({ page }) => {
+    const parentTitle = uniqueTitle('Diagram Child Parent')
     await page.goto('/')
     await page.locator('[aria-label="New page"]').first().click()
     const dialog = page.getByRole('dialog')
@@ -67,15 +63,44 @@ test.describe('dedicated diagram and mind map pages', () => {
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
 
-    // Right-click the row → context menu → Mind map page (child).
+    // Right-click the row → context menu → Diagram page (child).
     const row = page.locator('[role="treeitem"]', { hasText: parentTitle }).first()
     await row.click({ button: 'right' })
     await expect(page.getByTestId('tree-context-menu')).toBeVisible()
     await page.getByRole('menuitem', { name: 'Insert child note' }).hover()
-    await page.getByRole('menuitem', { name: 'Mind map page' }).click()
-    await expect(page.getByTestId('mindmap-workspace')).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('menuitem', { name: 'Diagram page' }).click()
+    await expect(page.getByTestId('diagram-workspace')).toBeVisible({ timeout: 15_000 })
     // The new page is a child of the parent (visible in breadcrumb or tree).
-    await expect(page.getByTestId('mindmap-rendered').locator('svg')).toBeVisible()
+    await expect(page.getByTestId('diagram-rendered').locator('svg')).toBeVisible()
+  })
+
+  // The Mind Map page is retired. These assert the removal rather than trusting
+  // it: a creation path that survived would let a user make a page whose type the
+  // API now rejects, and the failure would surface as a confusing error at save.
+  test('no Mind Map page can be created from the New Page dialog', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByTestId('new-page-type-diagram')).toBeVisible()
+    await expect(dialog.getByTestId('new-page-type-mindmap')).toHaveCount(0)
+    await expect(dialog.getByText('Mind map', { exact: true })).toHaveCount(0)
+  })
+
+  test('no Mind Map page can be created from the tree context menu', async ({ page }) => {
+    const parentTitle = uniqueTitle('No MindMap Parent')
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(parentTitle)
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+
+    const row = page.locator('[role="treeitem"]', { hasText: parentTitle }).first()
+    await row.click({ button: 'right' })
+    await expect(page.getByTestId('tree-context-menu')).toBeVisible()
+    await page.getByRole('menuitem', { name: 'Insert child note' }).hover()
+    await expect(page.getByRole('menuitem', { name: 'Diagram page' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Mind map page' })).toHaveCount(0)
   })
 
   test('diagram workspace: edit mode with live preview, template, apply/cancel', async ({
@@ -97,14 +122,11 @@ test.describe('dedicated diagram and mind map pages', () => {
     await input.fill('sequenceDiagram\n    Alice->>Bob: Hi')
     await expect(page.getByTestId('diagram-live-preview').locator('svg')).toBeVisible()
 
-    // The flat template bar loads a starter into the source. This used to drive a
-    // `Select` dropdown at `diagram-template`; that picker is gone, replaced by
-    // the bar, so the test was clicking a testid that no longer exists. Flowchart
-    // now also opens a direction menu rather than loading directly, because
-    // Mermaid offers it four ways — so pick one explicitly.
-    await page.getByTestId('template-flowchart').click()
-    await page.getByTestId('template-variant-flowchart-Top-to-bottom').click()
-    await expect(page.getByTestId('diagram-source-input')).toHaveValue(/flowchart TD|graph TD/)
+    // The template controls are in the page's toolbar row now, not in the edit
+    // pane, and choosing one adds a diagram rather than filling the source. So
+    // this step is gone from here; the picker's behaviour is covered in
+    // diagram-templates.pwspec.ts against the toolbar itself. What remains of this
+    // test is the source editor itself.
 
     // Cancel restores the applied source; then apply a real change.
     await page.getByTestId('diagram-cancel').click()

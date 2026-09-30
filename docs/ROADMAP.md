@@ -147,7 +147,7 @@ Safe `.md` import and export, Markdown templates, preview refinements, and clear
 - `UI_TEXT` additions (templates, labels)
 
 **Dependencies**
-- The Markdown page type already supports edit/preview. The shared import pipeline (HTML/Markdown import) already exists. `.md` round-trip must stay safe (DOMPurify; no HTML/script execution).
+- The Markdown page type already supports edit/preview. The Markdown import goes through the conversion boundary in `src/shared/import/conversion.ts`; the wider shared import pipeline (HTML/Markdown import) of [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) is **not built** - see [ADR-020](adr/ADR-020-search-and-conversion-boundary.md). `.md` round-trip must stay safe (DOMPurify; no HTML/script execution).
 
 **Storage impact**
 - None new. Templates are code constants; import/export are file operations and are not stored in the database.
@@ -168,10 +168,10 @@ Safe `.md` import and export, Markdown templates, preview refinements, and clear
 ### Slice 5: Rich Document Improvements
 
 **User-visible outcome**
-Linked child-page cards (embed/navigate to child pages from a rich document), better Formula / Diagram / Mind Map presentation, and subject/chapter templates — without redesigning the whole rich editor.
+Linked child-page cards (embed/navigate to child pages from a rich document), better Formula / Diagram presentation, and subject/chapter templates — without redesigning the whole rich editor.
 
 **Affected systems**
-- `src/web/features/rich-editor/*` (formula, diagram, mindmap blocks; linked child-page card block; insert menus; templates)
+- `src/web/features/rich-editor/*` (formula, diagram blocks; linked child-page card block; insert menus; templates)
 - `VISUAL_BLOCKS.md` reference and the rich-content schema (new linked-page block type, backward-compatible)
 - Existing wiki-links / backlinks (`WIKI_LINKS.md`) as the foundation for linked child-page cards
 
@@ -184,7 +184,7 @@ Linked child-page cards (embed/navigate to child pages from a rich document), be
 **Manual owner checklist**
 - Linked child-page cards render with title/type and open the child on click.
 - Formula blocks render clearly (KaTeX) and edit smoothly.
-- Diagram / Mind Map blocks present cleanly with clear edit/preview.
+- Diagram blocks present cleanly with clear edit/preview.
 - Subject/chapter templates create well-structured starter documents.
 - No regression in core rich editing; existing documents still load.
 
@@ -209,7 +209,7 @@ LAN access means reading and editing the same workspace from another device. It 
 
 ## Phase 4: Visual Mind Map Editor
 
-This phase replaces static Mermaid mind maps with a fully interactive visual editor using React Flow. Mermaid mind maps remain available as a quick-insert option.
+This phase replaces static Mermaid mind maps with a fully interactive visual editor using React Flow. Mermaid mind maps remain available as a quick-insert option, as one of the diagram templates.
 
 | Feature | Description |
 |---------|------------|

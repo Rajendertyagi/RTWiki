@@ -1,4 +1,14 @@
-export type PageType = 'rich' | 'html' | 'diagram' | 'mindmap' | 'markdown'
+/**
+ * The page types RTWiki writes.
+ *
+ * `mindmap` was retired. It was a second Mermaid page identical to `diagram` bar
+ * one ternary and two starter strings, and Mermaid's `mindmap` is an ordinary
+ * diagram type offered from the shared template list. Existing rows are
+ * rewritten to `diagram` by migration `010_mindmap_pages_to_diagram`; a stored
+ * page's own inner `type` marker is normalised on read, so no other rewrite is
+ * needed. See docs/adr/ADR-019-one-mermaid-page-and-block.md.
+ */
+export type PageType = 'rich' | 'html' | 'diagram' | 'markdown'
 
 export interface Page {
   id: string

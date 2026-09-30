@@ -35,7 +35,6 @@ import {
   IconBraces,
   IconFileCode,
   IconFileText,
-  IconGitFork,
   IconLetterM,
   IconNetwork,
   IconPalette,
@@ -105,8 +104,7 @@ const PAGE_TYPE_ICONS: Record<string, typeof IconFileText> = {
   rich: IconFileText,
   html: IconWorld,
   markdown: IconLetterM,
-  diagram: IconNetwork,
-  mindmap: IconGitFork
+  diagram: IconNetwork
 }
 
 /** Virtual HTML/CSS/JS source handles use 14px icons. */
@@ -149,11 +147,7 @@ interface WbNodeLike {
  */
 function nodePageType(node: WbNodeLike): PageType | null {
   const value: unknown = node.data?.data?.pageType
-  return value === 'rich' ||
-    value === 'html' ||
-    value === 'markdown' ||
-    value === 'diagram' ||
-    value === 'mindmap'
+  return value === 'rich' || value === 'html' || value === 'markdown' || value === 'diagram'
     ? value
     : null
 }
@@ -440,7 +434,6 @@ export class PageTreeHost {
         rich: { classes: 'rtw-type-rich' },
         html: { classes: 'rtw-type-html' },
         diagram: { classes: 'rtw-type-diagram' },
-        mindmap: { classes: 'rtw-type-mindmap' },
         subfile: { classes: 'rtw-type-subfile' }
       },
       edit: {

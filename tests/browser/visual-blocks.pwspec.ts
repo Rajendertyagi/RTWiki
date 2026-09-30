@@ -83,6 +83,21 @@ async function insertViaMenu(page: Page, key: string): Promise<void> {
   await inMenu.click()
 }
 
+/** Opens an insertion chooser and picks one of its options.
+ *
+ * The control itself is filed wherever the bar currently has room, exactly as
+ * {@link insertViaMenu} handles it, so the assertion stays about what the chosen
+ * template produces rather than about where the button sits. The option is
+ * addressed by its own testid, which the toolbar builds from the entry key and
+ * the template id — so this cannot pass against a template the Diagram page does
+ * not offer. */
+async function insertViaChooser(page: Page, key: string, optionId: string): Promise<void> {
+  await insertViaMenu(page, key)
+  const option = page.getByTestId(`${key}-option-${optionId}`)
+  await option.waitFor({ state: 'visible', timeout: 5_000 })
+  await option.click()
+}
+
 function nextSave(page: Page): {
   done: Promise<{ ok: boolean; status: number; payload: string }>
 } {
@@ -204,11 +219,14 @@ test.describe('visual knowledge blocks', () => {
     await openNote(page, title)
 
     const save = nextSave(page)
-    await insertViaMenu(page, 'insert-diagram')
+    // Through the chooser, because that is now what the Diagram button does: it
+    // opens a template list rather than dropping one fixed starter. Asserting on
+    // the template's own source is what makes this a test of the chooser.
+    await insertViaChooser(page, 'insert-diagram', 'flowchart')
     const result = await save.done
     expect(result.ok).toBe(true)
     expect(result.payload).toContain('"type":"diagram"')
-    expect(result.payload).toContain('graph TD')
+    expect(result.payload).toContain('flowchart')
 
     // Rendered SVG appears inside the sanitized host.
     await expectRendered(page, 'diagram')
@@ -246,30 +264,33 @@ test.describe('visual knowledge blocks', () => {
     await expectRendered(page, 'diagram')
   })
 
-  test('mind map: insert → render → edit → reload', async ({ page, request }) => {
+  test('mind map template: chooser → render → edit → reload', async ({ page, request }) => {
     const title = uniqueTitle('VB MindMap')
     const p = await seedRich(request, title, [])
     await openNote(page, title)
 
+    // The mind map is chosen from the toolbar's Mermaid chooser, not from a
+    // second block type: Mermaid's `mindmap` is one of the shared templates.
     const save = nextSave(page)
-    await insertViaMenu(page, 'insert-mind-map')
+    await insertViaChooser(page, 'insert-diagram', 'mindmap')
     const result = await save.done
     expect(result.ok).toBe(true)
-    expect(result.payload).toContain('"type":"mindMap"')
-    await expectRendered(page, 'mindMap')
+    expect(result.payload).toContain('"type":"diagram"')
+    expect(result.payload).toContain('mindmap')
+    await expectRendered(page, 'diagram')
 
-    await page.getByTestId('mindMap-edit-button').click()
-    const input = page.getByTestId('mindMap-source-input')
+    await page.getByTestId('diagram-edit-button').click()
+    const input = page.getByTestId('diagram-source-input')
     await input.fill('mindmap\n  root((Root))\n    Alpha\n    Beta')
     const applySave = nextSave(page)
-    await page.getByTestId('mindMap-apply').click()
+    await page.getByTestId('diagram-apply').click()
     const applied = await applySave.done
     expect(applied.ok).toBe(true)
     expect(applied.payload).toContain('Beta')
 
     await page.reload()
     await openNote(page, title)
-    await expectRendered(page, 'mindMap')
+    await expectRendered(page, 'diagram')
     const stored = await getStoredContent(request, p.id)
     expect(stored).toContain('Beta')
   })
@@ -596,20 +617,28 @@ test.describe('visual knowledge blocks', () => {
   test('mind map: live preview renders while typing', async ({ page, request }) => {
     const title = uniqueTitle('VB LiveMindMap')
     await seedRich(request, title, [
-      { id: 'mm', type: 'mindMap', content: 'mindmap\n  root((R))\n    A\n    B' }
+      { id: 'mm', type: 'diagram', content: 'mindmap\n  root((R))\n    A\n    B' }
     ])
     await openNote(page, title)
-    await expectRendered(page, 'mindMap')
+    await expectRendered(page, 'diagram')
 
-    await page.getByTestId('mindMap-edit-button').click()
-    const input = page.getByTestId('mindMap-source-input')
+    await page.getByTestId('diagram-edit-button').click()
+    const input = page.getByTestId('diagram-source-input')
     await input.fill('mindmap\n  root((Root))\n    Alpha\n    Beta\n    Gamma')
-    await expect(page.locator('[data-testid="mindMap-svg"] svg').first()).toBeVisible()
-    await page.getByTestId('mindMap-cancel').click()
-    await expect(page.getByTestId('mindMap-preview')).toBeVisible()
+    await expect(page.locator('[data-testid="diagram-svg"] svg').first()).toBeVisible()
+    await page.getByTestId('diagram-cancel').click()
+    await expect(page.getByTestId('diagram-preview')).toBeVisible()
   })
 
-  test('mind map: zoom controls resize the rendered map', async ({ page, request }) => {
+  // The zoom controls belong to the retired `mindMap` block and to no other, so
+  // this is the only remaining coverage of them. It is kept deliberately and
+  // seeded with that type on purpose: a note written before the block was retired
+  // still carries it, and this is the behaviour that note keeps. Nothing inserts
+  // this type any more.
+  test('a note that still holds a mindMap block keeps its zoom controls', async ({
+    page,
+    request
+  }) => {
     const title = uniqueTitle('VB ZoomMindMap')
     await seedRich(request, title, [
       { id: 'mm', type: 'mindMap', content: 'mindmap\n  root((R))\n    A\n    B' }

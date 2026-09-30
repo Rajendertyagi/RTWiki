@@ -156,8 +156,11 @@ test.describe('Rich Note toolbar controls', () => {
     await newRichNote(page)
     const keys = [
       'insert-formula',
+      // Opens the Mermaid template chooser rather than inserting a fixed block,
+      // so it is checked for reachability here and for behaviour in
+      // visual-blocks.pwspec.ts. The retired `insert-mind-map` is gone: a mind map
+      // is a template in that chooser, not a second control.
       'insert-diagram',
-      'insert-mind-map',
       'insert-callout-info',
       'insert-callout-note',
       'insert-callout-tip',
@@ -374,7 +377,7 @@ test.describe('Rich Note toolbar controls', () => {
     expect(metrics.height, 'the bar must stay one row').toBeLessThan(80)
 
     // Everything that did not fit is still reachable through the more menu.
-    const keys = ['insert-formula', 'insert-diagram', 'insert-mind-map', 'insert-callout-danger']
+    const keys = ['insert-formula', 'insert-diagram', 'insert-callout-danger']
     await page.getByTestId('toolbar-more').click()
     await page.waitForTimeout(400)
     for (const key of keys) {

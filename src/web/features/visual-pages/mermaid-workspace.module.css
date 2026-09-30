@@ -1,3 +1,11 @@
+/*
+ * biome-ignore-all lint/style/noDescendingSpecificity: the rule order in this file *is*
+ * the mechanism, not an accident of editing. .fit and .actual set the same
+ * properties on the same element as .blockCanvasSized, at the same specificity, so
+ * the later rule wins - which is exactly how a sized block overrides the default fill
+ * behaviour. Reordering them to satisfy the lint would silently stop sized blocks from
+ * scaling to their box, with nothing failing. The affected rules are marked in place.
+ */
 .root {
   display: flex;
   flex-direction: column;
@@ -34,35 +42,185 @@
   align-items: stretch;
 }
 
-/* The page's diagrams, stacked. A block list rather than one canvas, because a
- * page can now hold several diagrams; each is its own card so the actions that
- * apply to one diagram do not read as though they apply to all of them. */
+/* The page's diagrams, laid out by the width available rather than by a column
+ * count. A wrapping flex row, not a grid: each block asks for a share of the
+ * row and the browser puts as many on a line as genuinely fit. That is what
+ * "side by side when the width allows" means — two on a wide screen, one on a
+ * narrow one, and never a half-empty third column.
+ *
+ * `min-width: 0` on the cards is what stops a wide diagram forcing the row wider
+ * than the window, which is the only thing that would introduce horizontal
+ * scrolling. Height is the other axis that may overflow: a diagram taller than the
+ * viewport grows its card and the list scrolls vertically, rather than the
+ * diagram being shrunk to fit. */
 .blockList {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
   display: flex;
-  flex-direction: column;
+  flex-flow: row wrap;
+  align-content: flex-start;
+  align-items: flex-start;
   gap: var(--mantine-spacing-sm);
   padding: var(--mantine-spacing-sm);
 }
 
+/* A block's share of the row. The basis is a *preference*, not a column: below
+ * it a block takes the whole row, and above it two or more share one. Sized so
+ * two diagrams sit side by side on an ordinary page and a single one still fills
+ * the width.
+ *
+ * The direct child is now Motion's `Reorder.Item`, which carries the stored size —
+ * see `.blockListItem` below. */
+.blockList > * {
+  flex: 1 1 22rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A block with a stored or in-flight size takes exactly that size; the flex rules
+ * above divide the row between blocks that have none.
+ *
+ * `data-width` is the stored size, and `data-live` marks a drag in progress. Both
+ * drop out of the row-sharing rules, so a block being resized — or one a user has
+ * already sized — is sized by its own value instead. Without the `data-live` case a
+ * horizontal drag could not leave the column it started in, because the flex rules
+ * kept capping it at its share. */
+.blockList > *:not([data-width=""]),
+.blockList > [data-live="true"] {
+  flex: 0 0 auto;
+}
+
+/* The reorder item's own width. An in-flight drag wins over the stored size, so the
+ * row re-wraps underneath the pointer; otherwise the stored size; otherwise `auto`,
+ * which leaves the flex rules above in charge — the layout that was already working.
+ *
+ * `--block-width-live` is written onto this element by the resize container during a
+ * drag and removed again on release. It is a *separate* property from the stored
+ * `--block-width` so that removing it cannot take the stored size with it. */
+.blockListItem {
+  min-width: 0;
+  width: var(--block-width-live, var(--block-width, auto));
+}
+
+/* A block the user has sized keeps the size they chose. Without this the row's
+ * flex-basis would win over a stored width and a diagram resized to 700px would
+ * be re-laid-out to whatever share of the line it happened to land on.
+ *
+ * Keyed on `data-width` rather than a prop, because that is the one thing the
+ * resize container already publishes about itself: empty means auto, a number
+ * means the user dragged or picked a size. */
+/* Superseded by the combined rule above, which also covers a drag in progress.
+ * Kept here only as the statement of *why* the sized case exists: the row's
+ * flex-basis would otherwise win over a stored width, and a diagram resized to
+ * 700px would be re-laid-out to whatever share of the line it landed on. */
+
+/* A block card is a column that takes the container's height, so a stored height
+ * on the resize container can actually reach the diagram.
+ *
+ * This is the fix for vertical resizing being broken, and there were two causes.
+ *
+ * The first was that the card was an ordinary block box: the action bar and the
+ * canvas were stacked by normal flow, the canvas had no height of its own, and
+ * the SVG inside it was `height: auto` with the card clipping the overflow. So
+ * dragging the height shrank the *box* while the diagram kept its natural size —
+ * the card appeared to stay put with dead space under it, and the
+ * absolutely-positioned resize handle, anchored to the container rather than to
+ * the diagram, floated over the middle of the picture.
+ *
+ * The second, and the one that survived the first fix, is that `height: 100%`
+ * here is **load-bearing**. A block-level child does not stretch to a fixed-height
+ * parent: it sizes to its own content. So with `display: flex` on the card but no
+ * height, the card measured 247.77px inside a 240px container — the canvas's
+ * `flex: 1` had no definite height to distribute, so it fell back to content, and
+ * the card still overflowed by the 7.77px difference. Measured in the browser, not
+ * inferred; see `tests/browser/diagram-workspace-layout.pwspec.ts`.
+ *
+ * For an **unsized** block the container's height is `auto`, and a percentage
+ * height against an indefinite parent computes to `auto` — so this one rule gives
+ * the sized case a definite box and leaves the default case exactly as it was.
+ *
+ * `overflow: hidden` is kept for the border radius. */
 .blockCard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   background: var(--rtwiki-pane, var(--mantine-color-body));
   overflow: hidden;
 }
 
+/* The action row is chrome, not diagram. `flex-shrink: 0` keeps it at its natural
+ * height so a short stored height shrinks the canvas rather than the toolbar —
+ * which is also what stops it collapsing when a block is dragged very small. */
 .blockBar {
+  flex-shrink: 0;
   padding: 4px var(--mantine-spacing-xs);
   border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
 }
 
+/* The drag grip and the block's label, grouped at the left of the action row. */
+.blockBarStart {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The drag handle.
+ *
+ * `touch-action: none` is required, not decorative: without it a touch drag is
+ * claimed by the browser for scrolling and the reorder never starts. The corner
+ * resize handle in the shared component carries the same declaration for the same
+ * reason.
+ *
+ * It is a real `<button>` so it is focusable and so `Enter`/`Space` do not scroll
+ * the page, but it deliberately has no `onClick`: the ordering it performs is a
+ * drag, and the keyboard route is the up/down buttons beside it. Giving it a click
+ * handler would imply an action the button does not take. */
+.blockDragHandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--mantine-radius-xs);
+  background: transparent;
+  color: var(--mantine-color-dimmed);
+  cursor: grab;
+  touch-action: none;
+}
+
+.blockDragHandle:hover {
+  color: var(--mantine-color-text);
+  background: var(--mantine-color-default-hover);
+}
+
+.blockDragHandle:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+.blockDragHandle:active {
+  cursor: grabbing;
+}
+
+/* `flex: 1` plus `min-height: 0` is the pair that makes the remaining height
+ * usable: without `min-height: 0` a flex item refuses to shrink below its
+ * content, so the canvas would keep the diagram's natural height and
+ * `max-height: 100%` on the SVG would resolve against that instead of against
+ * the box. Centring is what letterboxes a diagram whose aspect ratio differs
+ * from the box it was given. */
 .blockCanvas {
-  padding: var(--mantine-spacing-sm);
+  flex: 1;
   min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--mantine-spacing-sm);
 }
 
 .editSplit {
@@ -129,6 +287,16 @@
   width: 100%;
 }
 
+/* The wrapper the sanitised SVG markup is injected into. Carries no styling of
+ * its own; it exists so the scale-to-fit rule can give it a definite height, and
+ * is documented where it is created. */
+.svgInner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
 .fit :global(svg),
 .svgHost :global(svg) {
   max-width: 100%;
@@ -141,6 +309,50 @@
 .actual :global(svg) {
   max-width: none;
   width: auto;
+}
+
+/* A block the user has given a height: the diagram scales to fit that box.
+ *
+ * **Additive, not a replacement.** This class is applied *alongside*
+ * `.blockCanvas`, never instead of it, because it only adds the scale-to-fit
+ * rules — the flex column, `flex: 1` and the padding all still come from
+ * `.blockCanvas`. Swapping one for the other cost the canvas `display: flex` and
+ * `flex: 1`, its height went back to being content-driven, and the diagram
+ * overflowed the box by 6.77px. That was measured, not anticipated.
+ *
+ * Declared after `.fit` / `.actual` on purpose — those set the same properties on
+ * the same element, so with equal specificity the later rule wins. That ordering is
+ * the mechanism, and it is why this cannot simply be folded into `.fit`.
+ *
+ * The SVG is given the box's width *and* height and left to letterbox itself,
+ * which is what `preserveAspectRatio="xMidYMid meet"` — already on Mermaid's output
+ * — exists to do. The alternative of `width: auto; height: auto` with
+ * `max-height: 100%` was rejected: an inline `<svg>` with a `viewBox` and auto
+ * dimensions resolves its width to the containing block, so `max-height` would then
+ * letterbox *inside* an already-full-width element instead of shrinking it.
+ *
+ * Mermaid's own inline `max-width` is deliberately left alone. It only prevents a
+ * diagram scaling *up* past its natural size, which is correct, and an inline style
+ * cannot be overridden by a stylesheet rule without `!important` — not a trade
+ * worth making for a cosmetic gain.
+ *
+ * `.svgHost`, `.zoomHost` and `.svgInner` are local classes of this same module,
+ * so these composed selectors resolve consistently. All three need the height
+ * because a percentage height only resolves against a *definite* ancestor, and
+ * each is between the canvas and the SVG. `svgInner` is the wrapper the sanitised
+ * markup is injected into; without a class on it there was no way to give it one. */
+.blockCanvasSized .svgHost,
+.blockCanvasSized .zoomHost,
+.blockCanvasSized .svgInner {
+  height: 100%;
+  min-height: 0;
+}
+
+.blockCanvasSized :global(svg) {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .zoomHost {

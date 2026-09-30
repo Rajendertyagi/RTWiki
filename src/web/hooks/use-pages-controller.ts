@@ -384,7 +384,15 @@ export function usePagesController(): PagesController {
         const message = err instanceof Error ? err.message : 'Failed to create page'
         setMutationStatus('error')
         setMutationError(message)
-        return null
+        // Re-thrown, not swallowed.
+        //
+        // This returned `null` and kept the message in controller state, so every
+        // caller had to *know* to go looking for it. One did not: the Markdown importer
+        // did `if (!page) return`, so a refused import reported nothing at all and the
+        // user was left believing a file had become a note. The state is still set, so
+        // the existing error banner is unchanged; this only makes the failure
+        // reportable to a caller that wants to act on it.
+        throw err instanceof Error ? err : new Error(message)
       }
     },
     [scheduleReset]

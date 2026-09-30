@@ -39,7 +39,7 @@ export interface DiagramCanvasProps {
    * of Refresh on the page re-renders every diagram on it.
    */
   renderSeq: number
-  /** Test id stem, e.g. `diagram` or `mindmap`. */
+  /** Test id stem; a Diagram page is always `diagram`. */
   testId: string
 }
 
@@ -77,7 +77,7 @@ export function DiagramCanvas({
         setSvg(result.svg)
       } else {
         // Superseded or unmounted: not a failure, so keep what is on screen.
-        if (result.code === 'cancelled') return
+        if (result.code === 'cancelled' || result.code === 'empty_source') return
         setSvg(null)
         setErrorCode(result.code)
       }
@@ -114,11 +114,34 @@ export function DiagramCanvas({
   }
 
   return (
-    <div className={`${classes.svgHost} ${fit ? classes.fit : classes.actual}`}>
+    // The view controls (zoom, pan, reset, full screen) wrap this canvas one level
+    // up, in `diagram-block-card.tsx` — shared with the Rich Note's block, so the two
+    // surfaces cannot drift apart again. See the comment there for why the wrapper
+    // does not sit inside the element carrying `data-testid="diagram-rendered"`.
+    <div
+      className={`${classes.svgHost} ${fit ? classes.fit : classes.actual}`}
+      // Named so a test can address *this* diagram. Without it the only svgs
+      // inside a block card are the action icons in its toolbar, and a locator
+      // scoped to the card finds a 24x24 icon and reads it as the diagram.
+      data-testid={`${testId}-svg`}
+    >
       <div className={classes.zoomHost} style={{ '--zoom-level': `${zoom * 100}%` } as CSSVars}>
         {/* Sanitized by svg-sanitize.ts + Mermaid strict-mode DOMPurify. */}
+        {/* The injected wrapper needs a class of its own. It sits between
+         * `.zoomHost` and the SVG, and a percentage height on the SVG only
+         * resolves against a *definite* ancestor height - an unclassed wrapper
+         * here left it content-sized, so the SVG fell back to its intrinsic
+         * height and ignored the box it was supposed to fit. Targeting it
+         * structurally (`.zoomHost > div`) would have worked and would also have
+         * broken the day the markup gained a wrapper.
+         *
+         * The suppression below must sit *immediately* above the element it covers.
+         * For a while it did not, because this explanatory block sat between the
+         * two, and the suppression silently stopped applying - the rule reappeared
+         * on a line that had already been reviewed and approved. A suppression
+         * separated from its target is worse than no suppression. */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: contained sanitized SVG rendering */}
-        <div dangerouslySetInnerHTML={{ __html: svg }} />
+        <div className={classes.svgInner} dangerouslySetInnerHTML={{ __html: svg }} />
       </div>
     </div>
   )

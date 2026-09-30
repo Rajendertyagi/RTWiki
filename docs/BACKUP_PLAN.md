@@ -88,10 +88,12 @@ declarations in the schema are both `_migrations` (`:12`, `:430`).
 | `page-repository.ts:435` | `ORDER BY position, rowid` | **sibling ordering** |
 | `migrations.ts:67` | `p2.rowid > pages.rowid` | fts sync, inside a one-time migration |
 
-**Not counted, deliberately:** `migrations.ts:40` sets `content_rowid='page_id'`, which
-tells FTS5 to key on the `page_id` column *instead of* the table rowid. That is a
-**mitigation** — it insulates search from this entirely — and listing it as a dependency
-would overstate the blast radius. `migrations.ts:56` and `page-repository.ts:424` are
+**Not counted, deliberately:** `migrations.ts` sets `content_rowid='page_id'` on the
+`search_index_fts` virtual table, which tells FTS5 to key on the `page_id` column *instead
+of* the table rowid. It is recorded here only because it is the one rowid dependency in the
+schema. **It insulates nothing, because that table is never queried** — the live search path
+is `si.title LIKE ? OR si.content LIKE ?` joined on an explicit `page_id` column, which is
+independent of the rowid of both tables. `migrations.ts` and `page-repository.ts` comments are
 comments.
 
 #### 3.3.1 Not enforced by the schema…

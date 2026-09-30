@@ -41,7 +41,44 @@ export default defineConfig({
     // the gap between our code and the library it ships with.
     target: 'es2024',
     rollupOptions: {
-      input: resolve(repoRoot, 'src/web/index.html')
+      input: resolve(repoRoot, 'src/web/index.html'),
+      // Suppresses exactly one diagnostic, from exactly one third-party file.
+      //
+      // `IMPORT_IS_UNDEFINED`: "Import `default` will always be undefined because there
+      // is no matching export". It points at @mantine/schedule's
+      // expand-recurring-events, which contains:
+      //
+      //   import * as rruleAll from 'rrule'
+      //   const RRule = "default" in rruleAll ? rruleAll.default.RRule : rruleAll.RRule
+      //
+      // That is defensive code in Mantine's own source, for an rrule export shape that
+      // cannot occur. `@mantine/schedule@9.6.2` requires `rrule@^2.8.1`, and no rrule
+      // 2.x release exports `default` from its ESM entry (checked 2.6.2 -> 2.8.1: the
+      // only `export default` in the package are the internal CallbackIterResult and
+      // IterResult classes). The named `RRule` export is what always exists, so the
+      // ternary always takes its second branch and the app works.
+      //
+      // Not fixable from here, and deliberately not worked around:
+      //   - upgrading @mantine/schedule does not help: 9.6.3 is the latest and carries
+      //     the identical line;
+      //   - changing the rrule version would violate Mantine's own declared range, and
+      //     every in-range version has the same export shape;
+      //   - patching node_modules is not permitted and would not survive install.
+      // The remaining honest option was a local shim re-exporting a synthetic
+      // `default`, which satisfies the static check while adding a vendored module
+      // that can silently drift from the real package. A targeted, documented filter is
+      // the smaller and more truthful cost.
+      //
+      // Scoped to IMPORT_IS_UNDEFINED *and* to @mantine/schedule, so a genuine missing
+      // export anywhere else - including in RTWiki's own code - still fails the build.
+      onwarn(warning: { code?: string; id?: string }, defaultHandler: (w: unknown) => void): void {
+        if (
+          warning.code === 'IMPORT_IS_UNDEFINED' &&
+          (warning.id ?? '').includes('@mantine/schedule')
+        )
+          return
+        defaultHandler(warning)
+      }
     }
   },
   resolve: {

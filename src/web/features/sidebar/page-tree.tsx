@@ -409,8 +409,6 @@ function typeFromAction(action: string): PageType | null {
     return 'markdown'
   if (action === 'newDiagram' || action === 'afterDiagram' || action === 'childDiagram')
     return 'diagram'
-  if (action === 'newMindMap' || action === 'afterMindMap' || action === 'childMindMap')
-    return 'mindmap'
   return null
 }
 

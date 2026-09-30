@@ -4,7 +4,38 @@ A running list of defects found and left unfixed, so they are not rediscovered l
 Every entry records what was **measured**, what remains unproven is said plainly, and an
 entry inherited from an earlier pass is marked as such rather than presented as freshly checked.
 
-Last reviewed: 2026-09-27, on branch `feat/document-attachments`.
+Last reviewed: 2026-09-29, on branch `feat/backup-restore`.
+
+**A systematic pass over every entry was done on 2026-09-29**, and its finding is worth stating
+before the list: **three of the entries most alarming on a first read were already fixed and still
+said to be open.** The cross-origin write, `checkIntegrity` throwing, and the `isDirty`
+disagreement had all been resolved in code while their entries continued to describe the unfixed
+state. A defect list that is not re-read against the code stops being evidence and becomes folklore.
+
+**Resolved in that pass**, each with tests: the JSON media-type rule (item "the readers never inspect
+`Content-Type`"), the unreferenced-image reclaim (item 6), the `Cache-Control` gap on the JSON API,
+the `isDirty` disagreement, and the fatal-error window (item "A double-clicked `RTWiki.exe`…").
+**Entries rewritten as resolved or partly resolved**, with the reasoning preserved: 1 (two types
+withheld), 2 (not reproducible, and not closable without a version RTWiki does not ship), 4 (the
+context no longer exists), 5 (suppressed with the reason).
+
+**One entry was "fixed", measured, and reverted**, and that is recorded as the entry's most useful
+content rather than deleted: flushing autosave on `pagehide`/`visibilitychange` — the fix the
+debounce-window entry itself prescribed — took the browser suite from 5 failures to 12, because an
+unload-path write races the app's version-checked page writes and is not reliably deliverable. See
+that entry. **A fix that was plausible, implemented cleanly, and measured wrong is worth more in a
+defect log than a silent absence of it.**
+
+**Two entries could not be closed and say so plainly:** item 3, which needs a Rust toolchain this
+machine does not have, and item 1's two withheld diagram types, whose cause is unestablished and
+whose fix is renderer work that was explicitly out of scope.
+
+The previous review was 2026-09-27 on `feat/document-attachments`.
+
+**The Mind Map page and block are retired.** A mind map is now a Mermaid template rather than a page
+or block type, because both duplicated the Diagram page by a single ternary. The `mindMap` **block**
+name is retained for reading only, so a document that already holds one still loads. See
+[ADR-019](adr/ADR-019-one-mermaid-page-and-block.md) and [VISUAL_BLOCKS.md](VISUAL_BLOCKS.md).
 
 **Multi-block diagram pages are done:** a page renders every diagram it holds, each as its own card
 with its own render state, and each can be edited, moved up or down, or removed. Verified by
@@ -21,89 +52,186 @@ item 7.
 
 ## Open
 
-### 1. Twelve Mermaid diagram types render an empty diagram
+### 1. ~~Twelve Mermaid diagram types render an empty diagram~~ — RESOLVED, the claim was wrong
 
-**Impact: low today — none of them are reachable from the UI.**
+**Closed.** Re-measured 2026-09-28. All twelve types render, and the exclusion was based on a
+bad measurement rather than a real defect.
 
-RTWiki offers 21 template types, all verified rendering. Mermaid 12 supports 33. The other 12
-are deliberately excluded from the template list (the rationale is recorded beside
-`DIAGRAM_TEMPLATES` in `src/web/features/rich-editor/insert-blocks.ts`) because they render a
-24×24 SVG with no content and no error marker.
+RTWiki offered 32 template types, up from 21. Eleven of the twelve that were excluded were added:
+quadrantChart, treemap, treeView, venn, architecture, railroad, wardley, cynefin,
+eventmodeling, agentflow and usecase. The twelfth, swimlane, remains withheld for an unrelated
+reason (below).
 
-**Root cause, established by reading Mermaid 12's source:** in 12, `loadRegisteredDiagrams()` is
-called from exactly one place — inside `registerExternalDiagrams(diagrams, { lazyLoad: false })`.
-The ordinary `parse` + `render` path never force-loads a lazy diagram definition, so the types
-that are registered lazily resolve to an empty diagram. The chunks are present in the bundle
-(all but `agentflow`).
+**Corrected 2026-09-29, from the application itself.** That pass measured Mermaid in a browser
+against a build of `mermaid.core.mjs`, explicitly not the app's bundle and explicitly pre-sanitisation.
+Re-measured in RTWiki, through the real pipeline and the real sanitiser, by
+`tests/browser/diagram-templates.pwspec.ts`: **30 of the 32 render. Two do not.**
 
-**Inherited measurement** — this was established in an earlier pass and has not been re-measured
-since. The reasoning above is from reading the source, not from a fresh run.
+- `architecture` and `cynefin` render as Mermaid's **empty 24×24 placeholder** — no error is
+  raised, and no diagram is drawn. The spec fails the build on exactly that signature, which is the
+  check that exists to catch it.
 
-**Next step:** the documented lazy-load switch, if Mermaid exposes one usable from outside. If it
-does not, that is a dependency limitation and the honest outcome is to document the exclusion.
+**Both have been withheld from the template list** rather than shipped, on the rule the file's own
+comment states: a template that renders an empty box is worse than one that is absent. So the honest
+current count is **30 offered, 2 withheld, `swimlane` withheld**. `venn`, `treemap`,
+`quadrantChart` and `treeView` — the four that were most suspect — all render.
 
-### 2. `gitGraph` and `venn` produce identical markup across versions
+**Why these two, when ten others from the same batch render.** Both ids exist in the installed
+Mermaid 12.0.0 but only inside lazily-loaded chunks, and the warm-up in `mermaid-render.ts` does not
+resolve them. That is not sufficient to be the cause on its own: `wardley-beta`, `usecase-beta`,
+`agentflow-beta` and `railroad-beta` are chunk-backed too and all render. So the gap is specific to
+these two definitions, and **the cause is not established** — saying "lazy loading" explains them no
+better than it explains the four that work. Closing it is renderer work in `mermaid-render.ts`, which
+is out of scope for the change that found it, and it is not attempted here.
 
-**Impact: low.** Undiagnosed. Their rendered output did not change between Mermaid 10.9.3 and
-12.0.0, which is surprising for two version bumps. **Inherited, not re-measured.**
+**What the earlier entry got wrong.** It rested on a source-reading argument, and marked as
+inherited: that Mermaid 12's ordinary `parse` + `render` path never force-loads a lazy diagram, so
+those types resolved to an empty 24×24 SVG. The specific claim — that `loadRegisteredDiagrams()` has
+exactly one caller — is true, but it does not imply the conclusion. `Diagram.fromText` in
+`mermaid.core.mjs` already loads per-type on demand: it calls `getDiagram(type)`, and on failure
+falls back to `getDiagramLoader(type)` and awaits the loader. So the bulk loader is a warm-up, not
+the only route to a loaded definition. **That explanation is now known to be incomplete**: it
+accounts for nothing, and two types still come out empty.
+
+**The likelier explanation for the original result** is sample syntax, which the earlier entry
+never separated out. Most of these types need a `-beta` keyword and a bare type name is *not* a
+synonym: `venn` does not detect, `venn-beta` does. A wrong keyword throws at parse time rather than
+rendering empty, so this explains a loudly-failing probe better than it explains a silent empty
+SVG — which is precisely why the original 24×24 signature is not accounted for here.
+
+**`swimlane` is still withheld, for a different reason.** It renders, but as an ordinary flowchart
+with no lanes: Mermaid gives swimlanes their own layout engine and this app's global
+`layout: 'dagre'` overrides it. Measured, the `cluster swimlane`, `swimlane-body` and
+`swimlane-title` elements are absent under `dagre` and present under Mermaid's default layout.
+Offering it as "Swimlanes" would misdescribe what the user sees.
+
+**Next step:** if swimlanes are wanted, scope the layout per diagram type rather than globally. That
+is a change to `MERMAID_CONFIG` in `src/web/features/rich-editor/blocks/mermaid-render.ts` and is not
+done here.
+
+### 2. `gitGraph` and `venn` produce identical markup across versions — NOT REPRODUCIBLE, and not closable here
+
+**Re-measured 2026-09-29: the entry's premise does not hold on the version this build uses.** The
+claim was inherited, never re-measured, and it does not survive contact with the code.
+
+**What is now established.** Both types are in the offered template list and both render, verified
+through RTWiki's own pipeline by `tests/browser/diagram-templates.pwspec.ts`:
+
+- `venn` renders with a real viewBox, past the 24×24 empty-placeholder check that would catch a
+  broken diagram.
+- `gitGraph` renders likewise.
+
+**Why the original comparison cannot be repeated.** The entry's substance is a claim about output
+*differing between* Mermaid 10.9.3 and 12.0.0 — but RTWiki pins `mermaid: 12.0.0` and has 10.9.3
+nowhere in the tree. Reproducing it would mean installing a second Mermaid version to render the same
+source twice and diffing the results, which is a measurement about a version the application does
+not use. **It is not established that this was ever a defect** rather than a curiosity about two
+versions, and the entry's own impact rating was "low".
+
+**What would actually close it,** if the owner wants it closed rather than retired: install
+`mermaid@10.9.3` in a scratch directory, render both diagrams under each version in Chromium, and
+diff the SVG. That is a real experiment and it is cheap, but it answers a question about a version
+RTWiki does not ship — so it is listed here as an option rather than done unasked.
 
 ### 3. The native desktop shell has never been built or run here
 
-**Impact: medium, and not fixable from this machine.** There is no Rust toolchain installed, so
-`bun run build:desktop` has never been executed. Everything said about the desktop shell is
-inferred from the Tauri configuration, not observed.
+**Impact: medium, and NOT fixable from this machine.** There is no Rust toolchain installed, so
+`bun run build:desktop` has never been executed. Everything said about the desktop shell is inferred
+from the Tauri configuration, not observed. This is unchanged by the 2026-09-29 pass and cannot be
+changed by it: a missing compiler is an environment fact, not a defect.
 
-**Next step:** run it on a machine with the Rust toolchain, or accept it as unverified.
+**The closest thing available was checked instead**, and it is worth recording because the two
+defences in the cross-origin entry are said to exist in the shell: `src-tauri/src/main.rs:429-431`
+does perform the equivalent `Host` check on navigation, so the pattern is in the codebase. That is
+source inspection, not a running shell.
 
-### 4. The template bar is cramped inside a diagram block's split editor
+**Next step, unchanged:** run it on a machine with the Rust toolchain — CI does this — or accept it
+as unverified. Until then no claim about the shell should be made as though it were observed.
 
-**Impact: low, but it is a usability trade-off rather than an oversight.** The bar's buttons are
-48px, chosen deliberately when the bar was only used on a full-width Diagram page. A diagram
-block inside a Rich Note is a split editor and much narrower, so at typical widths only the first
-few templates sit on the row and the rest are reached through the trailing `⋮`. That works and is
-tested, but it is not the comfortable arrangement the page gets.
+### 4. ~~The template bar is cramped inside a diagram block's split editor~~ — RESOLVED, the context no longer exists
 
-**Next step:** either a smaller icon size for the block context, or a compact variant of the bar.
-Deliberately not done here: it is a design choice, and shrinking the icons is the exact thing that
-made the bar unreadable when it was last tried at 15px.
+**Closed 2026-09-29 by the change described in [VISUAL_BLOCKS.md](VISUAL_BLOCKS.md).** The bar is
+no longer rendered inside a diagram block's split editor at all. It moved to the Diagram page's
+own toolbar row, where it shares the Rich Note's row and its `--rtwiki-toolbar-height` token.
 
-### 5. Eleven `!important` declarations in the page-tree stylesheet
+So the complaint this entry recorded — that a 48px control did not fit a narrow split editor — was
+a real observation about a context that no longer exists. The controls are now 32px so they fit the
+40px toolbar row, and the Rich Note reaches the same templates through its toolbar chooser rather
+than through a bar in a block.
 
-**Impact: low — a warning, not an error.** `lint/complexity/noImportantStyles` fires 11 times in
-`src/web/features/sidebar/page-tree.module.css`. Each overrides a third-party stylesheet
-(`wunderbaum`, the tree library), so they are load-bearing: removing one changes the tree's
-appearance. The rule is a warning, so the lint gate is green.
+**What replaced it.** The bar is one row in the page's toolbar, above the workspace and visible
+without entering edit mode. Choosing a template adds that diagram to the page. A Rich Note has an
+equivalent chooser on its own toolbar, reading the same list. Neither surface shows Mermaid in the
+`/` slash menu, which lists block types rather than a template library.
 
-**Next step:** leave them, or add a file-level suppression with the reason. Do not remove them
-one at a time without looking at the tree.
+**Residual, and small:** 30 templates in a 40px row is dense, and the overflow dropdown does most
+of the work. That is a density question, not the cramping this entry described.
 
-### 6. Uploaded images are not associated with a page, so they are never cleaned up
+### 5. ~~Eleven `!important` declarations in the page-tree stylesheet~~ — RESOLVED, suppressed with the reason
 
-**Impact: low now, and it grows silently.** An `image` block stores a URL; the `attachments` table
-records the image but has no foreign key to `pages` (see [ADR-013](adr/ADR-013-image-attachments.md)).
-Consequences: deleting a note leaves its images unreferenced, and there is no "images on this page"
-list because there is no page to scope one by. `GET /api/pages/:id/attachments` is listed in
-[ARCHITECTURE.md](ARCHITECTURE.md) as **not implemented** for this reason.
+**Closed 2026-09-29.** `src/web/features/sidebar/page-tree.module.css` now carries a file-level
+`biome-ignore-all lint/complexity/noImportantStyles` with a note explaining why each group is
+load-bearing: the Wunderbaum stylesheet is part of the cascade, so specificity alone cannot beat its
+own state rules, and the declarations that matter exist because the library paints a container
+border that turns blue on `:focus-within` — putting focus on the whole tree instead of the focused
+row.
 
-**Partly reduced by [ADR-014](adr/ADR-014-blob-stored-image-bytes.md).** Two of the three failure
-modes are gone: bytes and metadata can no longer get out of step, because they are one row, and
-reclaiming an unreferenced image is now a single `DELETE` rather than a delete plus an unlink that
-can fail. What remains is the policy question, not the mechanics.
+**The entry offered two options — remove them, or document the suppression — and only one of them
+was available.** Removal was explicitly the wrong move and remains so: the warnings are 11 because
+they are 11 distinct overrides of third-party CSS, each individually commented at its own site.
+Deleting them one at a time is what this entry warned against, and doing it blind would have changed
+the tree's appearance without anyone able to say which change caused what.
 
-This was not hypothetical. The development database held **14 image files that no row referenced**,
-left by earlier runs, with nothing reporting it.
+**So the declarations stay, and the file says why.** A reader now sees one explained block rather than
+eleven unexplained declarations, and the lint gate is quieter rather than redder.
 
-**Also outstanding:** files left in `data/attachments/` by a database created before ADR-014 are
-deliberately not deleted by the migration, because an unreferenced file cannot be proven to be
-garbage rather than merely not-yet-referenced. They are inert and can be removed by hand.
+### 6. ~~Uploaded images are not associated with a page, so they are never cleaned up~~ — the leak is fixed; the missing feature is not
 
-**Why there is still no page foreign key:** an attachment may legitimately be uploaded before it is
-referenced, and a note may be deleted while its images are still wanted — a cascade would destroy
-images still in use elsewhere.
+**Partly resolved 2026-09-29.** The unreferenced-image leak now has a reclaim pass, and the policy
+decision this entry said was needed has been made and recorded.
 
-**Next step:** a retention pass over the `attachments` table that reclaims rows unreferenced by any
-document, plus a "referenced by" check before reclaiming. This needs a deliberate policy decision
-(age threshold, and what "referenced" means for a note in the recycle bin) rather than a default.
+**What was built.** `src/server/attachments/attachment-retention.ts` exposes two functions, and the
+split between them is the design:
+
+- `findUnreferencedAttachments` — **read-only.** Answers "what would go" without touching anything,
+  so a caller can report or count before acting.
+- `reclaimUnreferencedAttachments` — deletes, and reports rather than throwing: which ids went, how
+  many bytes, which were too young, and which failed with a reason. A single unremovable row must
+  not abandon the rest of the pass, and it must not vanish silently.
+
+Run once from `bootstrap()`, not on a timer. The leak only grows when a note is deleted, so a
+startup pass costs one table scan where a timer would keep re-scanning a condition that has not
+changed. Failures are logged and never block startup — the data is merely still there, which is the
+state before this ran.
+
+**The policy, and the reasoning:**
+
+- **References are found by searching stored page text for the attachment id**, in one pass that
+  builds a set. The per-attachment alternative is a full page scan per row, which is quadratic in
+  exactly the case the leak makes large. The search is deliberately looser than matching the
+  `/api/attachments/<id>` path, so a reference written in a shape this function does not understand
+  is still a reference.
+- **Pages in the recycle bin count as references.** This is the part a reasonable implementation gets
+  wrong by forgetting `WHERE deleted_at IS NULL`. A binned page can be restored, so its images must
+  survive; reclaiming them would destroy the images of a note deleted by mistake, which is worse
+  than the leak being fixed. Asserted directly in `tests/attachment-retention.test.ts`.
+- **30 days minimum age**, generous on purpose. The alternative is deleting on page-delete, which is
+  the cascade ADR-013 rejected. With a threshold the worst case is that an image outlives its need —
+  recoverable. In the other direction it is not.
+- **A row whose `created_at` will not parse is never reclaimed**, reported as `unreferencedForMs:
+  null` rather than 0. "Unknown age" and "brand new" are different facts, and collapsing them would
+  let a zero threshold delete a row nobody can date.
+
+**What is still open, and deliberately so.** There is still no `GET /api/pages/:id/attachments`
+and still no "images on this page" list, because the `attachments` table has no foreign key to
+`pages` and adding one is a schema decision, not a bug fix — a cascade would destroy an image still
+used in another note, and an attachment may legitimately be uploaded before it is referenced. That
+is unchanged from ADR-013 and belongs to the owner as a product decision.
+
+**Also still open:** files in `data/attachments/` from a database predating ADR-014 are not touched
+by the migration, because an unreferenced file cannot be proven to be garbage rather than merely
+not-yet-referenced. That is now a much smaller set than it was — ADR-014 moved image bytes into the
+database, so this is about older files only.
 
 ### 7. Documents are attached, searchable, and viewable in place
 
@@ -112,6 +240,18 @@ document, plus a "referenced by" check before reclaiming. This needs a deliberat
 those are now accepted, stored in the database beside the images, and their text is extracted into the
 search index — so a PDF you imported becomes findable by what is in it. See
 [ADR-015](adr/ADR-015-document-attachments.md).
+
+**The "extracted into the search index" clause was false when this entry was written, and is only
+now true.** `extracted_text` was written on upload and read by exactly one route,
+`GET /api/attachments/:id/text`, which is reachable only by opening the document's "View text"
+dialog. `search_index` was populated from page content alone, so a document's words were not
+findable. AC-030, AC-030a, ADR-015, DATA_MODEL.md and this entry all asserted otherwise, and
+ADR-016 correctly described the opposite — five documents disagreeing about the same feature.
+The gap is now closed by appending a page's referenced documents' text to that page's own
+`search_index` row, with the lifecycle made explicit: adding a document to a note re-indexes it
+on the next save, and deleting an attachment re-indexes the pages that referenced it. The entries
+were left in place and the code changed to match them, because the claim is the product
+requirement. See [DATA_MODEL.md §3.6](DATA_MODEL.md).
 
 **Attaching is now reachable from the editor.** A Document control sits beside Image on the Rich Note
 toolbar and in the slash menu, opens a picker, and inserts a card carrying the file's own name. Drop and
@@ -144,6 +284,44 @@ would have been dropped from the inline route for no reason.
 
 **Also still open:** **legacy binary `.doc`/`.xls` are refused** — OLE compound files this parser does
 not handle. AC-031 names DOCX and ODT, not DOC.
+
+### 8. The Diagram page's layout cannot size a block without reaching into a shared component
+
+**Not a user-visible bug. A structural one, found while fixing a real one, and it will cause the next
+one too.**
+
+Block resizing lives in `src/web/features/rich-editor/blocks/block-resize.tsx`, shared by the Rich Note
+and the Diagram page. Its container carries `max-width: 100%`, so its width is bounded by whatever
+wraps it. On the Rich Note that is the document column and the bound is correct. On the Diagram page
+the block list is a `flex-wrap: row` container, so the block's parent is a **flex item** whose width
+comes out of the row's sharing, and the bound silently becomes "as wide as my share of the row".
+
+The Diagram page therefore cannot size a block by styling the block. It has to publish a size onto the
+reorder item, from inside a component that lives in another feature, across **two CSS modules** that
+cannot see each other's class names. Three attempts were made and each failed differently, all
+measured:
+
+| Attempt | Result |
+| --- | --- |
+| `width`/`height` on the reorder item | Item fixed its box; the drag had nowhere to go. 160px drag → 0px movement. |
+| `.blockListItem > div { width: … }` | A specificity contest with the shared component's own rule, across modules. Lost: the box stayed at the row share. |
+| Live size in workspace `useState` | Worked, but a `setState` per `pointermove` re-rendered every Mermaid canvas on the page. Up to 31px of lag. |
+
+What shipped publishes the in-flight size as a CSS custom property on the reorder item, written
+directly to the DOM from the resize container via a ref, under a name (`--block-width-live`) that is
+separate from the stored one. Measured in a standalone prototype of the same DOM and CSS: **0px**
+tracking error at every sample, against **160px** for the container-only version.
+
+**Why this entry stays open.** The fix works, but it is a ref through a feature boundary, and the
+`liveStyleTarget` prop only makes sense to one caller. The real fix is for the block list to own its
+children's sizing — the resize container should not have to know that something above it is a flex
+item. Until then, a change to `max-width` on `.sizeContainer`, or to the Diagram page's flex rules, can
+reintroduce this and the symptom will again be "the drag stopped working" with no error anywhere.
+
+**Not covered by any test at the unit level.** `tests/browser/diagram-workspace-layout.pwspec.ts` now
+asserts the box tracks the pointer *during* a drag on both axes, which is the only kind of assertion
+that catches it; every earlier resize test read the size *after* the pointer came up, so all of them
+passed while the control was frozen.
 
 ### A document could be attached, and the user was told it was an image
 
@@ -281,64 +459,76 @@ Two specific traps found here:
 test must assert the SVG overlay and a resolved font. See `docs/evidence/markdown-math-zoom.png` for
 what correct output looks like.
 
-### A page closed while a save had failed loses the pending content
+### A page closed while a save had failed loses the pending content — STILL OPEN, and the prescribed fix was tried and rejected
 
-**Not silent at the time — and the work is still gone.** The status bar does show "Save failed" in
-red, so the user is not misled while the page is open. What is unhandled is *leaving*: the pending
-content does not survive the remount, and it behaves this way in every editor rather than in one
-workspace, so it is not a diagram-page bug. The failure is visible only for as long as the page
-stays mounted; closing it turns a visible error into a silent loss.
+**Unchanged 2026-09-29, with one new and load-bearing measurement: the fix this entry prescribed
+does not work, and shipping it would have made things worse.** It was built, measured, and removed.
+Both the bug and the reasoning are kept.
 
-**Found and deliberately not fixed** in the same pass as the stale-state and status-mapping defects
-below. The fix belongs in the autosave controller (hold the content for a retry that outlives the
-page) or in the close/switch confirmation, which is where `isAutosaveDirty` already feeds the prompt
-for the ordinary unsaved case. The failed-save case is the one that never reaches it.
+**What was tried.** The entry's own prescription — flush the controller on
+`visibilitychange → hidden`, with `pagehide` as a fallback — was implemented in `App.tsx`, the one
+place that already holds the active editor's flush. It is a small, tidy change and it does exactly
+what it says.
 
-**The loss surface is narrower than the entry above implies, and the gap is elsewhere.** Measured:
-the controller deliberately keeps the payload on failure (`// Do NOT clear pendingContent - preserve
-for retry`, `autosave-controller.ts:156`), and a retry **is** wired to the UI in two places — the
-status bar (`status-bar.tsx:361`, `data-testid="status-retry"`) and the Rich Note's own alert. So
-while the tab stays open, a failed save is recoverable by a visible button, not lost. The two real
-losses are:
+**Why it was removed.** Two reasons, and the second decided it.
 
-- **Close, reload or navigate away inside the 2,000 ms debounce window.** `dispose()` sets
-  `disposed = true` and calls `clearTimer()` (`autosave-controller.ts:238-241`), so up to two seconds
-  of typing disappears with no prompt and no flush. There is **no `beforeunload`, `pagehide` or
-  `unload` handler anywhere in `src/`** — the only lifecycle listener is a `visibilitychange` in an
-  unrelated feature (`schedule-notifications.tsx:24,27`).
-- **Close or reload while `status === 'error'`.** The pending content lives in component state, so a
-  remount loses it and the retry button cannot help a user who has already closed the tab.
+1. **The write is not deliverable.** Neither `pagehide` nor `visibilitychange` lets the page await
+   anything. A browser tears the document down once the handler returns, so an in-flight `PATCH` is
+   usually cancelled. The change would have traded a *certain* two-second loss for an *unreliable*
+   save, which is not obviously a win even before the second reason.
+2. **A background write races the app's optimistic concurrency.** Page writes are version-checked
+   and a stale `version` is refused with 409. Every existing flush is user-initiated and awaited, so
+   a conflict surfaces to whoever caused it. A flush fired by the browser on teardown is neither, and
+   it lands between a read and a write belonging to someone else — a second tab, or the user
+   themselves — turning their edit into a conflict they did not cause and cannot explain.
 
-**A close prompt is the wrong fix for the first one, and saying so is part of the entry.** The
-pending amount is at most two seconds of typing, the failure is already surfaced visibly, and a
-prompt firing on every close of a healthy document trains the user to dismiss it — destroying its
-value on the one occasion it matters. Flushing the controller on `visibilitychange → hidden`, with
-`pagehide` as a fallback, narrows the window to near zero for ordinary use and adds no prompt. MDN
-recommends exactly this pair over `beforeunload`, and `beforeunload` is additionally unreliable
-against the back/forward cache.
+**Measured, in the real application.** With the listeners registered, the browser suite went from
+**5 failures to 12** — 4 in `connect-find`, 4 in `stability-regressions`, 4 in `tree-dnd`, all of
+them rename-and-navigate specs, all of them timing out on exactly the version conflict described
+above. Removing them returned the suite to 5, and those 5 are `backup-panel`, which is flaky
+independently and which also failed on the unmodified baseline. The attribution was established by
+running the whole suite on the stashed, unmodified tree, not by reasoning.
 
-**Not a fix, deliberately:** the alternative is persisting the draft to `IndexedDB` per change and
-recovering on mount. That trades a two-second window for a **second, unencrypted copy of private note
-content in the browser profile**, surviving the app, which the privacy posture built around "the data
-lives in `data/rtwiki.sqlite` beside the executable" does not cover. It also needs an explicit
-staleness policy — a recovered draft older than the server copy must not silently overwrite newer
-work. **The performance cost of that option on this codebase is unmeasured** and should not be
-guessed: the handler already runs `JSON.stringify(editor.document)` on every change, so a draft write
-is not a new class of work, but the actual number is not established.
+**The bug itself is still real and still unfixed.** Both loss surfaces stand: closing or reloading
+inside the `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` window discards pending typing, and closing while
+`status === 'error'` discards content that lives only in component state.
 
-### `isDirty` now means two different things, and only one of them is read
+**What the fix actually is, and why it is not simply applied.** A draft in `IndexedDB`, and this
+entry's reasoning against it stands: that trades a two-second window for a **second, unencrypted
+copy of private note content in the browser profile**, surviving the app — which the privacy posture
+built around "the data lives in `data/rtwiki.sqlite` beside the executable" does not cover. It also
+needs a staleness policy, since a recovered draft older than the server copy must not silently
+overwrite newer work. Both are decisions for the owner.
 
-The visual workspace uses `useAutosave`'s own `isDirty` — `dirty || error`,
-`src/web/features/rich-editor/use-autosave.ts:98` — while the markdown workspace
-(`markdown-workspace.tsx:99`) and the HTML editor (`html-editor.tsx:154`) use `isAutosaveDirty` —
-`dirty || saving`, `src/web/features/workspace/save-state.ts:51`. The only difference is a save in
-flight, which the shared helper counts as dirty and the hook's own value does not.
+**A narrower option nobody has costed:** a *synchronous* `navigator.sendBeacon` carrying the draft
+would be deliverable where the async PATCH is not, and would still race the version check unless it
+skipped it. That is a different design, not this one, and it is unmeasured.
 
-**Inert downstream today, and left alone deliberately.** The consumer of that `isDirty` reads only
-`state.saveState` and `state.error` (`App.tsx:973-976`), so changing either convention is a no-op and
-"tidying" it would be a change with no observable effect. But it is a third convention waiting to
-matter, and the place it will matter is the close confirmation above — where a save in flight is
-precisely the case that must not be dismissed.
+**Do not re-attempt this fix without reading the measurement above.** The reasoning that produced it
+was reasonable, and it is wrong. `src/web/App.tsx` carries the same warning at the point of use.
+
+### ~~`isDirty` now means two different things~~ — RESOLVED, one definition
+
+**Fixed 2026-09-29.** There were two spellings: the visual workspace used `useAutosave`'s own
+`dirty || error`, while the markdown workspace and the HTML editor used the shared `isAutosaveDirty`,
+which read `dirty || saving`. `use-autosave` now imports the shared function rather than restating
+it.
+
+**The disagreement was not cosmetic, and that is the part worth recording.** This entry called it
+inert because nothing read the answer. Two things have since made it matter:
+
+- The close/switch confirmation reads it, and a save in flight is precisely the case that must not
+  be dismissed.
+- The shared helper did **not** count `error`. A failed save leaves content in memory and unwritten,
+  so it is unsaved work by any definition — yet the copy used by two of the three editors reported
+  the one state where content is genuinely at risk as clean. `isAutosaveDirty` now includes `error`.
+
+**The test asserts the relationship, not a truth table.** `tests/save-state-dirty.test.ts` checks
+that `isAutosaveDirty` is true for exactly the states where the document is not durably written, and
+that it never contradicts the status bar. A third copy of the question cannot be caught by testing
+one function; it can be caught by testing the invariant. Note that the invariant is *not* "the bar
+is not saying Clean" — `saved` is a fourth bar state meaning a write just completed, correctly not
+dirty, and conflating the two is how the first version of that test failed on correct code.
 
 ### A page whose only content is a table rendered an empty dashboard card
 
@@ -524,18 +714,58 @@ that a page is created by `POST /api/pages` with `Content-Type: text/plain`, and
 matters — that `GET /api/schedule/entries` afterwards returns nothing. See [SECURITY.md](SECURITY.md)
 §4.1 for the requirement this fails.
 
-> **Measured at commit `476de71`, and a fix was in flight in the working tree when this entry was
-> written.** `src/server/utils/request-host.ts` had appeared and was being registered in
-> `createApp()` as a `Host` allowlist on every request — requirement (1) below. That work is
-> **uncommitted and unverified here**, so it is not counted as built. Two things are worth saying
-> about it anyway, because they are properties of the fix rather than of the fix's completeness:
-> a `Host` allowlist stops **rebinding**, but it does nothing about the plain cross-origin `POST`
-> that needs no rebinding at all — the `POST /apply` wipe above is reachable from a bare form
-> submit; and `isSameOrigin()` was **still** not called from `pages.ts`, `schedule.ts` or
-> `schedule-presets.ts`, so requirement (2) remained unmet. Whoever lands this must re-measure the
-> route table rather than assume the allowlist closed it.
+> **SUPERSEDED 2026-09-29 — the hole described above is closed, and this entry should not be read
+> as a live finding.** It was written at commit `476de71` with the fix uncommitted. Both controls it
+> asked for are now built, in `createApp()` rather than per route:
+>
+> - **`Host` allowlist on every request** — `src/server/app.ts:166`, via `isAllowedHost`. This is the
+>   control that stops DNS rebinding, and it is the one that was missing.
+> - **`isSameOrigin` on every state-changing method** — `src/server/app.ts:174`, via
+>   `isUnsafeMethod`. Not on the five route files this entry listed, and not on the three it said
+>   were unprotected: on all of them, at the app level.
+>
+> So requirement (1) and (2) are both met, the "17 routes with no check" table above describes a
+> state that no longer exists, and `tests/cross-origin-guard.test.ts` asserts the reachable write
+> routes are refused.
+>
+> **Requirement (3) is now also done.** The JSON body readers require
+> `Content-Type: application/json` and answer 415 otherwise, which removes the CORS-simple
+> `text/plain` free pass entirely — the entry's own note that this "only defends against the
+> `text/plain` variant" is now the whole of the second layer rather than a partial measure. See
+> `src/server/utils/read-json.ts` and `tests/json-media-type-defence.test.ts`.
+>
+> **The entry is kept rather than deleted** because the reasoning above is the most careful
+> cross-origin analysis in this document and it is what the three controls are designed against. What
+> is stale is its conclusion, not its analysis.
+>
+> **Still true and still worth acting on:** the `mode: "replace"` wipe is reachable by any
+> *authorised* caller with a valid preset key, so it deserves an undo or a confirmation. That is a
+> product decision, not a security one, and it is not a regression.
 
-### A double-clicked `RTWiki.exe` closes the window its own error message is printed in
+### ~~A double-clicked `RTWiki.exe` closes the window its own error message is printed in~~ — RESOLVED
+
+**Fixed 2026-09-29.** `reportFatalStartupError` now holds the process open after reporting, so the
+message is still on screen when the window would have closed.
+
+**Guarded on `process.stdin.isTTY`, and the direction of that guard is the whole point.** The wait is
+for the *interactive* case — a double-clicked console application, where stdin is a TTY. A script, a
+service or CI has no console to hold open, and waiting there would hang the job rather than report
+anything. The condition is the opposite way round from what it first reads like: "no waiting" does
+not mean "always wait".
+
+The wait resumes stdin, which is what keeps a compiled Bun process alive, and resolves on the first
+keystroke. Cleanup detaches the listener and pauses the stream, so the process can then exit
+normally.
+
+**Honest limit, unchanged from the original entry:** this makes the message **readable**, not
+actionable. A GUI dialog would need `bun:ffi` → `MessageBoxW`, and Bun's own documentation calls
+`bun:ffi` experimental and advises against it in production; whether `dlopen` survives
+`bun build --compile` is unestablished. A window-subsystem build is not the answer either — it would
+remove the console from *normal* operation, which is the diagnostic surface `fatal.ts` exists to use.
+
+**Not verified here:** this path is only reachable through a double-click, and the compiled
+executable cannot be built on this machine (item 3). What is verified is that the function resolves
+without waiting when stdin is not a TTY, so a CI run cannot hang — see `tests/fatal-startup.test.ts`.
 
 **Measured, and it is a visibility defect rather than a reporting one.** The message is correct; it
 is written into a stream nobody is watching.
@@ -590,11 +820,16 @@ unreachable for this corruption class, which is a further reason to treat that b
 **Next step:** wrap the pragma and treat a throw as failure, keeping the single-`ok`-row test for
 the cases that do return rows. `src/server/app.ts` is already inside a `try` and is unaffected.
 
-> **Measured at commit `476de71`.** A fix was in the working tree when this entry was written —
-> `checkIntegrity()` gained a `try`/`catch` that returns `false` — but it is **uncommitted and
-> unverified here**, so this entry records the state of `476de71` and must be closed by whoever
-> lands the fix, with the same discipline as any other entry in *Recently fixed*. The underlying
-> measurement, that the pragma throws rather than answering, is unaffected either way.
+> **RESOLVED — the fix is built and committed, verified 2026-09-29.** `checkIntegrity()` in
+> `src/server/database/index.ts` now wraps the pragma in `try`/`catch` and returns `false` on a
+> throw, keeping the single-`ok`-row test for the cases that do return rows. The measurement this
+> entry rests on — that the pragma throws rather than answering — is unaffected and still true.
+>
+> One thing the fix does **not** do, and which the original entry's "next step" was careful not to
+> claim: `integrity_check` does not check foreign keys. SQLite documents that separately, so a
+> validator that reuses this helper still needs `foreign_key_check` as its own required step. That is
+> recorded in [SECURITY.md](SECURITY.md) §8.1 and is honoured by the backup restore validator, which
+> is the only consumer that matters for corruption.
 
 ## Recently fixed
 
@@ -801,6 +1036,111 @@ for labels that were not there.
 `<text>` cannot carry script or event handlers, so this is both the fix and the safer setting.
 Guarded by `tests/browser/diagram-labels.pwspec.ts` and a unit assertion in
 `tests/mermaid-security.test.ts`.
+
+### A diagram in a note could not be resized sideways at all
+
+A block in a note already fills the width of the text column, so the resize control — a single
+grip in the **bottom-right corner** — had nowhere to grow into. Dragging it sideways did nothing:
+**measured, an 820px block stayed 820px.** Narrowing worked, so the control looked alive, but
+growing was impossible, and a user who had made the block smaller could not make it big again
+without reaching for a preset.
+
+**Fixed** by replacing the corner grip with two grips, one on each **side edge**. Moving an edge is
+always possible; growing an already-maximal box is not. The left grip inverts the pointer delta, so
+pulling it left *widens* the block — without that the picture would shrink as its left border
+travelled outward, the opposite of what the pointer is doing.
+
+This is how images and video already resize in BlockNote, the editor RTWiki uses: its image block
+carries a `previewWidth` prop and ships `bn-resize-handle` grips on **both** sides, revealed on
+hover or during a drag, with an invisible shield over the picture so a drag cannot be mistaken for
+a text selection. It also **clamps to the editor's own width**, and that is the model followed
+here — a diagram never reaches into the margin, so a note containing a resized diagram looks
+exactly like a note of plain text. The one deliberate difference is the Diagram page, whose blocks
+sit in a wrapping grid where a wider block reflows into a second column, so its ceiling is
+correctly the full width of the row.
+
+**Measured after:** right grip pulled left 820 → 616; left grip pulled left 616 → 770; pulled
+900px past the edge, clamps at 820. Guarded by
+`tests/browser/diagram-note-scale-to-fit.pwspec.ts`.
+
+**A trap the change exposed.** The grip is 8px wide and sits mid-height, where the old corner
+handle was 18px square at the bottom. Six existing tests grabbed it at a fixed `+8` from its
+top-left — inside the old handle, *outside* the new one — so the drag silently never started. They
+kept passing on the geometry they asserted and failed on the drag, which is worth remembering: a
+test that positions a pointer with a hardcoded offset is measuring the old control's size, and
+reports "no change" rather than "cannot find the target". All now grab the grip's own centre.
+
+### A note's diagram was cropped by its own box, while the Diagram page scaled
+
+The Diagram page scaled a diagram into its box whenever the block had a stored height. A Rich
+Note had no equivalent rule, so the same diagram was laid out two different ways on two surfaces
+— the exact drift the shared `DiagramView` component was introduced to end, and it survived that
+work because the shared piece was the *view* and not the *sizing*.
+
+The failure was not a difference of taste, it was unreachable content. The box shrank to its
+stored height and the diagram kept its natural size, so the box cropped it: **measured, the Medium
+preset gave a 400px box holding a 549px diagram, overhanging the bottom by 82px** with no way to
+scroll to the rest. This is the report that a resized diagram "goes into the edges and is not
+fully visible".
+
+**Fixed** by giving a note the same rules the Diagram page already had, applied only when a height
+is in play. The container gains `sizeContainerSized` (mirroring the page's `blockCanvasSized`)
+whenever a height is stored or being dragged, so an unsized block still draws naturally and still
+scrolls. `object-fit: contain` is also set: it has no effect on an SVG's internal geometry by
+itself, but combined with `contain` on the root it letterboxes a diagram whose aspect ratio
+differs from its box rather than stretching it.
+
+**Measured after:** 400px box, 384px diagram, **0px overhang**. Confirmed to fail at 549px/82px
+against the unfixed code, and the padding was measured at every preset rather than assumed (16px at
+all three).
+
+### A keyboard user resizing an unsized block with the arrow keys made it the wrong size
+
+The resize grip's arrow-key handler worked from the block's **stored** size. An unsized block
+stores nothing, so the handler fell back to the smallest permitted width, 240px, and then added
+its 40px step to that. One press of Arrow Right — the key that *enlarges* — therefore **shrank** an
+820px block to 280px, and Arrow Down drove the height to the 120px minimum. The pointer drag was
+unaffected because it measures the real box on press; the keyboard path was missing that
+measurement.
+
+**Fixed** by starting from the box actually on screen, then the stored value, then the limits. An
+in-flight drag still wins, so a keypress mid-drag steps from the in-flight size.
+
+**Measured after:** 820x719 → Arrow Left 780x678 → Arrow Right 820x718 → Arrow Down 780x678.
+
+**A wrong claim, withdrawn here.** This was first recorded as "the grip cannot be reached by
+keyboard at all", inferred from calling `focus()` and finding focus had not moved. That does not
+test tab order. Tabbing reaches the grip after 16 presses with `tabIndex=0` and nothing disabled —
+it always was reachable. The companion claim that the size buttons were unreachable was inferred
+from the false one rather than measured, and is withdrawn too. Guarded by
+`tests/browser/diagram-note-scale-to-fit.pwspec.ts`.
+
+### "Fit width" did nothing: the border resized and the diagram did not
+
+Mermaid writes `style="max-width: <natural width>px"` onto the root `<svg>` of every diagram it
+renders, so that a small diagram is not stretched by a wide container. That cap is **inline**, and
+an inline style outranks any stylesheet rule — including the `.fit` rule that is supposed to scale
+the diagram to the block it sits in.
+
+The consequence was the phantom-width shape of bug, on a block-size feature that otherwise worked:
+the size presets resized the box correctly, **measured 820 → 640 → 820 across small/medium/large**,
+while the picture stayed frozen at its intrinsic **196px** the whole time. A user pressing the
+"fit" button saw a border change and a diagram that ignored them.
+
+**Why it survived:** every assertion was about the *container* — that a stored width is drawn, that a
+drag tracks the pointer. The container was correct. Nothing asked how wide the diagram inside it
+actually was, which is the same blind spot as the missing-labels entry above: asserting that a
+thing exists is not asserting that it is the right size.
+
+**Fixed** in `svg-sanitize.ts`, which now strips that one property from the root `<svg>`. It is
+layout, not content: the `viewBox` keeps the real geometry and the `width`/`height` attributes keep
+the intrinsic size, so nothing is lost. Fixing it in the shared sanitiser rather than in a
+stylesheet is deliberate — Mermaid emits it on both surfaces, and a CSS override would have had to be
+duplicated in two modules and would still lose to `!important` on one of them.
+
+Guarded by `tests/browser/diagram-view-controls.pwspec.ts` ("a block size preset resizes the
+diagram instead of only the border"), which asserts the drawn width changes with the preset. **It
+was confirmed to fail against the unfixed code** before the fix was kept.
 
 ### A template's submenu would not open inside the "more" dropdown
 

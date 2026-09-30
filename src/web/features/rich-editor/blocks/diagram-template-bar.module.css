@@ -10,7 +10,19 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  flex: 0 0 auto;
+  /* `0 1 auto`, not `0 0 auto`.
+   *
+   * `useToolbarOverflow` decides how many controls fit by reading this element's
+   * `clientWidth`. With `flex: 0 0 auto` the bar is always exactly as wide as its
+   * contents, so `clientWidth` always equalled the full width of all 30 templates,
+   * the budget was never exceeded, and the trailing "more" menu could never appear.
+   * Measured at a 900px window: the bar's content was 1093px wide inside a 564px row
+   * and spilled past the window edge, with no overflow control anywhere.
+   *
+   * Allowing it to shrink is what gives the measurement something to measure
+   * against. `0` on grow keeps the bar content-width when there is room, so a wide
+   * window looks exactly as it did. */
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
 }

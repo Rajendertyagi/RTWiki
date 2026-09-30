@@ -17,46 +17,78 @@ import {
 } from '@rtwiki/shared/schemas/visual-page-content'
 import {
   IconAspectRatio,
-  IconChevronDown,
-  IconChevronUp,
-  IconPencil,
   IconPlayerPlay,
-  IconPlus,
   IconRefresh,
-  IconTrash,
   IconZoomIn,
   IconZoomOut
 } from '@tabler/icons-react'
+import { Reorder } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
 import type { CSSVars } from '../../style-props.js'
 import { reorderByIds } from '../../util/reorder.js'
-import { DiagramTemplateBar } from '../rich-editor/blocks/diagram-template-bar.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import { mapAutosaveStatus, type StatusSaveState } from '../workspace/save-state.js'
-import { DiagramCanvas, type RenderErrorCode } from './diagram-canvas.js'
+import { DiagramBlockCard } from './diagram-block-card.js'
+import type { RenderErrorCode } from './diagram-canvas.js'
 import classes from './mermaid-workspace.module.css'
 import { starterSourceFor } from './starter-source.js'
 
 /**
- * Dedicated full-page workspace for the Diagram and Mind Map page types.
+ * Dedicated full-page workspace for the Diagram page type.
  *
- * Normal opening shows the fully rendered diagram; Edit reveals a split view
+ * Normal opening shows the fully rendered diagrams. Edit reveals a split view
  * with the Mermaid source on the left and a live debounced preview on the
  * right (Apply commits + exits, Cancel restores). Rendering reuses RTWiki's
  * secure Mermaid pipeline — never duplicated. Autosave flows through the
  * shared autosave controller so save status, flush-on-navigation and late-
  * response guards behave exactly like every other editor.
+ *
+ * The page's creation controls are **not** rendered here. "Add diagram" and the
+ * Mermaid template chooser live in the page's own toolbar row, beside the Rich
+ * Note's, and reach this workspace through
+ * {@link MermaidPageWorkspaceProps.onCreateActionsReady} — the same arrangement
+ * the Rich Note uses to put its toolbar in the shared row while the editor
+ * instance stays down here.
+ *
+ * Both creation actions travel in **one** handoff rather than one callback each.
+ * A second independent callback would mean a second registration with the same
+ * teardown semantics, and the first version of this arrangement already had that
+ * shape: a single callback whose value was a bare function, which a `setState` on
+ * the other end called as an updater. One object, registered once, makes that
+ * unrepresentable rather than merely avoided.
  */
+
+/**
+ * What the Diagram page's toolbar row needs in order to create a diagram.
+ *
+ * Held and handed up as an **object**, never as bare functions, for the reason in
+ * the module note: a `useState` given a function invokes it as an updater with the
+ * previous state. An object cannot be mistaken for an updater.
+ */
+export interface DiagramCreateActions {
+  /** Appends a diagram of this Mermaid source, at full page width. */
+  pickTemplate: (source: string) => void
+  /** Appends a diagram of the default starter, at full page width. */
+  addDiagram: () => void
+  /**
+   * Whether another diagram may be added right now.
+   *
+   * Carried rather than recomputed by the toolbar, because `MAX_VISUAL_PAGE_BLOCKS`
+   * is a limit this module owns and a second copy of it in the toolbar would be
+   * free to drift.
+   */
+  canAdd: boolean
+}
 
 export interface MermaidPageWorkspaceProps {
   pageId: string
   storedContent: string
-  pageType: Extract<PageType, 'diagram' | 'mindmap'>
+  pageType: Extract<PageType, 'diagram'>
   createdDate?: string
   updatedDate?: string
   onSaveContent?: (id: string, content: string) => Promise<boolean>
@@ -68,6 +100,16 @@ export interface MermaidPageWorkspaceProps {
   }) => void
   /** Opens a page through the controller/tab flow, for the sidebar's backlinks. */
   onOpenPage?: (pageId: string) => void
+  /**
+   * Hands this workspace's "add a diagram of this type" action up to whoever
+   * renders the page's toolbar row, and is called with `null` on unmount.
+   *
+   * The mirror image of the Rich Note's `onEditorReady`: the control belongs in
+   * the shared toolbar row so the page looks like every other page type, while
+   * the state it acts on lives down here. Handing over a function rather than a
+   * node means the toolbar never re-renders because the workspace re-rendered.
+   */
+  onCreateActionsReady?: (actions: DiagramCreateActions | null) => void
 }
 
 const ERROR_MESSAGE = UI_TEXT.diagramErrorTitle
@@ -90,11 +132,14 @@ export default function MermaidPageWorkspace({
   onSaveContent,
   onFlushRef,
   onSaveStateChange,
-  onOpenPage
+  onOpenPage,
+  onCreateActionsReady
 }: MermaidPageWorkspaceProps): JSX.Element {
-  // The secure Mermaid pipeline keys render IDs by block type; the mind-map
-  // page type maps onto the pipeline's camelCase token.
-  const mermaidBlockType: 'diagram' | 'mindMap' = pageType === 'mindmap' ? 'mindMap' : 'diagram'
+  // The secure Mermaid pipeline keys its render IDs by block type. The Mind Map
+  // page is retired, so a Diagram page is always the `diagram` token. The
+  // `mindMap` token still exists further down for reading a Mind Map block
+  // inside a rich note (blocks/diagram.tsx), which is a different surface.
+  const MERMAID_BLOCK_TYPE = 'diagram' as const
   // Parsed once per stored document rather than per render, so the block list
   // below is referentially stable while `storedContent` is unchanged.
   const parsed = useMemo(() => parseVisualPageContent(storedContent), [storedContent])
@@ -218,20 +263,20 @@ export default function MermaidPageWorkspace({
     void renderMermaidSvg(debouncedDraft, {
       theme: colorScheme === 'dark' ? 'dark' : 'default',
       blockId: pageId,
-      blockType: mermaidBlockType,
+      blockType: MERMAID_BLOCK_TYPE,
       signal: ac.signal
     }).then((result) => {
       if (gen !== liveGenRef.current) return
       if (result.ok) setLiveSvg(result.svg)
       else {
         // Superseded or unmounted: not a failure, so keep the current diagram.
-        if (result.code === 'cancelled') return
+        if (result.code === 'cancelled' || result.code === 'empty_source') return
         setLiveSvg(null)
         setLiveError(result.code)
       }
     })
     return () => ac.abort()
-  }, [debouncedDraft, colorScheme, renderSeq, pageId, mermaidBlockType])
+  }, [debouncedDraft, colorScheme, renderSeq, pageId])
 
   const startEditing = (index: number): void => {
     const block = blocks[index]
@@ -313,10 +358,101 @@ export default function MermaidPageWorkspace({
     // instead of the save failing.
     if (blocks.length >= MAX_VISUAL_PAGE_BLOCKS) return
     commitBlocks(
-      [...blocks, { id: crypto.randomUUID(), source: starterSourceFor(pageType) }],
+      [...blocks, { id: crypto.randomUUID(), source: starterSourceFor() }],
       `${pageType}-block-add`
     )
   }
+
+  /**
+   * Appends a diagram of the chosen type, at full page width.
+   *
+   * This is what the toolbar's template bar calls, and it is the whole point of
+   * moving that bar to the top: choosing a template adds that diagram, rather
+   * than requiring a generic diagram to be added first and then replaced.
+   *
+   * A new block carries no stored size, which the layout reads as "take the full
+   * width available". A user who then resizes it has stored a preference, and a
+   * block added afterwards is unaffected by it.
+   */
+  const addBlockWithSource = (source: string): void => {
+    if (blocks.length >= MAX_VISUAL_PAGE_BLOCKS) return
+    commitBlocks([...blocks, { id: crypto.randomUUID(), source }], `${pageType}-block-add-template`)
+  }
+
+  // The toolbar row above this workspace owns the page's creation controls.
+  //
+  // `addBlockWithSource` closes over `blocks` and is therefore a new function on
+  // every render, so registering it directly would tear the handler down and set
+  // it back up each time - and each teardown nulls it, which the toolbar reads as
+  // "no toolbar yet" and renders a placeholder. A ref holding the latest one lets
+  // the registration happen exactly once per mount, and the toolbar still calls
+  // the current closure.
+  const addBlockWithSourceRef = useRef(addBlockWithSource)
+  useEffect(() => {
+    addBlockWithSourceRef.current = addBlockWithSource
+  })
+
+  // The same treatment for the bare "add a default diagram" action, because it
+  // closes over `blocks` for the cap check and is therefore a new closure per
+  // render for exactly the reason `addBlockWithSource` is.
+  const addBlockRef = useRef(addBlock)
+  useEffect(() => {
+    addBlockRef.current = addBlock
+  })
+
+  /**
+   * The actions the toolbar row needs, always current.
+   *
+   * `canAdd` is part of the handoff rather than something the toolbar guesses:
+   * the cap is `MAX_VISUAL_PAGE_BLOCKS` and only this component knows whether it
+   * has been reached, so a toolbar-side check would be a second copy of a limit
+   * that lives here. Carrying it means the button is genuinely disabled at the
+   * cap and says so, instead of being clickable and silently doing nothing.
+   */
+  const canAddBlock = blocks.length < MAX_VISUAL_PAGE_BLOCKS
+  const readCreateActions = (): DiagramCreateActions => ({
+    pickTemplate: (source: string) => addBlockWithSourceRef.current(source),
+    // Both actions call *through* their ref rather than storing what it holds.
+    //
+    // Storing `addBlockRef.current` looked equivalent and was not: the stored
+    // value would be the closure from the render at registration time, closing
+    // over that render's `blocks`. Its cap check and its `[...blocks, newBlock]`
+    // would then always be computed from the list as it was when the toolbar
+    // appeared, so every press after the first rebuilt the same list instead of
+    // extending it — two presses produced one new block, not two.
+    // `tests/browser/visual-debounce-window.pwspec.ts` caught it.
+    addDiagram: () => addBlockRef.current(),
+    canAdd: canAddBlock
+  })
+
+  // Registered on mount and cleared on unmount, so a closed page cannot leave a
+  // handler behind that would append a diagram to a page no longer on screen.
+  //
+  // Registration and refresh are deliberately two effects. One effect depending on
+  // both would tear down (nulling the toolbar, so it renders its skeleton) and
+  // re-register on every add or remove, so the bar would visibly flash to a
+  // placeholder each time a diagram was added. The second effect has no cleanup,
+  // so it updates in place.
+  //
+  // `readCreateActions` is intentionally absent from both dependency lists. It is a
+  // new closure every render, so listing it would re-run these on every render —
+  // and the first effect would then null the toolbar each time, which is the exact
+  // flash this split exists to prevent. The dependencies that matter are the
+  // callback identity and `canAddBlock`, which is the only value the toolbar reads
+  // that can change without a re-registration.
+  //
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above - readCreateActions is a per-render closure and listing it would re-register on every render.
+  useEffect(() => {
+    if (!onCreateActionsReady) return
+    onCreateActionsReady(readCreateActions())
+    return () => onCreateActionsReady(null)
+  }, [onCreateActionsReady])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: as above - only canAddBlock can change the handed-up value without a remount.
+  useEffect(() => {
+    if (!onCreateActionsReady) return
+    onCreateActionsReady(readCreateActions())
+  }, [onCreateActionsReady, canAddBlock])
 
   const removeBlock = (index: number): void => {
     // The schema requires at least one block, so the last one cannot be removed.
@@ -337,6 +473,29 @@ export default function MermaidPageWorkspace({
     commitBlocks(
       reorderByIds(blocks, ids, (block) => block.id),
       `${pageType}-block-move`
+    )
+  }
+
+  /**
+   * Applies a new order handed over by Motion's `Reorder`.
+   *
+   * Deliberately the same `reorderByIds` path as `moveBlock`, so a drag and a
+   * button press cannot diverge: one ordering rule, one cap, one write.
+   *
+   * Guarded on identity rather than assumed equal. `onReorder` fires on every
+   * frame the pointer crosses a neighbour, including frames where nothing actually
+   * changed order, so writing unconditionally would push a document save on every
+   * mousemove during a drag — a version bump per frame, which is both wasteful and
+   * a way to manufacture the very conflicts the version check exists to catch.
+   */
+  const reorderBlocks = (next: VisualPageBlock[]): void => {
+    const nextIds = next.map((block) => block.id)
+    const currentIds = blocks.map((block) => block.id)
+    if (nextIds.length !== currentIds.length) return
+    if (nextIds.every((id, index) => id === currentIds[index])) return
+    commitBlocks(
+      reorderByIds(blocks, nextIds, (block) => block.id),
+      `${pageType}-block-reorder`
     )
   }
 
@@ -440,89 +599,40 @@ export default function MermaidPageWorkspace({
    * counted label is stored as a `{placeholder}` pattern and filled in at the call
    * site, exactly as the status bar does it.
    */
-  const blockLabel = (position: number, total: number): string =>
-    UI_TEXT.diagramBlockLabel
-      .replace('{position}', String(position))
-      .replace('{total}', String(total))
 
+  /**
+   * One card, with the workspace's handlers bound to it.
+   *
+   * A thin wrapper on purpose: the card is a component in its own file because it
+   * calls `useDragControls`, and a hook invoked from inside `blocks.map(...)` would
+   * join *this* component's hook list — so adding a diagram would change the hook
+   * count and break the page. See the note on `DiagramBlockCard`.
+   */
   const blockCard = (block: VisualPageBlock, index: number): JSX.Element => (
-    <section
+    <DiagramBlockCard
       key={block.id}
-      className={classes.blockCard}
-      aria-label={blockLabel(index + 1, blocks.length)}
-      data-testid={`${pageType}-block-${index}`}
-    >
-      <Group justify="space-between" wrap="nowrap" gap="xs" className={classes.blockBar}>
-        <Text size="xs" c="dimmed" data-testid={`${pageType}-block-title-${index}`}>
-          {blockLabel(index + 1, blocks.length)}
-        </Text>
-        <Group gap={2} wrap="nowrap">
-          <Tooltip label={UI_TEXT.diagramEditBlockLabel}>
-            <ActionIcon
-              size="xs"
-              variant="subtle"
-              aria-label={UI_TEXT.diagramEditBlockLabel}
-              onClick={() => startEditing(index)}
-              data-testid={`${pageType}-block-edit-${index}`}
-            >
-              <IconPencil size={14} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label={UI_TEXT.diagramMoveBlockUpLabel}>
-            <ActionIcon
-              size="xs"
-              variant="subtle"
-              aria-label={UI_TEXT.diagramMoveBlockUpLabel}
-              // The first block cannot move up, so the control says so rather than
-              // doing nothing when pressed.
-              disabled={index === 0}
-              onClick={() => moveBlock(index, -1)}
-              data-testid={`${pageType}-block-up-${index}`}
-            >
-              <IconChevronUp size={14} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label={UI_TEXT.diagramMoveBlockDownLabel}>
-            <ActionIcon
-              size="xs"
-              variant="subtle"
-              aria-label={UI_TEXT.diagramMoveBlockDownLabel}
-              disabled={index === blocks.length - 1}
-              onClick={() => moveBlock(index, 1)}
-              data-testid={`${pageType}-block-down-${index}`}
-            >
-              <IconChevronDown size={14} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label={UI_TEXT.diagramRemoveBlockLabel}>
-            <ActionIcon
-              size="xs"
-              variant="subtle"
-              aria-label={UI_TEXT.diagramRemoveBlockLabel}
-              // The last remaining diagram cannot be removed: a page with none
-              // cannot be rendered at all.
-              disabled={blocks.length <= 1}
-              onClick={() => removeBlock(index)}
-              data-testid={`${pageType}-block-remove-${index}`}
-            >
-              <IconTrash size={14} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      </Group>
-      <div className={classes.blockCanvas} data-testid={`${pageType}-rendered`}>
-        <DiagramCanvas
-          source={block.source}
-          renderKey={`${pageId}-${block.id}`}
-          mermaidBlockType={mermaidBlockType}
-          colorScheme={colorScheme}
-          fit={fit}
-          zoom={zoom}
-          renderSeq={renderSeq}
-          testId={`${pageType}-block-${index}`}
-        />
-      </div>
-    </section>
+      block={block}
+      index={index}
+      total={blocks.length}
+      pageType={pageType}
+      pageId={pageId}
+      mermaidBlockType={MERMAID_BLOCK_TYPE}
+      colorScheme={colorScheme}
+      fit={fit}
+      zoom={zoom}
+      renderSeq={renderSeq}
+      onResize={(blockId, width, height) => {
+        commitBlocks(
+          blocks.map((candidate) =>
+            candidate.id === blockId ? { ...candidate, width, height } : candidate
+          ),
+          `${pageType}-block-resize`
+        )
+      }}
+      onEdit={startEditing}
+      onMove={moveBlock}
+      onRemove={removeBlock}
+    />
   )
 
   // A diagram or mind map has no headings, so the panel carries backlinks and
@@ -534,7 +644,7 @@ export default function MermaidPageWorkspace({
   const sidebar = fullscreen ? null : (
     <RightSidebarRegion
       pageId={pageId}
-      pageTypeLabel={pageType === 'mindmap' ? UI_TEXT.mindMapPage : UI_TEXT.diagramPage}
+      pageTypeLabel={UI_TEXT.diagramPage}
       createdDate={createdDate ?? ''}
       updatedDate={updatedDate ?? ''}
       onOpenPage={onOpenPage}
@@ -580,23 +690,11 @@ export default function MermaidPageWorkspace({
               {fullscreenToggle}
             </Group>
           </Group>
-          {pageType === 'diagram' ? (
-            // Its own row, directly under the edit bar: one row of template
-            // controls, never wrapping, never scrolling, with whatever does not
-            // fit split into a trailing dropdown by the shared overflow hook —
-            // the same behaviour as the rich document toolbar.
-            <DiagramTemplateBar
-              onPick={(source) => {
-                setDraft(source)
-                debugLog('ui', 'ui_context_menu_action', {
-                  targetId: pageId,
-                  code: `${pageType}-template-pick`,
-                  len: source.length,
-                  hash: safeHash(source)
-                })
-              }}
-            />
-          ) : null}
+          {/* No template bar here any more. It used to sit under this edit bar,
+              reachable only by first adding a generic diagram and entering edit
+              mode. It is now in the page's toolbar row, above the workspace and
+              visible without entering edit mode, where choosing a template adds
+              that diagram to the page. */}
           <div className={classes.contentRow}>
             <div className={classes.editSplit}>
               <Textarea
@@ -628,30 +726,40 @@ export default function MermaidPageWorkspace({
         </>
       ) : (
         <>
-          <Group justify="space-between" gap={4} wrap="nowrap" className={classes.viewBar}>
-            <Button
-              size="compact-xs"
-              variant="light"
-              leftSection={<IconPlus size={12} />}
-              onClick={addBlock}
-              // Disabled rather than failing on click: the cap is a real limit and
-              // the control should say so instead of doing nothing.
-              disabled={blocks.length >= MAX_VISUAL_PAGE_BLOCKS}
-              data-testid={`${pageType}-add-block`}
-            >
-              {UI_TEXT.diagramAddBlockLabel}
-            </Button>
-            <Group gap={4} wrap="nowrap">
-              {refreshButton}
-              {fitToggle}
-              {zoomControls}
-              {fullscreenToggle}
-            </Group>
+          {/* View controls only. "Add diagram" used to sit here, on the left of
+           * this bar, while the template chooser had already moved up into the
+           * page toolbar — so the page's two creation actions were split across
+           * two bars with the chooser above the page header and the button below
+           * it. Both now live together in the toolbar row, and this bar holds
+           * only what is genuinely about viewing the diagrams rather than making
+           * them. */}
+          <Group justify="flex-end" gap={4} wrap="nowrap" className={classes.viewBar}>
+            {refreshButton}
+            {fitToggle}
+            {zoomControls}
+            {fullscreenToggle}
           </Group>
           <div className={classes.contentRow}>
-            <div className={classes.blockList} data-testid={`${pageType}-block-list`}>
+            <Reorder.Group
+              as="div"
+              // "xy" because this list **wraps**. Motion documents "x" for
+              // horizontal rows, "y" for vertical columns and "xy" for grids and
+              // wrapped layouts — which is precisely `flex-flow: row wrap` below.
+              // A single axis cannot express "put this diagram to the left of that
+              // one on the next row", and the installed types confirm the value
+              // exists (`ReorderAxis = "x" | "y" | "xy"`).
+              axis="xy"
+              values={blocks}
+              // Reordered through the same validated path the up/down buttons use,
+              // so there is one persistence route and one cap, not two. Motion
+              // hands back the whole new array; it is mapped by id rather than by
+              // position, because position is exactly what just changed.
+              onReorder={reorderBlocks}
+              className={classes.blockList}
+              data-testid={`${pageType}-block-list`}
+            >
               {blocks.map((block, index) => blockCard(block, index))}
-            </div>
+            </Reorder.Group>
             {sidebar}
           </div>
         </>

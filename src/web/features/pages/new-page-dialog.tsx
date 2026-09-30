@@ -131,11 +131,6 @@ export function NewPageDialog({
               data-testid="new-page-type-diagram"
             />
             <Radio
-              value="mindmap"
-              label={UI_TEXT.mindMapPage}
-              data-testid="new-page-type-mindmap"
-            />
-            <Radio
               value="markdown"
               label={UI_TEXT.markdownPage}
               data-testid="new-page-type-markdown"

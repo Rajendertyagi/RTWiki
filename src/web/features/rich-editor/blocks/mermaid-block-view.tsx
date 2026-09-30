@@ -25,6 +25,7 @@ import type { CSSVars } from '../../../style-props.js'
 import { DIAGRAM_TEMPLATES } from '../insert-blocks.js'
 import { ResizableBlockContainer } from './block-resize.js'
 import { DiagramTemplateBar } from './diagram-template-bar.js'
+import { DiagramView } from './diagram-view.js'
 import classes from './mermaid-block.module.css'
 import { renderMermaidSvg } from './mermaid-render.js'
 
@@ -59,6 +60,18 @@ export interface MermaidBlockViewProps {
   height?: string
   /** Persists new container dimensions without disturbing other props. */
   onCommitSize?: (width: string, height: string) => void
+  /**
+   * The Mermaid renderer to use, defaulting to the editor's single
+   * `renderMermaidSvg`.
+   *
+   * This exists so a test can drive the block's render *states* - committed,
+   * in flight, errored - without replacing the renderer module process-wide.
+   * A `mock.module` override of `mermaid-render.js` is global and, per Bun's own
+   * documented behaviour, survives into every later test file: it made an
+   * unrelated renderer test see the stub and fail depending on file order.
+   * `attachMermaidDiagrams` takes its renderer the same way.
+   */
+  render?: typeof renderMermaidSvg
 }
 
 type RenderErrorCode = 'parse_error' | 'render_error'
@@ -80,7 +93,8 @@ export function MermaidBlockView({
   contentRef,
   width = '',
   height = '',
-  onCommitSize
+  onCommitSize,
+  render = renderMermaidSvg
 }: MermaidBlockViewProps): JSX.Element {
   const colorScheme = useComputedColorScheme('light')
   const [editing, setEditing] = useState(false)
@@ -108,7 +122,7 @@ export function MermaidBlockView({
     const gen = ++committedGenRef.current
     const ac = new AbortController()
     setErrorCode(null)
-    void renderMermaidSvg(source, {
+    void render(source, {
       theme: colorScheme === 'dark' ? 'dark' : 'default',
       blockId,
       blockType,
@@ -120,13 +134,13 @@ export function MermaidBlockView({
       } else {
         // A cancelled render was superseded or unmounted: it is not a failure
         // and must not blank the diagram or raise an error.
-        if (result.code === 'cancelled') return
+        if (result.code === 'cancelled' || result.code === 'empty_source') return
         setCommittedSvg(null)
         setErrorCode(result.code)
       }
     })
     return () => ac.abort()
-  }, [source, colorScheme, renderSeq, blockId, blockType])
+  }, [source, colorScheme, renderSeq, blockId, blockType, render])
 
   // Debounce the live draft so typing never re-renders per keystroke.
   useEffect(() => {
@@ -140,7 +154,7 @@ export function MermaidBlockView({
     const gen = ++liveGenRef.current
     const ac = new AbortController()
     setLiveError(null)
-    void renderMermaidSvg(debouncedDraft, {
+    void render(debouncedDraft, {
       theme: colorScheme === 'dark' ? 'dark' : 'default',
       blockId,
       blockType,
@@ -151,7 +165,7 @@ export function MermaidBlockView({
         setLiveSvg(result.svg)
       } else {
         // Superseded or unmounted: not a failure, so keep whatever is shown.
-        if (result.code === 'cancelled') return
+        if (result.code === 'cancelled' || result.code === 'empty_source') return
         setLiveSvg(null)
         setLiveError(result.code)
       }
@@ -379,7 +393,16 @@ export function MermaidBlockView({
             className={classes.previewScroll}
             style={height !== '' ? { height: '100%' } : undefined}
           >
-            {renderSvg(committedSvg)}
+            {/* The diagram's own view — zoom, pan, reset, full screen — is the same
+             * component the Diagram page uses, so the two surfaces cannot drift apart
+             * again. It is separate from the block's size: these move the picture,
+             * the corner handle changes the box, and neither affects the other.
+             *
+             * Its test ids are prefixed `note-view` rather than the block type on
+             * purpose. A retired `mindMap` block already carries toolbar zoom buttons
+             * addressed as `mindMap-zoom-in`/`-out`, and reusing the block type here
+             * made the two sets collide on one id. */}
+            <DiagramView testIdPrefix="note-view">{renderSvg(committedSvg)}</DiagramView>
           </div>
         </ResizableBlockContainer>
       ) : (

@@ -285,10 +285,169 @@ test.describe('diagram and mind map resizing', () => {
     )
     expect(largeWidth).toBeGreaterThanOrEqual(360)
     expect(largeWidth).toBeLessThanOrEqual(1600)
+    // The stored width must be a width the block can actually *draw*. `max-width: 100%`
+    // bounds the container to its parent's content box, and the clamp used to measure
+    // `clientWidth` — which includes the parent's padding. Measured: it stored 840 in an
+    // 820px box, so the document held a size the page silently reduced on every render.
+    // Asserting equality is the only way that stays true when the padding changes.
+    const renderedLarge = await page
+      .getByTestId('diagram-container')
+      .evaluate((el) => Math.round(el.getBoundingClientRect().width))
+    expect(
+      largeWidth,
+      `stored ${largeWidth}px must equal the ${renderedLarge}px the block actually draws`
+    ).toBe(renderedLarge)
     await page.getByTestId('diagram-preset-fit').click()
     await expect(page.getByTestId('diagram-container')).toHaveAttribute('data-width', '')
   })
 
+  test('a note diagram block can be narrowed and widened again', async ({ page, request }) => {
+    // The reported symptom: a diagram block in a Rich Note "cannot be flexed
+    // horizontally". It starts spanning the whole document column, so a rightward drag
+    // asks for width that does not exist. Two things had to be true for horizontal
+    // resizing to work at all, and neither was:
+    //
+    //  1. narrowing has to stick, so there is room to grow back into; and
+    //  2. growing back has to reach the column rather than being swallowed.
+    const title = uniqueTitle('Resize Flex')
+    await seedRich(request, title, [{ id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' }])
+    await openNote(page, title)
+    const container = page.getByTestId('diagram-container')
+    await expect(container).toBeVisible()
+    // Let the note finish settling, so the width measured here is the one the drag
+    // starts from. See the identical wait, and why it is needed, in
+    // "dragging a full-width note block outward stores nothing unreachable".
+    await expect
+      .poll(
+        async () => {
+          const first = await container.evaluate((el) =>
+            Math.round(el.getBoundingClientRect().width)
+          )
+          await page.waitForTimeout(120)
+          const second = await container.evaluate((el) =>
+            Math.round(el.getBoundingClientRect().width)
+          )
+          return first === second ? second : -1
+        },
+        { timeout: 10_000 }
+      )
+      .toBeGreaterThan(0)
+    const fullWidth = await container.evaluate((el) => Math.round(el.getBoundingClientRect().width))
+
+    // 1. Narrow it with a preset, and confirm the narrower width is what is stored *and*
+    //    drawn — not clamped back to the column.
+    await page.getByTestId('diagram-preset-small').click()
+    await expect(container).toHaveAttribute('data-width', '360')
+    const narrow = await container.evaluate((el) => Math.round(el.getBoundingClientRect().width))
+    expect(narrow, 'the preset must actually narrow the block').toBeLessThan(fullWidth - 100)
+
+    // 2. Now there is room: drag the corner right and the block must follow.
+    const handle = page.getByTestId('diagram-resize-handle')
+    const box = await handle.boundingBox()
+    if (box === null) throw new Error('resize handle not visible')
+    const sx = box.x + box.width / 2
+    const sy = box.y + box.height / 2
+    await page.mouse.move(sx, sy)
+    await page.mouse.down()
+    const track: number[] = []
+    for (let step = 1; step <= 5; step++) {
+      await page.mouse.move(sx + step * 40, sy)
+      await page.waitForTimeout(60)
+      track.push(await container.evaluate((el) => Math.round(el.getBoundingClientRect().width)))
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(500)
+
+    // The box must widen *during* the drag, not snap on release.
+    expect(track[0], `the first sample is still ${track[0]}px`).toBeGreaterThan(narrow)
+    expect(
+      track.every((w, i) => i === 0 || w >= (track[i - 1] ?? 0)),
+      `width must not go backwards: ${track.join(' -> ')}`
+    ).toBe(true)
+
+    const grown = await container.evaluate((el) => Math.round(el.getBoundingClientRect().width))
+    const stored = await container.getAttribute('data-width')
+    expect(grown, 'the block must end wider than the preset made it').toBeGreaterThan(narrow)
+    expect(
+      Number(stored),
+      `stored ${String(stored)}px must equal the ${grown}px the block actually draws`
+    ).toBe(grown)
+  })
+
+  test('dragging a full-width note block outward stores nothing unreachable', async ({
+    page,
+    request
+  }) => {
+    // The block already spans its column, so a rightward drag cannot make it wider.
+    // The defect was not that nothing moved - it was that a width the block can never
+    // draw was still written to the document: measured, it stored 948 in an 820px box,
+    // which `max-width: 100%` reduced on screen, leaving the stored width permanently
+    // disagreeing with the picture.
+    //
+    // Asserted on the **stored document**, not on the container's `data-width`. That
+    // attribute mirrors the in-flight drag state and is set on pointer-down even when
+    // nothing moves, so it cannot tell "dragged" from "held the pointer down".
+    const title = uniqueTitle('Resize No Phantom')
+    const seeded = await seedRich(request, title, [
+      { id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' }
+    ])
+    await openNote(page, title)
+    const container = page.getByTestId('diagram-container')
+    await expect(container).toBeVisible()
+    // Let the note finish settling, so the width the drag starts from is the real one.
+    await expect
+      .poll(
+        async () => {
+          const first = await container.evaluate((el) =>
+            Math.round(el.getBoundingClientRect().width)
+          )
+          await page.waitForTimeout(120)
+          const second = await container.evaluate((el) =>
+            Math.round(el.getBoundingClientRect().width)
+          )
+          return first === second ? second : -1
+        },
+        { timeout: 10_000 }
+      )
+      .toBeGreaterThan(0)
+    const startWidth = await container.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().width)
+    )
+
+    const handle = page.getByTestId('diagram-resize-handle')
+    const box = await handle.boundingBox()
+    if (box === null) throw new Error('resize handle not visible')
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 300, box.y, { steps: 10 })
+    await page.mouse.up()
+    await page.waitForTimeout(800)
+
+    expect(
+      await container.evaluate((el) => Math.round(el.getBoundingClientRect().width)),
+      'the block could not get wider, so it must not have changed'
+    ).toBe(startWidth)
+
+    // The invariant, which holds whether or not a width is written: a stored width is
+    // always a width the block can actually draw. Asserting only "nothing was written"
+    // passed against the unfixed code, because whether anything is written depends on
+    // where the drag ceiling happens to fall; asserting the *equality* is what actually
+    // pins the commit to the rendered box.
+    const storedWidth = await (async (): Promise<string> => {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const stored = await getStoredContent(request, seeded.id)
+        const match = /"width"\s*:\s*"([^"]*)"/.exec(stored)
+        if (match !== null || attempt === 19) return match === null ? '(none)' : match[1]
+        await page.waitForTimeout(300)
+      }
+      return '(none)'
+    })()
+    const rendered = await container.evaluate((el) => Math.round(el.getBoundingClientRect().width))
+    expect(
+      storedWidth === '(none)' ? rendered : Number(storedWidth),
+      `stored ${storedWidth} must equal the ${rendered}px the block actually draws`
+    ).toBe(rendered)
+  })
   test('narrow screens clamp responsively without destroying stored size', async ({
     page,
     request
@@ -318,14 +477,14 @@ test.describe('diagram and mind map resizing', () => {
     const original = await seedRich(request, title, [
       {
         id: 'mm',
-        type: 'mindMap',
+        type: 'diagram',
         props: { width: '700', height: '450' },
         content: 'mindmap\n  root((R))\n    A'
       }
     ])
     await openNote(page, title)
-    await expect(page.getByTestId('mindMap-container')).toHaveAttribute('data-width', '700')
-    await expect(page.getByTestId('mindMap-container')).toHaveAttribute('data-height', '450')
+    await expect(page.getByTestId('diagram-container')).toHaveAttribute('data-width', '700')
+    await expect(page.getByTestId('diagram-container')).toHaveAttribute('data-height', '450')
 
     const dup = await request.post(`/api/pages/${original.id}/duplicate`)
     expect(dup.status()).toBe(201)

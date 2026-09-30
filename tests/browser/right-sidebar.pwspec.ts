@@ -122,7 +122,7 @@ test.describe('right-hand panel', () => {
     const title = uniqueTitle('Panel Markdown Nav')
     await seedPage(request, title, 'markdown', {
       version: 1,
-      markdown: '# Top\n\n' + 'Filler line.\n\n'.repeat(120) + '## Deep Section\n\nBottom.'
+      markdown: `# Top\n\n${'Filler line.\n\n'.repeat(120)}## Deep Section\n\nBottom.`
     })
     await openPage(page, title)
     await expect(page.getByTestId('markdown-workspace')).toBeVisible()

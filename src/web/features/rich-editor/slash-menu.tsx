@@ -14,25 +14,31 @@ import { filterLinkablePages, insertWikiLink, type LinkablePage } from './wiki-l
 
 /**
  * The Rich Document slash menu: BlockNote's default items plus the official
- * math items plus RTWiki's visual-knowledge insertions. Entries are shared
- * with the toolbar Insert menu via insert-blocks.ts so both surfaces stay
- * identical by construction.
+ * math items plus RTWiki's insertions that belong on this surface.
+ *
+ * Entries are shared with the toolbar Insert menu via insert-blocks.ts, so the
+ * content of an insertion is defined once. The *set* is not shared: an entry
+ * declares its own surfaces, and this menu keeps the ones that include `slash`.
+ * The Mermaid chooser is toolbar-only, because a slash menu lists block types
+ * and a library of Mermaid templates is not a list of block types.
  */
 export function getRTWikiSlashMenuItems(
   editor: AnyRichEditor
 ): ReturnType<typeof getDefaultReactSlashMenuItems> {
   const defaults = getDefaultReactSlashMenuItems(editor)
   const mathItems = getMathSlashMenuItems(editor)
-  const insertItems = getInsertEntries(editor).map((entry) => ({
-    title: entry.label,
-    subtext: undefined,
-    // The run names the block family, which is what the slash menu groups by.
-    group: entry.run === 'callout' ? 'Callouts' : 'Insert',
-    onItemClick: () => {
-      runInsertEntry(editor, entry)
-    },
-    aliases: [entry.key]
-  }))
+  const insertItems = getInsertEntries(editor)
+    .filter((entry) => entry.surfaces?.includes('slash') ?? true)
+    .map((entry) => ({
+      title: entry.label,
+      subtext: undefined,
+      // The run names the block family, which is what the slash menu groups by.
+      group: entry.run === 'callout' ? 'Callouts' : 'Insert',
+      onItemClick: () => {
+        runInsertEntry(editor, entry)
+      },
+      aliases: [entry.key]
+    }))
   // Grouped composition keeps BlockNote's default ordering intact while the
   // visual blocks form their own groups directly after the defaults.
   return [...combineByGroup(defaults, mathItems), ...insertItems]

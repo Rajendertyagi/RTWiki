@@ -68,8 +68,16 @@ async function checkBlobStorage(): Promise<boolean> {
     db.exec('PRAGMA page_size = 8192')
     db.exec('PRAGMA auto_vacuum = INCREMENTAL')
     db.exec('PRAGMA journal_mode = WAL')
+    // The schema here must match the real one. It was left at the pre-`011` shape when
+    // `bytes_stored` was added, and `insertAttachment` writes that column, so every
+    // compiled run of this check failed with "table attachments has no column named
+    // bytes_stored" - a gate that had not been run since the column landed.
+    //
+    // Kept in step by hand, deliberately: this fixture exists to pin the page size,
+    // auto-vacuum and journal mode so that chunked *streaming* is what is under test, and
+    // running real migrations would replace exactly those settings.
     db.exec(
-      "CREATE TABLE attachments (id TEXT PRIMARY KEY, mime_type TEXT NOT NULL, byte_size INTEGER NOT NULL, kind TEXT NOT NULL DEFAULT 'image', extracted_text TEXT, original_name TEXT, checksum TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), data BLOB)"
+      "CREATE TABLE attachments (id TEXT PRIMARY KEY, mime_type TEXT NOT NULL, byte_size INTEGER NOT NULL, kind TEXT NOT NULL DEFAULT 'image', extracted_text TEXT, original_name TEXT, checksum TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), data BLOB, bytes_stored INTEGER NOT NULL DEFAULT 1)"
     )
 
     // Larger than one chunk, so a stream that stopped early would be caught.

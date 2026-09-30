@@ -243,6 +243,112 @@ export async function runMigrations(
     db.run("ALTER TABLE attachments ADD COLUMN kind TEXT NOT NULL DEFAULT 'image'")
     db.run('ALTER TABLE attachments ADD COLUMN extracted_text TEXT')
   })
+
+  await applyMigration(db, '010_mindmap_pages_to_diagram', (db) => {
+    // The Mind Map page is retired. It was a second Mermaid page whose entire
+    // difference from the Diagram page was the block type it inserted and the
+    // starter source it began from - one ternary in mermaid-workspace.tsx and two
+    // starter strings. Mermaid's `mindmap` is an ordinary diagram type and is
+    // already offered from the shared template list, so the separate page type
+    // duplicated something that existed.
+    //
+    // Every one of these rows becomes an ordinary Diagram page: same workspace,
+    // same canvas, same secure render pipeline. The stored block content still
+    // loads, because the `mindMap` block stays registered for reading (see
+    // rich-editor/schema.ts) - retiring the page type is not a content migration.
+    //
+    // Rewritten, never deleted. `page_type` is a plain TEXT column with no CHECK
+    // constraint (002_add_page_type), so nothing ever stopped these rows being
+    // written. A row left as 'mindmap' would fail the pageType enum at
+    // src/shared/schemas/pages.ts on read, and because that enum guards the whole
+    // page response, one stale row would take the entire page list down rather
+    // than just its own page.
+    db.run("UPDATE pages SET page_type = 'diagram' WHERE page_type = 'mindmap'")
+  })
+
+  await applyMigration(db, '011_signatureless_attachment_bytes', (db) => {
+    // A signature-less document keeps its text and not its bytes.
+    //
+    // `.txt`, `.md` and `.html` can never be identified from their bytes, so the
+    // serving path refused them anyway (`GET /api/attachments/:id` answers 404 for a
+    // signature-less MIME). Their bytes were nevertheless being stored: dead weight in
+    // the row, and duplicated into every backup, for content no user could ever get
+    // back. The repository comment already described the intended behaviour — a
+    // signature-less document has "no servable bytes" — and the code had drifted away
+    // from it. This migration makes the schema able to say so.
+    //
+    // ## Why `data` must be rebuilt rather than altered
+    //
+    // SQLite cannot drop a NOT NULL constraint. `data BLOB NOT NULL` has to become a
+    // table rebuild, which is the same shape `008_drop_stored_name` used, and for the
+    // same reason: the old table is verified intact before it is dropped.
+    //
+    // ## Why `bytes_stored` and not an inference
+    //
+    // Making `data` nullable alone would be ambiguous. `data IS NULL` would mean either
+    // "this document deliberately has no bytes" or "this row's bytes were never
+    // migrated" — and the second is what backup refuses to run over. An explicit flag
+    // separates them in the row itself, so the distinction survives a database that
+    // nobody remembers the history of.
+    //
+    // Existing rows are backfilled to 1, because every row that exists today has its
+    // bytes: nothing wrote a signature-less upload without them.
+    //
+    // ## Why this must not run on an unfinished ADR-014 database
+    //
+    // `008_drop_stored_name` deliberately does nothing while any row still holds its
+    // bytes on disk, leaving `stored_name` in place for the next boot to finish from. A
+    // rebuild here would drop that column — and `stored_name` is the only record of
+    // where a row's bytes are. Losing it would strand a half-migrated database with
+    // no way back: the bytes exist, nothing knows their filenames, and
+    // `migrateAttachmentBytesToBlobs` has nothing to read.
+    //
+    // So this migration stands down on exactly the condition 008 stands down on, and
+    // lets ADR-014 finish first. It returns without recording, exactly as 008 does when
+    // it cannot finish: a thrown error would roll back the whole transaction, including
+    // the 007 blob column 008 depends on, and would take the application down over a
+    // database it had already decided to leave alone.
+    const stillHasStoredName = (
+      db.query('PRAGMA table_info(attachments)').all() as Array<{ name: string }>
+    ).some((c) => c.name === 'stored_name')
+    if (stillHasStoredName) {
+      return
+    }
+
+    db.run(`
+      CREATE TABLE attachments_with_optional_bytes (
+        id TEXT PRIMARY KEY,
+        mime_type TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        original_name TEXT,
+        checksum TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        kind TEXT NOT NULL DEFAULT 'image',
+        extracted_text TEXT,
+        data BLOB,
+        bytes_stored INTEGER NOT NULL DEFAULT 1
+      )
+    `)
+    db.run(`
+      INSERT INTO attachments_with_optional_bytes
+        (id, mime_type, byte_size, original_name, checksum, created_at, kind, extracted_text, data, bytes_stored)
+      SELECT id, mime_type, byte_size, original_name, checksum, created_at, kind, extracted_text, data,
+             CASE WHEN data IS NULL THEN 0 ELSE 1 END
+      FROM attachments
+    `)
+    // Verified before the old table is dropped: a changed row count means the copy lost
+    // something, and the original is still there to fall back on.
+    const moved = db.query('SELECT count(*) AS n FROM attachments_with_optional_bytes').get() as {
+      n: number
+    }
+    const before = db.query('SELECT count(*) AS n FROM attachments').get() as { n: number }
+    if (moved.n !== before.n) {
+      throw new Error(`row count changed during the copy: ${before.n} became ${moved.n}`)
+    }
+    db.run('DROP TABLE attachments')
+    db.run('ALTER TABLE attachments_with_optional_bytes RENAME TO attachments')
+    db.run('CREATE INDEX idx_attachments_created_at ON attachments(created_at)')
+  })
 }
 
 /**

@@ -1,6 +1,20 @@
 import { mkdirSync } from 'node:fs'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 
+/**
+ * Narrows a value that a test assumes is present, failing with a diagnostic if it is not.
+ *
+ * These tests measure real geometry, so `null` means the premise failed - the element
+ * was not rendered, or the page did not settle. A non-null assertion would let that
+ * surface later as an arithmetic `NaN` or a confusing matcher error; this turns it into
+ * the actual cause at the point it happens.
+ */
+function must<T>(value: T | null | undefined, what: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`${what} is missing - the test premise did not hold`)
+  }
+  return value
+}
 const OUT = '.superpowers/sdd/desktop-chrome-fix/audit'
 
 /**
@@ -105,7 +119,9 @@ test.describe('Tree geometry', () => {
     for (const o of offsets) byLevel.set(o.level, o.x)
     const levels = [...byLevel.keys()].sort((a, b) => a - b)
     for (let i = 1; i < levels.length; i += 1) {
-      const step = byLevel.get(levels[i])! - byLevel.get(levels[i - 1])!
+      const step =
+        must(byLevel.get(levels[i]), `level ${levels[i]}`) -
+        must(byLevel.get(levels[i - 1]), `level ${levels[i - 1]}`)
       expect(
         step,
         `level ${levels[i - 1]}->${levels[i]} must step by exactly ${LIBRARY_INDENT_PX}px, measured ${step}px (${JSON.stringify(offsets)})`
@@ -159,10 +175,7 @@ test.describe('Tree geometry', () => {
     expect(cell).toBe(LIBRARY_INDENT_PX)
   })
 
-  test('rows are the flex container, not an absolutely positioned cell', async ({
-    page,
-    request
-  }) => {
+  test('rows are the flex container, not an absolutely positioned cell', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('[role="treeitem"]').first()).toBeVisible({ timeout: 20_000 })
 
@@ -186,7 +199,7 @@ test.describe('Tree geometry', () => {
     expect(layout.colWidth).toBeGreaterThan(100)
   })
 
-  test("a row's content is vertically centred", async ({ page, request }) => {
+  test("a row's content is vertically centred", async ({ page }) => {
     await page.goto('/')
     const row = page.locator('[role="treeitem"]').first()
     await expect(row).toBeVisible({ timeout: 20_000 })
@@ -207,8 +220,8 @@ test.describe('Tree geometry', () => {
     })
     expect(drift.rowH).toBeGreaterThan(20)
     // A sub-pixel centre is fine; a 5px offset was the original defect.
-    expect(drift.icon!).toBeLessThanOrEqual(1.5)
-    expect(drift.title!).toBeLessThanOrEqual(1.5)
+    expect(must(drift.icon, 'measured drift')).toBeLessThanOrEqual(1.5)
+    expect(must(drift.title, 'measured drift')).toBeLessThanOrEqual(1.5)
   })
 
   test('the rendered row height matches the library layout height', async ({ page }) => {
@@ -282,7 +295,7 @@ test.describe('Tree geometry', () => {
       }
     })
     expect(
-      Math.abs(m.rootLabelX! - m.rowTitleX!),
+      Math.abs(must(m.rootLabelX, 'measured geometry') - must(m.rowTitleX, 'measured geometry')),
       'Home text must line up with page titles'
     ).toBeLessThanOrEqual(1)
     expect(m.rootH, 'Home row must be the same height as a tree row').toBe(m.rowH)
@@ -366,10 +379,7 @@ test.describe('Tree geometry', () => {
     )
   })
 
-  test('the search field is wide, with a complete and visible border', async ({
-    page,
-    request
-  }) => {
+  test('the search field is wide, with a complete and visible border', async ({ page }) => {
     await page.goto('/')
     const input = page.locator('[aria-label="Search pages"]')
     await expect(input).toBeVisible({ timeout: 20_000 })
@@ -408,10 +418,7 @@ test.describe('Tree geometry', () => {
     expect(Number.parseFloat(m.padLeft)).toBeGreaterThan(8)
   })
 
-  test('the tree exposes the keyboard-focused row to assistive technology', async ({
-    page,
-    request
-  }) => {
+  test('the tree exposes the keyboard-focused row to assistive technology', async ({ page }) => {
     // The container holds DOM focus and every row is tabindex=-1, so
     // aria-activedescendant is the only thing that tells a screen reader where
     // the arrow keys are. Without it, pressing Down announces nothing.
@@ -503,7 +510,7 @@ test.describe('Tree geometry', () => {
     })
     expect(floor, 'the title must declare a minimum width').not.toBeNull()
     // Without it, a page eleven levels deep is left with about one character.
-    expect(floor!).toBeGreaterThanOrEqual(72)
+    expect(must(floor, 'row floor')).toBeGreaterThanOrEqual(72)
 
     const deepest = await page.evaluate((s) => {
       const rows = Array.from(document.querySelectorAll('[role="treeitem"]')) as HTMLElement[]
@@ -555,11 +562,19 @@ test.describe('Tree geometry', () => {
     expect(m.home).not.toBeNull()
     expect(m.row).not.toBeNull()
     // Left edges aligned: all three start on the same line.
-    expect(Math.abs(m.search!.x - m.home!.x)).toBeLessThanOrEqual(1)
-    expect(Math.abs(m.home!.x - m.row!.x)).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(must(m.search, 'measured geometry').x - must(m.home, 'measured geometry').x)
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(must(m.home, 'measured geometry').x - must(m.row, 'measured geometry').x)
+    ).toBeLessThanOrEqual(1)
     // Widths within a pixel of each other.
-    expect(Math.abs(m.search!.w - m.home!.w)).toBeLessThanOrEqual(1)
-    expect(Math.abs(m.home!.w - m.row!.w)).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(must(m.search, 'measured geometry').w - must(m.home, 'measured geometry').w)
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(must(m.home, 'measured geometry').w - must(m.row, 'measured geometry').w)
+    ).toBeLessThanOrEqual(1)
     // And the library's 2px box is gone, not merely invisible.
     expect(m.treeBorder, 'the tree container must not reserve a border box').toBe('0px/0px')
   })
@@ -618,8 +633,11 @@ test.describe('Tree geometry', () => {
     })
     expect(bg, 'the action button must be visible on hover').not.toBeNull()
     // Transparent or a tint of the row - never an opaque near-white panel.
-    const opaque = /^rgb\(/.test(bg!.background)
-    expect(opaque, `action button must not be opaque (${bg!.background})`).toBe(false)
+    const opaque = /^rgb\(/.test(must(bg, 'computed style').background)
+    expect(
+      opaque,
+      `action button must not be opaque (${must(bg, 'computed style').background})`
+    ).toBe(false)
   })
 
   test('a page can actually be dragged onto another', async ({ page, request }) => {

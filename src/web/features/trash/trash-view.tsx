@@ -19,7 +19,6 @@ import {
   IconCode,
   IconFileText,
   IconHierarchy,
-  IconSitemap,
   IconTrash,
   IconTrashX
 } from '@tabler/icons-react'
@@ -89,8 +88,6 @@ export function TrashView({ onRestorePage }: TrashViewProps): JSX.Element {
         return <IconCode size={16} />
       case 'diagram':
         return <IconHierarchy size={16} />
-      case 'mindmap':
-        return <IconSitemap size={16} />
       default:
         return <IconFileText size={16} />
     }

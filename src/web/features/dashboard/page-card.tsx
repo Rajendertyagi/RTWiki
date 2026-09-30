@@ -34,7 +34,7 @@ interface PageCardProps {
 export function PageCard({ page, onOpen, onDuplicate, onDelete }: PageCardProps): JSX.Element {
   const displayTitle = page.title || UI_TEXT.untitledPage
   const preview = pagePreviewText(page)
-  const isVisual = page.pageType === 'diagram' || page.pageType === 'mindmap'
+  const isVisual = page.pageType === 'diagram'
 
   return (
     <Card

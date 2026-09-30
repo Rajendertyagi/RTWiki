@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
+import { isAutosaveDirty } from '../workspace/save-state.js'
 import { type AutosaveStatus, createAutosaveController } from './autosave-controller.js'
 
 interface UseAutosaveOptions {
@@ -95,7 +96,11 @@ export function useAutosave(options: UseAutosaveOptions): {
     setError(null)
   }, [pageId])
 
-  const isDirty = status === 'dirty' || status === 'error'
+  // The shared definition, not a second spelling of it. This used to read
+  // `dirty || error`, which disagreed with `isAutosaveDirty` about a save in
+  // flight; see the note on that function for why the error case is the one that
+  // matters. One question, one answer, imported rather than restated.
+  const isDirty = isAutosaveDirty(status)
 
   const notifyEdit = useCallback(
     (content: string): void => {

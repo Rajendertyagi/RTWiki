@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTWiki vs Trilium — backup UI and options, side by side</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2b303c;
+    --text: #e6e8ee; --muted: #98a0b0; --dim: #6b7383;
+    --rt: #4dabf7; --tri: #9775fa; --ok: #51cf66; --no: #ff6b6b; --warn: #ffd43b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .sub code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+
+  .col-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .tag { padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+  .tag.rt { background: rgba(77,171,247,.15); color: var(--rt); }
+  .tag.tri { background: rgba(151,117,250,.15); color: var(--tri); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card + .card { margin-top: 12px; }
+  .card h3 { margin: 0 0 2px; font-size: 14px; }
+  .card .desc { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+
+  /* faithful control mocks */
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row .lbl { font-size: 13px; font-weight: 500; }
+  .row .sub2 { font-size: 11.5px; color: var(--dim); margin-top: 1px; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel2); color: var(--text);
+    padding: 5px 11px; border-radius: 6px; font-size: 12.5px; cursor: default; white-space: nowrap;
+  }
+  .btn.red { color: #ffa8a8; border-color: rgba(255,107,107,.35); }
+  .btn[disabled] { opacity: .4; }
+  .sw { width: 38px; height: 21px; border-radius: 999px; background: var(--rt); position: relative; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 2px; right: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; }
+  .sw.off { background: #3a4150; }
+  .sw.off::after { right: auto; left: 2px; background: #98a0b0; }
+  .tog { width: 36px; height: 20px; border-radius: 4px; background: var(--tri); position: relative; flex: none; }
+  .tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 3px; background: #fff; }
+  .tog.off { background: #3a4150; }
+  .tog.off::after { left: auto; right: 2px; background: #98a0b0; }
+  .inp { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; font-size: 12px; color: var(--text); min-width: 62px; text-align: right; }
+  .lbl-sm { font-size: 11px; color: var(--dim); display: block; margin-bottom: 3px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 8px; border-bottom: 1px solid rgba(43,48,60,.5); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  .num { color: var(--muted); font-size: 11.5px; }
+  .strike { text-decoration: line-through; opacity: .5; }
+
+  .yes { color: var(--ok); font-weight: 600; }
+  .no  { color: var(--no); font-weight: 600; }
+  .part{ color: var(--warn); font-weight: 600; }
+  .na  { color: var(--dim); }
+
+  .summary { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .summary h2 { margin: 0 0 10px; font-size: 15px; }
+  .summary ul { margin: 0 0 0 18px; padding: 0; }
+  .summary li { margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+  .summary li b { color: var(--text); }
+  .bug { background: rgba(255,107,107,.08); border: 1px solid rgba(255,107,107,.3); border-radius: 8px; padding: 12px 14px; margin-top: 12px; }
+  .bug h4 { margin: 0 0 6px; font-size: 13px; color: #ffa8a8; }
+  .bug p { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
+  .bug code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+  .note { font-size: 11.5px; color: var(--dim); margin-top: 6px; }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 1000px) { .cols2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>Backup UI and options — RTWiki vs Trilium</h1>
+<div class="sub">
+  Reconstructed from source, not screenshots.
+  RTWiki: <code>src/web/features/settings/backup-panel.tsx</code> (329 lines) + <code>restore-confirm-modal.tsx</code> (73) on branch <code>feat/backup-restore</code> @ <code>9cf3a76</code>.
+  Trilium: <code>apps/client/src/widgets/type_widgets/options/backup.tsx</code> (467) + <code>setup_backup.tsx</code> (336).
+  Every control below was read from those files.
+</div>
+
+<div class="grid">
+
+  <!-- ===================== RTWIKI ===================== -->
+  <div>
+    <div class="col-head"><span class="tag rt">RTWiki</span> Settings → Backup</div>
+
+    <div class="card">
+      <h3>Automatic backups</h3>
+      <div class="desc">Three slots, each with its own toggle, interval field and manual button.</div>
+
+      <div class="row">
+        <div>
+          <div class="lbl">Daily</div>
+          <div class="sub2">Taken 3 hours ago</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div>
+            <span class="lbl-sm">Every</span>
+            <span class="inp">24</span>
+          </div>
+          <span class="sw"></span>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Weekly</div>
+          <div class="sub2">Taken 2 days ago</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div>
+            <span class="lbl-sm">Every</span>
+            <span class="inp">168</span>
+          </div>
+          <span class="sw"></span>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Monthly</div>
+          <div class="sub2">Never taken</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div>
+            <span class="lbl-sm">Every</span>
+            <span class="inp">720</span>
+          </div>
+          <span class="sw off"></span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lbl">Back up Daily now</div>
+        <span class="btn">Back up</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Backups</h3>
+      <div class="desc">Table. <b style="color:#ffa8a8">Headers are wrong — see below.</b></div>
+      <table>
+        <thead>
+          <tr><th>Daily</th><th>Restore</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>3 hours ago<br><span class="num">8.4 MB</span></td>
+            <td class="num">rtwiki-backup-daily</td>
+            <td><span class="btn red">Restore</span></td>
+          </tr>
+          <tr>
+            <td>2 days ago<br><span class="num">8.1 MB</span></td>
+            <td class="num">rtwiki-backup-weekly</td>
+            <td><span class="btn red">Restore</span></td>
+          </tr>
+          <tr>
+            <td>—<br><span class="num">—</span></td>
+            <td class="num">—</td>
+            <td><span class="btn red" disabled>Restore</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">Column 1 is headed <b>Daily</b> but holds a date and size. Column 2 is headed <b>Restore</b> but holds a filename.</div>
+    </div>
+  </div>
+
+  <!-- ===================== TRILIUM ===================== -->
+  <div>
+    <div class="col-head"><span class="tag tri">Trilium</span> Settings → Backup</div>
+
+    <div class="card">
+      <h3>Related actions</h3>
+      <div class="desc">One backup button, one restore button. Restore is described as restarting.</div>
+      <div class="row">
+        <div><div class="lbl">Back up now</div></div>
+        <span class="btn">Back up</span>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Restore backup</div>
+          <div class="sub2">Trilium will restart for the restore</div>
+        </div>
+        <span class="btn">Restore</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Automatic backups</h3>
+      <div class="desc">Toggles only. Intervals are fixed in code, not configurable.</div>
+      <div class="row">
+        <div><div class="lbl">Enable daily backup</div><div class="sub2">every 24 hours</div></div>
+        <span class="tog"></span>
+      </div>
+      <div class="row">
+        <div><div class="lbl">Enable weekly backup</div><div class="sub2">every 7 days</div></div>
+        <span class="tog"></span>
+      </div>
+      <div class="row">
+        <div><div class="lbl">Enable monthly backup</div><div class="sub2">every 30 days</div></div>
+        <span class="tog"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Backup location</h3>
+      <div class="desc">Desktop only — it is the only platform with a directory picker.</div>
+      <div class="row">
+        <div><div class="lbl">Select backup location</div><div class="sub2">D:\Trilium\backups</div></div>
+        <span class="btn">Change</span>
+      </div>
+      <div class="row">
+        <div class="lbl">Reset to default</div>
+        <span class="btn">Reset</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Options</h3>
+      <div class="desc">Compression and encryption. Encryption needs a stored passphrase.</div>
+      <div class="row">
+        <div>
+          <div class="lbl">Enable compression</div>
+          <div class="sub2">Smaller files</div>
+        </div>
+        <span class="tog off"></span>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Enable encryption</div>
+          <div class="sub2">Password stored in the OS keyring</div>
+        </div>
+        <span class="tog"></span>
+      </div>
+      <div class="row">
+        <div class="lbl">Change password</div>
+        <span class="btn">Change…</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Backups</h3>
+      <div class="desc">A summary line, then per-file badges.</div>
+      <div style="background:var(--panel2);border-radius:6px;padding:9px 11px;font-size:12.5px;margin-bottom:9px">
+        <b>3 backups</b>, newest 3 hours ago
+      </div>
+      <div class="row" style="border:0;padding:6px 0">
+        <div>
+          <div class="lbl">backup-daily.db</div>
+          <div class="sub2">3 hours ago · 8.4 MB <span class="tag tri" style="margin-left:4px">encrypted</span></div>
+        </div>
+      </div>
+      <div class="row" style="border:0;padding:6px 0">
+        <div>
+          <div class="lbl">backup-weekly.tnbackup</div>
+          <div class="sub2">2 days ago · 3.1 MB <span class="tag tri" style="margin-left:4px">compressed</span></div>
+        </div>
+      </div>
+      <div class="row" style="border:0;padding:6px 0">
+        <div>
+          <div class="lbl">backup-monthly.tnbackup</div>
+          <div class="sub2">3 weeks ago · 3.0 MB <span class="tag tri" style="margin-left:4px">compressed</span> <span class="tag tri">encrypted</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== FEATURE MATRIX ===================== -->
+<div class="summary">
+  <h2>Feature matrix</h2>
+  <table>
+    <thead>
+      <tr><th style="width:34%">Capability</th><th style="width:11%">RTWiki</th><th style="width:11%">Trilium</th><th>Why they differ</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Back up now</td><td class="yes">yes</td><td class="yes">yes</td><td class="num">Ours is per-slot; theirs is one global button.</td></tr>
+      <tr><td>Daily / weekly / monthly toggles</td><td class="yes">yes</td><td class="yes">yes</td><td class="num">Same three periods, same defaults.</td></tr>
+      <tr><td>Configurable interval</td><td class="yes">yes</td><td class="no">no</td><td class="num">Yours is the <b>only</b> one with this. It came from your "don't hardcode, keep configurable" instruction.</td></tr>
+      <tr><td>List of backups with date + size</td><td class="yes">yes</td><td class="yes">yes</td><td class="num">Ours is a table with wrong headers; theirs is a list with badges.</td></tr>
+      <tr><td>"N backups, newest X ago" summary</td><td class="no">no</td><td class="yes">yes</td><td class="num">Never built. <code>summarizeBackups</code> in their <code>database_files.ts</code>.</td></tr>
+      <tr><td>Per-file badges (compressed / encrypted)</td><td class="no">no</td><td class="yes">yes</td><td class="num">Follows from encryption being dropped.</td></tr>
+      <tr><td>Choose backup location</td><td class="no">no</td><td class="yes">yes</td><td class="num"><b>Unrelated to encryption.</b> Never built. On a family PC this may matter more than the password modal.</td></tr>
+      <tr><td>Compression</td><td class="no">no</td><td class="yes">yes</td><td class="num">Declined. Note <code>VACUUM INTO</code> already emits a compacted file.</td></tr>
+      <tr><td>Encryption + password modal + keyring</td><td class="no">no</td><td class="yes">yes</td><td class="num">Your explicit decision.</td></tr>
+      <tr><td>Restore with confirmation</td><td class="yes">yes</td><td class="yes">yes</td><td class="num">Ours: own modal, states data is moved aside. Theirs: restarts to the setup screen.</td></tr>
+      <tr><td>Busy state while running</td><td class="yes">yes</td><td class="yes">yes</td><td class="num">Ours a <code>Loader</code> in the button; theirs a <code>disabled</code> prop.</td></tr>
+      <tr><td>Progress / percent complete</td><td class="no">no</td><td class="no">no</td><td class="num"><b>Neither has it.</b> Not possible with <code>VACUUM INTO</code>.</td></tr>
+      <tr><td>Delete a single backup</td><td class="no">no</td><td class="no">no</td><td class="num"><b>Neither has it.</b> With fixed slots a bad backup is overwritten by the next run.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===================== THE BUG ===================== -->
+<div class="bug">
+  <h4>Defect found while comparing — the table headers do not match the cells</h4>
+  <p>
+    <code>backup-panel.tsx:291-296</code> builds the header from the same <code>PERIOD_LABEL</code>
+    constants that label the toggle rows above:
+  </p>
+  <p>
+    <code>&lt;Table.Th&gt;{PERIOD_LABEL.daily}&lt;/Table.Th&gt;</code> →
+    <code>&lt;Table.Th&gt;{UI_TEXT.backupRestore}&lt;/Table.Th&gt;</code> → empty
+  </p>
+  <p>
+    The body at <code>:303-314</code> puts <b>date + size</b> in the first cell,
+    <b>filename</b> in the second, and the <b>Restore button</b> in the third.
+  </p>
+  <p>
+    So the column headed <b>Daily</b> shows a timestamp, and the column headed <b>Restore</b>
+    shows a filename. The header row was carried over from the toggle list and never revised
+    when the table was written.
+  </p>
+  <p class="note">
+    This is very likely caused by our one <i>extra</i> feature. The per-slot interval field made
+    the toggle rows a list of period labels, and the table was then built from those same
+    labels. A per-slot table needs headers like <i>Last taken / Size / File / —</i>.
+  </p>
+  <p>
+    It is also consistent with the browser spec timing out at <code>backup-panel.pwspec.ts:57</code>:
+    the tests assert on testids, not on a table a person could read.
+  </p>
+</div>
+
+<div class="summary">
+  <h2>Why the gap exists — three different reasons</h2>
+  <div class="cols2">
+    <div>
+      <ul>
+        <li><b>Deliberate.</b> Encryption, compression and the password flow are gone by your decision.
+          But dropping encryption also removed the <i>badges</i> and the
+          <i>encrypted-or-local fallback rule</i> that depends on it — roughly six Trilium features
+          removed by one decision, and the plan never said so.</li>
+        <li><b>Accidental, and it went the other way.</b> Configurable per-slot intervals is a feature
+          Trilium does not have. It is probably what coupled the toggle rows to the table
+          headers.</li>
+      </ul>
+    </div>
+    <div>
+      <ul>
+        <li><b>Never built.</b> Location picker, delete-one-backup, the "newest X ago" summary,
+          and the badges. Not declined — simply absent.</li>
+        <li><b>On size, we are not far behind.</b> 329 lines against their 467 + 336. The extra
+          ~470 lines are almost entirely location, compression and encryption — the part you declined.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="summary">
+  <h2>What a user cannot do today in RTWiki</h2>
+  <ul>
+    <li><b>Tell when a backup last ran.</b> The column that would show it is mislabelled.</li>
+    <li><b>Tell which file a row refers to</b> without reading the Restore button's context.</li>
+    <li><b>Delete a bad backup.</b> With three fixed slots, a corrupt daily is overwritten by
+      tomorrow's run and there is no way to clear it. Ironic, because choosing fixed slots was
+      partly to protect against exactly that.</li>
+  </ul>
+</div>
+
+</body>
+</html>

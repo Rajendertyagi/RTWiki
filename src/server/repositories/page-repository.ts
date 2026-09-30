@@ -172,6 +172,30 @@ export function updatePage(
   return updated
 }
 
+/**
+ * Replaces only a page's search row, leaving the page itself untouched.
+ *
+ * A separate writer rather than `updatePage` on purpose. `updatePage` is the content
+ * write path: it demands the optimistic-lock `version` and bumps it, and using it to
+ * recompute search text would mean a reindex masquerades as a user edit — bumping
+ * `version`, resetting anything version-driven, and racing a concurrent save.
+ *
+ * Re-indexing happens on a mutation that did not come from an editor at all (an
+ * attachment was deleted), so it must not look like one. No transaction here either: it
+ * is a single statement, and `updatePage` commits its own search row separately too.
+ */
+export function reindexPageSearch(db: Database, id: string, searchContent: string): void {
+  db.run('UPDATE search_index SET content = ? WHERE page_id = ?', [searchContent, id])
+  // A page that has never been indexed has no row to update. Re-insert rather than leave
+  // its text unsearchable, taking the title from the page itself.
+  db.run(
+    `INSERT INTO search_index (page_id, title, content)
+     SELECT id, title, ? FROM pages WHERE id = ? AND deleted_at IS NULL
+     ON CONFLICT(page_id) DO UPDATE SET content = excluded.content`,
+    [searchContent, id]
+  )
+}
+
 export function duplicatePage(db: Database, id: string, searchContent?: string): Page | null {
   const source = getPage(db, id)
   if (!source) return null

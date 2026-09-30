@@ -8,6 +8,7 @@ import { acceptedDocumentFormatFor } from '../../shared/attachments/document-for
 import { DOCUMENT_CSP_KEY } from '../app.js'
 import type { getDb } from '../database/index.js'
 import type { Logger } from '../logging/index.js'
+import { reindexPagesReferencingAttachment } from '../services/page-service.js'
 import { isSameOrigin } from '../utils/request-origin.js'
 import {
   type AttachmentKind,
@@ -35,7 +36,21 @@ export interface AttachmentRouteOptions {
 }
 
 /** Why an upload was refused. */
-type RejectionReason = 'empty' | 'unsupported_type' | 'svg_not_supported' | 'too_many_pixels'
+type RejectionReason =
+  | 'empty'
+  | 'unsupported_type'
+  | 'svg_not_supported'
+  | 'too_many_pixels'
+  /**
+   * A container RTWiki recognised and then could not open — either it expands past the
+   * decompression ceiling, or it is truncated or malformed.
+   *
+   * Distinct from `unsupported_type`, which would tell a user their perfectly valid DOCX
+   * is a file type this application does not accept. It gets its own words because the two
+   * problems have different causes, and a user who hits this one has a different thing to
+   * do about it.
+   */
+  | 'extract_failed'
 
 /**
  * The message a rejection produces.
@@ -58,6 +73,15 @@ const REJECTION_MESSAGES: Record<RejectionReason, { status: 400 | 413 | 415; err
   too_many_pixels: {
     status: 415,
     error: `Image is larger than the ${PROVISIONAL_MAX_IMAGE_PIXELS / 1_000_000} megapixel limit.`
+  },
+  extract_failed: {
+    status: 415,
+    // Deliberately does not name a byte figure. The condition is reached either by a
+    // document that expands far beyond what arrived, or by a damaged one, and a message
+    // quoting a limit would be wrong for the second case — a 4 KB file is not "too large".
+    // Both are fixed by opening the file and saving it again.
+    error:
+      'That document could not be opened. It may be damaged, or too large to read — try opening it and saving a fresh copy.'
   }
 }
 
@@ -159,11 +183,26 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     // about it is made from its own bytes. The declared type is consulted only
     // where the bytes cannot speak for themselves, and never for the stored type.
     const bytes = new Uint8Array(await file.arrayBuffer())
-    const accepted = await acceptUpload(bytes, file.type)
+    const accepted = await acceptUpload(bytes, file.type, logger)
     if (!accepted.ok) return reject(c, accepted.reason, logger)
 
     const id = crypto.randomUUID()
     const originalName = normaliseOriginalName(file.name)
+    /*
+     * A signature-less upload keeps its text, not its bytes.
+     *
+     * `.txt`, `.md` and `.html` cannot be identified from their bytes, so
+     * `GET /api/attachments/:id` answers 404 for them by design. Storing the bytes
+     * anyway put unreachable content in the row and copied it into every backup, for
+     * a file no user could ever download back. The text is what the product actually
+     * needs — it is what the document card shows and what search indexes — so that is
+     * what is kept.
+     *
+     * `byteSize` still records what arrived, so the metadata stays truthful about the
+     * upload. `checksum` is likewise still computed: it describes the upload, and it is
+     * the one moment the bytes are in hand to compute it from.
+     */
+    const keepsBytes = !accepted.upload.signatureless
     try {
       const record = insertAttachment(getDb(), {
         id,
@@ -175,7 +214,7 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
         // Computed while the bytes are in hand: it is what makes content-addressed
         // deduplication possible later, and it is free now.
         checksum: checksumOf(bytes),
-        data: bytes
+        data: keepsBytes ? bytes : null
       })
       return c.json({ attachment: toResponse(record) }, 201)
     } catch (err) {
@@ -315,6 +354,19 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     // One statement removes the bytes and their metadata together. There is no
     // second step that can fail and leave the two disagreeing.
     if (!deleteAttachment(getDb(), id)) return c.json({ error: 'Not found' }, 404)
+    // The document's text was indexed against every page that referenced it, and those
+    // page rows still hold its URL. Without this the deleted document's words stay
+    // findable and lead to a page that no longer shows it. Reindexing cannot fail in a
+    // way that should fail the delete — the attachment is already gone, and the worst
+    // case is stale search text, not a wrong result.
+    try {
+      reindexPagesReferencingAttachment(getDb(), id)
+    } catch (err) {
+      logger.warn('Attachment delete: reindex failed', {
+        event: 'attachment_reindex_failed',
+        code: err instanceof Error ? err.name : 'unknown'
+      })
+    }
     return c.json({ ok: true })
   })
 
@@ -330,12 +382,31 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
  * list first would mean a document never reached the parser, and checking the
  * reported type first would mean a renamed PDF could be taken for a renamed
  * `.txt`. The parser runs first precisely so the bytes outrank the claim.
+ *
+ * `logger` is an explicit parameter rather than a module import: the router holds one,
+ * and a hidden global here would be the "uncontrolled global state" the standards forbid.
  */
 async function acceptUpload(
   bytes: Uint8Array,
-  reportedType: string
+  reportedType: string,
+  logger?: Logger
 ): Promise<{ ok: true; upload: AcceptedUpload } | { ok: false; reason: RejectionReason }> {
   const document = await inspectDocumentUpload(bytes, reportedType)
+  if (!document.ok && document.reason === 'extract_failed') {
+    // Refused here rather than falling through to the image path. The bytes are a
+    // document RTWiki recognised, so trying to interpret them as an image cannot succeed,
+    // and letting it run would replace the real diagnosis with "unsupported type".
+    //
+    // The distinction the detector made — a tripped decompression ceiling against a merely
+    // damaged archive — is logged and never shown. It is the difference between "this user
+    // is uploading bomb-shaped files" and "this user is uploading files their software
+    // saved badly", which are not the same bug.
+    logger?.warn('Document container refused', {
+      event: 'document_refused',
+      code: document.detail ?? 'unknown'
+    })
+    return { ok: false, reason: 'extract_failed' }
+  }
   if (document.ok) {
     return {
       ok: true,

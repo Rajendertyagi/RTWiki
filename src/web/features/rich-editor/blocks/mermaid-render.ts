@@ -101,7 +101,7 @@ export interface MermaidRenderSuccess {
 export interface MermaidRenderFailure {
   ok: false
   /** Bounded machine-readable failure code (never raw error text). */
-  code: 'parse_error' | 'render_error' | 'cancelled'
+  code: 'parse_error' | 'render_error' | 'cancelled' | 'empty_source'
 }
 
 export type MermaidRenderResult = MermaidRenderSuccess | MermaidRenderFailure
@@ -153,24 +153,32 @@ function applyConfig(
 }
 
 /**
- * Forces Mermaid to load every lazily-registered diagram definition, once.
+ * Pre-loads every lazily-registered Mermaid diagram definition, once.
  *
- * Mermaid 12 registers most diagram types lazily and never resolves them on the
- * ordinary `parse` + `render` path. Reading the installed build, the only caller
- * of its internal `loadRegisteredDiagrams()` is `registerExternalDiagrams` when
- * passed `lazyLoad: false` — so without this, twelve of the thirty-three types
- * Mermaid supports resolve to an empty 24x24 SVG with no error. They are the
- * types deliberately absent from `DIAGRAM_TEMPLATES`.
+ * This is a bulk warm-up, NOT a correctness fix. Mermaid 12's ordinary
+ * `parse` + `render` path already loads a diagram definition on demand the
+ * first time a type is encountered — `Diagram.fromText` calls `getDiagram`,
+ * and on failure falls back to `getDiagramLoader(type)` and awaits it
+ * (mermaid.core.mjs, `Diagram.fromText`). Every type offered in
+ * `DIAGRAM_TEMPLATES` therefore renders with or without this call; that was
+ * measured, in Chromium, against both paths, with identical output.
+ *
+ * An earlier revision of this comment claimed the opposite — that twelve types
+ * resolved to an empty 24x24 SVG without it, and that those were the types
+ * deliberately absent from the template list. That claim did not reproduce, and
+ * the exclusion rested on it. `KNOWN_BUGS.md` records the correction.
+ *
+ * What it does buy is latency: all lazy chunks are resolved before the first
+ * render instead of each being awaited mid-render, so a first diagram does not
+ * pay for the chunks of the 30-odd types the user will never open.
  *
  * `registerExternalDiagrams` is public, documented API on Mermaid's `Mermaid`
- * interface, and is the supported way to reach that behaviour. Passing an empty
- * list adds no external diagrams; it exists purely to trigger the load, so
- * `addDiagrams()` registers the detectors and the force-load resolves them.
+ * interface. Passing an empty list adds no external diagrams; it exists purely
+ * to trigger the bulk load, so `addDiagrams()` registers the detectors and the
+ * force-load resolves them all at once.
  *
  * It runs once per session, inside the render mutex, because it mutates the same
- * module-global registry the render path reads. The cost is that the lazy diagram
- * chunks load on the first diagram rather than never, which is the trade for
- * every type Mermaid supports actually working.
+ * module-global registry the render path reads.
  */
 let diagramsLoaded: Promise<void> | null = null
 
@@ -215,6 +223,21 @@ export async function renderMermaidSvg(
     signal?: AbortSignal
   }
 ): Promise<MermaidRenderResult> {
+  // Empty source is a legitimate state, not malformed Mermaid.
+  //
+  // The live-preview paths pass `debouncedDraft` straight from the user's textarea, so a
+  // cleared block legitimately arrives here as "". The stored schema allows it too
+  // (`VisualPageBlockSchema.source` bounds length but does not require a minimum), which
+  // is right: refusing to save an in-progress empty block would break typing.
+  //
+  // Invoking the parser on it produced `UnknownDiagramError` and a console warning that
+  // read as a broken diagram. There is nothing to parse and nothing wrong, so this returns
+  // before the import with its own code. Non-empty input is untouched: invalid Mermaid still
+  // reaches the parser and still fails as `parse_error`.
+  if (source.trim().length === 0) {
+    return { ok: false, code: 'empty_source' }
+  }
+
   const startedAt = Date.now()
   debugLog('editor', 'editor_block_render_requested', {
     targetId: options.blockId,
@@ -240,9 +263,9 @@ export async function renderMermaidSvg(
       }
       stage = 'init'
       applyConfig(mermaid, options.theme)
-      // Before parsing: a lazily-registered type cannot be detected until its
-      // definition is loaded, so parsing first would fail on a diagram the user
-      // can legitimately type.
+      // Warm the lazy diagram registry before the first parse, so a first
+      // diagram does not pay to resolve chunks for types the user never opens.
+      // Correctness does not depend on it: `parse`/`render` load on demand.
       await ensureDiagramsLoaded(mermaid)
       stage = 'parse'
       await mermaid.parse(source)

@@ -303,7 +303,7 @@ export function attachMermaidDiagrams(
       // A cancelled render was superseded or unmounted. It is **not** a failure:
       // it must not blank a diagram that is on its way, and must not raise an
       // error. Exactly the editor block's treatment of the same code.
-      if (result.code === 'cancelled') return
+      if (result.code === 'cancelled' || result.code === 'empty_source') return
       showRenderError(element, source, result.code)
     })
   }

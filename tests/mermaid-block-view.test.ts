@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import type { MermaidRenderResult } from '../src/web/features/rich-editor/blocks/mermaid-render.js'
 import { sharedDom } from './utils/dom-harness.js'
 
 /**
@@ -40,7 +41,14 @@ import { sharedDom } from './utils/dom-harness.js'
 
 let dom: ReturnType<typeof sharedDom>
 let viewModule: typeof import('../src/web/features/rich-editor/blocks/mermaid-block-view.js')
-type RenderResult = { ok: true; svg: string } | { ok: false; code: string }
+/**
+ * The real result type, not a re-declared local shape.
+ *
+ * A stand-in `{ ok: false; code: string }` is assignable to nothing the renderer
+ * actually returns, and it would let these tests drift from the production
+ * contract as failure codes are added.
+ */
+type RenderResult = MermaidRenderResult
 
 /** The result the next `renderMermaidSvg` call resolves with. */
 let nextResult: RenderResult = { ok: true, svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' }
@@ -82,14 +90,11 @@ beforeAll(async () => {
   // React logs an act/environment warning per render; it is not a test signal.
   console.error = () => {}
 
-  // The real module, captured before it is stubbed so the stub can re-export it.
-  const actual = await import('../src/web/features/rich-editor/blocks/mermaid-render.js')
-  mock.module('../src/web/features/rich-editor/blocks/mermaid-render.js', () => ({
-    ...actual,
-    renderMermaidSvg: (): Promise<RenderResult> =>
-      hang ? new Promise<RenderResult>(() => {}) : Promise.resolve(nextResult)
-  }))
-
+  // The renderer is injected per-mount through the `render` prop, NOT stubbed
+  // with `mock.module`. A module override is process-global and Bun does not
+  // undo it for later files, so it leaked this stub into unrelated renderer
+  // tests and made them fail purely on file order.
+  viewModule = await import('../src/web/features/rich-editor/blocks/mermaid-block-view.js')
   viewModule = await import('../src/web/features/rich-editor/blocks/mermaid-block-view.js')
 })
 
@@ -142,7 +147,10 @@ async function mount(source: string): Promise<Mounted> {
           source,
           blockType: 'diagram' as const,
           editor,
-          contentRef: () => undefined
+          contentRef: () => undefined,
+          // The seam: a per-mount renderer, scoped to this component tree.
+          render: (): Promise<RenderResult> =>
+            hang ? new Promise<RenderResult>(() => {}) : Promise.resolve(nextResult)
         })
       )
     )
