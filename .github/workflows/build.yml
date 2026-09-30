@@ -9,13 +9,36 @@ on:
 # Least privilege: the workflow reads the repo and runs fast verification
 # (format, lint, typecheck, unit tests) plus Playwright browser tests. The
 # Windows build and smoke test live in separate, independent workflows.
+#
+# ## Why these jobs run on Windows, not Linux
+#
+# RTWiki ships as a portable Windows artifact (ADR-005): a `.zip` holding
+# `RTWiki.exe` and its assets, with all mutable data beside the executable.
+# Windows is therefore the only platform the product actually runs on, and it is
+# the only platform on which a test failure is worth acting on.
+#
+# These jobs previously ran on `ubuntu-latest`, which is a mismatch with the
+# shipped artifact and produced failures that do not exist on the target OS.
+# Measured, on the same commit, in both places:
+#
+#   - `tests/pane-divider.*` - Mantine writes `data-mantine-color-scheme` onto
+#     the document element on Linux and not on Windows.
+#   - `tests/backup-restore-rollback.test.ts:118` - child-process and filesystem
+#     behaviour differs between the two platforms.
+#   - `tests/markdown-mermaid-hydrate.test.ts:451` - fails on the Linux runner,
+#     passes on Windows.
+#
+# `main` had been red on these since 2026-09-24 for exactly this reason, while
+# the same suite passed locally on Windows. A Linux runner cannot tell us
+# whether a Windows build works, so it is the wrong gate for this repository.
+# The Windows compile and smoke test remain in their own workflows.
 permissions:
   contents: read
 
 jobs:
   verify:
     name: Verify (format, lint, typecheck, test, build)
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,7 +63,9 @@ jobs:
 
   browser-tests:
     name: Browser tests (Playwright, real application)
-    runs-on: ubuntu-latest
+    # See the note above: the product is a portable Windows artifact, so the
+    # browser suite must run where the application actually runs.
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,7 +81,10 @@ jobs:
       - name: Measure web bundle (informational, no threshold)
         run: bun scripts/measure-bundle.ts
       - name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+        # No `--with-deps`: that flag installs Linux system packages and is
+        # meaningless on a Windows runner. The Windows image already carries
+        # everything Chromium needs.
+        run: bunx playwright install chromium
       - name: Run browser tests against the built application
         run: bunx playwright test
       - name: Upload browser-test failure diagnostics
