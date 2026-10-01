@@ -219,5 +219,5 @@ label (§1.1, changed to read *Every day / week / month* with hours behind a pre
   no UI or settings-screen analysis, which is the root of §2.3.
 - [Backup plan](BACKUP_PLAN.md) — the design. Correct on the engine, silent on the panel.
 - [Handover](HANDOVER.md) — full project status for a project manager. (Untracked.)
-- [Known bugs](KNOWN_BUGS.md)
+
 - [Security](SECURITY.md) §8 — backup and restore

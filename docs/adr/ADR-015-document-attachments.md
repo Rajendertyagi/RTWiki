@@ -7,7 +7,7 @@
 
 ## Context
 
-R-024 and AC-030/AC-031 commit RTWiki to attaching "images, PDFs, and documents", and AC-031 names DOCX, ODT, TXT and MD. Until now only images existed, and [KNOWN_BUGS.md](../KNOWN_BUGS.md) §7 records that as a gap.
+R-024 and AC-030/AC-031 commit RTWiki to attaching "images, PDFs, and documents", and AC-031 names DOCX, ODT, TXT and MD. Until now only images existed.
 
 A document is not an image. An image is bytes the browser draws; a document is a program. A PDF can carry JavaScript, an office file can carry macros, and served inline either executes in RTWiki's own origin. ADR-013 already reached this conclusion for SVG and refused it; a document is a strictly larger version of the same problem, and refusing it outright would defeat a committed requirement.
 
@@ -105,7 +105,7 @@ A container recognised and then refused is reported as `extract_failed`, not `un
 
 Pages are soft-deleted and attachments have no page foreign key, so deleting a note does not delete its documents. This is a deliberate policy, matching the existing attachment behaviour and the reference implementation: an attachment may be uploaded before it is referenced, and a note may be deleted while its document is still wanted. A cascade would destroy documents still in use elsewhere.
 
-The cost is the same one already recorded in KNOWN_BUGS §6: nothing reclaims an unreferenced document automatically. That remains a retention decision, not a defect.
+The cost is the same one already recorded for images: nothing reclaims an unreferenced document automatically. That remains a retention decision, not a defect.
 
 ## Consequences
 

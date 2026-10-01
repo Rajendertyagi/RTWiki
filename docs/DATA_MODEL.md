@@ -138,7 +138,7 @@ Image bytes are stored in the `attachments.data` column, not as files in a direc
 
 **Type and size:** `mime_type` and `byte_size` are recorded from the bytes, never from the request. The type is decided by reading the file's container structure with `file-type`, and the accepted-format list in `src/shared/attachments/image-formats.ts` is what maps that to a stored type. Accepted formats are PNG, JPEG, GIF, WebP, AVIF and BMP. SVG, TIFF, HEIC and JPEG XL are deliberately not accepted — see [ADR-013](adr/ADR-013-image-attachments.md). Pixel dimensions are read from the header without decoding and capped at `PROVISIONAL_MAX_IMAGE_PIXELS`; the byte ceiling is the separate 50 MB attachment limit.
 
-**Ownership:** There is no foreign key to `pages`. An attachment may be uploaded before it is referenced, and a note may be deleted while its images are still on disk. The consequence is that deleting a page does not delete its images: the files become orphans, reclaimable from this table but not yet reclaimed automatically. This is tracked as an open item in [KNOWN_BUGS.md](KNOWN_BUGS.md).
+**Ownership:** There is no foreign key to `pages`. An attachment may be uploaded before it is referenced, and a note may be deleted while its images are still on disk. The consequence is that deleting a page does not delete its images: the files become orphans, reclaimable from this table but not yet reclaimed automatically. This is an open retention decision rather than a defect.
 
 ### 3.6 Search Index
 

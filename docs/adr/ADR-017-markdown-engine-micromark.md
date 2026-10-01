@@ -184,7 +184,7 @@ equation, which for a study-notes application is a worse and more visible failur
 `$a$$b$` is **one** expression whose TeX source is `a$$b`, which KaTeX reports as an error and shows the
 source for. This is **not** a regression: the package was measured against this construct and produces
 byte-identical output for `$a$$b$`, `x $a$$b$ y`, `$a$$b$ $c$`, `$$x$$`, `$a$ $b$` and `$a$$b`. Two adjacent
-expressions need a space — `$a$ $b$` is two. Written up in [KNOWN_BUGS.md](../KNOWN_BUGS.md) and pinned
+expressions need a space — `$a$ $b$` is two. Pinned
 by a test.
 
 `$x$` inside link **text** does render maths, matching GitHub. Link destinations, image alt text, image
@@ -513,5 +513,3 @@ rather than one, because the outline needs the tree and the renderer needs the H
 - [ADR-013](ADR-013-image-attachments.md) — the byte-first identification rule the same
   "never trust the claim, read the bytes" reasoning produced for attachments.
 - [SECURITY.md](../SECURITY.md) — DOMPurify configuration and the raw-HTML prohibition.
-- [KNOWN_BUGS.md](../KNOWN_BUGS.md) — the dead stylesheet rule this fixed, and the harness facts
-  recorded alongside it.

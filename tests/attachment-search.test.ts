@@ -16,7 +16,7 @@ import { composeSearchableContent } from '../src/server/services/search-extracti
  *
  * ## What was claimed and what was true
  *
- * AC-030, AC-030a, ADR-015, DATA_MODEL.md and KNOWN_BUGS §7 all said a document's
+ * AC-030, AC-030a, ADR-015 and DATA_MODEL.md all said a document's
  * extracted text is searchable. It was not: `extracted_text` was written on upload and
  * read by exactly one route, `GET /api/attachments/:id/text`, which is reachable only by
  * opening the document's "View text" dialog. `search_index` was populated from page

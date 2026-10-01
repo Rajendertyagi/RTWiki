@@ -6,7 +6,7 @@ import { sharedDom } from './utils/dom-harness.js'
  * A diagram's rendered state is observable, and the observation is not
  * "an `<svg>` appeared".
  *
- * `docs/KNOWN_BUGS.md` records the worst defect this project shipped: every
+ * The worst defect this project shipped: every
  * diagram in the application rendered with no labels at all, and nothing caught
  * it, because **every existing assertion was "an `<svg>` appeared"**. A
  * labelless diagram still has an `<svg>`, so that assertion was satisfied by

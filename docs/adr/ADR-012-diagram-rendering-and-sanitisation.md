@@ -171,4 +171,3 @@ what it holds, and the two surfaces differ deliberately:
 - [ADR-007](ADR-007-sandboxed-custom-content.md) — L3 sandbox; **not** required for diagrams, which stay L1
 - [SECURITY.md](../SECURITY.md) — sanitisation and CSP
 - [DEVELOPMENT_STANDARDS.md](../DEVELOPMENT_STANDARDS.md) — modular block architecture rules
-- [KNOWN_BUGS.md](../KNOWN_BUGS.md) — the measured account of the label defect and the CI gate failures

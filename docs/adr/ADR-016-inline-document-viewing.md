@@ -237,7 +237,7 @@ returns 404 on both routes; its text is reachable through View text.
 - **Office formats will not render in most browsers.** `DOCX`, `XLSX`, `PPTX` and `ODT` have no
   mainstream browser renderer; View on one of those will download it or show source. This is the
   browser's behaviour, not a policy RTWiki imposes, and it is why Download and View text are on the
-  card. Recorded in [KNOWN_BUGS.md](../KNOWN_BUGS.md) so it is not mistaken for a defect.
+  card. This is the browser's behaviour rather than a defect of ours, and is recorded here so it is not mistaken for one.
 
 ## Revisit conditions
 

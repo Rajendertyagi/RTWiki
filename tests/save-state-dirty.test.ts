@@ -5,7 +5,7 @@ import { isAutosaveDirty, mapAutosaveStatus } from '../src/web/features/workspac
 /**
  * The two questions the save state answers, asserted against each other.
  *
- * `KNOWN_BUGS.md` recorded that this file had two spellings of "is there unsaved
+ * This file had two spellings of "is there unsaved
  * work" and that the copies disagreed. The disagreement was inert only because
  * nothing read the answer; the moment a close confirmation reads it, the copy that
  * omits `error` is the one that loses a user's content.

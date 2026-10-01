@@ -15,7 +15,7 @@
  *
  * WHY THESE `!important` DECLARATIONS STAY
  *
- * Recorded as KNOWN_BUGS item 5, which asked for either removal or a documented
+ * A defect report asked for either removal or a documented
  * suppression. This is the suppression, and the reason is that the declarations
  * are load-bearing rather than sloppy:
  *
@@ -30,7 +30,7 @@
  *   without it.
  *
  * So they are suppressed deliberately, and individually justified, rather than
- * removed one at a time — which is what the KNOWN_BUGS entry warned against. The
+ * removed one at a time — which is what that report warned against. The
  * lint gate is green; a future reader sees this block rather than eleven
  * unexplained declarations.
  */

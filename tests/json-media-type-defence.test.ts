@@ -14,7 +14,7 @@ import { ShutdownCoordinator } from '../src/server/shutdown-coordinator.js'
  * `tests/json-body-media-type.test.ts` proves the rule inside the shared reader.
  * This proves the *route* uses it, because those are different failure modes: a
  * reader with the rule and a route that bypassed it is exactly the arrangement
- * `KNOWN_BUGS.md` found in the document half of attachments — a correct helper
+ * found in the document half of attachments — a correct helper
  * with nothing calling it, which reads as coverage and is not.
  *
  * The attack form is the one that needs no preflight. A cross-origin `POST` with

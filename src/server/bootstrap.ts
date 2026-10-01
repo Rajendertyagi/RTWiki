@@ -306,7 +306,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   // write lock first.
   sweepPartialBackups(dataDir)
 
-  // Reclaims attachments no document refers to (KNOWN_BUGS item 6). Runs once at
+  // Reclaims attachments no document refers to. Runs once at
   // startup rather than on a timer: the leak only grows when a note is deleted, and
   // a startup pass costs one table scan, whereas a timer would keep re-scanning for
   // a condition that has not changed. The 30-day default means an image deleted

@@ -166,7 +166,7 @@ function applyConfig(
  * An earlier revision of this comment claimed the opposite — that twelve types
  * resolved to an empty 24x24 SVG without it, and that those were the types
  * deliberately absent from the template list. That claim did not reproduce, and
- * the exclusion rested on it. `KNOWN_BUGS.md` records the correction.
+ * the exclusion rested on it. This comment records the correction.
  *
  * What it does buy is latency: all lazy chunks are resolved before the first
  * render instead of each being awaited mid-render, so a first diagram does not

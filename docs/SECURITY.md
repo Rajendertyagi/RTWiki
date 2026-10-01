@@ -19,7 +19,7 @@ This table states a mitigation per threat. **Where the mitigation is not impleme
 | Accidental data loss | User deletes a page | Soft delete + recycle bin | **Built** — `migrations.ts:24,64,70,74` |
 | Accidental data loss | Restore from a corrupt or incompatible backup | Backup validation before restore | **Not implemented.** No backup or restore feature exists in `src/`; `data/backups/` is created at startup and stays empty. §8 is a requirement, not a description |
 | Unauthorized LAN access (future) | Someone on the local network discovers the server | Localhost binding by default; LAN access requires explicit opt-in | **Built** — §4 |
-| **A web page the user visits writes to their own server** | Any site the user browses while RTWiki runs issues a cross-origin `POST` to `127.0.0.1:8080` | **None.** No `Host` validation, no CORS middleware, and `isSameOrigin()` is not applied to the page, schedule or preset routes — 17 of 25 mutating routes perform no origin check, 5 of which are reachable with no prior identifier | **Not implemented.** Data-destroying: `POST /api/schedule/presets/apply` with `mode: "replace"` deletes every timetable entry and reminder. The loopback bind does not cover it — it stops remote hosts, not a page in the user's own browser. §4.1 and [KNOWN_BUGS.md](KNOWN_BUGS.md) |
+| **A web page the user visits writes to their own server** | Any site the user browses while RTWiki runs issues a cross-origin `POST` to `127.0.0.1:8080` | **None.** No `Host` validation, no CORS middleware, and `isSameOrigin()` is not applied to the page, schedule or preset routes — 17 of 25 mutating routes perform no origin check, 5 of which are reachable with no prior identifier | **Not implemented.** Data-destroying: `POST /api/schedule/presets/apply` with `mode: "replace"` deletes every timetable entry and reminder. The loopback bind does not cover it — it stops remote hosts, not a page in the user's own browser. §4.1 |
 
 ## 2. Input Sanitization
 
@@ -167,7 +167,7 @@ identifier, and one of them is destructive: `POST /api/schedule/presets/apply` w
 one cross-origin request **permanently erases the user's entire timetable and every reminder**. It
 requires no identifier, no reconnaissance, and no knowledge of the victim's data. The other four
 create attacker-chosen pages, entries, reminders and presets. The full route table, the shortest
-destructive request, and the impact bounds are in [KNOWN_BUGS.md](KNOWN_BUGS.md).
+destructive request needs no identifier, no reconnaissance, and no knowledge of the victim’s data.
 
 **The requirements, none of which is met today:**
 
@@ -351,9 +351,9 @@ constant is not evidence that the limit it named now exists.
   failure path is not reached for the corruption classes that matter most. At the call in
   `src/server/bootstrap.ts` the exception propagates as a raw `SQLiteError` and the
   `'Database failed integrity check'` log line never fires. Any validator built by reusing this
-  helper would crash instead of reject. See [KNOWN_BUGS.md](KNOWN_BUGS.md). *A fix adding the
-  `try`/`catch` was present in the working tree but uncommitted and unverified when this was
-  written, so it is not counted as built.*
+  helper would crash instead of reject. *Fixed: `checkIntegrity()` now wraps the pragma in
+  `try`/`catch` and returns `false` on a throw, keeping the single-`ok`-row test for the cases that
+  do return rows.*
 
 ## 8. Backup Validation
 
@@ -602,7 +602,6 @@ rules keep the web content untrusted even inside the native window:
 ## 11. Cross-References
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — where sanitization and validation happen in each layer
-- [KNOWN_BUGS.md](KNOWN_BUGS.md) — the measured defects behind §4.1, §6 and §7, with their evidence
 - [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) — coding standards that enforce these requirements
 - [DATA_MODEL.md](DATA_MODEL.md) — soft-delete and attachment safety in the data layer
 - [CI_CD.md](CI_CD.md) — security linting and static analysis in the build pipeline

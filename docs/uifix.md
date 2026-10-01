@@ -3,7 +3,7 @@
 Written 2026-09-29 on `feat/backup-restore`, working tree only, **not committed**.
 Part 1 covers the Diagram page UI restructure, the Mermaid toolbar move, the
 flexible workspace, and the Mermaid surfaces in Rich Document. **Part 2** covers
-the systematic pass over every entry in [KNOWN_BUGS.md](KNOWN_BUGS.md), which
+the systematic pass over every entry in `KNOWN_BUGS.md` (since deleted), which
 found that three of the most alarming entries were already fixed, fixed six real
 defects, and **reverted one of my own fixes after measuring it**.
 
@@ -27,8 +27,8 @@ be open**:
   answer.
 
 A defect list that is not re-read against the code stops being evidence and
-becomes folklore. `KNOWN_BUGS.md` now says so at the top, and `AGENTS.md` §9 was
-corrected — it still described the cross-origin hole as unimplemented.
+becomes folklore. That lesson was written into the top of the file, and `AGENTS.md` §9
+was corrected — it still described the cross-origin hole as unimplemented.
 
 ## Fixed, with tests
 
@@ -51,7 +51,7 @@ neither is counted twice.
 
 ## The one I fixed, measured, and reverted
 
-The `KNOWN_BUGS` entry about losing pending typing on close **prescribed its own
+The `KNOWN_BUGS.md` entry about losing pending typing on close **prescribed its own
 fix**: flush the autosave controller on `visibilitychange → hidden`, with
 `pagehide` as a fallback. I implemented it. It is tidy, small, and does what it
 says.

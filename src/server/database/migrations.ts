@@ -377,7 +377,7 @@ export async function runMigrations(
  * No file is deleted at any point. Files on disk with no row are left alone:
  * they are unreferenced, so nothing can display them, but the application cannot
  * prove they are garbage rather than merely not-yet-referenced. Reclaiming them
- * belongs to the retention pass tracked in KNOWN_BUGS.md.
+ * belongs to a separate retention pass.
  */
 async function migrateAttachmentBytesToBlobs(
   db: ReturnType<typeof getDb>,

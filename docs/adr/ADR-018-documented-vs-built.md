@@ -146,7 +146,7 @@ reconcile it** — consistent with the pre-work protocol in [`AGENTS.md`](../../
 ## Follow-up
 
 A second pass covers [ARCHITECTURE.md](../ARCHITECTURE.md),
-[DEVELOPMENT_STANDARDS.md](../DEVELOPMENT_STANDARDS.md) and [KNOWN_BUGS.md](../KNOWN_BUGS.md).
+[DEVELOPMENT_STANDARDS.md](../DEVELOPMENT_STANDARDS.md).
 Those three were excluded from this pass because they were being edited concurrently; changing them
 here would have destroyed work in progress. [README.md](../../README.md), [SECURITY.md](../SECURITY.md),
 [MVP_SCOPE](../MVP_SCOPE.md), [PRODUCT_REQUIREMENTS](../PRODUCT_REQUIREMENTS.md) and

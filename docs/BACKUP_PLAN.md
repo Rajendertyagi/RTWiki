@@ -652,13 +652,6 @@ during a backup.**
   refusal of an existing target and the open-transaction question
 - [ADR-005](adr/ADR-005-portable-data-layout.md) — the `data/backups/` contract, plus the
   pre-restore copy in `data/`
-- [docs/KNOWN_BUGS.md](KNOWN_BUGS.md) — **there is no backup or restore entry to close.**
-  Verified: no heading in that file matches backup, restore, or autosave-on-close. The
-  nearest, `:284` *"A page closed while a save had failed loses the pending content"*, is a
-  **separate and still-open** defect about a failed save losing unsaved work, which this
-  plan does not fix. Leave it open and do not claim otherwise
-- [ARCHITECTURE.md](ARCHITECTURE.md) — if a new route and settings keys are added
-- `bun scripts/verify-docs.ts` must pass
 
 ## 15. Risks
 

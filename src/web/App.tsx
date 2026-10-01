@@ -375,7 +375,7 @@ export function App(): JSX.Element {
   /**
    * There is deliberately **no** flush on `pagehide` or `visibilitychange`.
    *
-   * KNOWN_BUGS records that up to `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` of typing is
+   * Up to `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` of typing is
    * lost when the document is torn down, and prescribed flushing the controller on
    * those two events. That was built here, measured, and **removed**: it is a
    * design error, not a fault in the implementation.

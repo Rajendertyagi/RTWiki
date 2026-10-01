@@ -55,7 +55,7 @@ Serving therefore streams the blob through a `ReadableStream` in 512 KB chunks. 
 
 The migration reads each referenced file, writes its bytes into the row, and compares the byte count against `byte_size`. Only when every row is accounted for is the old column dropped. A file that cannot be read aborts the migration and is reported; no file is deleted on the strength of a partial conversion.
 
-Files on disk with no row are **left alone**. They are unreferenced, so they are invisible to the user, and deleting data the application cannot prove is garbage is not this migration's decision to make. Removing them belongs to the retention pass already tracked in [KNOWN_BUGS.md](../KNOWN_BUGS.md).
+Files on disk with no row are **left alone**. They are unreferenced, so they are invisible to the user, and deleting data the application cannot prove is garbage is not this migration's decision to make. Removing them belongs to a separate retention pass.
 
 ## Consequences
 

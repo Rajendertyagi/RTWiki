@@ -618,7 +618,7 @@ test.describe('documents in the Rich editor', () => {
     // Which block type a drop lands in is BlockNote's business, and this project
     // already records that it is not what the code suggests: the `file` block
     // accepts `*/*`, the scan keeps the *last* match, and `image` only wins
-    // because it happens to be ordered after `file`. See KNOWN_BUGS. Asserting a
+    // because it happens to be ordered after `file`. Asserting a
     // block type here would freeze that accident, and a BlockNote upgrade could
     // break the test without changing anything a user can observe.
     //

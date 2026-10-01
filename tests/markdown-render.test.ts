@@ -289,7 +289,7 @@ describe('the $ delimiter follows GitHub’s adjacency rule', () => {
      * `x $a$$b$ y`, `$a$$b$ $c$`, `$$x$$`, `$a$ $b$` and `$a$$b`, because the run
      * matching and the `previous` guard are both carried over from it. It is pinned
      * so that a future change to either is noticed, and it is written down in
-     * `KNOWN_BUGS.md`. Two expressions side by side need a space: `$a$ $b$` is two.
+     * Two expressions side by side need a space: `$a$ $b$` is two.
      */
     const doc = parse(renderMarkdown('$a$$b$'))
     expect(doc.querySelectorAll('.math-display').length).toBe(0)
