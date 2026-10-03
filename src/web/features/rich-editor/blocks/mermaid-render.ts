@@ -75,6 +75,20 @@ import { sanitizeDiagramSvg } from './svg-sanitize.js'
  *   event handlers, so switching the labels to text removes the need to strip
  *   `foreignObject` at all while making the output smaller and faster.
  *   `tests/browser/diagram-labels.pwspec.ts` guards this.
+ *
+ * - `fontFamily` — the one setting that has to be ABSOLUTE rather than inherited, and
+ *   the reason is a real cross-surface divergence that was measured, not noticed.
+ *   It was `'inherit'`, which reads as the obviously-correct "use the app's font" and
+ *   is in fact the opposite: it inherits from whatever host the SVG is mounted in. On
+ *   the Diagram page that host carries the application stack, but inside a Rich Note
+ *   the nearest ancestor with a font is BlockNote's own `.bn-default-styles`, which
+ *   hardcodes `Inter, "SF Pro Display", -apple-system, …` (BlockNote 0.54,
+ *   `editor.css`). So the same diagram source rendered in `Inter…` on the Rich Note
+ *   and in `system-ui…` on the Diagram page. Everything else about the two was already
+ *   identical — measured: same `viewBox` (`0 0 426 414`), same node fills
+ *   (`rgb(236, 236, 255)`), same label text — which is exactly why the font was easy
+ *   to miss and why it has to be pinned here rather than left to the cascade.
+ *   `tests/mermaid-cross-surface.test.ts` guards it.
  */
 export const MERMAID_CONFIG = Object.freeze({
   startOnLoad: false,
@@ -84,7 +98,16 @@ export const MERMAID_CONFIG = Object.freeze({
   deterministicIDSeed: 'rtwiki',
   maxTextSize: 200_000,
   maxEdges: 500,
-  fontFamily: 'inherit',
+  /*
+   * The application stack, spelled out rather than inherited. `inherit` resolved
+   * against BlockNote's hardcoded `.bn-default-styles` font inside a Rich Note, so
+   * the same source rendered in a different typeface depending on the surface. It
+   * mirrors the `fontFamily` in `theme/registry.ts`, which is the single place the
+   * application's own stack is declared; this is the same value stated once more
+   * because Mermaid bakes the font into the SVG it emits and cannot be handed a
+   * live token.
+   */
+  fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   layout: 'dagre',
   look: 'classic',
   htmlLabels: false,

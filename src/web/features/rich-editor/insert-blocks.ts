@@ -46,38 +46,50 @@ export const DIAGRAM_TEMPLATES = {
   // Order follows the toolbar, grouping the everyday diagram types first and
   // the specialist ones after. Keys are Mermaid diagram ids.
   //
-  // NOT every type Mermaid 12 registers is listed, and the omissions are of two
-  // different kinds. Both are withheld rather than offered broken, which is the
-  // rule: a template that renders an empty box is worse than one that is absent.
+  // NOT every type Mermaid 12 registers is listed. Three are withheld, and every
+  // claim below was measured in Chromium through this application's own pipeline
+  // rather than reasoned about. All three are upstream grammar defects in Mermaid
+  // 12.0.0: each fails in Mermaid's PARSER, reports a `parse_error`, and shows the
+  // block's "Diagram error" box. None of them can be repaired from here, because
+  // the fix would be in Mermaid's grammars — so they are withheld rather than
+  // offered broken, which is the rule: a template that cannot render is worse than
+  // one that is absent.
   //
-  // 1. `swimlane` — a layout problem, not a rendering one. Mermaid gives
-  //    swimlanes their own layout engine, which this app's global
-  //    `layout: 'dagre'` (MERMAID_CONFIG) overrides, so `swimlane-beta` lays out
-  //    as an ordinary flowchart with no lanes at all. Fixing it means scoping the
-  //    layout per diagram, not editing here.
+  // 1. `swimlane-beta` — its grammar cannot parse a lane. Even the minimal
+  //    `swimlane-beta\n  lane A` fails:
+  //    `Expecting 'SEMI', 'NEWLINE', 'EOF', 'AMP', 'START_LINK', 'LINK', 'LINK_ID',
+  //    got 'NODE_STRING'`.
+  //    This was previously recorded here as a LAYOUT problem — that the global
+  //    `layout: 'dagre'` in MERMAID_CONFIG overrides swimlanes' own engine. That was
+  //    measured and it is wrong: the same source fails identically with the layout
+  //    unset and with `layout: 'elk'`. The failure is upstream of layout entirely.
   //
-  // 2. `architecture-beta` and `cynefin-beta` — a rendering problem, measured in
-  //    this application rather than in Mermaid in isolation. Both were added with
-  //    the other newer types and both render as Mermaid's empty 24x24
-  //    placeholder: no error is raised, and the diagram is simply not drawn.
-  //    `tests/browser/diagram-templates.pwspec.ts` caught this, which is what that
-  //    test is for. Both ids are present in the installed Mermaid 12.0.0 but only
-  //    inside lazily-loaded chunks, and the render warm-up in
-  //    `blocks/mermaid-render.ts` does not resolve them — so the gap is in which
-  //    definitions Mermaid force-loads, and closing it is renderer work, not a
-  //    change to this list. The other ten types added alongside them do render,
-  //    including the chunk-backed `wardley-beta`, `usecase-beta`, `agentflow-beta`
-  //    and `railroad-beta`, so this is specific to these two and not a general
-  //    consequence of lazy loading.
+  // 2. `architecture-beta` — renders correctly for services, groups, junctions and
+  //    service-to-service edges. It fails only on an edge whose endpoint is a GROUP:
+  //    `db:L -- R:api` where `api` is a group throws
+  //    `undefined is not an object (evaluating 'this.nodes.get(rhsId).in')`.
+  //    So the type is not unsupported — a working subset of it is — which is why
+  //    this note previously mis-described it.
+  //
+  // 3. `cynefin-beta` — parses `title` alone, and fails on any `description` line
+  //    with a lexer error on the generated `->d<-` domain markers. Both the bare
+  //    form (`A chaos`) and the `domain` keyword form fail identically.
+  //
+  // A correction to what this comment used to claim: none of these three renders as
+  // a silent 24x24 placeholder, and the cause was never the render warm-up failing
+  // to resolve a lazy chunk. Every one raises a visible parse error. The chunk-backed
+  // types that do work — `wardley-beta`, `usecase-beta`, `agentflow-beta`,
+  // `railroad-beta` — prove lazy loading is not the issue.
   //
   // Most of the newer types require their `-beta` keyword, and a bare type name
-  // is not a synonym for it: `venn` does not detect, `venn-beta` does. A wrong
-  // keyword THROWS at parse time rather than rendering empty, so that failure is
-  // loud — unlike case 2 above, which is silent. That is worth knowing when
-  // reading a parse error here, and it is why `railroad` nests `terminal(...)`
-  // inside `choice(...)` — its grammar has no bare-string form. Note that
-  // `eventmodeling` and `quadrantChart` are the exceptions: Mermaid 12 registers
-  // those two bare, and no `-beta` form exists for them.
+  // is not a synonym for it: `venn` does not detect, `venn-beta` does. Note that
+  // `architecture`, `cynefin` and `swimlane` are inconsistent among themselves —
+  // `architecture`'s detector is `/^\s*architecture/` and accepts both forms, while
+  // `cynefin`'s is `/^\s*cynefin-beta(?:[\s:]|$)/` and `swimlane`'s is
+  // `/^\s*swimlane-beta\b/`, so those two are only ever detected in their `-beta`
+  // form. `eventmodeling` and `quadrantChart` are registered bare, with no `-beta`
+  // form at all. It is also why `railroad` nests `terminal(...)` inside
+  // `choice(...)`: its grammar has no bare-string form.
   //
   // `tests/browser/diagram-templates.pwspec.ts` renders every entry here through
   // the real pipeline and fails on the 24x24 placeholder, so adding one that does

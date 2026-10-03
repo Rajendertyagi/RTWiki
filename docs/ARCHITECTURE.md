@@ -241,6 +241,80 @@ When a page supplies optional custom HTML/CSS/JS, it is rendered only inside an 
 - **Responsibility:** Structured logging (JSON lines) for errors, warnings, and operational events. Log entries must never contain sensitive page content.
 - **Constraint:** No secrets, no user-provided page content, and no attachment data in logs. Log files use rotation and retention limits so they cannot grow indefinitely.
 
+
+### 3.16 Mermaid: one renderer, several surfaces
+
+Every Mermaid diagram in RTWiki — in a Rich Note, on a Diagram page, in the live workspace
+preview, and in a rendered Markdown page — is produced by **one** function:
+
+```
+                       renderMermaidSvg(source, { theme, blockId, blockType, signal })
+                                          │
+   Rich Note block ─┐                     │
+   Diagram page   ─┤                     │
+   Workspace      ─┤                     │
+   Markdown fence ─┘                     │
+                          ┌──────────────┴──────────────┐
+                    parse ─┤                             ├─ render
+                          └──────────────┬──────────────┘
+                                  sanitizeDiagramSvg
+                                          │
+                              sanitised SVG → surface container
+```
+
+There is exactly one `mermaid.initialize`, one `mermaid.parse`, one `mermaid.render` and one
+`import('mermaid')` in `src/`. The configuration lives in one frozen `MERMAID_CONFIG`, the result
+model in one `MermaidRenderResult`, and the theme is the only per-render variable.
+
+**The result model is shared, not per-surface:**
+
+| code | meaning | both surfaces do |
+| --- | --- | --- |
+| `ok: true` | SVG produced | mount it |
+| `empty_source` | `""` or whitespace | **keep what is on screen**, no error shown |
+| `cancelled` | superseded or unmounted | keep what is on screen, no error shown |
+| `parse_error` | Mermaid rejected it | show the error box with Retry |
+| `render_error` | it parsed but would not draw | show the error box with Retry |
+
+`empty_source` returns **before** Mermaid is imported, so an empty block never reaches the
+parser and never produces a misleading warning. This matters because the live-preview paths
+pass the textarea contents straight through, and a cleared block legitimately arrives as `""`.
+Both surfaces treat `empty_source` and `cancelled` identically, so neither degrades into an
+error for a state that is not one.
+
+**Configuration is absolute, not inherited — deliberately.** `MERMAID_CONFIG.fontFamily` states
+the application's font stack instead of `'inherit'`. `'inherit'` looks like the obvious way to
+"use the app's font" and inverts: it resolves against whichever element hosts the diagram.
+Inside a Rich Note that is BlockNote's own `.bn-default-styles`, which hardcodes
+`Inter, "SF Pro Display", …`; on a Diagram page it is the application stack. The same source
+therefore rendered in two typefaces depending on the surface. Measured, that divergence was
+the *only* one: `viewBox`, node fills and label text already matched exactly, which is why it
+went unnoticed — a visual comparison of shape and colour reports "no difference". Mermaid
+bakes the font into a `<style>` rule on the SVG, so it cannot be handed a live CSS custom
+property; `tests/mermaid-security.test.ts` holds the value against the theme's stack.
+
+**What legitimately differs between surfaces is the container, not the diagram.** A Diagram page
+has a canvas with zoom, pan, fit-to-box and full screen; a Rich Note has an inline block with
+compact controls and document flow; a Markdown fence is a centred block capped to the page
+width. Those are separate layout concerns in separate CSS modules
+(`visual-pages/mermaid-workspace.module.css`, `rich-editor/blocks/mermaid-block.module.css`,
+`markdown/markdown-mermaid.css`), and the diagram inside them is byte-for-byte the same render.
+
+Verified by `tests/browser/mermaid-cross-surface.pwspec.ts`, which renders one source as both a
+Diagram block and a Rich block and compares `viewBox`, `width`, `height`, node fills, label text
+and the computed font on a real label.
+
+**Three diagram types are withheld from the template list.** `swimlane-beta`,
+`architecture-beta` and `cynefin-beta` are each affected by a defect in Mermaid 12.0.0's own
+grammars, measured through this pipeline and recorded in `insert-blocks.ts`: `swimlane-beta`
+cannot parse a lane at all, `architecture-beta` renders everything except an edge whose endpoint
+is a group, and `cynefin-beta` parses `title` alone but fails on any `description` line. All
+three raise a **visible** parse error rather than rendering a silent empty box. None can be
+fixed from here without forking Mermaid, so they are absent from the menu rather than offered
+broken. `tests/browser/mermaid-fixture-audit.pwspec.ts` proves all of this end to end and fails
+if a Mermaid upgrade repairs any of the three.
+
+
 ## 4. Canonical Data Format
 
 ### Markdown pages

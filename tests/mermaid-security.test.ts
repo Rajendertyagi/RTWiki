@@ -6,6 +6,17 @@ import {
   mermaidRenderId
 } from '../src/web/features/rich-editor/blocks/mermaid-render.js'
 
+/**
+ * The application's own stack, mirrored from `theme/registry.ts`.
+ *
+ * Stated here rather than imported because the theme holds it inside a Mantine theme
+ * object with no exported constant to reach for, and the test's job is to pin the
+ * literal that Mermaid is given. The two are held together by the second test below,
+ * which reads the theme source and fails if they drift.
+ */
+const APP_FONT_STACK =
+  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+
 describe('mermaid security configuration', () => {
   it('pins the fixed RTWiki configuration', () => {
     expect(MERMAID_CONFIG.startOnLoad).toBe(false)
@@ -59,6 +70,30 @@ describe('mermaid security configuration', () => {
     // is the one pin that cannot be justified by inspection alone — it was
     // verified by rendering a mindmap under each version and comparing the SVG.
     expect(MERMAID_CONFIG.mindmap).toEqual({ layout: 'cose-bilkent' })
+  })
+
+  it('pins the diagram font instead of inheriting it', () => {
+    // `'inherit'` is the value that looks right and behaves wrongly. Mermaid bakes
+    // `fontFamily` into a `<style>` rule on the SVG it emits, and `inherit` resolves
+    // that against whichever element hosts the diagram. Inside a Rich Note the
+    // nearest ancestor carrying a font is BlockNote's `.bn-default-styles`, which
+    // hardcodes `Inter, "SF Pro Display", …`; on the Diagram page it is the
+    // application stack. Measured: the same source produced the same viewBox, the
+    // same node fills and the same labels in both places, and different typefaces —
+    // which is precisely why it went unnoticed.
+    expect(MERMAID_CONFIG.fontFamily).not.toBe('inherit')
+    expect(MERMAID_CONFIG.fontFamily).toBe(APP_FONT_STACK)
+  })
+
+  it('uses the same font stack the application theme declares', () => {
+    // Two places must agree, and this is what holds them together. The value is
+    // written out in MERMAID_CONFIG because Mermaid cannot be handed a live CSS
+    // custom property; the theme is the source of truth it mirrors.
+    const registry = readFileSync(new URL('../src/web/theme/registry.ts', import.meta.url), 'utf8')
+    expect(
+      registry,
+      "the theme's font stack and the Mermaid font stack must not drift apart"
+    ).toContain(MERMAID_CONFIG.fontFamily)
   })
 
   it('imports Mermaid by package specifier, never a dist path', () => {
