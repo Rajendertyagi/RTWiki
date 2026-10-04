@@ -64,6 +64,14 @@
   align-items: flex-start;
   gap: var(--mantine-spacing-sm);
   padding: var(--mantine-spacing-sm);
+  /*
+   * `RTWIKI_SCROLL` is applied to this element from `mermaid-workspace.tsx` rather
+   * than a `ScrollArea` wrapper. This is a Motion `Reorder.Group`: it measures its
+   * children to drive drag reordering, and it is the element the layout's own
+   * height chain depends on. Inserting a viewport around it would add a second box
+   * between the pane and the group, changing what the drag maths measures against,
+   * to obtain a scrollbar that restyling the existing element achieves directly.
+   */
 }
 
 /* A block's share of the row. The basis is a *preference*, not a column: below
@@ -146,6 +154,29 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  /*
+   * The card cannot be shorter than its own chrome plus the controls that live in it.
+   *
+   * `.host` — which carries the control pad — has `min-height: blockControlsMinHeight`
+   * (`diagram-view.module.css`) and is the *second* row of this column; the first is
+   * `.blockBar`. So a container shorter than the two together left the host needing
+   * more room than the card had, the host overflowed, and this element's
+   * `overflow: hidden` clipped the pad. Measured at a stored height of 140: the card's
+   * bottom edge at y=298 with the pad's bottom at y=304, so the pan-down and full-screen
+   * buttons were 6px outside the card, and the stage ran to y=326, clipping 28px of
+   * canvas as well.
+   *
+   * The floor is per-surface and comes from one number: `LAYOUT.visualPageBlockMinHeight`
+   * is this card's action row and border on top of the shared controls floor, published
+   * here as `--rtwiki-visual-page-block-min-height`. The same value clamps the drag, the
+   * keyboard and the size presets in `block-resize.tsx`, so the box can never be
+   * committed shorter than this. A Rich Note block keeps the smaller shared floor,
+   * because it has no action row inside it.
+   *
+   * `min-height` on a border-box element is measured on the border box, which is why the
+   * constant includes the card's own 1px top and bottom border.
+   */
+  min-height: var(--rtwiki-visual-page-block-min-height, 169px);
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   background: var(--rtwiki-pane, var(--mantine-color-body));
@@ -252,6 +283,12 @@
   border: 1px solid var(--mantine-color-default-border);
   background: var(--rtwiki-pane, var(--mantine-color-body));
   overflow: auto;
+  /*
+   * `RTWIKI_SCROLL` is applied from `mermaid-workspace.tsx`, so this live preview
+   * gets RTWiki's scrollbar while staying the element that scrolls. Not a
+   * `ScrollArea` wrapper: the diagram sizes itself against this pane, and the pane
+   * is what a wide diagram grows into.
+   */
 }
 
 .previewError {
@@ -274,6 +311,14 @@
   border: 1px solid var(--mantine-color-default-border);
   background: var(--rtwiki-pane, var(--mantine-color-body));
   overflow: auto;
+  /*
+   * Deliberately NOT given `RTWIKI_SCROLL`.
+   *
+   * This is the canvas host. It scrolls, but panning and zooming are wired to it,
+   * and its scroll position is part of how the canvas is viewed — so it is left
+   * exactly as it was. Restyling it is not worth any risk to the pan/zoom
+   * behaviour, and a scrollbar here is a minor part of the page.
+   */
 }
 
 .errorBox {
@@ -344,13 +389,18 @@
  * needs a *definite* ancestor height to resolve against, which is what the wrapper
  * rules below supply.
  *
- * `.svgHost`, `.zoomHost` and `.svgInner` are local classes of this same module,
- * so these composed selectors resolve consistently. All three need the height
- * because a percentage height only resolves against a *definite* ancestor, and
- * each is between the canvas and the SVG. `svgInner` is the wrapper the sanitised
- * markup is injected into; without a class on it there was no way to give it one.
+ * `.svgHost` and `.svgInner` are local classes of this same module, so these
+ * composed selectors resolve consistently. Both need the height because a
+ * percentage height only resolves against a *definite* ancestor, and each sits
+ * between the canvas and the SVG. `svgInner` is the wrapper the sanitised markup is
+ * injected into; without a class on it there was no way to give it one.
+ *
+ * There was a third of these, `.zoomHost`, carrying a page-level `--zoom-level` width.
+ * It is gone: the diagram's zoom is `DiagramView`'s `--view-scale`, the single authority
+ * on both surfaces. Two layers multiplied here with different ranges (50-200% against
+ * 20-600%) and no way to see the product, and `min-width: 100%` made the whole lower
+ * half of the page zoom's range do nothing at all.
  */ .blockCanvasSized .svgHost,
-.blockCanvasSized .zoomHost,
 .blockCanvasSized .svgInner {
   height: 100%;
   min-height: 0;
@@ -361,13 +411,6 @@
   height: auto;
   max-width: 100%;
   max-height: 100%;
-}
-
-.zoomHost {
-  /* Zoom level arrives as a custom property; the width rule lives here.
-     Resize-based, never transform-clipped. */
-  min-width: 100%;
-  width: var(--zoom-level, 100%);
 }
 
 .statusRow {

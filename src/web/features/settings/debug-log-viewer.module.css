@@ -13,17 +13,33 @@
   max-width: 220px;
 }
 
+/*
+ * The scrolling region for the log entries.
+ *
+ * The scrollbar is a `ScrollArea` (see `debug-log-viewer.tsx`), which is why this
+ * rule no longer declares `overflow-y` or a scrollbar colour — the component draws
+ * the bar and carries the shared thickness. What is left is the box: the border,
+ * surface, inset and the height floors, which belong to the frame the entries sit
+ * in rather than to the scroll axis.
+ *
+ * The `ScrollArea` outside it keeps this region's `onScroll` working through
+ * `viewportRef`, because "follow new entries only when the reader is already at
+ * the bottom" reads the real scroll position and cannot work off a wrapper.
+ */
 .logRegion {
   flex: 1;
   min-height: 220px;
   max-height: 100%;
-  overflow-y: auto;
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-sm);
   background: var(--rtwiki-pane, var(--mantine-color-body));
   padding: var(--mantine-spacing-xs);
-  scrollbar-width: thin;
-  scrollbar-color: var(--rtwiki-border, var(--mantine-color-default-border)) transparent;
+}
+
+/* The scroll area that owns the log's vertical axis and the pane's height. */
+.logScroll {
+  flex: 1;
+  min-height: 0;
 }
 
 .emptyState {

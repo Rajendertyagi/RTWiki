@@ -81,9 +81,7 @@ test.describe('source-file IDE', () => {
       'ide-font-increase',
       'ide-save-now',
       'ide-fullscreen',
-      'return-to-preview',
-      'source-breadcrumb',
-      'ide-status-row'
+      'return-to-preview'
     ]) {
       await expect(page.getByTestId(id)).toBeVisible()
     }
@@ -226,7 +224,7 @@ test.describe('source-file IDE', () => {
     await expect(page.getByTestId('live-preview')).toBeVisible()
   })
 
-  test('status row shows caret position after typing', async ({ page }) => {
+  test('the info bar carries the caret position and the open subfile', async ({ page }) => {
     const title = await newHtmlPage(page)
     const row = page.locator('[role="treeitem"]', { hasText: title }).first()
     await row.hover()
@@ -240,8 +238,26 @@ test.describe('source-file IDE', () => {
     const editor = page.getByTestId('code-editor-css')
     await editor.click()
     await page.keyboard.type('abcd')
-    await expect(page.getByTestId('ide-caret-position')).toContainText('Ln 1')
-    await expect(page.getByTestId('ide-status-row')).toContainText('CSS')
+
+    /*
+     * Repointed from the editor's own status row.
+     *
+     * That row repeated what the application status bar at the bottom of the
+     * window already drew from the same `editorStatus` — measured, the two sat
+     * 28px apart reading the same `Ln 5, Col 2` — so it was deleted rather than
+     * kept in step. The info bar is now the single place the caret is shown.
+     */
+    await expect(page.getByTestId('status-caret-position')).toContainText('Ln 1')
+
+    /*
+     * And the path now names the open subfile too, which is what the deleted
+     * row's language label used to say. A subfile is a virtual child with no
+     * page of its own, so it cannot come from the page list — it comes from the
+     * same `htmlSource` state the toolbar reads.
+     */
+    const statusBar = page.getByTestId('workspace-status-bar')
+    await expect(statusBar).toContainText('CSS')
+    await expect(statusBar).toContainText(title)
   })
 
   test('no unexpected console errors while using the IDE', async ({ page }) => {

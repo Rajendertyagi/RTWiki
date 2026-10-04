@@ -36,6 +36,20 @@
    * and radius are absent for that same reason. */
   padding: var(--mantine-spacing-sm);
   background: var(--rtwiki-canvas, var(--mantine-color-body));
+  /*
+   * RTWiki's shared scrollbar, applied as a class from `rich-editor.tsx`.
+   *
+   * This element stays the Rich Note's scroll owner. It is *not* wrapped in a
+   * `ScrollArea`, and that is deliberate: BlockNote scrolls the caret into view
+   * inside this element, so any second viewport inserted around it would change
+   * what the editor scrolls and could leave the caret off-screen after a keyboard
+   * move. Restyling the existing native scrollbar gives the same appearance with
+   * no change to caret scrolling, `scrollIntoView`, table and column geometry, or
+   * keyboard behaviour.
+   *
+   * A comment rather than `composes`, because the class lives in the global
+   * stylesheet and `composes` can only reach another CSS module.
+   */
 }
 
 /* Bind the editor's own surface to the declared canvas token.
@@ -49,8 +63,25 @@
  * Verified by injecting a sentinel canvas value and asserting the editor
  * follows it — see the "document surface follows the canvas token" test in
  * tests/browser/rich-workspace.pwspec.ts. */
+/* Bind BlockNote's own editor padding to RTWiki's document-inset token.
+ *
+ * BlockNote ships `.bn-editor { padding-inline: 54px }`
+ * (@blocknote/core/dist/style.css), which is how a Rich Note keeps a readable text
+ * measure inside a surface that fills its pane. Measured on a live Rich Note at a
+ * 1440px viewport: a 790px editor inside a ~900px pane.
+ *
+ * This override exists so the Markdown preview can present **the same measure from
+ * the same number**. The Markdown side previously used `max-width: 78ch` with
+ * `margin-inline: auto`, which is a different mechanism entirely and produced a
+ * visibly different page: a 547px content box with 145.7px of dead gutter on each
+ * side.
+ *
+ * Written with `padding-inline` rather than `padding`, deliberately: this rule has
+ * to override BlockNote's own `padding-inline` declaration, and it must not disturb
+ * the vertical padding on the same element. */
 .blockNoteWrapper :global(.bn-editor) {
   background: var(--rtwiki-canvas, var(--mantine-color-body));
+  padding-inline: var(--rtwiki-document-inset);
 }
 
 .blockNoteWrapper :global(.bn-container) {
@@ -58,12 +89,41 @@
 }
 
 /* Display formulas must never overflow a narrow document; scroll the block
-   horizontally instead of breaking the layout. */
+   horizontally instead of breaking the layout.
+
+   The scrollbar is RTWiki's shared one, same as the other one-axis strips. It is
+   spelled out here rather than taken from `RTWIKI_SCROLL` because KaTeX generates
+   these elements inside the editor's DOM and there is no React owner to attach a
+   className to. It reads the same `--rtwiki-scrollbar-*` tokens, so the thickness
+   cannot drift; see `.rtwiki-scroll` in `customization.css` for why the standard
+   and vendor declarations are two separate mechanisms. */
 .blockNoteWrapper :global(.katex-display) {
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
   padding-bottom: var(--mantine-spacing-xs);
+  scrollbar-width: auto;
+  scrollbar-color: var(--rtwiki-scrollbar-thumb) var(--rtwiki-scrollbar-track);
+}
+
+@supports selector(::-webkit-scrollbar) {
+  .blockNoteWrapper :global(.katex-display::-webkit-scrollbar) {
+    width: var(--rtwiki-scrollbar-size);
+    height: var(--rtwiki-scrollbar-size);
+  }
+
+  .blockNoteWrapper :global(.katex-display::-webkit-scrollbar-track) {
+    background: var(--rtwiki-scrollbar-track);
+  }
+
+  .blockNoteWrapper :global(.katex-display::-webkit-scrollbar-thumb) {
+    background: var(--rtwiki-scrollbar-thumb);
+    border-radius: var(--rtwiki-scrollbar-radius);
+  }
+
+  .blockNoteWrapper :global(.katex-display::-webkit-scrollbar-thumb:hover) {
+    background: var(--rtwiki-scrollbar-thumb-hover);
+  }
 }
 
 .richRow {
@@ -100,10 +160,16 @@
   word-break: break-all;
 }
 
-/* Internal wiki links */
+/* Internal wiki links.
+ *
+ * A floating list, so it belongs in the same family as the other dropdowns. It is
+ * given `RTWIKI_SCROLL` at its call site in `blocknote-capabilities.tsx` rather than
+ * a `ScrollArea` wrapper, because BlockNote renders this picker into its own DOM and
+ * the class is the change that cannot alter where a keystroke scrolls.
+ */
 .wikiLinkPicker {
   width: 280px;
-  max-height: 320px;
+  max-height: var(--rtwiki-panel-max-height);
   overflow-y: auto;
 }
 

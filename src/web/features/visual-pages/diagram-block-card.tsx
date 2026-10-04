@@ -10,7 +10,7 @@ import {
 import { Reorder, useDragControls } from 'motion/react'
 import type { JSX } from 'react'
 import { useRef } from 'react'
-import { UI_TEXT } from '../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import type { CSSVars } from '../../style-props.js'
 import { ResizableBlockContainer } from '../rich-editor/blocks/block-resize.js'
 import { DiagramView } from '../rich-editor/blocks/diagram-view.js'
@@ -48,7 +48,6 @@ export interface DiagramBlockCardProps {
   mermaidBlockType: 'diagram' | 'mindMap'
   colorScheme: string
   fit: boolean
-  zoom: number
   renderSeq: number
   /** Persists a new stored size for this block. */
   onResize: (blockId: string, width: string, height: string) => void
@@ -71,7 +70,6 @@ export function DiagramBlockCard({
   mermaidBlockType,
   colorScheme,
   fit,
-  zoom,
   renderSeq,
   onResize,
   onEdit,
@@ -140,6 +138,10 @@ export function DiagramBlockCard({
         width={width}
         height={height}
         onCommit={(nextWidth, nextHeight) => onResize(block.id, nextWidth, nextHeight)}
+        // This card stacks an action row above the canvas inside the same box, so the
+        // shared controls floor is 29px short here and the card's `overflow: hidden`
+        // clipped the pad. `LAYOUT.visualPageBlockMinHeight` is that floor.
+        minHeight={LAYOUT.visualPageBlockMinHeight}
         liveStyleTarget={itemRef}
         testIdPrefix={`${pageType}-block-${index}`}
       >
@@ -245,7 +247,6 @@ export function DiagramBlockCard({
                 mermaidBlockType={mermaidBlockType}
                 colorScheme={colorScheme}
                 fit={fit}
-                zoom={zoom}
                 renderSeq={renderSeq}
                 testId={`${pageType}-block-${index}`}
               />

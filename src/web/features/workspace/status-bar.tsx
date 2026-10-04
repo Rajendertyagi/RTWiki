@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { Fragment, useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { getBacklinks, getOutgoingLinks } from '../../services/pages-api.js'
+import { RTWIKI_SCROLL } from '../../theme/registry.js'
 import { formatDate, formatRelativeTime } from '../../util/format-date.js'
 import { pagePlainText } from '../../util/page-preview-text.js'
 import type { StatusSaveState } from './save-state.js'
@@ -64,7 +65,7 @@ function InfoRow({ label, value }: InfoRowProps): JSX.Element {
  * floating layers at LAYOUT.overlayZIndex paint above it).
  *
  * Mirrors Trilium's bottom bar: a breadcrumb-style path on the left and a row
- * of metadata actions on the right — word/character count, last-modified time,
+ * of metadata actions on the right â€” word/character count, last-modified time,
  * a backlinks dropdown listing the pages that link here, a note-info popover,
  * and the save state.
  */
@@ -164,7 +165,7 @@ export function StatusBar({
 
   return (
     <div
-      className={classes.bar}
+      className={`${classes.bar} ${RTWIKI_SCROLL}`}
       role="status"
       aria-live="polite"
       data-testid="workspace-status-bar"
@@ -205,7 +206,7 @@ export function StatusBar({
                     {crumb.title}
                   </UnstyledButton>
                   <span className={classes.crumbSep} aria-hidden>
-                    ›
+                    â€º
                   </span>
                 </Fragment>
               ))}
@@ -224,7 +225,7 @@ export function StatusBar({
             size="xs"
             c="dimmed"
             className={classes.field}
-            title={`${UI_TEXT.statusWordsLabel}: ${wordCount} · ${UI_TEXT.statusCharsLabel}: ${charCount}`}
+            title={`${UI_TEXT.statusWordsLabel}: ${wordCount} Â· ${UI_TEXT.statusCharsLabel}: ${charCount}`}
             data-testid="status-word-count"
           >
             {UI_TEXT.statusWordChars
@@ -264,7 +265,7 @@ export function StatusBar({
               <Text size="xs" fw={600} c="dimmed" className={classes.dropdownHeader}>
                 {UI_TEXT.backlinksHeading}
               </Text>
-              <Stack gap={2} className={classes.backlinksList}>
+              <Stack gap={2} className={`${classes.backlinksList} ${RTWIKI_SCROLL}`}>
                 {backlinks?.map((entry) => (
                   <UnstyledButton
                     key={entry.id}
@@ -299,7 +300,7 @@ export function StatusBar({
               <Text size="xs" fw={600} c="dimmed" className={classes.dropdownHeader}>
                 {UI_TEXT.statusLinksLabel}
               </Text>
-              <Stack gap={2} className={classes.backlinksList}>
+              <Stack gap={2} className={`${classes.backlinksList} ${RTWIKI_SCROLL}`}>
                 {outgoing?.map((entry) => (
                   <UnstyledButton
                     key={entry.id}

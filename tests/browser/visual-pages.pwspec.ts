@@ -192,8 +192,21 @@ test.describe('dedicated diagram and mind map pages', () => {
     await dialog.getByRole('button', { name: /create/i }).click()
     await expect(page.getByTestId('diagram-rendered').locator('svg')).toBeVisible()
 
-    await page.getByTestId('diagram-zoom-in').click()
-    await expect(page.getByTestId('diagram-zoom-label')).toHaveText('125%')
+    // Zoom belongs to the block, not to the page: the page-level `--zoom-level` layer
+    // is gone, so the block's own control is the only one and it is what scales the
+    // drawing. Measured, not asserted from a label - see
+    // `diagram-workspace-layout.pwspec.ts` and the effective-scale tests.
+    await page
+      .locator('[data-testid="diagram-block-0-container"] [class*="_host_"]')
+      .first()
+      .hover()
+    await page.getByTestId('diagram-block-0-zoom-in').click()
+    const zoomed = await page
+      .locator('[data-testid="diagram-block-0-container"] [class*="_layer_"] svg')
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().width / el.clientWidth)
+    expect(zoomed).toBeCloseTo(1.25, 2)
+
     await page.getByTestId('diagram-refresh').click()
     await expect(page.getByTestId('diagram-rendered').locator('svg')).toBeVisible()
     await page.getByTestId('diagram-fullscreen').click()

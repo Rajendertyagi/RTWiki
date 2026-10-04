@@ -49,6 +49,32 @@ export function useToolbarOverflow(
   const itemsRef = useRef<ReactNode[]>(items)
   itemsRef.current = items
   const [split, setSplit] = useState<number | null>(null)
+  /**
+   * The split currently applied, mirrored in a ref so `measure` can tell a real
+   * change from a repeat.
+   *
+   * This is the fix for a live defect. React checks its nested-update budget inside
+   * `dispatchSetState`, *before* it decides whether the update is redundant — a
+   * `setState` to the value a component already holds is still a dispatch and still
+   * counts. So `measure` calling `setSplit` unconditionally on every pass, from an
+   * effect that depends on `split`, was a dispatch loop: render → measure →
+   * `setSplit` → effect re-runs because `split` is a dependency → measure again.
+   * React's own bailout never engaged because the dispatch was never skipped.
+   *
+   * Measured on the running app: editing an HTML source file raised React error #185
+   * ("maximum update depth exceeded") repeatedly, because every keystroke re-rendered
+   * the toolbar and restarted the loop.
+   *
+   * Only dispatching on an actual change lets the bailout do its job: a second
+   * measurement that reaches the same conclusion is now free.
+   */
+  const splitRef = useRef<number | null>(null)
+
+  const applySplit = useCallback((next: number | null): void => {
+    if (splitRef.current === next) return
+    splitRef.current = next
+    setSplit(next)
+  }, [])
 
   const measure = useCallback(() => {
     const bar = barRef.current
@@ -83,7 +109,7 @@ export function useToolbarOverflow(
     let used = 0
     for (const w of list) used += (used === 0 ? 0 : gap) + w
     if (used <= available) {
-      setSplit(null)
+      applySplit(null)
       return
     }
 
@@ -101,8 +127,8 @@ export function useToolbarOverflow(
     if (isDivider) {
       while (fit > 0 && isDivider(itemsRef.current[fit - 1])) fit -= 1
     }
-    setSplit(fit >= list.length ? null : Math.max(fit, 0))
-  }, [isDivider, moreButtonWidth])
+    applySplit(fit >= list.length ? null : Math.max(fit, 0))
+  }, [applySplit, isDivider, moreButtonWidth])
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `split` is a trigger, not a dependency — the observer must re-attach after a split so it can measure the controls that just moved out of the bar. Reading it here would be exactly the loop the width cache exists to prevent.
   useEffect(() => {

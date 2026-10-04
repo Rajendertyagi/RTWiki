@@ -1,4 +1,4 @@
-import { ActionIcon, Divider, Stack, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Divider, ScrollArea, Stack, Text, Tooltip } from '@mantine/core'
 import { IconLayoutSidebar } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
@@ -108,7 +108,12 @@ export function RightSidebar({
         </Tooltip>
       </div>
 
-      <div className={classes.scrollArea}>
+      {/*
+       * `ScrollArea` so the outline/backlinks/page-info column carries RTWiki's
+       * scrollbar. It is the only scrollable element in this pane and nothing scrolls
+       * it programmatically, so the conversion is a presentation change only.
+       */}
+      <ScrollArea className={classes.scrollArea} type="always" scrollbars="y">
         {/* The outline section is omitted entirely for a page type with no
             headings. Passing an empty list instead would render an "Outline"
             heading over "no headings", which is noise on a diagram page. */}
@@ -189,7 +194,7 @@ export function RightSidebar({
             {UI_TEXT.pageInfoUpdated}: {updatedDate}
           </Text>
         </Stack>
-      </div>
+      </ScrollArea>
     </aside>
   )
 }

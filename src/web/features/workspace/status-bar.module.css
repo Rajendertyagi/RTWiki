@@ -10,7 +10,9 @@
   padding: 0 0.25em;
   border-top: 1px solid var(--rtwiki-chrome-border);
   background: var(--rtwiki-chrome-bg);
-  /* One compact line; scroll horizontally on narrow widths instead of wrapping. */
+  /* One compact line; scroll horizontally on narrow widths instead of wrapping.
+   A one-axis strip, so it takes the shared scrollbar as a class from
+   `status-bar.tsx` rather than a `ScrollArea` — see `.rtwiki-scroll`. */
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
@@ -135,6 +137,8 @@
   margin-bottom: 4px;
 }
 
+/* The backlinks dropdown's list. A floating list, so it shares the dropdown
+   scrollbar; the class is applied from `status-bar.tsx`. */
 .backlinksList {
   max-height: 50vh;
   overflow-y: auto;

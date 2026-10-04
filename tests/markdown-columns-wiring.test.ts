@@ -170,7 +170,7 @@ describe('the browser spec seed for the unknown directive, verified here', () =>
   /**
    * A browser failure that turned out to be the spec's, not the product's.
    *
-   * The browser test seeds `:::warning\nbe careful\n` and then asserts on
+   * The browser test seeds an unclaimed name (`:::notice`) with `be careful` and then asserts on
    * `.rt-unknown-directive strong`. **`be careful` has no `**` markers**, so it
    * compiles to `<p>be careful</p>` and there is no `<strong>` element anywhere in
    * the document. The locator can never match, in any browser, for any build.
@@ -183,7 +183,7 @@ describe('the browser spec seed for the unknown directive, verified here', () =>
     const document = sharedDom().window.document
     const container = document.createElement('div')
     container.innerHTML = renderMarkdown(
-      'before paragraph\n\n:::warning\nbe careful\n\nafter paragraph\n'
+      'before paragraph\n\n:::notice\nbe careful\n\nafter paragraph\n'
     )
     document.body.append(container)
 
@@ -194,7 +194,7 @@ describe('the browser spec seed for the unknown directive, verified here', () =>
     // The unknown directive is surfaced, with its name.
     const unknown = container.querySelector('.rt-unknown-directive')
     expect(unknown, 'an unclaimed directive must be visible').not.toBeNull()
-    expect(unknown?.textContent).toContain('warning')
+    expect(unknown?.textContent).toContain('notice')
     expect(unknown?.textContent).toContain('be careful')
     // And there is no <strong>, because the seed has no emphasis markers. This
     // is the line that makes the browser locator's failure a diagnosis.
@@ -202,7 +202,7 @@ describe('the browser spec seed for the unknown directive, verified here', () =>
     // The first paragraph inside is the visible name; the second is the body.
     const paragraphs = [...(unknown?.querySelectorAll('p') ?? [])]
     expect(paragraphs[0]?.className).toBe('rt-unknown-directive__name')
-    expect(paragraphs[0]?.textContent).toBe(':::warning')
+    expect(paragraphs[0]?.textContent).toBe(':::notice')
     expect(paragraphs[1]?.textContent, 'the body renders as a paragraph').toBe('be careful')
   })
 
@@ -210,7 +210,7 @@ describe('the browser spec seed for the unknown directive, verified here', () =>
     const document = sharedDom().window.document
     const container = document.createElement('div')
     container.innerHTML = renderMarkdown(
-      'before paragraph\n\n:::warning\n**be careful**\n\nafter paragraph\n'
+      'before paragraph\n\n:::notice\n**be careful**\n\nafter paragraph\n'
     )
     document.body.append(container)
     expect(container.querySelector('.rt-unknown-directive strong')?.textContent).toBe('be careful')

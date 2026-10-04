@@ -530,6 +530,154 @@ test.describe('diagram templates', () => {
     await expect(menu).toBeHidden()
   })
 
+  /**
+   * The chooser is positioned by the toolbar's popover, and this is the test that
+   * says so.
+   *
+   * The panel used to render its own `Menu.Dropdown`, which is a positioned floating
+   * element in its own right. It had no `Menu.Target` to measure against — the
+   * toolbar's `Popover` is the trigger — so floating-ui fell back to the viewport
+   * origin. Measured at 1440x900: the chooser sat at `x: 0, y: 900` with a height of
+   * 1024px, every row at `x: 5`, and the trigger at `x: 1115, y: 46`. It looked like
+   * a panel belonging to the left edge of the page, ran off the bottom of the window,
+   * and its rows could not be clicked, so choosing a template inserted nothing.
+   *
+   * Asserted by comparing edges against the trigger rather than by `scrollWidth` or
+   * by a hardcoded coordinate, so the test states the relationship instead of
+   * restating a measurement that will differ on another display.
+   */
+  test('the rich-note chooser opens under its trigger and stays on screen', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const title = `ChooserPos ${Date.now()}`
+    await page.goto('/')
+    await page.locator('[aria-label="New page"]').first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(title)
+    await dialog.getByRole('button', { name: /create/i }).click()
+    await expect(page.locator('[data-testid="rich-editor"]')).toBeVisible()
+
+    const trigger = page.getByTestId('insert-diagram')
+    if ((await trigger.count()) === 0) {
+      await page.getByTestId('toolbar-more').click()
+      await trigger.waitFor({ state: 'visible', timeout: 5_000 })
+    }
+    await trigger.click()
+    const menu = page.getByTestId('insert-diagram-submenu')
+    await expect(menu).toBeVisible({ timeout: 5_000 })
+
+    const boxes = await page.evaluate(() => {
+      const read = (sel: string) => {
+        const el = document.querySelector(sel)
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, w: r.width, h: r.height }
+      }
+      const panelEl = document.querySelector('[data-testid="insert-diagram-submenu"]')
+      /*
+       * Everything is resolved relative to the popover that CONTAINS the chooser.
+       * The toolbar renders popovers of its own (the overflow panel, tooltips), so a
+       * document-wide `.mantine-Popover-dropdown` lookup can land on a different one —
+       * which measured a 701px viewport belonging to something else and failed a panel
+       * that was correctly capped at 320px.
+       *
+       * The inner list is deliberately not the height assertion: thirty templates are
+       * ~1000px of content, and with the cap inside the `ScrollArea` the unclipped
+       * list is legitimately taller than the window. Asserting on it measured content
+       * the reader never sees.
+       */
+      const frameEl = panelEl?.closest('.mantine-Popover-dropdown') ?? null
+      const viewportEl = frameEl?.querySelector('[data-scrollarea-viewport]') ?? null
+      const box = (el: Element | null) => {
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, w: r.width, h: r.height }
+      }
+      return {
+        trigger: read('[data-testid="insert-diagram"]'),
+        panel: box(panelEl),
+        frame: box(frameEl),
+        viewport: box(viewportEl)
+      }
+    })
+    expect(boxes.trigger, 'the trigger must be measurable').not.toBeNull()
+    expect(boxes.panel, 'the panel must be measurable').not.toBeNull()
+    expect(boxes.viewport, 'the chooser must have a ScrollArea viewport').not.toBeNull()
+
+    const {
+      trigger: t,
+      panel: p,
+      frame: f,
+      viewport: v
+    } = boxes as {
+      trigger: NonNullable<typeof boxes.trigger>
+      panel: NonNullable<typeof boxes.panel>
+      frame: NonNullable<typeof boxes.frame>
+      viewport: NonNullable<typeof boxes.viewport>
+    }
+
+    /*
+     * The panel is centred on its trigger, so its left edge can legitimately sit to
+     * the left of the trigger's own. What must hold is that the two overlap
+     * horizontally and that the panel is below — asserted as overlap rather than as
+     * an edge comparison, because an edge comparison would be asserting the popover's
+     * alignment strategy rather than the relationship the reader relies on.
+     *
+     * Every one of these failed on the old markup, where the panel reported `x: 0`
+     * while the trigger was at `x: 1115`, so there was no overlap at all.
+     */
+    const overlap = Math.min(p.right, t.right) - Math.max(p.x, t.x)
+    expect(overlap, 'the chooser must be horizontally aligned with its trigger').toBeGreaterThan(0)
+    expect(
+      Math.abs((p.x + p.right) / 2 - (t.x + t.right) / 2),
+      'the chooser must be centred under its trigger'
+    ).toBeLessThan(120)
+    expect(p.y, 'the chooser must open below its trigger').toBeGreaterThanOrEqual(t.y)
+    expect(p.y, 'the chooser must not be pinned to the top of the window').toBeGreaterThan(0)
+
+    /*
+     * On screen, and capped — measured on the frame and the viewport, the two boxes a
+     * reader sees. Before the cap moved into the `ScrollArea` the assertion ran against
+     * the inner list, which is now legitimately ~1000px of content clipped by the
+     * viewport, so it was measuring content nobody can see.
+     */
+    expect(f.bottom, 'the chooser frame must fit in the window').toBeLessThanOrEqual(900)
+    expect(v.h, 'the viewport must be capped rather than grow').toBeLessThanOrEqual(320)
+    expect(v.bottom, 'the viewport must fit in the window').toBeLessThanOrEqual(900)
+
+    // Every row is reachable, which is what the old position made impossible.
+    const first = page.getByTestId('insert-diagram-option-flowchart')
+    await expect(first).toBeVisible()
+    const rowBox = await first.boundingBox()
+    expect(rowBox, 'a row must be clickable').not.toBeNull()
+    expect((rowBox as { y: number }).y).toBeGreaterThanOrEqual(0)
+    expect(
+      (rowBox as { y: number; height: number }).y + (rowBox as { height: number }).height
+    ).toBeLessThanOrEqual(900)
+
+    // And it still inserts: a visible, on-screen, unclickable panel is the old bug.
+    await first.click()
+    await expect(page.locator('[data-content-type="diagram"]').first()).toBeVisible({
+      timeout: 10_000
+    })
+
+    /*
+     * Escape must still dismiss it.
+     *
+     * Asserted here rather than only in the catalogue test above, because this is the
+     * behaviour that broke when the panel stopped rendering its own positioned
+     * dropdown: Mantine closes a `Popover` on Escape through `onKeyDownCapture` on
+     * the *dropdown*, so the key only arrives when focus is inside the panel. The old
+     * `Menu.Dropdown` focused itself when it opened and Escape worked; a plain
+     * container does not, and the chooser became undismissable from the keyboard.
+     */
+    await trigger.click()
+    await expect(menu).toBeVisible()
+    await expect(first).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
   test('the template list has no duplicate labels', async () => {
     const labels = Object.values(DIAGRAM_TEMPLATES).map((d) => d.label)
     const dupes = labels.filter((l, i) => labels.indexOf(l) !== i)

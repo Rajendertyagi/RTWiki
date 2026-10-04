@@ -102,14 +102,17 @@
 /* The trailing dropdown holds real menu rows - a plain template is a Menu.Item,
    a template with variants a Menu.Sub - so it is a single column of text rows,
    not the wrapped grid of icon buttons this replaced. Mantine gives its items
-   width:100%, which only lines up as a column if the container is one. */
+   width:100%, which only lines up as a column if the container is one.
+
+   The column shape and the padding stay here, on the `Menu.Dropdown`. The cap
+   and the scrolling moved into the `ScrollArea` that wraps the rows, so this
+   dropdown carries RTWiki's scrollbar rather than a native one and the cap comes
+   from `LAYOUT.panelMaxHeight` rather than a literal in this file. */
 .moreMenu {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   padding: var(--mantine-spacing-xs);
-  max-height: 320px;
-  overflow-y: auto;
 }
 
 /* The short mark at the left of a variant row - a direction arrow, or a syntax

@@ -9,9 +9,52 @@ import { purgeUntitledPages } from './utils/cleanup.js'
 
 let titleSeq = 0
 
+/** One mid-drag measurement: pointer delta and the box's rendered size at that instant. */
+interface ResizeSample {
+  dx: number
+  width: number
+  height: number
+}
+
 function uniqueTitle(base: string): string {
   titleSeq += 1
   return `${base} ${Date.now()}-${titleSeq}`
+}
+
+/** Drags the note block's corner grip by (dx, dy) with a real pointer. */
+async function dragHandle(page: Page, dx: number, dy: number): Promise<void> {
+  const handle = page.getByTestId('diagram-resize-handle')
+  await handle.scrollIntoViewIfNeeded()
+  const box = await handle.boundingBox()
+  if (!box) throw new Error('resize handle not visible')
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  for (let step = 1; step <= 6; step += 1) {
+    await page.mouse.move(from.x + (dx * step) / 6, from.y + (dy * step) / 6)
+  }
+  await page.mouse.up()
+  await page.waitForTimeout(700)
+}
+
+/**
+ * The width a note block may reach: the content box of the pane it sits in.
+ *
+ * Measured from the DOM rather than hardcoded, because this is the ceiling the drag
+ * clamps against and a stale figure would quietly turn the tracking assertion into a
+ * no-op.
+ */
+async function columnCeiling(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>('[data-testid="diagram-preview"]')
+    if (!pane) return Number.POSITIVE_INFINITY
+    const cs = getComputedStyle(pane)
+    return (
+      pane.clientWidth -
+      (Number.parseFloat(cs.paddingLeft) || 0) -
+      (Number.parseFloat(cs.paddingRight) || 0)
+    )
+  })
 }
 
 async function seedRich(
@@ -252,21 +295,126 @@ test.describe('diagram and mind map resizing', () => {
     const handle = page.getByTestId('diagram-resize-handle')
     const box = await handle.boundingBox()
     if (!box) throw new Error('resize handle not visible')
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(box.x + 140, box.y + 90, { steps: 10 })
-    await page.mouse.up()
+    const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
 
-    const width = await container.getAttribute('data-width')
-    const height = await container.getAttribute('data-height')
-    // Height is unclamped and must grow; width clamps to the document column
-    // (the stored 500px may exceed it, in which case the clamp pulls it in).
-    expect(Number(height)).toBeGreaterThan(340)
-    const workspace = page.getByTestId('rich-editor')
-    const wsBox = await workspace.boundingBox()
-    const containerBox = await container.boundingBox()
-    expect(containerBox?.width ?? 0).toBeLessThanOrEqual((wsBox?.width ?? 9999) + 2)
-    expect(Number(width)).toBeGreaterThanOrEqual(240)
+    /*
+     * Sampled from `getBoundingClientRect` inside the `pointermove` that publishes the
+     * size, which is what the reader actually sees. The previous version of this test
+     * read `data-width`/`data-height` instead, and therefore passed whatever the box
+     * did: the drag handler writes those attributes from its own state, so a box that
+     * never moved still produced a plausible number. It also asserted
+     * `width >= 240`, which `clampWidth`'s own floor guarantees and which therefore
+     * could not fail, and asserted the container was NOT wider than the workspace —
+     * which is the symptom of the ceiling being reached, recorded as correct.
+     */
+    const before = await container.evaluate((el) => ({
+      width: el.getBoundingClientRect().width,
+      height: el.getBoundingClientRect().height
+    }))
+    await page.evaluate((origin) => {
+      const w = window as unknown as { __samples?: ResizeSample[] }
+      w.__samples = []
+      document.addEventListener('pointermove', (event) => {
+        const el = document.querySelector<HTMLElement>('[data-testid="diagram-container"]')
+        if (!el || !w.__samples) return
+        w.__samples.push({
+          dx: Math.round(event.clientX - origin.x),
+          width: Math.round(el.getBoundingClientRect().width),
+          height: Math.round(el.getBoundingClientRect().height)
+        })
+      })
+    }, from)
+
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    for (let step = 1; step <= 6; step += 1) {
+      await page.mouse.move(from.x + step * 20, from.y + step * 15)
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(900)
+
+    const samples = await page.evaluate(() => {
+      const w = window as unknown as { __samples?: ResizeSample[] }
+      return w.__samples ?? []
+    })
+    expect(samples.length, 'the drag must produce samples to judge').toBeGreaterThan(2)
+
+    /*
+     * The rendered width follows the pointer within a pixel, for every sample whose
+     * target is still inside the column. Samples past the ceiling are expected to sit
+     * at the ceiling — that is 6.1 working — so they are asserted as clamped rather
+     * than skipped, which would leave the assertion free to pass on nothing.
+     */
+    const ceiling = await columnCeiling(page)
+    for (const sample of samples) {
+      const wanted = before.width + sample.dx
+      if (wanted <= ceiling) {
+        expect(
+          Math.abs(sample.width - wanted),
+          `rendered width ${sample.width} must follow pointer delta ${sample.dx} from ${before.width}`
+        ).toBeLessThanOrEqual(2)
+      } else {
+        expect(
+          Math.abs(sample.width - ceiling),
+          `past the column ceiling the box must sit at ${ceiling}, not ${sample.width}`
+        ).toBeLessThanOrEqual(2)
+      }
+    }
+
+    // The rendered HEIGHT grew, and by the pointer's own vertical delta. Height has no
+    // column ceiling, so it must track.
+    const after = await container.evaluate((el) => ({
+      width: el.getBoundingClientRect().width,
+      height: el.getBoundingClientRect().height
+    }))
+    expect(
+      after.height - before.height,
+      'a vertical drag must grow the rendered height by ~90px'
+    ).toBeGreaterThan(80)
+    expect(after.height - before.height).toBeLessThanOrEqual(100)
+
+    // What is stored is what the box actually reached, not what was asked for.
+    const storedW = Number(await container.getAttribute('data-width'))
+    const storedH = Number(await container.getAttribute('data-height'))
+    expect(
+      Math.abs(storedW - after.width),
+      'stored width must equal the rendered width'
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(storedH - after.height),
+      'stored height must equal the rendered height'
+    ).toBeLessThanOrEqual(1)
+  })
+
+  test('a narrowed block can be widened again with the same grip', async ({ page, request }) => {
+    /*
+     * Guards the contract in `DIAGRAM_BLOCK_SPECIFICATION.md` 2.3. The report this
+     * replaced claimed a block narrowed by the corner grip could never be widened
+     * again without a preset, which would have forced a second grip on each side edge.
+     * Measured instead: the same grip does both, and this test fails if that regresses.
+     *
+     * The width ceiling is the note's text column, so a block at full width correctly
+     * does not grow. The sequence below therefore starts from full width, narrows, and
+     * only then checks that it can grow back.
+     */
+    const title = uniqueTitle('Resize Round Trip')
+    await seedRich(request, title, [{ id: 'd', type: 'diagram', content: 'graph TD\n  A-->B' }])
+    await openNote(page, title)
+    const container = page.getByTestId('diagram-container')
+    await expect(container).toBeVisible()
+    const widthOf = async () => container.evaluate((el) => el.getBoundingClientRect().width)
+
+    const full = await widthOf()
+    await dragHandle(page, -240, 0)
+    const narrowed = await widthOf()
+    expect(narrowed, 'dragging left must narrow the rendered block').toBeLessThan(full - 40)
+
+    await dragHandle(page, 240, 0)
+    const widened = await widthOf()
+    expect(widened, 'the same grip must widen the block again without a preset').toBeGreaterThan(
+      narrowed + 40
+    )
+    expect(widened, 'widening stops at the column, never past it').toBeLessThanOrEqual(full + 2)
   })
 
   test('size presets apply clamped dimensions via keyboard-accessible buttons', async ({

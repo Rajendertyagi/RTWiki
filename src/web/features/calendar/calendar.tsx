@@ -1,4 +1,14 @@
-import { ActionIcon, Box, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core'
+import {
+  ActionIcon,
+  Box,
+  Button,
+  Group,
+  Paper,
+  ScrollArea,
+  Stack,
+  Text,
+  Tooltip
+} from '@mantine/core'
 import { Schedule, type ScheduleEventData, type ScheduleViewLevel } from '@mantine/schedule'
 import {
   DEFAULT_PERIOD_NOTIFICATIONS,
@@ -327,9 +337,9 @@ export function Calendar({ pages, onClose }: CalendarProps): JSX.Element {
               {UI_TEXT.scheduleAgenda}
             </Text>
           </Group>
-          <Box className={classes.todayScroll}>
+          <ScrollArea className={classes.todayScroll} type="always" scrollbars="y">
             <TodayAgenda events={todayEvents} />
-          </Box>
+          </ScrollArea>
         </Paper>
       </Box>
 

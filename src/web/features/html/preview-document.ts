@@ -1,3 +1,4 @@
+import { LAYOUT } from '../../config/index.js'
 import { CHANNEL_ID_PATTERN } from './preview-messages.js'
 
 /**
@@ -173,6 +174,65 @@ export function generateChannelId(): string {
 }
 
 /**
+ * The scrollbar rules for the sandboxed preview document.
+ *
+ * ## Why the preview needs its own copy
+ *
+ * Evidence, not assumption: the iframe element (`.frame` in
+ * `html-preview.module.css`) is `flex: 1` with no `overflow`, and its comment
+ * records that the sandboxed document scrolls *inside* the frame. So the scroll
+ * container for a previewed page is the `srcdoc` document, not any element in the
+ * application tree.
+ *
+ * That has two consequences. A Mantine `ScrollArea` cannot reach it — the component
+ * lives in the parent document and the frame is a separate one — and neither can
+ * `.rtwiki-scroll` from `customization.css`, because custom properties and
+ * stylesheets do not cross an iframe boundary.
+ *
+ * ## Why it is a copy rather than the shared class
+ *
+ * This string cannot read the application's tokens, and it should not try: it is
+ * injected into a document whose background and text colour are the *page
+ * author's*, chosen at runtime. So the geometry comes from `LAYOUT.scrollbar.size`,
+ * which is the same number the application's own scrollbars use, and the thumb is
+ * mixed from `currentColor` rather than from a literal grey.
+ *
+ * `currentColor` is what makes this work without knowing the theme: the thumb takes
+ * the document's own text colour at low alpha, so it is dark on a light preview and
+ * light on a dark one. A hardcoded grey would be invisible against one of them, and
+ * `prefers-color-scheme` inside the frame follows the OS, not RTWiki's own theme
+ * toggle, so it could not be trusted either.
+ *
+ * The standard properties and the vendor pseudo-elements are kept as two separate
+ * mechanisms for the same reason as in `customization.css`: a Chromium browser that
+ * sees a non-`auto` `scrollbar-width` ignores `::-webkit-scrollbar` entirely, so
+ * declaring both without resetting the standard property would silently leave the
+ * browser's own thick bar in place.
+ */
+function previewScrollbarCss(): string {
+  const size = LAYOUT.scrollbar.size
+  const radius = size / 2
+  return [
+    'html {',
+    '  scrollbar-width: auto;',
+    '  scrollbar-color: color-mix(in srgb, currentColor 32%, transparent) transparent;',
+    '}',
+    'html::-webkit-scrollbar {',
+    `  width: ${size}px;`,
+    `  height: ${size}px;`,
+    '}',
+    'html::-webkit-scrollbar-track { background: transparent; }',
+    'html::-webkit-scrollbar-thumb {',
+    '  background: color-mix(in srgb, currentColor 32%, transparent);',
+    `  border-radius: ${radius}px;`,
+    '}',
+    'html::-webkit-scrollbar-thumb:hover {',
+    '  background: color-mix(in srgb, currentColor 48%, transparent);',
+    '}'
+  ].join('\n')
+}
+
+/**
  * Builds the complete srcdoc string. Throws PreviewBuildError on invalid
  * inputs (bad nonce/channel) — callers must render recoverable UI.
  */
@@ -219,7 +279,7 @@ export function buildPreviewDocument(input: PreviewDocumentInput): string {
   const documentColor = isPlainCssColor(input.documentColor)
     ? `\n  color: ${input.documentColor};`
     : ''
-  const transparentCanvasBlock = `<style>\nhtml,\nbody {\n  background: ${documentBackground};${documentColor}\n}\n</style>`
+  const transparentCanvasBlock = `<style>\nhtml,\nbody {\n  background: ${documentBackground};${documentColor}\n}\n${previewScrollbarCss()}\n</style>`
 
   const scriptBlock =
     input.jsEnabled && input.javascript.trim().length > 0

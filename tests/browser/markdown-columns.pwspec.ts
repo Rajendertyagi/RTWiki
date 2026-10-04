@@ -438,10 +438,14 @@ test.describe(':::columns', () => {
     // document, so the locator below could never match in any browser. The intent
     // is to prove the body is rendered *as Markdown*, which needs real emphasis.
     // Pinned in `tests/markdown-columns-wiring.test.ts`.
+    // `:::notice`, not `:::warning`. `markdown-callouts.ts` claims `:::warning`, so
+    // it now renders as a callout and would never produce the
+    // `.rt-unknown-directive` this test is about. `:::notice` is measured to still
+    // fall through to the fallback.
     await seedMarkdown(
       request,
       title,
-      'before paragraph\n\n:::warning\n**be careful**\n\nafter paragraph\n'
+      'before paragraph\n\n:::notice\n**be careful**\n\nafter paragraph\n'
     )
     await openPage(page, title)
 
@@ -451,7 +455,7 @@ test.describe(':::columns', () => {
     // The body of the unknown directive is still rendered, as Markdown.
     await expect(preview.locator('.rt-unknown-directive strong')).toHaveText('be careful')
     // And the name is visible, so the reader can see what was not recognised.
-    await expect(preview.locator('.rt-unknown-directive__name')).toContainText('warning')
+    await expect(preview.locator('.rt-unknown-directive__name')).toContainText('notice')
   })
 
   test('an invalid width is shown rather than silently accepted', async ({ page, request }) => {

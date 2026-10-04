@@ -60,6 +60,10 @@ const ZOOM_OUT = 0.8
  * Capped so full screen always makes a diagram *bigger and never absurd*, which is
  * what the user asked it for; the zoom buttons cover the rest, and they are in the
  * overlay.
+ *
+ * The other end of the range is `1`, and that is not a fallback value: a picture the
+ * layout has already fitted to the overlay has nothing to gain, and `1` is the correct
+ * answer for it. See `fitToScreen`.
  */
 const FULLSCREEN_FIT_MAX = 4
 
@@ -163,6 +167,16 @@ export function DiagramView({ children, testIdPrefix }: DiagramViewProps): JSX.E
     setView({ x: 0, y: 0, z: 1 })
   }, [])
 
+  /**
+   * The reader's own magnification, readable from inside a stable callback.
+   *
+   * `fitToScreen` must not close over `view`, or it would be a new function on every
+   * pan and its effect would re-run — and re-running it is what re-derives fit. A ref
+   * keeps the callback identity constant while the value stays current.
+   */
+  const viewRef = useRef(view)
+  viewRef.current = view
+
   // Escape closes full screen, because that is what a full screen anything should do.
   useEffect(() => {
     if (!fullscreen) return
@@ -208,11 +222,12 @@ export function DiagramView({ children, testIdPrefix }: DiagramViewProps): JSX.E
       stage.style.removeProperty('--stage-height')
       // The screen fit goes too, and it has to be removed **explicitly**. React owns
       // the three properties in this element's `style` prop and rewrites those, but it
-      // has no idea `--view-fit` exists and will never clear it. Left behind, it
-      // multiplies into the transform in the box as well and the diagram comes back
-      // from full screen enormously magnified and cropped - which is the very symptom
-      // this work is fixing, reintroduced by the fix.
+      // has no idea `--view-fit` or `--view-fit-offset` exist and will never clear
+      // them. Left behind, they multiply into the transform in the box as well and the
+      // diagram comes back from full screen enormously magnified, offset and cropped -
+      // which is the very symptom this work is fixing, reintroduced by the fix.
       layer.style.removeProperty('--view-fit')
+      layer.style.removeProperty('--view-fit-offset')
       if (layer.parentElement !== stage) stage.appendChild(layer)
       return
     }
@@ -226,18 +241,70 @@ export function DiagramView({ children, testIdPrefix }: DiagramViewProps): JSX.E
   }, [fullscreen])
 
   /**
-   * The extra scale full screen applies so the diagram actually fills the screen.
+   * The extra scale full screen applies so the diagram actually fills the screen, and
+   * the centring that goes with it. Both are written only while full screen is open and
+   * removed with it, so the box view is untouched.
    *
-   * Measured before this existed: at a 1600x950 window the overlay covered the
-   * whole viewport and the diagram sat in the middle of it at 426x414, unchanged
-   * from its size in the box. "Full screen" was a big empty canvas.
+   * ## The contract
    *
-   * The scale is measured against the picture's **current laid-out box** rather than
-   * its natural size, because the layout already caps the picture at the container
-   * (`max-width: 100%` on the SVG). Measuring the natural size as well would apply
-   * that cap twice and overshoot. `--view-fit` is multiplied into the same transform
-   * as the reader's own zoom, so the two compose instead of fighting, and it is
-   * dropped on close along with the rest of the overlay.
+   * **Fit is the scale at which the picture fills the viewport on its limiting axis.**
+   * That is the whole of it, and it is derived from two numbers: the overlay's size and
+   * the picture's size. There is no constant, no margin and no remembered value.
+   *
+   * Three properties make that contract deterministic, and each replaces a measured
+   * failure:
+   *
+   * 1. **Measured from the picture's LAYOUT box, not its painted box.**
+   *    `clientWidth`/`clientHeight` on the `<svg>` are layout metrics and are unaffected
+   *    by `transform`; `getBoundingClientRect()` is not. The previous version measured
+   *    the rect, so the reader's own zoom was inside the measurement: at a 1.25 zoom on a
+   *    wide diagram the ratio fell to 0.80, was clamped to `1`, and fit silently did
+   *    nothing at all. Fit is a property of the drawing and the screen, so it must not
+   *    contain the reader's magnification. `clientWidth` is on `Element`, so it exists on
+   *    an inline `<svg>` (measured: 196x168 for a two-node flowchart); `offsetWidth` does
+   *    **not** — that is `HTMLElement` only, and reads `undefined` here.
+   *
+   * 2. **Clamped to [1, FULLSCREEN_FIT_MAX], so it can only ever make a diagram
+   *    bigger.** `1` is the "it already fills the screen" answer, which is a real answer
+   *    and now a deterministic one: a wide diagram is capped to the overlay's width by
+   *    `max-width: 100%` before fit is computed, so it genuinely has nothing to gain and
+   *    fit is exactly `1`. The upper bound is the existing product decision that a
+   *    two-node flowchart is a 200px drawing and scaling it to a 4K screen turns its
+   *    labels into furniture.
+   *
+   * 3. **Composed with the reader's zoom, never substituted for it.** `--view-fit`
+   *    multiplies into the same `scale()` as `--view-scale`, so the effective
+   *    magnification is exactly `viewScale x fit` — one product, both terms known, both
+   *    readable from the computed matrix.
+   *
+   * ## Centring, and why it cannot break reachability
+   *
+   * The scale is applied with `transform-origin: 0 0` (see `diagram-view.module.css`,
+   * and the note there on why the origin cannot be the centre), so a fitted picture
+   * grows from the overlay's top-left and would otherwise sit in that corner with a band
+   * of empty screen beside it. "Fills the screen" with the content jammed into one
+   * corner is not filling the screen.
+   *
+   * The offset is therefore chosen in **painted** space, because that is where the
+   * requirement lives:
+   *
+   *     paintedStart = max(0, (viewport - paintedSize) / 2)      per axis
+   *
+   * i.e. centre the picture, and when it is too big to centre, put its start edge on the
+   * start edge of the screen. That `max(0, …)` is what keeps F1 true: it is the only
+   * place a value is clamped, and what it clamps is the picture's **start** coordinate to
+   * 0, so every pixel of overflow stays end-side and reachable by scrolling. Measured
+   * reachability in full screen is unchanged; see `diagram-zoom-reachability.pwspec.ts`.
+   *
+   * Turning that into the custom property needs one number the transform hides: the
+   * picture's own origin inside the layer. It is not `(0, 0)`, and it is not derivable
+   * from the styles - `.layer` centres its child, the Diagram page's `.blockCanvas` and
+   * `.svgInner` centre again, and the Rich Note's `.svgHost` centres a third way. So it
+   * is measured, with the fit cleared for one synchronous read: both writes and both
+   * reads land before the browser paints, so an unfitted picture is never displayed.
+   * Assuming `(0, 0)` instead - which needs no measurement at all - puts a 4x-fitted
+   * 196px picture at a left offset of **2816px** in a 1440px overlay, four fifths of it
+   * off the screen.
    */
   const fitToScreen = useCallback((): void => {
     const layer = layerRef.current
@@ -248,19 +315,44 @@ export function DiagramView({ children, testIdPrefix }: DiagramViewProps): JSX.E
     // and Mermaid's own output nests no `svg` before the root one.
     const picture = layer.querySelector('svg') as SVGElement | null
     if (picture === null) return
-    // Measure with the previous fit removed, or the second measurement compounds the
-    // first. Both writes land before the browser paints.
+    const viewportWidth = overlay.clientWidth
+    const viewportHeight = overlay.clientHeight
+    if (viewportWidth <= 0 || viewportHeight <= 0) return
+    // Layout metrics: unaffected by the transform, unlike the bounding rect.
+    const layoutWidth = picture.clientWidth
+    const layoutHeight = picture.clientHeight
+    if (layoutWidth <= 0 || layoutHeight <= 0) return
+
+    const { x: panX, y: panY, z: scale } = viewRef.current
+
+    // The picture's origin inside the layer, read with the fit neutralised so that the
+    // only remaining transform is the reader's own, whose magnification is known.
     layer.style.setProperty('--view-fit', '1')
-    const box = picture.getBoundingClientRect()
-    if (box.width <= 0 || box.height <= 0) return
-    const overlayBox = overlay.getBoundingClientRect()
-    if (overlayBox.width <= 0 || overlayBox.height <= 0) return
-    const fit = Math.min(
-      overlayBox.width / box.width,
-      overlayBox.height / box.height,
+    layer.style.setProperty('--view-fit-offset', '0px, 0px')
+    const layerBox = layer.getBoundingClientRect()
+    const pictureBox = picture.getBoundingClientRect()
+    const originX = (pictureBox.left - layerBox.left - panX) / scale
+    const originY = (pictureBox.top - layerBox.top - panY) / scale
+
+    const raw = Math.min(
+      viewportWidth / layoutWidth,
+      viewportHeight / layoutHeight,
       FULLSCREEN_FIT_MAX
     )
-    layer.style.setProperty('--view-fit', fit > 1 ? String(Math.round(fit * 1000) / 1000) : '1')
+    const fit = Math.max(1, Math.round(raw * 1000) / 1000)
+    // The reader's magnification composed with the screen fit: one product, which is
+    // exactly what `--view-scale * --view-fit` evaluates to inside the `scale()`.
+    const total = fit * scale
+
+    // Comma-separated, because `translate()` takes its two values that way. See the
+    // note on `transform` in `diagram-view.module.css`.
+    const startX = Math.max(0, Math.round((viewportWidth - layoutWidth * total) / 2))
+    const startY = Math.max(0, Math.round((viewportHeight - layoutHeight * total) / 2))
+    layer.style.setProperty('--view-fit', String(fit))
+    layer.style.setProperty(
+      '--view-fit-offset',
+      `${Math.round(startX - panX - total * originX)}px, ${Math.round(startY - panY - total * originY)}px`
+    )
   }, [])
 
   // Refit whenever full screen opens, and whenever the window changes size while it

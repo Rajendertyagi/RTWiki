@@ -28,12 +28,19 @@
   margin-bottom: 6px;
 }
 
+/* The section list. The vertical axis is the `ScrollArea` that wraps it, so this
+   rule keeps the column shape and the gap and no longer declares `overflow-y`. */
 .navList {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-height: 0;
-  overflow-y: auto;
+}
+
+/* The scroll area that gives the section list RTWiki's scrollbar and its height. */
+.navScroll {
+  flex: 1;
+  min-height: 0;
 }
 
 .navItem {

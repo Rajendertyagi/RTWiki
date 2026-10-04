@@ -10,6 +10,7 @@ import type { EditorStatus } from '../html-editor/use-codemirror.js'
 import { DiagramTemplateBar } from '../rich-editor/blocks/diagram-template-bar.js'
 import type { AnyRichEditor } from '../rich-editor/schema.js'
 import type { DiagramCreateActions } from '../visual-pages/mermaid-workspace.js'
+import type { EditorCapabilities } from '../workspace/capabilities.js'
 import type { StatusSaveState } from '../workspace/status-bar.js'
 import { EditorHeader } from './editor-header.js'
 import classes from './page-workspace.module.css'
@@ -32,6 +33,21 @@ const RichToolbar = lazy(() =>
   import('../rich-editor/rich-editor.js').then((m) => ({ default: m.RichToolbar }))
 )
 
+/**
+ * The shared toolbar shell, lazily loaded for the same reason `RichToolbar` is.
+ *
+ * It was imported statically at first and that was a measurable regression: the
+ * model names 36 Tabler icons, so a static import pulled the whole icon set plus
+ * Mantine's `ActionIcon`, `Tooltip` and `Popover` into the **eager** entry chunk,
+ * where the running app's own toolbar has never been. Verified in the built
+ * output before the change — `data-toolbar-item` was present in `index-*.js`.
+ * After the change the shell and its icons are in a lazy chunk, matching the
+ * toolbar that was already there.
+ */
+const DocumentToolbar = lazy(() =>
+  import('../workspace/document-toolbar.js').then((m) => ({ default: m.DocumentToolbar }))
+)
+
 // Dedicated Diagram / Mind Map workspaces share one lazily loaded component
 // (Mermaid itself is further code-split inside the render pipeline).
 const MermaidPageWorkspace = lazy(() => import('../visual-pages/mermaid-workspace.js'))
@@ -41,8 +57,6 @@ const MarkdownPageWorkspace = lazy(() => import('../markdown/markdown-workspace.
 
 interface PageWorkspaceProps {
   page: Page
-  /** Display-only parent chain for the open page (no navigation). */
-  breadcrumb?: string[]
   /** Persists editor content and syncs the pages list. */
   onSaveContent?: (id: string, content: string) => Promise<boolean>
   onBack: () => void
@@ -75,7 +89,6 @@ interface PageWorkspaceProps {
 
 export function PageWorkspace({
   page,
-  breadcrumb = [],
   onSaveContent,
   onBack,
   onRenamePage,
@@ -111,15 +124,54 @@ export function PageWorkspace({
   // travel together in something the setter treats as a plain value.
   const [diagramActions, setDiagramActions] = useState<DiagramCreateActions | null>(null)
 
-  const wantsToolbarRow =
-    page.pageType === 'rich' || page.pageType === 'html' || page.pageType === 'diagram'
+  /*
+   * The Markdown page's editing capabilities, published by its workspace.
+   *
+   * Held here, in the component that owns the toolbar row, and handed down the
+   * same way `richEditor` and `diagramActions` are — so the row renders whatever
+   * the active surface published, with no per-surface branch deciding what the
+   * bar contains. Null until the workspace mounts and null again when it
+   * unmounts, so switching tabs cannot leave a bar whose commands act on a
+   * detached view.
+   */
+  const [markdownCapabilities, setMarkdownCapabilities] = useState<EditorCapabilities | null>(null)
+
+  /*
+   * The Markdown page's Edit/Preview switch, published by its workspace.
+   *
+   * A node rather than capabilities: it is a view control, not a formatting
+   * command, so it does not belong in the capability model. It renders in the
+   * shared row's `trailing` slot — the same slot the Diagram page's creation
+   * controls use, so a surface-owned action always lands in the same place on
+   * the bar rather than in a row of its own.
+   */
+  const [markdownViewSwitch, setMarkdownViewSwitch] = useState<ReactNode | null>(null)
+
+  /*
+   * The row, for every page type.
+   *
+   * It used to exclude Markdown, which is the whole reason that page's toolbar
+   * had nowhere to go and ended up in a row of its own below the header. There is
+   * no page type left that has no editing surface, so the row is unconditional —
+   * stated as a constant rather than a comparison because a comparison over a
+   * four-value union that is always true is a lie the type checker is right to
+   * reject, and a new page type then gets the row by default instead of silently
+   * losing it.
+   */
+  const wantsToolbarRow = true
 
   return (
     <div className={classes.workspace}>
       {wantsToolbarRow && (
         <div
           className={classes.toolbarRow}
-          data-testid={page.pageType === 'diagram' ? 'diagram-toolbar-row' : 'rich-toolbar-row'}
+          data-testid={
+            page.pageType === 'diagram'
+              ? 'diagram-toolbar-row'
+              : page.pageType === 'markdown'
+                ? 'markdown-toolbar-row'
+                : 'rich-toolbar-row'
+          }
           aria-busy={page.pageType === 'rich' && !richEditor}
         >
           {page.pageType === 'rich' ? (
@@ -168,6 +220,36 @@ export function PageWorkspace({
               </Button>
               <DiagramTemplateBar onPick={diagramActions.pickTemplate} />
             </Group>
+          ) : page.pageType === 'markdown' ? (
+            // Rendered only once the workspace has published its capabilities, so
+            // a control cannot appear before there is an editor to act on. The
+            // skeleton is the same one the Rich Note uses while BlockNote loads,
+            // which keeps the row from changing height as a page type changes.
+            markdownCapabilities ? (
+              // Suspended because the shell is lazily loaded, and the fallback is
+              // the same skeleton the Rich Note uses — so switching to a Markdown
+              // page does not change the row's height while the chunk arrives.
+              <Suspense
+                fallback={
+                  <div className={classes.toolbarSkeleton} aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                }
+              >
+                <DocumentToolbar
+                  capabilities={markdownCapabilities}
+                  trailing={markdownViewSwitch}
+                />
+              </Suspense>
+            ) : (
+              <div className={classes.toolbarSkeleton} aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            )
           ) : (
             <div className={classes.toolbarSkeleton} aria-hidden="true">
               <span />
@@ -191,7 +273,6 @@ export function PageWorkspace({
         <PageEditors
           key={page.id}
           page={page}
-          breadcrumb={breadcrumb}
           linkablePages={linkablePages}
           onOpenPageLink={onOpenPageLink}
           sourceField={htmlSourceField}
@@ -205,6 +286,8 @@ export function PageWorkspace({
           onRichEditorReady={setRichEditor}
           onToolbarReady={setHtmlToolbar}
           onDiagramCreateActionsReady={setDiagramActions}
+          onMarkdownCapabilitiesReady={setMarkdownCapabilities}
+          onMarkdownViewSwitchReady={setMarkdownViewSwitch}
         />
       </div>
     </div>
@@ -220,7 +303,6 @@ export function PageWorkspace({
  */
 function PageEditors({
   page,
-  breadcrumb,
   linkablePages,
   onOpenPageLink,
   sourceField,
@@ -233,10 +315,11 @@ function PageEditors({
   onSaveStateChange,
   onRichEditorReady,
   onToolbarReady,
-  onDiagramCreateActionsReady
+  onDiagramCreateActionsReady,
+  onMarkdownCapabilitiesReady,
+  onMarkdownViewSwitchReady
 }: {
   page: Page
-  breadcrumb?: string[]
   linkablePages?: Array<{ id: string; title: string }>
   onOpenPageLink?: (pageId: string) => void
   sourceField: 'html' | 'css' | 'javascript' | null
@@ -250,6 +333,21 @@ function PageEditors({
   onRichEditorReady: (editor: AnyRichEditor | null) => void
   onToolbarReady?: (node: ReactNode | null) => void
   onDiagramCreateActionsReady?: (actions: DiagramCreateActions | null) => void
+  /**
+   * Receives the Markdown page's editing capabilities.
+   *
+   * Capabilities rather than a rendered toolbar, and this is the one seam that
+   * differs from `onToolbarReady` above. That one is a `ReactNode` because the
+   * HTML toolbar is popover-heavy and predates the capability model. A Markdown
+   * page instead publishes what CodeMirror can do, and the row renders it
+   * through the shared `DocumentToolbar` — so the shell, the roving focus, the
+   * overflow and the disabled treatment are owned in exactly one place, and a
+   * Markdown Note cannot grow a second bar that behaves differently from a Rich
+   * Note's.
+   */
+  onMarkdownCapabilitiesReady?: (capabilities: EditorCapabilities | null) => void
+  /** Receives the Markdown page's Edit/Preview switch, for the row's trailing slot. */
+  onMarkdownViewSwitchReady?: (node: ReactNode | null) => void
 }): JSX.Element | null {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
@@ -312,6 +410,8 @@ function PageEditors({
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}
           onEditorStatusChange={onEditorStatusChange}
+          onCapabilitiesReady={onMarkdownCapabilitiesReady}
+          onViewSwitchReady={onMarkdownViewSwitchReady}
           onOpenPage={onOpenPageLink}
         />
       </Suspense>
@@ -320,7 +420,6 @@ function PageEditors({
   return (
     <HtmlEditorSurface
       page={page}
-      breadcrumb={breadcrumb ?? []}
       sourceField={sourceField}
       onExitSource={onExitSource}
       onSourceFieldChange={onSourceFieldChange}
@@ -341,7 +440,6 @@ function PageEditors({
  */
 function HtmlEditorSurface({
   page,
-  breadcrumb,
   sourceField,
   onExitSource,
   onSourceFieldChange,
@@ -353,7 +451,6 @@ function HtmlEditorSurface({
   onToolbarReady
 }: {
   page: Page
-  breadcrumb: string[]
   sourceField: 'html' | 'css' | 'javascript' | null
   onExitSource?: () => void
   onSourceFieldChange?: (field: 'preview' | 'html' | 'css' | 'javascript') => void
@@ -380,7 +477,6 @@ function HtmlEditorSurface({
           onSourceFieldChange={onSourceFieldChange}
           onEditorStatusChange={onEditorStatusChange}
           onSaveContent={onSaveContent}
-          breadcrumbLabels={[...breadcrumb, page.title]}
           onBack={onBack}
           onFlushRef={onFlushRef}
           onSaveStateChange={onSaveStateChange}

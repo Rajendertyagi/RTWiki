@@ -1,12 +1,10 @@
-import { ActionIcon, Box, Popover, TextInput, Tooltip } from '@mantine/core'
+import { Box, TextInput } from '@mantine/core'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { buildInternalLinkHref } from '@rtwiki/shared/schemas/page-links'
-import { IconLink } from '@tabler/icons-react'
 import type { JSX } from 'react'
 import { useMemo, useState } from 'react'
-import { LAYOUT, OVERLAY_OWNER_ATTR, UI_TEXT } from '../../config/index.js'
+import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
-import classes from './rich-editor.module.css'
 import type { AnyRichEditor } from './schema.js'
 
 /**
@@ -61,116 +59,109 @@ export function insertWikiLink(editor: AnyRichEditor, page: LinkablePage): void 
 }
 
 /**
- * Caret-attached picker used by the toolbar action. Same list semantics as
- * the `[[` suggestion menu: filter by title, keyboard navigable, explicit
- * empty state, never creates pages implicitly.
+ * The link picker, as panel contents with no trigger of its own.
+ *
+ * ## Why the trigger is gone
+ *
+ * This was `WikiLinkToolbarAction`: a `Popover` with its own target button, its
+ * own open state, its own tooltip and its own `wiki-link-button` test id. That is
+ * a second toolbar control, which is the thing the unified toolbar exists to
+ * remove � and it survived the Rich Note migration only because the shell had not
+ * yet claimed the linked-page capability.
+ *
+ * So the trigger belongs to `DocumentToolbar` and this is only the panel. The
+ * list semantics are unchanged: filter by title, keyboard navigable with
+ * Arrow/Enter/Escape, an explicit empty state, and pages are never created
+ * implicitly.
+ *
+ * ## What is kept deliberately
+ *
+ * The `wiki-link-search`, `wiki-link-option-<n>` and `wiki-link-picker` test ids,
+ * and the `listbox`/`option` roles. They are part of the project's existing test
+ * surface, and they are the right roles for a filterable list � the combobox
+ * pattern, not a menu.
  */
-export function WikiLinkToolbarAction({
-  editor,
-  pages
+export function WikiLinkPanel({
+  pages,
+  onPick,
+  testId,
+  pickerClassName,
+  emptyClassName,
+  itemClassName,
+  itemActiveClassName
 }: {
-  editor: AnyRichEditor
   pages: LinkablePage[]
+  /** Called with the chosen page. The caller closes the panel and refocuses. */
+  onPick: (page: LinkablePage) => void
+  /** Test id for the panel itself. */
+  testId: string
+  /** Presentation classes, passed in so this module owns no styling. */
+  pickerClassName: string
+  emptyClassName: string
+  itemClassName: string
+  itemActiveClassName: string
 }): JSX.Element {
-  const [opened, setOpened] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
 
   const results = useMemo(() => filterLinkablePages(pages, query), [pages, query])
 
-  const pick = (page: LinkablePage): void => {
-    insertWikiLink(editor, page)
-    setOpened(false)
-    setQuery('')
-    setActiveIndex(0)
-    editor.focus()
-  }
+  const pick = (page: LinkablePage): void => onPick(page)
 
   return (
-    <Popover
-      opened={opened}
-      onChange={setOpened}
-      position="bottom-start"
-      withinPortal
-      zIndex={LAYOUT.overlayZIndex}
-      closeOnClickOutside
-      trapFocus
+    <Box
+      className={pickerClassName}
+      data-testid={testId}
+      role="dialog"
+      aria-label={UI_TEXT.wikiLinkLabel}
     >
-      <Popover.Target>
-        <Tooltip label={UI_TEXT.wikiLinkLabel} position="bottom">
-          <ActionIcon
-            variant="subtle"
-            aria-label={UI_TEXT.wikiLinkLabel}
-            aria-haspopup="dialog"
-            aria-expanded={opened}
-            data-testid="wiki-link-button"
-            {...{ [OVERLAY_OWNER_ATTR]: true }}
-            onClick={() => setOpened((o) => !o)}
-          >
-            <IconLink size={16} />
-          </ActionIcon>
-        </Tooltip>
-      </Popover.Target>
-      <Popover.Dropdown>
-        <Box
-          className={classes.wikiLinkPicker}
-          data-testid="wiki-link-picker"
-          role="dialog"
-          aria-label={UI_TEXT.wikiLinkLabel}
-        >
-          <TextInput
-            placeholder={UI_TEXT.wikiLinkSearchPlaceholder}
-            value={query}
-            onChange={(event) => {
-              setQuery(event.currentTarget.value)
-              setActiveIndex(0)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowDown') {
-                event.preventDefault()
-                setActiveIndex((i) => Math.min(i + 1, results.length - 1))
-              } else if (event.key === 'ArrowUp') {
-                event.preventDefault()
-                setActiveIndex((i) => Math.max(i - 1, 0))
-              } else if (event.key === 'Enter') {
-                event.preventDefault()
-                const page = results[activeIndex]
-                if (page) pick(page)
-              } else if (event.key === 'Escape') {
-                setOpened(false)
+      <TextInput
+        placeholder={UI_TEXT.wikiLinkSearchPlaceholder}
+        value={query}
+        onChange={(event) => {
+          setQuery(event.currentTarget.value)
+          setActiveIndex(0)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            setActiveIndex((i) => Math.min(i + 1, results.length - 1))
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            setActiveIndex((i) => Math.max(i - 1, 0))
+          } else if (event.key === 'Enter') {
+            event.preventDefault()
+            const page = results[activeIndex]
+            if (page) pick(page)
+          }
+        }}
+        data-testid="wiki-link-search"
+        autoFocus
+      />
+      {results.length === 0 ? (
+        <div className={emptyClassName} role="status">
+          {UI_TEXT.wikiLinkEmptyLabel}
+        </div>
+      ) : (
+        <div role="listbox" aria-label={UI_TEXT.wikiLinkLabel}>
+          {results.map((page, index) => (
+            <button
+              key={page.id}
+              type="button"
+              role="option"
+              aria-selected={index === activeIndex}
+              className={
+                index === activeIndex ? `${itemClassName} ${itemActiveClassName}` : itemClassName
               }
-            }}
-            data-testid="wiki-link-search"
-            autoFocus
-          />
-          {results.length === 0 ? (
-            <div className={classes.wikiLinkEmpty} role="status">
-              {UI_TEXT.wikiLinkEmptyLabel}
-            </div>
-          ) : (
-            <div role="listbox" aria-label={UI_TEXT.wikiLinkLabel}>
-              {results.map((page, index) => (
-                <button
-                  key={page.id}
-                  type="button"
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  className={
-                    index === activeIndex
-                      ? `${classes.wikiLinkItem} ${classes.wikiLinkItemActive}`
-                      : classes.wikiLinkItem
-                  }
-                  data-testid={`wiki-link-option-${index}`}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => pick(page)}
-                >
-                  {page.title || UI_TEXT.untitledPage}
-                </button>
-              ))}
-            </div>
-          )}
-        </Box>
-      </Popover.Dropdown>
-    </Popover>
+              data-testid={`wiki-link-option-${index}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => pick(page)}
+            >
+              {page.title || UI_TEXT.untitledPage}
+            </button>
+          ))}
+        </div>
+      )}
+    </Box>
   )
 }

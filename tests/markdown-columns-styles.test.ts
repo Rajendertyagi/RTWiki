@@ -69,13 +69,28 @@ const EMITTED_CLASSES = [
  * resolved to that file, the build emitted nothing, and the failure said so —
  * instead of the test reading a path that no longer existed and dying with
  * `ENOENT`, which is red but tells nobody anything.
+ *
+ * ## Matched by name, not by position
+ *
+ * This originally took the **first** bare `.css` import in the file, which was
+ * unambiguous only while there was exactly one. `markdown-content.css` now joins
+ * `markdown-columns.css` and `markdown-mermaid.css` as a third plain stylesheet,
+ * and alphabetically it sorts first — so this resolved to the wrong file and every
+ * class assertion below then failed against an unrelated stylesheet. Measured: 14
+ * failures that said "no CSS rule shipped for `.rt-cols`" when the rule was
+ * present and shipped exactly as before.
+ *
+ * The lesson is worth recording, because the failure mode is misleading rather
+ * than merely wrong: a test that finds its subject by position reports a *missing
+ * rule* when it has actually read the *wrong file*. This asks for the file whose
+ * name the assertions are about.
  */
 function resolveImportedStylesheet(): { path: string; specifier: string } {
   const source = readFileSync(WORKSPACE, 'utf8')
-  const match = /^import '(\.\/[^']*\.css)'/m.exec(source)
+  const match = /^import '(\.\/markdown-columns\.css)'/m.exec(source)
   if (match === null) {
     throw new Error(
-      'markdown-workspace.tsx does not bare-import a stylesheet; the ::columns rules are unreachable'
+      'markdown-workspace.tsx does not bare-import ./markdown-columns.css; the ::columns rules are unreachable'
     )
   }
   const specifier = match[1] as string

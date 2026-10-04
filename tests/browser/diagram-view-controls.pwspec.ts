@@ -218,13 +218,16 @@ test.describe('diagram view controls', () => {
     expect(await state()).toEqual({ x: '0px', scale: '1' })
   })
 
-  test('a note block that still holds a mindMap keeps its own zoom controls', async ({
+  test('a note block that still holds a mindMap uses the one shared view', async ({
     page,
     request
   }) => {
-    // The retired `mindMap` block carries toolbar zoom buttons addressed as
-    // `mindMap-zoom-in`. The shared cluster uses a different stem, so the two sets
-    // of controls must both resolve to exactly one element.
+    // The retired `mindMap` block used to carry a SECOND zoom in its toolbar,
+    // addressed `mindMap-zoom-in`, beside the shared cluster's `note-view-zoom-in`.
+    // Two zooms meant a legacy block's scale depended on which control the reader
+    // pressed, and the two sets could collide on one id. `DiagramView` is now the
+    // only view, so this asserts exactly that: the shared control is present and the
+    // old one is gone.
     const title = `VC mindmap ${Date.now()}`
     await seedNote(request, title, {
       id: 'mm',
@@ -237,8 +240,21 @@ test.describe('diagram view controls', () => {
       timeout: 20_000
     })
 
-    await expect(page.getByTestId('mindMap-zoom-in')).toHaveCount(1)
+    // One view, resolving to one element.
     await expect(page.getByTestId('note-view-zoom-in')).toHaveCount(1)
+    await expect(page.getByTestId('note-view-pan-up')).toHaveCount(1)
+    // The removed width-based zoom leaves nothing behind.
+    await expect(page.getByTestId('mindMap-zoom-in')).toHaveCount(0)
+    await expect(page.getByTestId('mindMap-zoom-out')).toHaveCount(0)
+
+    // And it is the working one: pressing it scales the picture.
+    const state = () => readViewState(page, '[data-testid="mindMap-svg"]')
+    expect(await state()).toEqual({ x: '0px', scale: '1' })
+    // The preview pane is `${blockType}-preview`, so a `mindMap` block's is not
+    // `diagram-preview`.
+    await page.locator('[data-testid="mindMap-preview"]').hover()
+    await page.getByTestId('note-view-zoom-in').click()
+    expect(await state()).toEqual({ x: '0px', scale: '1.25' })
   })
 
   // The three tests below each guard one reported fault. Every one was reproduced
@@ -464,4 +480,122 @@ test.describe('diagram view controls', () => {
     await page.waitForTimeout(250)
     expect(await width(), 'reset must undo it again').toBe(beforeZoom)
   })
+
+  /*
+   * Zoomed, panned and full-screen reachability lives in
+   * `diagram-zoom-reachability.pwspec.ts`, which proves each of the four edges of the
+   * painted drawing by scrolling to it and re-measuring, on both surfaces, at three
+   * viewports and up to 2.44x.
+   *
+   * The two tests that used to be here are gone, and both were weaker than their names
+   * said. One asserted `hiddenAtTop > 0` — that content *is* clipped above the stage —
+   * which is a symptom, and which passed against an origin that left half the drawing
+   * unreachable forever; it then only ever checked the *bottom* edge. The other asserted
+   * `align-items` contained `safe`, which cannot take effect here at all: the overlay's
+   * flex item is `width:100%; height:100%`, so it never overflows by layout, and `safe`
+   * substitutes only for layout overflow. Keeping an assertion that guards a declaration
+   * with no behaviour is worse than having none.
+   *
+   * What remains below is the part that is about the document rather than the viewport:
+   * that using the view controls never writes a size.
+   */
+  test.describe('the view controls do not write to the document', () => {
+    /** Hovers the block so the hover-revealed control cluster becomes interactive. */
+    const hoverBlock = async (page: Page): Promise<void> => {
+      const b = await page
+        .locator('[data-testid="diagram-block-0-container"] [class*="_host_"]')
+        .first()
+        .boundingBox()
+      if (b) await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2)
+      await page.waitForTimeout(350)
+    }
+
+    test('zoom does not change the stored block size, and full screen restores it', async ({
+      page,
+      request
+    }) => {
+      const title = `VC nosize ${Date.now()}`
+      const res = await request.post('/api/pages', {
+        data: {
+          title,
+          pageType: 'diagram',
+          content: JSON.stringify({
+            version: 2,
+            type: 'diagram',
+            blocks: [{ id: 'a', source: DIAGRAM }]
+          })
+        }
+      })
+      expect(res.status()).toBe(201)
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.goto('/')
+      await page.waitForTimeout(1500)
+      await page.evaluate((t) => {
+        const btn = Array.from(document.querySelectorAll('button')).find(
+          (b) => b.getAttribute('aria-label') === `Open ${t}`
+        )
+        if (btn) (btn as HTMLElement).click()
+      }, title)
+      await expect(page.getByTestId('diagram-workspace')).toBeVisible({ timeout: 20_000 })
+      await page
+        .locator('[data-testid="diagram-block-0-container"]')
+        .first()
+        .scrollIntoViewIfNeeded()
+      await page.waitForTimeout(600)
+      await page.getByTestId('diagram-block-0-preset-medium').click()
+      await page.waitForTimeout(1000)
+
+      const container = page.getByTestId('diagram-block-0-container')
+      const stored = async () => ({
+        w: await container.getAttribute('data-width'),
+        h: await container.getAttribute('data-height')
+      })
+      const before = await stored()
+
+      await hoverBlock(page)
+      await page.getByTestId('diagram-block-0-zoom-in').click()
+      await page.getByTestId('diagram-block-0-pan-down').click()
+      await page.waitForTimeout(500)
+      expect(await stored(), 'zoom and pan are view state and must not touch the document').toEqual(
+        before
+      )
+
+      await hoverBlock(page)
+      await page.getByTestId('diagram-block-0-full-screen').click()
+      await page.waitForTimeout(1000)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(1000)
+
+      expect(await stored(), 'leaving full screen must not alter the stored size').toEqual(before)
+      expect(
+        await container.evaluate((el) => Math.round(el.getBoundingClientRect().height)),
+        'the rendered box must come back at its stored height'
+      ).toBe(Number(before.h))
+      expect(
+        await page.evaluate(() => {
+          const l = document.querySelector<HTMLElement>(
+            '[data-testid="diagram-block-0-container"] [class*="_layer_"]'
+          )
+          return l ? getComputedStyle(l).getPropertyValue('--view-fit').trim() : '(gone)'
+        }),
+        'the full-screen fit scale must be cleared, or it multiplies into the box view'
+      ).toBe('')
+
+      // And the document the server holds still carries the same size.
+      const storedDoc = await (
+        await request.get(`/api/pages/${await pageId(request, title)}`)
+      ).json()
+      const blocks = JSON.parse((storedDoc as { page: { content: string } }).page.content).blocks
+      expect(blocks[0].height, 'the persisted height must be untouched by the view').toBe(before.h)
+    })
+  })
 })
+
+/** Resolves a page's id by its exact title, for reading back what was persisted. */
+async function pageId(request: APIRequestContext, title: string): Promise<string> {
+  const res = await request.get('/api/pages')
+  const json = (await res.json()) as { pages: Array<{ id: string; title: string }> }
+  const found = json.pages.find((p) => p.title === title)
+  if (!found) throw new Error(`page not found: ${title}`)
+  return found.id
+}

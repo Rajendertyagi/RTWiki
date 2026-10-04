@@ -357,28 +357,32 @@ export function SettingsWorkspace({
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
-        <div className={classes.navList}>
-          {visibleSections.map((item) => {
-            const active = section === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={active ? `${classes.navItem} ${classes.navItemActive}` : classes.navItem}
-                aria-current={active ? 'page' : undefined}
-                onClick={() => setSection(item.id)}
-              >
-                <item.icon size={15} />
-                <span className={classes.navItemLabel}>{item.label}</span>
-              </button>
-            )
-          })}
-          {visibleSections.length === 0 && (
-            <Text size="xs" c="dimmed" className={classes.navEmpty}>
-              {UI_TEXT.settingsNoMatches}
-            </Text>
-          )}
-        </div>
+        <ScrollArea className={classes.navScroll} type="always" scrollbars="y">
+          <div className={classes.navList}>
+            {visibleSections.map((item) => {
+              const active = section === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={
+                    active ? `${classes.navItem} ${classes.navItemActive}` : classes.navItem
+                  }
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => setSection(item.id)}
+                >
+                  <item.icon size={15} />
+                  <span className={classes.navItemLabel}>{item.label}</span>
+                </button>
+              )
+            })}
+            {visibleSections.length === 0 && (
+              <Text size="xs" c="dimmed" className={classes.navEmpty}>
+                {UI_TEXT.settingsNoMatches}
+              </Text>
+            )}
+          </div>
+        </ScrollArea>
       </nav>
 
       <div className={classes.content}>

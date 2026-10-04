@@ -15,19 +15,13 @@ import {
   serializeVisualPageBlocks,
   type VisualPageBlock
 } from '@rtwiki/shared/schemas/visual-page-content'
-import {
-  IconAspectRatio,
-  IconPlayerPlay,
-  IconRefresh,
-  IconZoomIn,
-  IconZoomOut
-} from '@tabler/icons-react'
+import { IconAspectRatio, IconPlayerPlay, IconRefresh } from '@tabler/icons-react'
 import { Reorder } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { updatePage } from '../../services/pages-api.js'
-import type { CSSVars } from '../../style-props.js'
+import { RTWIKI_SCROLL } from '../../theme/registry.js'
 import { reorderByIds } from '../../util/reorder.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
@@ -113,9 +107,6 @@ export interface MermaidPageWorkspaceProps {
 }
 
 const ERROR_MESSAGE = UI_TEXT.diagramErrorTitle
-const ZOOM_MIN = 0.5
-const ZOOM_MAX = 2
-const ZOOM_STEP = 0.25
 
 /**
  * Shared empty list for unparseable content, so a page that fails to parse does
@@ -180,7 +171,6 @@ export default function MermaidPageWorkspace({
   // failing.
   const [renderSeq, setRenderSeq] = useState(0)
   const [fit, setFit] = useState(true)
-  const [zoom, setZoom] = useState(1)
   const [fullscreen, setFullscreen] = useState(false)
 
   const liveGenRef = useRef(0)
@@ -499,34 +489,6 @@ export default function MermaidPageWorkspace({
     )
   }
 
-  const zoomControls = (
-    <Group gap={2} wrap="nowrap">
-      <ActionIcon
-        size="xs"
-        variant="subtle"
-        aria-label="Zoom out"
-        data-testid={`${pageType}-zoom-out`}
-        disabled={zoom <= ZOOM_MIN}
-        onClick={() => setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100))}
-      >
-        <IconZoomOut size={14} />
-      </ActionIcon>
-      <Text size="xs" data-testid={`${pageType}-zoom-label`}>
-        {Math.round(zoom * 100)}%
-      </Text>
-      <ActionIcon
-        size="xs"
-        variant="subtle"
-        aria-label="Zoom in"
-        data-testid={`${pageType}-zoom-in`}
-        disabled={zoom >= ZOOM_MAX}
-        onClick={() => setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100))}
-      >
-        <IconZoomIn size={14} />
-      </ActionIcon>
-    </Group>
-  )
-
   const fitToggle = (
     <Tooltip label={fit ? UI_TEXT.diagramActualSizeLabel : UI_TEXT.diagramFitLabel}>
       <ActionIcon
@@ -572,13 +534,15 @@ export default function MermaidPageWorkspace({
     </Tooltip>
   )
 
+  /*
+   * The edit view's live preview, which carries no zoom layer: the diagram's zoom
+   * belongs to `DiagramView`, and a preview inside the edit split is not a view.
+   */
   const renderSvgArea = (currentSvg: string): JSX.Element => (
     <div className={`${classes.svgHost} ${fit ? classes.fit : classes.actual}`}>
-      <div className={classes.zoomHost} style={{ '--zoom-level': `${zoom * 100}%` } as CSSVars}>
-        {/* Sanitized by svg-sanitize.ts + Mermaid strict-mode DOMPurify. */}
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: contained sanitized SVG rendering */}
-        <div dangerouslySetInnerHTML={{ __html: currentSvg }} />
-      </div>
+      {/* Sanitized by svg-sanitize.ts + Mermaid strict-mode DOMPurify. */}
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: contained sanitized SVG rendering */}
+      <div className={classes.svgInner} dangerouslySetInnerHTML={{ __html: currentSvg }} />
     </div>
   )
 
@@ -619,7 +583,6 @@ export default function MermaidPageWorkspace({
       mermaidBlockType={MERMAID_BLOCK_TYPE}
       colorScheme={colorScheme}
       fit={fit}
-      zoom={zoom}
       renderSeq={renderSeq}
       onResize={(blockId, width, height) => {
         commitBlocks(
@@ -686,7 +649,6 @@ export default function MermaidPageWorkspace({
             <Group gap={4} wrap="nowrap">
               {refreshButton}
               {fitToggle}
-              {zoomControls}
               {fullscreenToggle}
             </Group>
           </Group>
@@ -707,7 +669,10 @@ export default function MermaidPageWorkspace({
                 aria-label={UI_TEXT.workspaceSourceLabel}
                 data-testid={`${pageType}-source-input`}
               />
-              <div className={classes.previewPane} data-testid={`${pageType}-live-preview`}>
+              <div
+                className={`${classes.previewPane} ${RTWIKI_SCROLL}`}
+                data-testid={`${pageType}-live-preview`}
+              >
                 {liveError !== null ? (
                   <Text size="sm" c="red" role="alert" className={classes.previewError}>
                     {ERROR_MESSAGE}
@@ -736,7 +701,6 @@ export default function MermaidPageWorkspace({
           <Group justify="flex-end" gap={4} wrap="nowrap" className={classes.viewBar}>
             {refreshButton}
             {fitToggle}
-            {zoomControls}
             {fullscreenToggle}
           </Group>
           <div className={classes.contentRow}>
@@ -755,7 +719,7 @@ export default function MermaidPageWorkspace({
               // hands back the whole new array; it is mapped by id rather than by
               // position, because position is exactly what just changed.
               onReorder={reorderBlocks}
-              className={classes.blockList}
+              className={`${classes.blockList} ${RTWIKI_SCROLL}`}
               data-testid={`${pageType}-block-list`}
             >
               {blocks.map((block, index) => blockCard(block, index))}

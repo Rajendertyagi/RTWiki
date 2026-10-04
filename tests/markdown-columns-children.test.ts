@@ -393,7 +393,12 @@ describe('the child form never loses content', () => {
         'A',
         ':::',
         '',
-        ':::warning',
+        // An **unclaimed** name, which is what this test is about. It used to be
+        // `:::warning`, which no longer qualifies: `markdown-callouts.ts` now claims
+        // it, so `:::warning` correctly renders as a callout and would never produce
+        // the unknown-directive element asserted below. `:::notice` is measured to
+        // still fall through to the fallback.
+        ':::notice',
         'be careful',
         ':::',
         '',

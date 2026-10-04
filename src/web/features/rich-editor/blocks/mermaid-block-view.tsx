@@ -10,18 +10,11 @@ import {
   useComputedColorScheme
 } from '@mantine/core'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
-import {
-  IconAspectRatio,
-  IconPencil,
-  IconPlayerPlay,
-  IconRefresh,
-  IconZoomIn,
-  IconZoomOut
-} from '@tabler/icons-react'
+import { IconAspectRatio, IconPencil, IconPlayerPlay, IconRefresh } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../../config/index.js'
 import { debugLog, safeHash } from '../../../diagnostics/debug-log.js'
-import type { CSSVars } from '../../../style-props.js'
+import { RTWIKI_SCROLL } from '../../../theme/registry.js'
 import { DIAGRAM_TEMPLATES } from '../insert-blocks.js'
 import { ResizableBlockContainer } from './block-resize.js'
 import { DiagramTemplateBar } from './diagram-template-bar.js'
@@ -33,7 +26,7 @@ import { renderMermaidSvg } from './mermaid-render.js'
  * Shared preview-first view for Mermaid-backed blocks (Diagram, Mind Map).
  *
  * Normal view: the rendered (sanitized) SVG only, with a compact toolbar
- * (Edit, Fit/Actual, and zoom for Mind Map). Edit view: a source editor on
+ * (Edit and Fit/Actual). Edit view: a source editor on
  * the left and a LIVE rendered preview on the right — typing re-renders the
  * preview without requiring Apply. Apply commits the source through the editor
  * (so autosave sees an ordinary document change) and exits edit mode; Cancel
@@ -81,10 +74,6 @@ const ERROR_MESSAGES: Record<RenderErrorCode, string> = {
   render_error: UI_TEXT.diagramErrorTitle
 }
 
-const ZOOM_MIN = 0.5
-const ZOOM_MAX = 2
-const ZOOM_STEP = 0.25
-
 export function MermaidBlockView({
   blockId,
   source,
@@ -106,7 +95,6 @@ export function MermaidBlockView({
   const [liveError, setLiveError] = useState<RenderErrorCode | null>(null)
   const [debouncedDraft, setDebouncedDraft] = useState(source)
   const [fit, setFit] = useState(true)
-  const [zoom, setZoom] = useState(1)
 
   // Generation tokens: an older async render can never overwrite a newer
   // preview. Each render increments its own token; on resolution we apply the
@@ -197,34 +185,6 @@ export function MermaidBlockView({
     setEditing(false)
   }
 
-  const zoomControls = (
-    <Group gap={2} wrap="nowrap" className={classes.zoomControls}>
-      <ActionIcon
-        size="xs"
-        variant="subtle"
-        aria-label="Zoom out"
-        disabled={zoom <= ZOOM_MIN}
-        data-testid={`${blockType}-zoom-out`}
-        onClick={() => setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100))}
-      >
-        <IconZoomOut size={14} />
-      </ActionIcon>
-      <Text size="xs" className={classes.zoomLabel} data-testid={`${blockType}-zoom-label`}>
-        {Math.round(zoom * 100)}%
-      </Text>
-      <ActionIcon
-        size="xs"
-        variant="subtle"
-        aria-label="Zoom in"
-        disabled={zoom >= ZOOM_MAX}
-        data-testid={`${blockType}-zoom-in`}
-        onClick={() => setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100))}
-      >
-        <IconZoomIn size={14} />
-      </ActionIcon>
-    </Group>
-  )
-
   const fitToggle = (
     <Tooltip label={fit ? UI_TEXT.diagramActualSizeLabel : UI_TEXT.diagramFitLabel}>
       <ActionIcon
@@ -243,8 +203,13 @@ export function MermaidBlockView({
 
   const renderSvg = (svg: string): JSX.Element => (
     <div
-      className={`${classes.zoomHost} ${classes.svgHost} ${fit ? classes.fit : classes.actual}`}
-      style={{ '--zoom-level': `${zoom * 100}%` } as CSSVars}
+      // No `--zoom-level` and no `.zoomHost`. Those belonged to a second, older zoom
+      // that sized the diagram by changing a layout width; the diagram's zoom is now
+      // `DiagramView`'s transform, which is the only view both surfaces use and the
+      // only one whose overflow is reachable (see `diagram-view.module.css`). Two
+      // zoom mechanisms on one block meant the block's scale depended on which
+      // controls the reader happened to press.
+      className={`${classes.svgHost} ${fit ? classes.fit : classes.actual}`}
       data-testid={`${blockType}-svg`}
       // Sanitized by svg-sanitize.ts (script/handler/external-ref removal)
       // and Mermaid strict-mode DOMPurify before it reaches this state.
@@ -306,7 +271,6 @@ export function MermaidBlockView({
           </div>
           <div className={classes.editPreview}>
             <Group gap={4} wrap="nowrap" className={classes.previewToolbar}>
-              {blockType === 'mindMap' ? zoomControls : null}
               {fitToggle}
             </Group>
             {liveError !== null ? (
@@ -314,7 +278,9 @@ export function MermaidBlockView({
                 {ERROR_MESSAGES[liveError]}
               </Text>
             ) : liveSvg !== null ? (
-              <div className={classes.previewScroll}>{renderSvg(liveSvg)}</div>
+              <div className={`${classes.previewScroll} ${RTWIKI_SCROLL}`}>
+                {renderSvg(liveSvg)}
+              </div>
             ) : (
               <Text size="xs" c="dimmed" role="status">
                 …
@@ -367,7 +333,6 @@ export function MermaidBlockView({
         {blockType === 'diagram' ? UI_TEXT.diagramLabel : UI_TEXT.mindMapLabel}
       </Text>
       <Group gap={4} wrap="nowrap" className={classes.previewToolbar}>
-        {blockType === 'mindMap' ? zoomControls : null}
         {fitToggle}
         <Tooltip label={UI_TEXT.diagramEditLabel} position="top">
           <ActionIcon
@@ -390,7 +355,7 @@ export function MermaidBlockView({
           testIdPrefix={blockType}
         >
           <div
-            className={classes.previewScroll}
+            className={`${classes.previewScroll} ${RTWIKI_SCROLL}`}
             style={height !== '' ? { height: '100%' } : undefined}
           >
             {/* The diagram's own view — zoom, pan, reset, full screen — is the same
@@ -398,10 +363,11 @@ export function MermaidBlockView({
              * again. It is separate from the block's size: these move the picture,
              * the corner handle changes the box, and neither affects the other.
              *
-             * Its test ids are prefixed `note-view` rather than the block type on
-             * purpose. A retired `mindMap` block already carries toolbar zoom buttons
-             * addressed as `mindMap-zoom-in`/`-out`, and reusing the block type here
-             * made the two sets collide on one id. */}
+             * Its test ids are prefixed `note-view` rather than the block type so they
+             * cannot collide with the block's own `diagram-` prefixed controls. It used
+             * to matter more than that: a retired `mindMap` block carried a second,
+             * toolbar zoom addressed as `mindMap-zoom-in`, and the two sets landed on
+             * one id. That second zoom is gone — `DiagramView` is the only view. */}
             <DiagramView testIdPrefix="note-view">{renderSvg(committedSvg)}</DiagramView>
           </div>
         </ResizableBlockContainer>

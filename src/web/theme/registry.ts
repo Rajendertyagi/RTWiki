@@ -1,5 +1,7 @@
 import type { MantineThemeOverride } from '@mantine/core'
-import { createTheme, Menu, Modal, Popover, Tooltip } from '@mantine/core'
+import { createTheme, Menu, Modal, Popover, ScrollArea, Tooltip } from '@mantine/core'
+
+import { LAYOUT } from '../config/index.js'
 
 /**
  * The one class every floating surface carries. Defined in customization.css,
@@ -14,6 +16,21 @@ export const FLOATING = 'rtwiki-floating'
  * every other floating surface.
  */
 export const NOTIFICATION = 'rtwiki-notification'
+
+/**
+ * The shared native-scrollbar class, applied to the scroll containers a library
+ * owns and to the one-dimensional strips inside rendered text.
+ *
+ * It lives in `customization.css` rather than in a module because it has to reach
+ * DOM that no component here renders — the Wunderbaum tree builds its own element —
+ * and because a rule applied through `composes` could only ever live in a module.
+ * So it is applied by name, and named here so no call site can mistype it.
+ *
+ * See the long note on `.rtwiki-scroll` in `customization.css` for why the standard
+ * scrollbar properties and the vendor pseudo-elements are two separate mechanisms
+ * rather than one rule.
+ */
+export const RTWIKI_SCROLL = 'rtwiki-scroll'
 
 /**
  * RTWiki theme registry.
@@ -142,7 +159,25 @@ const defaultTheme: AppTheme = {
       Menu: Menu.extend({ classNames: { dropdown: FLOATING } }),
       Popover: Popover.extend({ classNames: { dropdown: FLOATING } }),
       Modal: Modal.extend({ classNames: { content: FLOATING } }),
-      Tooltip: Tooltip.extend({ classNames: { tooltip: FLOATING } })
+      Tooltip: Tooltip.extend({ classNames: { tooltip: FLOATING } }),
+      /*
+       * Scrollbar thickness for every `ScrollArea` in the application.
+       *
+       * Set as a component default rather than at each call site, so the size has
+       * one home: a `ScrollArea` added later is the right width without anyone
+       * remembering to pass it. The value is `LAYOUT.scrollbar.size`, the same
+       * number published to CSS as `--rtwiki-scrollbar-size` for the surfaces that
+       * cannot use this component — the Wunderbaum tree, the BlockNote editor, and
+       * the horizontal strips inside rendered Markdown. That shared source is what
+       * keeps a `ScrollArea` scrollbar and a native one from looking like two
+       * different applications.
+       *
+       * Mantine's own default is 12px. Left alone it would be the widest scrollbar
+       * in the app, and the only one a reader would notice.
+       */
+      ScrollArea: ScrollArea.extend({
+        defaultProps: { scrollbarSize: LAYOUT.scrollbar.size }
+      })
     }
   }),
   variants: {

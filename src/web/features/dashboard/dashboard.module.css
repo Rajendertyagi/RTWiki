@@ -23,10 +23,13 @@
  * scrolling element on the dashboard route; .mainContent never scrolls.
  * Uses the shared chrome inset so the page grid and header align with the
  * tab strip and toolbar above. */
+/* The dashboard's scroll region is a `ScrollArea` (see `dashboard.tsx`), so the
+   element carries RTWiki's scrollbar and its `flex: 1` / `min-height: 0` binding to
+   the shell's height chain. It keeps no `overflow-y`: the component owns the axis,
+   and declaring it here would only fight the component's own viewport. */
 .scrollRegion {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
   padding-inline: var(--rtwiki-chrome-pad-x);
 }
 

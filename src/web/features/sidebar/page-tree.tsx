@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { pageTypeLabel } from '../../components/page-type-badge.js'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog } from '../../diagnostics/debug-log.js'
+import { RTWIKI_SCROLL } from '../../theme/registry.js'
 import classes from './page-tree.module.css'
 import { isMoveToAction, TreeContextMenu } from './tree-context-menu.js'
 import { buildDescendantChecker } from './wb-adapter.js'
@@ -339,7 +340,11 @@ export function PageTree({
     <>
       <div
         ref={containerRef}
-        className={classes.wbHost}
+        // `RTWIKI_SCROLL` gives Wunderbaum's own scroll element RTWiki's scrollbar.
+        // It stays a native scrollbar on purpose — see the note in
+        // `page-tree.module.css` — and this is the only place the class is named
+        // for the tree.
+        className={`${classes.wbHost} ${RTWIKI_SCROLL}`}
         data-testid="page-tree"
         role="tree"
         aria-label={UI_TEXT.dashboardTitle}

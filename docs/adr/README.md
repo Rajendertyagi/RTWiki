@@ -26,6 +26,8 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-018](ADR-018-documented-vs-built.md) | Documented vs. Built — the Code Is the Authority | **Accepted** |
 | [ADR-019](ADR-019-one-mermaid-page-and-block.md) | One Mermaid Page, One Mermaid Block — the Mind Map page and block are retired | **Accepted** (owner-authorised 2026-09-29) |
 | [ADR-020](ADR-020-search-and-conversion-boundary.md) | Search Storage and the Import Conversion Boundary | **Accepted** (supersedes the search and import-adapter findings of ADR-018; ADR-018 itself unchanged) |
+| [ADR-021](ADR-021-shiki-and-code-language-registry.md) | One Shiki Engine and One Code-Language Registry for Both Surfaces | **Accepted** |
+| [ADR-022](ADR-022-capability-driven-document-toolbar.md) | One Document Toolbar, Driven by Editor Capabilities | **Accepted** |
 
 ## How to Read an ADR
 

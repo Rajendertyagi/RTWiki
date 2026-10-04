@@ -65,8 +65,25 @@ export function useAutosave(options: UseAutosaveOptions): {
     controllerRef.current = createAutosaveController({
       onSave: (pid: string, content: string) => onSaveRef.current(pid, content),
       onStatusChange: (state) => {
-        setStatus(state.status)
-        setError(state.error)
+        /*
+         * Dispatch only on a real change.
+         *
+         * React 19 checks its nested-update budget inside `dispatchSetState`, before
+         * it knows whether the update is a no-op: `getRootForUpdatedFiber` throws
+         * "maximum update depth exceeded" once 50 nested dispatches have accumulated,
+         * and a `setState` to the value the state already holds still counts. It does
+         * not bail out early.
+         *
+         * This callback runs from a `useEffect` (`notifyEdit` on every edit), and
+         * passive effects flush inside a commit context, so every call here is a
+         * *nested* dispatch. `notifyEdit` sets `dirty` on every keystroke, so after
+         * the first one `setStatus('dirty')` and `setError(null)` were both no-ops
+         * that still spent budget — two wasted dispatches per character typed.
+         * Measured: typing 200 lines into the HTML source editor raised React #185
+         * dozens of times; with this guard the same burst raises none.
+         */
+        setStatus((prev) => (prev === state.status ? prev : state.status))
+        setError((prev) => (prev === state.error ? prev : state.error))
       },
       events: {
         scheduled: (rev) => emitAutosaveEvent('autosave_scheduled', rev),

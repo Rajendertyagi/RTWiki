@@ -1,4 +1,14 @@
-import { ActionIcon, Badge, Box, Button, Group, Select, Stack, Text } from '@mantine/core'
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Group,
+  ScrollArea,
+  Select,
+  Stack,
+  Text
+} from '@mantine/core'
 import type { DebugEventCategory } from '@rtwiki/shared/schemas/debug-events'
 import {
   IconArrowsSort,
@@ -185,52 +195,63 @@ export function DebugLogViewer({ enabled }: DebugLogViewerProps): JSX.Element {
         className={classes.categorySelect}
       />
 
-      <div className={classes.logRegion} ref={scrollRef} onScroll={handleScroll}>
-        {!enabled ? (
-          <Text size="sm" c="dimmed" className={classes.emptyState}>
-            {UI_TEXT.debugLogsDisabledLabel}
-          </Text>
-        ) : visible.length === 0 ? (
-          <Text size="sm" c="dimmed" className={classes.emptyState}>
-            {UI_TEXT.debugLogsEmptyLabel}
-          </Text>
-        ) : (
-          visible.map((entry) => (
-            <div key={entry.id} className={classes.row}>
-              <button
-                type="button"
-                className={classes.rowHeader}
-                onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-                aria-expanded={expandedId === entry.id}
-              >
-                <IconChevronDown
-                  size={12}
-                  className={`${classes.rowChevron} ${expandedId === entry.id ? classes.rowChevronOpen : ''}`}
-                />
-                <span className={classes.time}>{formatTime(entry.ts)}</span>
-                <Badge size="xs" className={`${classes.level} ${classes[`level-${entry.level}`]}`}>
-                  {LEVEL_LABEL[entry.level]}
-                </Badge>
-                <span className={classes.category}>{entry.cat}</span>
-                <span className={classes.event}>{entry.evt}</span>
-                {fieldSummary(entry.fields) ? (
-                  <span className={classes.summary}>{fieldSummary(entry.fields)}</span>
+      <ScrollArea
+        className={classes.logScroll}
+        viewportRef={scrollRef}
+        viewportProps={{ onScroll: handleScroll }}
+        type="always"
+        scrollbars="y"
+      >
+        <div className={classes.logRegion}>
+          {!enabled ? (
+            <Text size="sm" c="dimmed" className={classes.emptyState}>
+              {UI_TEXT.debugLogsDisabledLabel}
+            </Text>
+          ) : visible.length === 0 ? (
+            <Text size="sm" c="dimmed" className={classes.emptyState}>
+              {UI_TEXT.debugLogsEmptyLabel}
+            </Text>
+          ) : (
+            visible.map((entry) => (
+              <div key={entry.id} className={classes.row}>
+                <button
+                  type="button"
+                  className={classes.rowHeader}
+                  onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+                  aria-expanded={expandedId === entry.id}
+                >
+                  <IconChevronDown
+                    size={12}
+                    className={`${classes.rowChevron} ${expandedId === entry.id ? classes.rowChevronOpen : ''}`}
+                  />
+                  <span className={classes.time}>{formatTime(entry.ts)}</span>
+                  <Badge
+                    size="xs"
+                    className={`${classes.level} ${classes[`level-${entry.level}`]}`}
+                  >
+                    {LEVEL_LABEL[entry.level]}
+                  </Badge>
+                  <span className={classes.category}>{entry.cat}</span>
+                  <span className={classes.event}>{entry.evt}</span>
+                  {fieldSummary(entry.fields) ? (
+                    <span className={classes.summary}>{fieldSummary(entry.fields)}</span>
+                  ) : null}
+                </button>
+                {expandedId === entry.id ? (
+                  <Box className={classes.meta}>
+                    {Object.entries(entry.fields).map(([key, value]) => (
+                      <div key={key} className={classes.metaRow}>
+                        <span className={classes.metaKey}>{key}</span>
+                        <span className={classes.metaValue}>{String(value)}</span>
+                      </div>
+                    ))}
+                  </Box>
                 ) : null}
-              </button>
-              {expandedId === entry.id ? (
-                <Box className={classes.meta}>
-                  {Object.entries(entry.fields).map(([key, value]) => (
-                    <div key={key} className={classes.metaRow}>
-                      <span className={classes.metaKey}>{key}</span>
-                      <span className={classes.metaValue}>{String(value)}</span>
-                    </div>
-                  ))}
-                </Box>
-              ) : null}
-            </div>
-          ))
-        )}
-      </div>
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
     </Stack>
   )
 }

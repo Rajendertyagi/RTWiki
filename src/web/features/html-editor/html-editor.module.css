@@ -7,30 +7,18 @@
   min-height: 0;
 }
 
-.controls {
-  flex-shrink: 0;
-}
-
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--mantine-spacing-sm);
-  flex: 1;
-  min-height: 0;
-}
-
-.editorPane,
 .previewPane {
   min-height: 320px;
   min-width: 0;
   overflow: hidden;
 }
 
-@media (max-width: 48em) {
-  .split {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(280px, auto) minmax(320px, auto);
-  }
+/* The transient "refreshing" line above the preview. It used to sit in the
+ * toolbar row, where it pushed the toolbar sideways for as long as a rebuild
+ * took; it belongs with the preview it describes. */
+.previewStatus {
+  flex: 0 0 auto;
+  padding: 6px 12px;
 }
 
 .previewPaneFull {
@@ -56,12 +44,6 @@
   flex-direction: column;
 }
 
-.statusRow {
-  min-height: 22px;
-  border-top: 1px solid var(--mantine-color-default-border);
-  padding-top: var(--mantine-spacing-xs);
-}
-
 /* In-app full-screen editor overlay above every shell layer. */
 .sourceFullscreen {
   position: fixed;
@@ -83,61 +65,24 @@
   border-top-right-radius: var(--mantine-radius-md);
 }
 
-/* Parent-chain breadcrumb, shown beside the source subfile switcher. A subfile
-   is a virtual child of its page rather than a page of its own, so this is what
-   connects the selected tree row to the editor that is open. */
-.breadcrumb {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.breadcrumbList {
-  display: flex;
-  align-items: center;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-
-.breadcrumbItem {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  font-size: var(--mantine-font-size-xs);
-  color: var(--mantine-color-dimmed);
-  white-space: nowrap;
-}
-
-.breadcrumbSep {
-  padding: 0 var(--mantine-spacing-xs);
-  opacity: 0.6;
-}
-
-/* The active subfile is the end of the trail, so it is the one full-strength
-   label; its ancestors are context and stay dimmed. */
-.breadcrumbCurrent {
-  color: var(--mantine-color-text);
-  font-weight: 500;
-}
-
-/* Status row under the source editor. A compact row in the editor's own pane,
-   the way a code editor reports where the caret is, rather than making the
-   reader look at the window's status bar. */
-.statusRow {
-  display: flex;
-  align-items: center;
-  gap: var(--mantine-spacing-md);
-  font-size: var(--mantine-font-size-xs);
-  color: var(--mantine-color-dimmed);
-}
-
-.statusLanguage {
-  font-weight: 500;
-  color: var(--mantine-color-text);
-}
-
-.statusCaret,
-.statusSelection {
-  font-variant-numeric: tabular-nums;
-}
+/*
+ * Rules removed from this file, listed so their absence is a decision on the
+ * record rather than a gap a reader has to guess at.
+ *
+ * `.breadcrumb*` styled the parent-chain crumb the toolbar used to carry, and
+ * `.statusRow` / `.statusLanguage` / `.statusCaret` / `.statusSelection` styled
+ * the row under the editor that repeated the info bar's caret position. Both
+ * elements are gone: the path is the info bar's job, and the info bar already
+ * showed the caret.
+ *
+ * `.controls`, `.split` and `.editorPane` were already unreferenced when this
+ * change started — verified against `HEAD`, where the same three rules exist and
+ * the same three names are used nowhere in `src/`. They described a two-pane
+ * editor/preview split layout that the page no longer has: a subfile shows either
+ * the editor or the preview, never both at once. `.editorPane` was only ever half
+ * of the shared `.editorPane, .previewPane` rule, so `.previewPane` is kept.
+ *
+ * A rule with no element is not documentation. It is a claim about the layout
+ * that a reader must spend time disproving, and CSS modules give no compiler
+ * error when it goes stale — nothing but this list stops it reading as current.
+ */

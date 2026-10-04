@@ -7,10 +7,9 @@
   flex: 1;
 }
 
-.bar {
-  flex-shrink: 0;
-  padding: 0 var(--rtwiki-chrome-pad-x);
-}
+/* The `.bar` rule that lived here is gone with the row it styled. The formatting
+   bar and the Edit/Preview switch are both published up to the workspace's shared
+   toolbar row now, so this feature no longer draws a row of its own. */
 
 /* The document surface and the right-hand panel sit side by side, with the bar
  * above both. Mirrors the Rich editor's row so the panel lands in the same place

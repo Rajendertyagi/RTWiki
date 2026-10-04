@@ -74,6 +74,45 @@
  * is content-sized as before. It is a custom property rather than an inline `height`
  * because the project's rule keeps inline style objects to custom properties only.
  */
+/**
+ * What the layer sits in, and **the diagram's scroll owner**.
+ *
+ * Exists so the layer can be lifted out of it for full screen while the block keeps
+ * the height the layer was giving it. `--stage-height` is written by the component
+ * for exactly as long as the layer is away, and removed on close, so the steady state
+ * is content-sized as before. It is a custom property rather than an inline `height`
+ * because the project's rule keeps inline style objects to custom properties only.
+ *
+ * ## Why this element and not `.host`, and not the card
+ *
+ * `overflow: auto` here is what makes a zoomed diagram fully reachable, and it is the
+ * smallest correct place for it. Three facts decide it, all measured in the running
+ * application rather than reasoned about:
+ *
+ *  1. **A `transform: scale()` on the layer DOES grow this element's scrollable
+ *     overflow.** Measured with a zoomed diagram: `.stage` reported
+ *     `scrollHeight 459` against `clientHeight 371`. The extent was already being
+ *     produced and was being discarded by the `overflow: hidden` further up. A
+ *     controlled measurement in the same browser — a 100x50 child at
+ *     `transform: scale(2)` inside a `overflow: auto` box — reported
+ *     `scrollHeight 100` against `clientHeight 98`, so the effect is the platform's,
+ *     not an accident of this layout.
+ *  2. **`.host` must not scroll.** The control cluster is `position: absolute`
+ *     against `.host`. An absolutely positioned box scrolls with its containing
+ *     block, so a scrolling `.host` would carry the pan, zoom and full-screen
+ *     controls off the top of the diagram exactly when a zoomed diagram most needs
+ *     them.
+ *  3. **The card's `overflow: hidden` is still correct.** It exists for the border
+ *     radius (`mermaid-workspace.module.css`) and for keeping the corner grip and
+ *     size-preset chip inside the frame. Because the stage absorbs the zoom's
+ *     overflow first, the card never sees overflow to hide.
+ *
+ * Pan is deliberately NOT implemented by scrolling this element. Panning has to work
+ * at any zoom — including a diagram that fits entirely, where there is nothing to
+ * scroll — so it stays a transform on the layer, and the controls anchored to the
+ * non-scrolling `.host` are what make an over-panned picture recoverable. That is why
+ * `.host` staying still matters as much as `.stage` scrolling.
+ */
 .stage {
   display: flex;
   flex: 1 1 auto;
@@ -81,6 +120,18 @@
   min-width: 0;
   min-height: 0;
   height: var(--stage-height, auto);
+  /*
+   * This is the box the zoom's overflow is measured against, and `overflow: auto` is
+   * what lets the scroll owner exist at all. `auto` rather than `scroll`: an axis with
+   * nothing to reach must not reserve a track.
+   *
+   * Reachability is only half of it. This element can only scroll towards its **end**,
+   * so `.layer`'s `transform-origin` has to be `0 0` for every pixel of the zoom's
+   * overflow to land on the scrollable side — see the long note on `.layer`. With the
+   * origin at the centre this box reported extent for half the overflow and the rest
+   * was unreachable; measured 461px of a 1562px drawing at 2.44x.
+   */
+  overflow: auto;
 }
 
 /**
@@ -99,17 +150,79 @@
   width: 100%;
   min-width: 0;
   min-height: 0;
-  /* The pan offset and zoom arrive as custom properties, written by the component on
-   * pointer-driven state. The project's rule keeps inline style objects to custom
-   * properties only, so the transform itself is composed here.
+  /* The pan offset, the reader's zoom and the full-screen fit arrive as custom
+   * properties, written by the component on pointer-driven state. The project's rule
+   * keeps inline style objects to custom properties only, so the transform itself is
+   * composed here.
    *
-   * `--view-fit` is the extra scale full screen applies, measured by the component
-   * against the overlay, and it is 1 everywhere else. It is multiplied in rather than
-   * replacing `--view-scale` so the reader's own zoom and the screen fit compose
-   * instead of one overwriting the other. */
-  transform: translate(var(--view-x, 0px), var(--view-y, 0px))
+   * `--view-fit` is full screen's own magnification, derived by the component from the
+   * overlay's size and the picture's layout size, and `--view-fit-offset` is the
+   * centring that goes with it. Both are absent outside full screen, so neither affects
+   * the box. The fit is multiplied in rather than replacing `--view-scale`, so the
+   * reader's zoom and the screen fit compose instead of one overwriting the other, and
+   * the effective magnification is exactly one product of two known terms. See
+   * `fitToScreen` in the component for the contract and the measurements behind it.
+   *
+   * The offset is composed **before** the pan translate, and that is not incidental: in
+   * `translate(...) translate(...) scale(...)` the rightmost transform is applied first,
+   * so the pan and the fit offset are both plain screen-pixel translations while only the
+   * scale magnifies. Put the offset after `scale()` instead and it would be multiplied by
+   * the zoom, so the same diagram would centre differently at every magnification.
+   *
+   * Both translates take their two values **comma**-separated, and that is a real grammar
+   * rule rather than a style choice: the space-separated two-value form belongs to the
+   * `translate` *property*, not to the `translate()` *function*. Written the other way
+   * round the declaration is invalid at computed-value time and the browser drops it
+   * silently - the whole `transform` value, including the zoom and the pan, not just the
+   * offending function. Measured on this Chromium (153): `CSS.supports('transform',
+   * 'translate(10px 20px) scale(2)')` is **false** while the comma form is true, and a
+   * layer left with that declaration computes to `transform: none` at every zoom, which
+   * looks exactly like a zoom control that does nothing. */
+  transform: translate(var(--view-fit-offset, 0px, 0px))
+    translate(var(--view-x, 0px), var(--view-y, 0px))
     scale(calc(var(--view-scale, 1) * var(--view-fit, 1)));
-  transform-origin: center center;
+  /*
+   * `0 0`, NOT `center center`, and this is the whole of the zoom-reachability fix.
+   *
+   * A transformed element does contribute to an ancestor's scrollable overflow - that
+   * part was always true, and it is why `.stage { overflow: auto }` is worth anything.
+   * What the origin decides is **which side** the contributed extent lands on, and an
+   * LTR scroll container can only scroll towards its **end**. So the rule is:
+   *
+   *   every pixel of overflow must be end-side, which means the transform must not
+   *   grow the box towards the scroll origin.
+   *
+   * Measured on this exact structure in Chromium, a 640x384 stage with the layer at
+   * `scale(1.25)` (identical DOM, identical CSS, origin the only variable):
+   *
+   *   | origin        | stage scrollWidth | content local x | left | right | top | bottom |
+   *   |---------------|-------------------|-----------------|------|-------|-----|--------|
+   *   | center center |        720        |      -80 … 720  |  no  |  yes  | no |  yes   |
+   *   | 0 0           |        800        |        0 … 800  |  yes |  yes  | yes|  yes   |
+   *
+   * `center center` grows the box (s-1)*W/2 in *both* directions but only the end-side
+   * growth becomes scrollable, so it hands back extent for exactly half the overflow and
+   * `(s-1)*W/2` of the diagram is unreachable at the start. That is not a rounding
+   * artefact: at 2.44x it is 461px of a 1562px drawing. Panning does not rescue it -
+   * panning far enough to show the start edge pushes the end edge out of reach, because
+   * the scrollable travel is smaller than the amount needed to see the whole thing.
+   *
+   * `0 0` makes the layout box's top-left the fixed point, so the box grows right and
+   * down only, and every pixel of overflow is end-side and therefore reachable by
+   * scrolling alone.
+   *
+   * **The deliberate trade.** The anchor is now the box's top-left rather than its
+   * centre, which is what every scroll-reachable zoom canvas does and the only anchor
+   * that can satisfy both edges at once. Consequence, measured: zoom<1 shrinks the
+   * picture towards the top-left of its box instead of towards the middle. At the
+   * default 100% nothing changes, and reachability - a picture you cannot see at all -
+   * outranks centring while zoomed out. Chasing both at once is not possible: centring
+   * a box larger than its port is *defined* as overflowing the start side.
+   *
+   * Pan is unaffected. `translate()` is applied before `scale()` in the matrix product,
+   * so a pan step is a fixed number of screen pixels at every zoom, exactly as before.
+   */
+  transform-origin: 0 0;
   will-change: transform;
 }
 
@@ -208,18 +321,53 @@
   inset: 0;
   z-index: var(--rtwiki-overlay-z-index, 200);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  /*
+   * Deliberately NOT `align-items: safe center` / `justify-content: safe center`.
+   *
+   * `safe` was here because a centred flex item larger than its container overflows in
+   * both directions and the start-side part is unreachable — the classic
+   * "centre + overflow" trap. It does not apply to this overlay, and it is measurably
+   * inert: `.fullscreen .layer` below is `width: 100%; height: 100%`, so the flex item
+   * is *exactly* the size of the container and never overflows it by layout. Measured
+   * at three viewports: `layer.offsetWidth x offsetHeight` was 1600x950, 1440x900 and
+   * 700x800 against a client box of the same three sizes. `safe` substitutes `start`
+   * for **layout** overflow only; every pixel of overflow here comes from the layer's
+   * `transform`, which no alignment keyword can influence.
+   *
+   * Reachability comes from `.layer`'s `transform-origin: 0 0` plus the `overflow`
+   * below, exactly as in the box. Keeping a declaration here that reads like a
+   * guarantee and provides none is worse than not having it.
+   */
   background: var(--rtwiki-canvas);
+  /*
+   * The full-screen scroll owner, and the same reasoning as `.stage` above: the layer
+   * inside is scaled by `--view-fit` composed with the reader's own zoom, and with the
+   * origin at `0 0` that scale grows this box's scrollable overflow towards its end,
+   * where it can be scrolled to. Measured before `overflow` existed here: the overlay
+   * reported `scrollWidth 2285` against `clientWidth 1440` and `scrollHeight 1428`
+   * against `clientHeight 900` — content past the edge of the screen that, with the
+   * default `overflow: visible`, was simply unreachable.
+   *
+   * `auto` rather than `scroll` so a diagram that fits reserves no track.
+   */
+  overflow: auto;
 }
 
 /*
- * The layer inside the overlay fills it, and `--view-fit` — measured against this
- * box by the component — is what makes the diagram fill the layer.
+ * The layer inside the overlay fills it, which is what makes full screen actually
+ * enlarge the diagram rather than show a small drawing on a huge empty canvas. Before
+ * this rule the layer kept the height it had in the block, so at a 1600x950 window the
+ * overlay showed a 426x414 drawing and the rest was background.
  *
- * These two rules are the whole fix for "full screen shows a small diagram on a huge
- * empty canvas". Before them the layer kept the height it had in the block, so at a
- * 1600x950 window the overlay showed a 426x414 drawing and the rest was background.
+ * Filling the layer is what does the enlarging, and `--view-fit` tops it up. The fit is
+ * the scale at which the picture fills the viewport on its limiting axis, measured by the
+ * component from the **overlay's** size and the picture's **layout** size - so it does
+ * not contain the reader's magnification, and the two compose instead of one cancelling
+ * the other. Measured at 1440x900: a 1806px-wide diagram already fitted to the overlay's
+ * width gets `--view-fit: 1`, which is the correct "nothing left to gain" answer, while a
+ * 196x168 two-node flowchart gets `4` and is drawn at 784x672 - centred, and the same 4
+ * whether or not the reader has zoomed. See `fitToScreen` in the component for the
+ * contract and the measurements behind it.
  */
 .fullscreen .layer {
   width: 100%;

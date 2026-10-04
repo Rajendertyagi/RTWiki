@@ -95,7 +95,7 @@
  *
  * Centring was checked rather than assumed: a flex wrapper was tried here as well,
  * on the theory that this was left-aligned while the Diagram page centred, and it
- * changed nothing ΓÇö measured gaps were identical with and without it, because
+ * changed nothing — measured gaps were identical with and without it, because
  * `margin: 0 auto` already does the work. It was removed rather than left in as
  * decoration.
  *
@@ -131,7 +131,7 @@
    * that can grow on its own is not enough, and the drag tracks only the vertical
    * axis and snaps to the dragged width on release.
    *
-   * Backwards compatible ΓÇö only a drag sets the live properties, so both surfaces
+   * Backwards compatible — only a drag sets the live properties, so both surfaces
    * (rich note and Diagram page) resolve to the stored size exactly as before. */
   width: var(--block-width-live, var(--block-width, auto));
   height: var(--block-height-live, var(--block-height, auto));
@@ -149,6 +149,13 @@
    *
    * The figure is published from `LAYOUT` by the theme resolver, so this and the
    * TypeScript clamp are one number rather than two that can drift.
+   *
+   * This is the **Rich Note** floor. The Diagram page needs 29px more, because its card
+   * stacks an action row above the canvas inside the same box, so it uses
+   * `--rtwiki-visual-page-block-min-height` in `mermaid-workspace.module.css` instead.
+   * Applying this one there under-floored the card and its `overflow: hidden` clipped
+   * the control pad: measured 6px of the pad and 28px of canvas off a 140px block. See
+   * `LAYOUT.visualPageBlockMinHeight`.
    */
   min-height: var(--rtwiki-block-controls-min-height);
 }
@@ -231,13 +238,15 @@
   opacity: 1;
 }
 
-.zoomHost {
-  /* Zoom level arrives as a custom property; the width rule lives here.
-     Resize-based, never transform-clipped, so the scroll extent stays honest. */
-  min-width: 100%;
-  width: var(--zoom-level, 100%);
-}
-
+/*
+ * `.zoomHost` and `--zoom-level` used to live here.
+ *
+ * They were a second zoom that changed the diagram's LAYOUT WIDTH, beside
+ * `DiagramView`'s transform zoom — so a block could be scaled two different ways and
+ * the result depended on which control the reader pressed. Zoom is `DiagramView`'s
+ * alone now, and its overflow is reachable because `.stage` scrolls
+ * (`diagram-view.module.css`). Nothing sets `--zoom-level` any more.
+ */
 .svgHost {
   width: 100%;
 }
@@ -263,7 +272,6 @@
  * and only when, the box is smaller than it is. `max-height: 100%` needs a *definite*
  * ancestor height to resolve against, which is what the first rule supplies.
  */
-.sizeContainerSized .zoomHost,
 .sizeContainerSized .svgHost {
   height: 100%;
   min-height: 0;
@@ -306,15 +314,7 @@
   margin: 0 auto;
 }
 
-.zoomControls {
-  flex-wrap: nowrap;
-}
-
-.zoomLabel {
-  min-width: 2.5rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
+/* `.zoomControls` and `.zoomLabel` are gone with the legacy zoom they styled. */
 
 .editPane {
   display: flex;

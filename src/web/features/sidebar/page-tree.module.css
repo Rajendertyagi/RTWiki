@@ -145,8 +145,24 @@
   padding: 0 !important;
   /* Titles truncate; never allow a horizontal scrollbar. */
   overflow-x: hidden !important;
-  scrollbar-width: thin;
-  scrollbar-color: var(--rtwiki-border, var(--mantine-color-default-border)) transparent;
+  /*
+   * RTWiki's shared scrollbar, by class rather than by a rule written here.
+   *
+   * The tree keeps Wunderbaum's own scrolling: `wb-tree-host.ts` reads and pins
+   * `tree.element.scrollTop` across animation frames, `adjustHeight: false` leaves
+   * the height to the flex parent, the row geometry is pinned to
+   * `--wb-row-outer-height`, and drag-and-drop autoscrolls that same element.
+   * Replacing it with a `ScrollArea` would mean rewriting all of that to obtain a
+   * cosmetic difference, so the element is restyled instead — which is what the
+   * three rules this replaces were already doing, at a hardcoded 10px with a
+   * hardcoded colour. They now read the shared tokens and nothing here can drift
+   * from the rest of the application.
+   *
+   * The shared class is applied from the component as `RTWIKI_SCROLL`
+   * (`src/web/theme/scrollbar.ts`) rather than with `composes`: `composes` can only
+   * reach another *module*, and `.rtwiki-scroll` lives in the global stylesheet
+   * because it also has to reach DOM this codebase does not render.
+   */
 }
 
 /*
@@ -159,19 +175,6 @@
 :global(div.wunderbaum:focus),
 :global(div.wunderbaum:focus-within) {
   border-color: transparent !important;
-}
-
-:global(div.wunderbaum)::-webkit-scrollbar {
-  width: 10px;
-}
-
-:global(div.wunderbaum)::-webkit-scrollbar-thumb {
-  background: var(--rtwiki-border, var(--mantine-color-default-border));
-  border-radius: 6px;
-}
-
-:global(div.wunderbaum)::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 /* Full-width row hit surface, and the flex container for the row's content.

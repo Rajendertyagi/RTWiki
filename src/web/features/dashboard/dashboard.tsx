@@ -1,4 +1,4 @@
-import { Alert, Loader, Stack, Text, Title } from '@mantine/core'
+import { Alert, Loader, ScrollArea, Stack, Text, Title } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { UI_TEXT } from '../../config/index.js'
@@ -20,9 +20,14 @@ interface DashboardProps {
 
 export function Dashboard(props: DashboardProps): JSX.Element {
   return (
-    <div className={classes.scrollRegion} data-testid="dashboard-scroll">
+    <ScrollArea
+      className={classes.scrollRegion}
+      data-testid="dashboard-scroll"
+      type="always"
+      scrollbars="y"
+    >
       <DashboardContent {...props} />
-    </div>
+    </ScrollArea>
   )
 }
 

@@ -2,13 +2,19 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-sm);
   background: var(--mantine-color-body);
 
-  &:focus-within {
-    border-color: var(--mantine-color-primary-filled);
-  }
+  /*
+   * No border and no radius.
+   *
+   * The editor is the page's own editing surface, not a card sitting on it. A
+   * frame here made the CSS editor read as a boxed object inside the workspace,
+   * and the wrapper one file over already says so: its own comment records that
+   * "a border and radius here made the page read as a card". The frame simply
+   * survived on this inner element. Focus is carried by the caret and the
+   * selection inside the text, which are unambiguous, so removing the frame
+   * costs no focus indication.
+   */
 }
 
 /* Syntax token colors — classHighlighter emits these stable classes.

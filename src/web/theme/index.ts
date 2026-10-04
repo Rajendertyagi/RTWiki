@@ -66,13 +66,28 @@ export function createThemeCssVariablesResolver(theme: AppTheme): CSSVariablesRe
       '--rtwiki-divider-step-width': `${LAYOUT.dividerStepWidth}px`,
       '--rtwiki-mobile-drawer-width': `${LAYOUT.mobileDrawerWidth}px`,
       '--rtwiki-status-bar-height': `${LAYOUT.statusBarHeight}px`,
+      // Scrollbar thickness for the native, restyled scrollbars. Published from
+      // LAYOUT for the same reason the layout dimensions above are: this is the
+      // same number the `ScrollArea` components are given, not a second
+      // definition of it. Without this the two mechanisms could drift apart and
+      // the app would carry a thin bar beside a thick one.
+      '--rtwiki-scrollbar-size': `${LAYOUT.scrollbar.size}px`,
+      // The dropdown height cap, published for the same reason: stylesheets read
+      // it as a custom property and `ScrollArea` call sites pass it as `mah`, and
+      // both must be the same number.
+      '--rtwiki-panel-max-height': `${LAYOUT.panelMaxHeight}px`,
       '--rtwiki-workspace-min-width': `${LAYOUT.workspaceMinWidth}px`,
-      // The shortest a diagram block may render, which is the height of the controls
-      // it carries. Published rather than written into a stylesheet because the same
-      // number also clamps the drag and the keyboard in `block-resize.tsx`; a block
+      // The shortest a Rich Note diagram block may render, which is the height of the
+      // controls it carries. Published rather than written into a stylesheet because the
+      // same number also clamps the drag and the keyboard in `block-resize.tsx`; a block
       // with **no stored height** can only be floored here, since nothing in the
       // commit path ever sees a number to clamp.
-      '--rtwiki-block-controls-min-height': `${LAYOUT.blockControlsMinHeight}px`
+      '--rtwiki-block-controls-min-height': `${LAYOUT.blockControlsMinHeight}px`,
+      // The Diagram page's floor: the same controls plus the card's action row and
+      // border. A separate token because the Diagram page card really does need more
+      // room, and one shared floor under-floored it — measured 6px of the control pad
+      // and 28px of canvas clipped off a 140px block. See LAYOUT.
+      '--rtwiki-visual-page-block-min-height': `${LAYOUT.visualPageBlockMinHeight}px`
     },
     light: buildVariantVariables(theme.variants.light),
     dark: buildVariantVariables(theme.variants.dark)

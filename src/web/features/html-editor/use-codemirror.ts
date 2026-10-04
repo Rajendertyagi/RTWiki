@@ -91,18 +91,18 @@ export interface UseCodeMirrorOptions {
 export interface UseCodeMirrorResult {
   /** Ref callback attaching the editor to a host element. */
   attach: (element: HTMLDivElement | null) => void
-  /** Imperative view access for toolbar commands (undo/find/format…). */
+  /** Imperative view access for toolbar commands (undo/find/formatÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦). */
   getView: () => EditorView | null
 }
 
 /**
- * Thin lifecycle wrapper around CodeMirror 6 — deliberately no third-party
+ * Thin lifecycle wrapper around CodeMirror 6 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â deliberately no third-party
  * React binding.
  *
  * The view is created ONCE per pane lifetime and survives source-field
  * switches: the document, language and history are swapped through
  * compartments instead of remounting. Remounting per field was the defect-1
- * amplifier — a fresh view seeded mid-flush could resurrect stale text and
+ * amplifier ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a fresh view seeded mid-flush could resurrect stale text and
  * destroyed typing continuity. History is reset together with the language
  * so an undo after a switch can never drag a previous field's document into
  * the current one.
@@ -115,9 +115,9 @@ export interface UseCodeMirrorResult {
 export function useCodeMirror(options: UseCodeMirrorOptions): UseCodeMirrorResult {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
-  // Last document string this hook emitted or received — the loop guard.
+  // Last document string this hook emitted or received ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the loop guard.
   const lastValueRef = useRef(options.value)
-  // Last language configured into the view — drives compartment swaps.
+  // Last language configured into the view ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â drives compartment swaps.
   const lastLanguageRef = useRef(options.language)
   const onChangeRef = useRef(options.onChange)
   onChangeRef.current = options.onChange
@@ -235,7 +235,7 @@ export function useCodeMirror(options: UseCodeMirrorOptions): UseCodeMirrorResul
     })
   }, [options.value])
 
-  // Word-wrap toggle reconfigures in place — never a remount, never a draft
+  // Word-wrap toggle reconfigures in place ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â never a remount, never a draft
   // reset.
   useEffect(() => {
     const view = viewRef.current

@@ -14,6 +14,19 @@
 // tabs and the window controls stop lining up.
 const TAB_STRIP_HEIGHT = 40
 
+/**
+ * Height of the Diagram page's per-block action row: the label, the drag grip and the
+ * four icon buttons, plus the card's own top and bottom border. 27px of row plus 1px of
+ * border on each side, measured in the running application at every viewport tested.
+ *
+ * It is named here because it is the only reason a Diagram page block cannot be as
+ * short as a Rich Note block, and that difference has to exist in exactly one place.
+ * Two rules need it: `.blockCard`'s `min-height` in the stylesheet, and
+ * `LAYOUT.visualPageBlockMinHeight`, which clamps the drag, the keyboard and the size
+ * presets. Both read this one number through `--rtwiki-visual-page-block-min-height`.
+ */
+const VISUAL_PAGE_BLOCK_CHROME_HEIGHT = 29
+
 export const LAYOUT = {
   /** Height of the tab strip row, which is also the desktop chrome band. */
   tabStripHeight: TAB_STRIP_HEIGHT,
@@ -53,6 +66,38 @@ export const LAYOUT = {
   overlayZIndex: 1000,
   /** Global application status-bar height (footer). Matches Trilium StatusBar 28px. */
   statusBarHeight: 28,
+  /**
+   * Scrollbar geometry, as the single source for both scrollbar mechanisms.
+   *
+   * RTWiki has two of them by design, and they read the same numbers so a
+   * scrollbar cannot look different depending on which surface it is on:
+   *
+   * - Mantine `ScrollArea` for containers RTWiki owns. Its `scrollbarSize` prop
+   *   sets the overlay's track and thumb together.
+   * - Native scrollbars, restyled, for containers a library owns (the
+   *   Wunderbaum tree, the BlockNote editor) or that scroll horizontally inside
+   *   a text flow. Those are driven by the `--rtwiki-scrollbar-*` custom
+   *   properties published from this object in `theme/index.ts`.
+   *
+   * `size` is the track *and* thumb thickness. The thumb radius is not declared
+   * here because it is derived as half of it in the stylesheet, which is what
+   * makes the thumb a capsule that cannot drift out of proportion with its track.
+   */
+  scrollbar: {
+    /** Track and thumb thickness (px). */
+    size: 6
+  },
+  /**
+   * The tallest a scrolling dropdown may grow before it scrolls instead.
+   *
+   * A floating list must never run off the bottom of the window. This was a
+   * `max-height: 320px` literal repeated in four stylesheets, which needed a
+   * fifth copy in `diagram-template-menu.module.css` when that panel was rebuilt
+   * — four chances to disagree, and no way for a `ScrollArea` call site to read a
+   * value that only existed as CSS. One number, published to both:
+   * `--rtwiki-panel-max-height` for stylesheets and `mah` for the components.
+   */
+  panelMaxHeight: 320,
   /** Visual-block container size clamps (px). */
   blockMinWidth: 240,
   blockMaxWidth: 1600,
@@ -70,13 +115,41 @@ export const LAYOUT = {
    * The same 78px box on the Diagram page left the size-preset row sitting on top of
    * the card's own action bar.
    *
-   * The figure covers the control pad (3 rows of 26px plus gaps, raised 22px to
-   * clear the corner grip) *and* the Diagram page's action row, which sits inside
-   * the same box above the canvas. Every size preset is taller than this already
-   * (the smallest is 240), so the only case it changes is Auto height on a short
-   * diagram — which is precisely the case that was broken.
+   * The figure covers the control pad only: 3 rows of 26px plus gaps, raised 22px to
+   * clear the corner grip. Every size preset is taller than this already (the smallest
+   * is 240), so the only case it changes is Auto height on a short diagram — which is
+   * precisely the case that was broken.
+   *
+   * It is the floor for a **Rich Note** block, which is what this number is named for.
+   * The Diagram page needs more, because its card puts an action row *above* the
+   * canvas inside the same box: see `visualPageBlockMinHeight`. An earlier version of
+   * this comment claimed the figure already covered that row. It did not, and the
+   * consequence was measured — see `visualPageBlockMinHeight`.
    */
-  blockControlsMinHeight: 140
+  blockControlsMinHeight: 140,
+  /**
+   * Chrome the Diagram page's card puts above the controls: its action row and its own
+   * top and bottom border.
+   */
+  visualPageBlockChromeHeight: VISUAL_PAGE_BLOCK_CHROME_HEIGHT,
+  /**
+   * The shortest a **Diagram page** block may be: its controls floor plus that chrome.
+   *
+   * `LAYOUT.blockControlsMinHeight` alone was wrong on this surface, and measurably so.
+   * `.host`, which carries the control pad, has `min-height: blockControlsMinHeight`,
+   * and it is the *second* row of the card's flex column — the first is the action row.
+   * A 140px container therefore left the host needing 140px inside a 140 − 27 − 2 = 111px
+   * space, so the host overflowed the card and the card's `overflow: hidden` clipped it.
+   * Measured at a stored height of 140: the card's bottom edge at y=298, the control
+   * pad's bottom at y=304 (6px outside), the pan-down and full-screen buttons partly
+   * outside the card, and the stage running to y=326 so 28px of canvas was clipped too.
+   * A Rich Note block at the same 140 is fine, because its padding gives the pad room.
+   *
+   * So the floor is per-surface, from one number each, and the two are published to the
+   * stylesheets as `--rtwiki-block-controls-min-height` and
+   * `--rtwiki-visual-page-block-min-height`.
+   */
+  visualPageBlockMinHeight: 140 + VISUAL_PAGE_BLOCK_CHROME_HEIGHT
 } as const
 
 /**
@@ -210,6 +283,14 @@ export const UI_TEXT = {
   editorPaneLabelHtml: 'HTML source editor',
   editorPaneLabelCss: 'CSS source editor',
   editorPaneLabelJs: 'JavaScript source editor',
+  /**
+   * Why an editor control is greyed on the rendered preview.
+   *
+   * One sentence, used by all sixteen of them, because they are all unavailable
+   * for the same single reason: there is no code editor open on this view. It
+   * names the way out rather than only reporting the fact.
+   */
+  ideNeedsSourceFileReason: 'open HTML, CSS or JavaScript to use this',
   jsEnabledToggleLabel: 'Enable JavaScript in preview',
   htmlEditorLoadError:
     'This HTML page could not be loaded. The stored content appears to be corrupted.',
@@ -515,9 +596,46 @@ export const UI_TEXT = {
    * with the file: the request was made and declined, and saying nothing made the
    * import look like it had worked.
    */
+  /**
+   * The tree context menu's per-page ".md" export. The Markdown workspace's
+   * own Export button was removed as a duplicate of `App.tsx`'s global export, but
+   * this label still has a reader, so it stays.
+   */
+  markdownExportLabel: 'Export .md',
   markdownImportErrorCreateFailed:
     'That file could not be imported. Nothing was created — try again, or import it as a file attachment instead.',
-  markdownExportLabel: 'Export .md',
+
+  /*
+   * Markdown toolbar. Grouped here with the Markdown strings rather than near the
+   * Rich toolbar's, because they are this feature's and `UI_TEXT` is one flat
+   * dictionary (DEVELOPMENT_STANDARDS §5.2) — the grouping is documentary.
+   *
+   * Every string is user-facing and therefore belongs in this dictionary rather than
+   * written into the component. They are `aria-label`s first: the bar is 17
+   * icon-only controls, so a label is the only thing telling a screen reader — or a
+   * tooltip — what a button does.
+   *
+   * Text colour and highlight are deliberately absent: they have no Markdown-native
+   * form, so the buttons were omitted rather than made to insert raw HTML that
+   * `markdown-render.ts` escapes by design.
+   */
+  markdownToolbarLabel: 'Markdown formatting',
+  markdownHeading1Label: 'Heading 1',
+  markdownHeading2Label: 'Heading 2',
+  markdownHeading3Label: 'Heading 3',
+  markdownBoldLabel: 'Bold',
+  markdownItalicLabel: 'Italic',
+  markdownStrikethroughLabel: 'Strikethrough',
+  markdownInlineCodeLabel: 'Inline code',
+  markdownLinkUrlLabel: 'Link address',
+  markdownBulletListLabel: 'Bullet list',
+  markdownNumberedListLabel: 'Numbered list',
+  markdownQuoteLabel: 'Quote',
+  markdownCodeBlockLabel: 'Code block',
+  markdownTableLabel: 'Table',
+  markdownCalloutLabel: 'Callout',
+  markdownMathLabel: 'Maths',
+  markdownInsertLabel: 'Insert callout',
   settingsCloseLabel: 'Close settings',
   settingsAppearance: 'Appearance',
   settingsLayout: 'Layout',

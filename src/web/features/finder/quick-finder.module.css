@@ -1,6 +1,7 @@
+/* The result list. The cap and the scrolling are the `ScrollArea` that wraps it,
+   so this rule keeps only the spacing: `margin-top` belongs here because it is
+   the gap below the search field, and the rows below that are inside the frame. */
 .results {
-  max-height: 320px;
-  overflow-y: auto;
   margin-top: var(--mantine-spacing-xs);
 }
 

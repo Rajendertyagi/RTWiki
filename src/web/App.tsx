@@ -44,6 +44,19 @@ import {
   saveLayoutPreferences
 } from './features/workspace/layout-preferences.js'
 import { StatusBar, type StatusSaveState } from './features/workspace/status-bar.js'
+
+/**
+ * Subfile name for the info bar's path, keyed by the field the toolbar uses.
+ *
+ * The same four destinations and the same four names as the toolbar's controls,
+ * so the path and the pressed button cannot disagree about what "CSS" is.
+ */
+const EDITOR_TABS = {
+  html: 'editorTabHtml',
+  css: 'editorTabCss',
+  javascript: 'editorTabJs'
+} as const satisfies Record<'html' | 'css' | 'javascript', keyof typeof UI_TEXT>
+
 import {
   loadWorkspaceSession,
   resolveRestorableWorkspace,
@@ -72,7 +85,7 @@ function createSessionStorage(): WorkspaceStorage | null {
 }
 
 /** Builds a clean URL keeping only the host (ip:port) plus an optional
- * ?page=<id> deep-link param — never a path segment. */
+ * ?page=<id> deep-link param ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â never a path segment. */
 function buildPageUrl(id: string | null): string {
   const params = new URLSearchParams(window.location.search)
   if (id) params.set('page', id)
@@ -104,7 +117,7 @@ export function App(): JSX.Element {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
   // Pane geometry preferences (Slice 2): explicit user widths and collapse
   // flags, persisted to a versioned localStorage store. Never tabs, page
-  // IDs, or content — document/session restoration stays in workspace-session.
+  // IDs, or content ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â document/session restoration stays in workspace-session.
   const [layoutPrefs, setLayoutPrefs] = useState<LayoutPreferences>(loadLayoutPreferences)
   const [treeWidth, setTreeWidth] = useState(layoutPrefs.treeWidth)
   const [treeOpen, setTreeOpen] = useState(!layoutPrefs.treeCollapsed)
@@ -268,7 +281,13 @@ export function App(): JSX.Element {
     }
     return chain
   }, [controller.pages, controller.selectedPage])
-  const breadcrumb = breadcrumbTrail.map((b) => b.title)
+  /*
+   * `breadcrumbTrail` is the info bar's path, built further down with the open
+   * subfile appended. There is no second, title-only copy of it for the page
+   * workspace: the HTML editor's breadcrumb moved to the info bar, so nothing in
+   * the workspace needs the plain title list, and two copies of a path would be
+   * two answers to "where am I".
+   */
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [newDialogType, setNewDialogType] = useState<PageType>('rich')
   // Settings workspace view (replaces the page/dashboard in the main area).
@@ -390,8 +409,8 @@ export function App(): JSX.Element {
    *    are version-checked: a stale `version` is refused with 409. Every existing
    *    flush is user-initiated and awaited, so a conflict surfaces to whoever
    *    caused it. A flush fired by the browser on teardown is neither, and it
-   *    lands between a read and a write belonging to someone else — a second tab,
-   *    or the user themselves — turning their edit into a conflict they did not
+   *    lands between a read and a write belonging to someone else ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a second tab,
+   *    or the user themselves ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â turning their edit into a conflict they did not
    *    cause and cannot explain.
    *
    * Measured: adding the listeners took the browser suite from 5 failures to 12,
@@ -401,7 +420,7 @@ export function App(): JSX.Element {
    *
    * The loss this would have prevented is real and is still real. Its fix belongs
    * with the draft-in-`IndexedDB` option that entry weighs and rejects on privacy
-   * grounds — the owner's decision, because it means a second copy of private note
+   * grounds ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the owner's decision, because it means a second copy of private note
    * content in the browser profile. What must not happen is shipping a "fix" that
    * breaks version-checked writes to close a two-second window.
    */
@@ -489,7 +508,7 @@ export function App(): JSX.Element {
    * Previously this returned `void` and did `if (!page) return` on a failed create, so
    * a refused import produced **no signal at all**: no navigation, no error, and a file
    * that had not become a note. The only trace was a generic banner in the main column
-   * reading "Stored content is not a valid Markdown page document." — which was wrong
+   * reading "Stored content is not a valid Markdown page document." ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â which was wrong
    * (nothing was stored) and named neither the limit nor the file.
    *
    * It now reports the outcome so the picker can raise a failure next to the control the
@@ -501,7 +520,7 @@ export function App(): JSX.Element {
       /*
        * The conversion, in one call. This used to be a filename regex plus an envelope
        * call written inline here, and the same regex appeared a second time in
-       * `handleExportPage` — two copies of the same answer to "what is this file called",
+       * `handleExportPage` ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â two copies of the same answer to "what is this file called",
        * none of them shared with the picker that decided the file was Markdown at all.
        *
        * A refusal now becomes the caller's message. The picker has already refused an
@@ -542,7 +561,7 @@ export function App(): JSX.Element {
       const markdown = parsed.ok ? parsed.value.markdown : ''
       /*
        * The same name derivation the import boundary uses, called directly. An export is
-       * not an import — there is no source to convert — so routing it through the converter
+       * not an import ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â there is no source to convert ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â so routing it through the converter
        * would be a fiction. What is genuinely shared is the answer to "what is this note
        * called", which is why that is a named function rather than a copy of a regex.
        */
@@ -807,7 +826,7 @@ export function App(): JSX.Element {
    * the page header bind into it (the header binds page.id at its call
    * site). The previous one-argument header handler was arity-compatible
    * with the tree's (id, title) contract, so a tree rename passed the row's
-   * UUID in the title slot and renamed whichever page was open — the
+   * UUID in the title slot and renamed whichever page was open ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the
    * reported ID-like title corruption. One shared signature makes that
    * mismatch unrepresentable.
    */
@@ -842,11 +861,32 @@ export function App(): JSX.Element {
   // Global application status bar, always visible at the viewport bottom. Shows
   // page type + save state on any open page, and caret/selection/format status
   // while editing code; on the dashboard it shows the app is ready.
+  /*
+   * The info bar's path, including which subfile of an HTML page is open.
+   *
+   * A subfile is a virtual child of the page rather than a page of its own, so
+   * it has no entry in the page list and the trail stops at the page. It is
+   * appended here from the same `htmlSource` state the toolbar reads, so the
+   * path cannot claim a file is open when the toolbar says otherwise. It is a
+   * crumb of the page itself, so clicking it returns to the page, which is the
+   * sensible thing for it to do ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â and it is the reason this belongs here rather
+   * than in a row of its own above the editor.
+   */
+  const statusPage = controller.selectedPage
+  const activeHtmlField =
+    statusPage?.pageType === 'html' && htmlSource?.pageId === statusPage.id
+      ? htmlSource.field
+      : null
+  const statusBreadcrumb =
+    statusPage && activeHtmlField
+      ? [...breadcrumbTrail, { id: statusPage.id, title: UI_TEXT[EDITOR_TABS[activeHtmlField]] }]
+      : breadcrumbTrail
+
   const globalStatusBar = controller.selectedPage ? (
     <StatusBar
       pageTypeLabel={pageTypeLabel(controller.selectedPage.pageType)}
       page={controller.selectedPage}
-      breadcrumb={breadcrumbTrail}
+      breadcrumb={statusBreadcrumb}
       onHome={() => void handleSelectPage(null)}
       onOpenPage={(id) => void handleSelectPage(id)}
       saveState={pageSaveState}
@@ -977,7 +1017,7 @@ export function App(): JSX.Element {
       >
         {/* Layout pass-through only: fills .mainContent so the dashboard scroll
           region and page workspaces bind to a definite height. Never a
-          scroll container — scrolling belongs to the dashboard region and
+          scroll container ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â scrolling belongs to the dashboard region and
           the per-page-type editor surfaces. */}
         <Stack gap={0} flex={1} mih={0} miw={0}>
           {controller.mutationError ? (
@@ -1036,7 +1076,6 @@ export function App(): JSX.Element {
           ) : controller.selectedPage ? (
             <PageWorkspace
               page={controller.selectedPage}
-              breadcrumb={breadcrumb}
               linkablePages={controller.pages.map((p) => ({
                 id: p.id,
                 title: p.title,

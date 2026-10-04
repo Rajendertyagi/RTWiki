@@ -50,6 +50,106 @@ Each layer has a single responsibility and communicates only with its adjacent l
 - **Constraints:** No server-side rendering. No direct database access. All API calls go through a single typed client module.
 - **Version policy:** The React version will be selected and pinned during the implementation phase to be compatible with the selected stable BlockNote, Mantine, and Vite versions. Major versions must never float. Compatibility takes priority over selecting the newest version.
 
+### 3.1a Scrollbars and Scroll Ownership
+
+RTWiki has **two** scrollbar mechanisms, chosen by who owns the scroll container. This
+is not an inconsistency to be tidied away later — it is the decision rule.
+
+| Who owns the scroll container | Mechanism |
+| --- | --- |
+| RTWiki | Mantine `ScrollArea` |
+| A library, or content scrolling inside a text flow | Keep the native/library scrollbar, restyled by `.rtwiki-scroll` |
+
+**RTWiki-owned containers use `ScrollArea`.** The thickness is set once, as
+`ScrollArea.extend({ defaultProps: { scrollbarSize } })` in `theme/registry.ts`, so a
+`ScrollArea` added later is the right width without anyone passing it. Floating lists
+use the documented `Popover.Dropdown` → `ScrollArea` / `ScrollArea.Autosize`
+structure, and the dropdown's own padding is the *only* inset — a panel inside must
+not add a second one.
+
+Converted to `ScrollArea`: the diagram template chooser, the toolbar overflow panel,
+the diagram page's template overflow dropdown, the quick finder, the debug log
+viewer, the settings section list, the dashboard scroll region, the right sidebar,
+and the calendar's today list.
+
+**Library-owned containers keep their own scrolling.** Replacing them would mean
+rewriting a library's scroll architecture for a cosmetic difference:
+
+- **Wunderbaum's tree.** `wb-tree-host.ts` reads and pins `tree.element.scrollTop`
+  across five animation frames to cancel the library's own `makeVisible()` jump;
+  `adjustHeight: false` leaves the height to the flex parent; row geometry is pinned
+  to `--wb-row-outer-height` and `ROW_HEIGHT_PX`; and drag-and-drop autoscrolls that
+  same element. A `ScrollArea` wrapper would insert a second box between the pane and
+  the library, changing what the drag maths measures against. **It receives
+  `.rtwiki-scroll` instead.**
+- **BlockNote's editor.** `.blockNoteWrapper` is the element BlockNote scrolls the
+  caret into view with `scrollIntoView`. A second viewport around it would change what
+  a keyboard move scrolls, and could leave the caret off-screen. **It receives
+  `.rtwiki-scroll` instead**, and no `ScrollArea` is inserted between it and the
+  document.
+- **Motion's `Reorder.Group`** on the diagram page measures its children for drag
+  reordering, so the Mermaid block list is restyled rather than wrapped.
+
+**The HTML preview is a fourth case.** Evidence, not assumption: the iframe element
+carries no `overflow`, and its comment records that the sandboxed document scrolls
+*inside* the frame. The scroll container is therefore the `srcdoc` document — a
+different CSS context that no application stylesheet or component can reach. Its
+scrollbar is injected by `previewScrollbarCss()` in `preview-document.ts`, taking its
+geometry from `LAYOUT.scrollbar.size` and mixing the thumb from `currentColor` so it
+follows the page author's own background.
+
+**Why the standard and vendor declarations are two mechanisms, not one rule.** In a
+Chromium browser a non-`auto` `scrollbar-width` makes the engine **ignore**
+`::-webkit-scrollbar` entirely. Setting both therefore does not layer them — it
+discards the vendor rules and leaves the browser's own bar. Worse, `scrollbar-width:
+thin` is a keyword rather than a measurement: Chromium resolves it to roughly 11px,
+and `scrollbar-color` cannot produce a rounded thumb at all. So the standard
+properties are the base (the Firefox path), and the vendor rules are gated behind
+`@supports selector(::-webkit-scrollbar)` with `scrollbar-width` reset to `auto`
+inside it. `!important` is not used.
+
+**There is deliberately no global `*` rule.** Scrollbar appearance is applied to
+known scroll owners only, so browser-level and third-party chrome RTWiki does not own
+is left alone.
+
+Values live in `LAYOUT` (`scrollbar.size`, `panelMaxHeight`) and are published to CSS
+by the theme resolver as `--rtwiki-scrollbar-size`, `--rtwiki-scrollbar-thumb`,
+`--rtwiki-scrollbar-thumb-hover`, `--rtwiki-scrollbar-track`,
+`--rtwiki-scrollbar-radius` and `--rtwiki-panel-max-height`. Nothing restates them.
+
+**Measured thickness, per surface.** `LAYOUT.scrollbar.size` is `6`. Verified in Chromium
+against the running application, not read off the stylesheet:
+
+| Surface | Mechanism | Thickness |
+| --- | --- | --- |
+| Page tree (Wunderbaum) | native, restyled | 6px |
+| Rich Document (BlockNote wrapper) | native, restyled | 6px |
+| Rich Note Mermaid block | native, restyled | 6px |
+| Diagram page block list | native, restyled | 6px |
+| Markdown preview pane | native, restyled | 6px |
+| Dashboard, settings, right sidebar, calendar, menus | Mantine `ScrollArea` | 6px |
+| Sandboxed HTML preview | injected into the `srcdoc` document | 6px |
+
+**How that is measured, because it is not obvious.** The Playwright harness draws *overlay*
+scrollbars, so the gutter is always `0` and `offsetWidth - clientWidth` proves nothing about
+thickness. The declared geometry is still readable, by two routes: a native-restyled bar
+resolves its vendor pseudo-element (`getComputedStyle(el, '::-webkit-scrollbar').width`), and a
+Mantine `ScrollArea` draws its bar as a real element whose `offsetWidth` is the thickness it was
+told to draw. `tests/browser/scrollbars.pwspec.ts` asserts both per surface. What remains
+visible only to the eye is the *painted* result — the capsule and its contrast.
+
+**Surfaces deliberately left alone.** `.viewHost` and `.svgHost` in
+`visual-pages/mermaid-workspace.module.css` carry `overflow: auto`/`visible` but were measured
+and found **not** to scroll — `scrollWidth === clientWidth`, so a bar is never painted there and
+restyling them would be a no-op. `.fullscreen` is a genuine `overflow: auto` root but is
+`position: fixed` with inset `0`, so its flex-constrained children keep it from overflowing.
+None of these carry `.rtwiki-scroll`, and that is correct: the class only earns its place on an
+element that actually scrolls.
+
+**The suite is served a prebuilt bundle.** `build/web` is what the browser tests run against, so
+a change under `src/` has no effect on a browser measurement until `bun run build:web` has run.
+An assertion made against a stale bundle measures the previous code.
+
 ### 3.2 Editor
 
 - **Technology:** BlockNote with `@blocknote/math-block` and `@blocknote/diagram-block`
@@ -241,80 +341,6 @@ When a page supplies optional custom HTML/CSS/JS, it is rendered only inside an 
 - **Responsibility:** Structured logging (JSON lines) for errors, warnings, and operational events. Log entries must never contain sensitive page content.
 - **Constraint:** No secrets, no user-provided page content, and no attachment data in logs. Log files use rotation and retention limits so they cannot grow indefinitely.
 
-
-### 3.16 Mermaid: one renderer, several surfaces
-
-Every Mermaid diagram in RTWiki — in a Rich Note, on a Diagram page, in the live workspace
-preview, and in a rendered Markdown page — is produced by **one** function:
-
-```
-                       renderMermaidSvg(source, { theme, blockId, blockType, signal })
-                                          │
-   Rich Note block ─┐                     │
-   Diagram page   ─┤                     │
-   Workspace      ─┤                     │
-   Markdown fence ─┘                     │
-                          ┌──────────────┴──────────────┐
-                    parse ─┤                             ├─ render
-                          └──────────────┬──────────────┘
-                                  sanitizeDiagramSvg
-                                          │
-                              sanitised SVG → surface container
-```
-
-There is exactly one `mermaid.initialize`, one `mermaid.parse`, one `mermaid.render` and one
-`import('mermaid')` in `src/`. The configuration lives in one frozen `MERMAID_CONFIG`, the result
-model in one `MermaidRenderResult`, and the theme is the only per-render variable.
-
-**The result model is shared, not per-surface:**
-
-| code | meaning | both surfaces do |
-| --- | --- | --- |
-| `ok: true` | SVG produced | mount it |
-| `empty_source` | `""` or whitespace | **keep what is on screen**, no error shown |
-| `cancelled` | superseded or unmounted | keep what is on screen, no error shown |
-| `parse_error` | Mermaid rejected it | show the error box with Retry |
-| `render_error` | it parsed but would not draw | show the error box with Retry |
-
-`empty_source` returns **before** Mermaid is imported, so an empty block never reaches the
-parser and never produces a misleading warning. This matters because the live-preview paths
-pass the textarea contents straight through, and a cleared block legitimately arrives as `""`.
-Both surfaces treat `empty_source` and `cancelled` identically, so neither degrades into an
-error for a state that is not one.
-
-**Configuration is absolute, not inherited — deliberately.** `MERMAID_CONFIG.fontFamily` states
-the application's font stack instead of `'inherit'`. `'inherit'` looks like the obvious way to
-"use the app's font" and inverts: it resolves against whichever element hosts the diagram.
-Inside a Rich Note that is BlockNote's own `.bn-default-styles`, which hardcodes
-`Inter, "SF Pro Display", …`; on a Diagram page it is the application stack. The same source
-therefore rendered in two typefaces depending on the surface. Measured, that divergence was
-the *only* one: `viewBox`, node fills and label text already matched exactly, which is why it
-went unnoticed — a visual comparison of shape and colour reports "no difference". Mermaid
-bakes the font into a `<style>` rule on the SVG, so it cannot be handed a live CSS custom
-property; `tests/mermaid-security.test.ts` holds the value against the theme's stack.
-
-**What legitimately differs between surfaces is the container, not the diagram.** A Diagram page
-has a canvas with zoom, pan, fit-to-box and full screen; a Rich Note has an inline block with
-compact controls and document flow; a Markdown fence is a centred block capped to the page
-width. Those are separate layout concerns in separate CSS modules
-(`visual-pages/mermaid-workspace.module.css`, `rich-editor/blocks/mermaid-block.module.css`,
-`markdown/markdown-mermaid.css`), and the diagram inside them is byte-for-byte the same render.
-
-Verified by `tests/browser/mermaid-cross-surface.pwspec.ts`, which renders one source as both a
-Diagram block and a Rich block and compares `viewBox`, `width`, `height`, node fills, label text
-and the computed font on a real label.
-
-**Three diagram types are withheld from the template list.** `swimlane-beta`,
-`architecture-beta` and `cynefin-beta` are each affected by a defect in Mermaid 12.0.0's own
-grammars, measured through this pipeline and recorded in `insert-blocks.ts`: `swimlane-beta`
-cannot parse a lane at all, `architecture-beta` renders everything except an edge whose endpoint
-is a group, and `cynefin-beta` parses `title` alone but fails on any `description` line. All
-three raise a **visible** parse error rather than rendering a silent empty box. None can be
-fixed from here without forking Mermaid, so they are absent from the menu rather than offered
-broken. `tests/browser/mermaid-fixture-audit.pwspec.ts` proves all of this end to end and fails
-if a Mermaid upgrade repairs any of the three.
-
-
 ## 4. Canonical Data Format
 
 ### Markdown pages
@@ -333,6 +359,15 @@ about which lines are headings. Navigation is by index, not by heading text.
 Maths in a Markdown page are rendered at parse time by **KaTeX**, into the same HTML string the sanitiser
 then processes. `$…$` is inline and `$$…$$` on its own line is display. KaTeX's `trust` is pinned to
 `false` and `throwOnError` to `false`; see [ADR-017](adr/ADR-017-markdown-engine-micromark.md).
+
+Code fences and `:::note`-family callouts are handled the way Mermaid blocks are: the parser emits
+plain markup, and a **post-render pass** fills it in. That split exists because micromark's compiler is
+synchronous and both **Shiki** and Mermaid are not — see `markdown-code-highlight.ts` and
+`markdown-mermaid-hydrate.ts`. Syntax highlighting uses **one Shiki instance shared with the Rich
+Editor**, described by one language registry, so both surfaces resolve `js`, `ts`, `yml` and the rest
+identically. Grammars and themes load on demand, one chunk per language, and an unlabelled or unknown
+fence stays plain text rather than failing. The full decision, including the rejected alternatives and
+the measured costs, is [ADR-021](adr/ADR-021-shiki-and-code-language-registry.md).
 
 **Two sources are involved, not one**, and the split is deliberate:
 
@@ -508,6 +543,78 @@ Reordering is offered as **Move up / Move down** rather than only as a drag. Bot
 order, but buttons are reachable from the keyboard and name themselves to a screen reader, whereas a
 drag handle is neither. The order goes through the same shared `reorderByIds` rule the tab strip
 uses, so a block can never be dropped or duplicated by a malformed order.
+
+### 3.1b Mermaid: one renderer, several surfaces
+
+Every Mermaid diagram in RTWiki — in a Rich Note, on a Diagram page, in the live workspace
+preview, and in a rendered Markdown page — is produced by **one** function:
+
+```
+                       renderMermaidSvg(source, { theme, blockId, blockType, signal })
+                                          │
+   Rich Note block ─┐                     │
+   Diagram page   ─┤                     │
+   Workspace      ─┤                     │
+   Markdown fence ─┘                     │
+                          ┌──────────────┴──────────────┐
+                    parse ─┤                             ├─ render
+                          └──────────────┬──────────────┘
+                                  sanitizeDiagramSvg
+                                          │
+                              sanitised SVG → surface container
+```
+
+There is exactly one `mermaid.initialize`, one `mermaid.parse`, one `mermaid.render` and one
+`import('mermaid')` in `src/`. The configuration lives in one frozen `MERMAID_CONFIG`, the result
+model in one `MermaidRenderResult`, and the theme is the only per-render variable.
+
+**The result model is shared, not per-surface:**
+
+| code | meaning | both surfaces do |
+| --- | --- | --- |
+| `ok: true` | SVG produced | mount it |
+| `empty_source` | `""` or whitespace | **keep what is on screen**, no error shown |
+| `cancelled` | superseded or unmounted | keep what is on screen, no error shown |
+| `parse_error` | Mermaid rejected it | show the error box with Retry |
+| `render_error` | it parsed but would not draw | show the error box with Retry |
+
+`empty_source` returns **before** Mermaid is imported, so an empty block never reaches the
+parser and never produces a misleading warning. This matters because the live-preview paths
+pass the textarea contents straight through, and a cleared block legitimately arrives as `""`.
+Both surfaces treat `empty_source` and `cancelled` identically, so neither degrades into an
+error for a state that is not one.
+
+**Configuration is absolute, not inherited — deliberately.** `MERMAID_CONFIG.fontFamily` states
+the application's font stack instead of `'inherit'`. `'inherit'` looks like the obvious way to
+"use the app's font" and inverts: it resolves against whichever element hosts the diagram.
+Inside a Rich Note that is BlockNote's own `.bn-default-styles`, which hardcodes
+`Inter, "SF Pro Display", …`; on a Diagram page it is the application stack. The same source
+therefore rendered in two typefaces depending on the surface. Measured, that divergence was
+the *only* one: `viewBox`, node fills and label text already matched exactly, which is why it
+went unnoticed — a visual comparison of shape and colour reports "no difference". Mermaid
+bakes the font into a `<style>` rule on the SVG, so it cannot be handed a live CSS custom
+property; `tests/mermaid-security.test.ts` holds the value against the theme's stack.
+
+**What legitimately differs between surfaces is the container, not the diagram.** A Diagram page
+has a canvas with zoom, pan, fit-to-box and full screen; a Rich Note has an inline block with
+compact controls and document flow; a Markdown fence is a centred block capped to the page
+width. Those are separate layout concerns in separate CSS modules
+(`visual-pages/mermaid-workspace.module.css`, `rich-editor/blocks/mermaid-block.module.css`,
+`markdown/markdown-mermaid.css`), and the diagram inside them is byte-for-byte the same render.
+
+Verified by `tests/browser/mermaid-cross-surface.pwspec.ts`, which renders one source as both a
+Diagram block and a Rich block and compares `viewBox`, `width`, `height`, node fills, label text
+and the computed font on a real label.
+
+**Three diagram types are withheld from the template list.** `swimlane-beta`,
+`architecture-beta` and `cynefin-beta` are each affected by a defect in Mermaid 12.0.0's own
+grammars, measured through this pipeline and recorded in `insert-blocks.ts`: `swimlane-beta`
+cannot parse a lane at all, `architecture-beta` renders everything except an edge whose endpoint
+is a group, and `cynefin-beta` parses `title` alone but fails on any `description` line. All
+three raise a **visible** parse error rather than rendering a silent empty box. None can be
+fixed from here without forking Mermaid, so they are absent from the menu rather than offered
+broken. `tests/browser/mermaid-fixture-audit.pwspec.ts` proves all of this end to end and fails
+if a Mermaid upgrade repairs any of the three.
 
 ## 5. Lazy Loading
 

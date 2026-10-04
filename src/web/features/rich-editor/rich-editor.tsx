@@ -12,7 +12,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
 import { updatePage } from '../../services/pages-api.js'
+import { RTWIKI_SCROLL } from '../../theme/registry.js'
 import { richBlocksPlainText } from '../../util/page-preview-text.js'
+import { createSyntaxHighlightingExtension } from '../code/blocknote-shiki.js'
 import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
@@ -28,7 +30,7 @@ import {
 } from './document.js'
 import { EditorErrorBoundary, ResetConfirmation } from './editor-error-boundary.js'
 import classes from './rich-editor.module.css'
-import { RichToolbar } from './rich-toolbar.js'
+import { RichToolbarBridge } from './rich-toolbar-bridge.js'
 import {
   type AnyRichEditor,
   KNOWN_BLOCK_TYPES,
@@ -328,9 +330,30 @@ function RichEditorInner(props: InnerProps): JSX.Element {
     []
   )
 
+  /*
+   * Syntax highlighting for the editor's code blocks.
+   *
+   * BlockNote ships the integration but leaves it **off**: its own types say
+   * "Highlighting is opt-in: the user adds this extension to the editor's
+   * `extensions` (configured with a `createHighlighter`) to enable it. When it's
+   * absent, content renders as plain text." So without this line a code block in a
+   * Rich Note is unstyled text, and the audit found no highlighter anywhere in
+   * RTWiki.
+   *
+   * The callback resolves RTWiki's **shared** Shiki instance
+   * (`src/web/features/code/shiki-service.ts`), the same one the Markdown preview
+   * uses, so both surfaces honour one alias table and one theme pair from
+   * `code-registry.ts`. This is an adapter, not a second highlighting system.
+   *
+   * `useMemo` with an empty dependency list is load-bearing: `useCreateBlockNote`
+   * is created once for the page's lifetime, and passing a new extension array on
+   * every render would rebuild the editor's extension state on every keystroke.
+   */
+  const syntaxHighlightingExtension = useMemo(() => createSyntaxHighlightingExtension(), [])
+
   const editor = useCreateBlockNote(
     {
-      extensions: [spellcheckExtension],
+      extensions: [spellcheckExtension, syntaxHighlightingExtension],
       schema: rtwikiBlockSchema,
       // BlockNote routes the file picker, paste and drop through this one hook.
       // It dispatches on the browser's reported type purely to decide *which
@@ -560,11 +583,16 @@ function RichEditorInner(props: InnerProps): JSX.Element {
         </Alert>
       ) : null}
 
-      {toolbarExternal ? null : <RichToolbar editor={editor} linkablePages={linkablePages} />}
+      {toolbarExternal ? null : <RichToolbarBridge editor={editor} linkablePages={linkablePages} />}
 
       <div className={classes.richRow}>
         <Stack gap="xs" className={classes.editorContainer}>
-          <div className={classes.blockNoteWrapper} ref={wrapperRef}>
+          {/*
+           * `RTWIKI_SCROLL` restyles the editor's own scroll container rather than
+           * replacing it. See the note on `.blockNoteWrapper`: BlockNote scrolls the
+           * caret inside this element, so it must stay the single viewport.
+           */}
+          <div className={`${classes.blockNoteWrapper} ${RTWIKI_SCROLL}`} ref={wrapperRef}>
             <LinkedPageContext.Provider value={linkedPageContextValue}>
               <BlockNoteView
                 editor={editor}
@@ -601,4 +629,11 @@ function RichEditorInner(props: InnerProps): JSX.Element {
 
 // Re-export for testing
 export { serializeDocument } from './document.js'
-export { RichToolbar } from './rich-toolbar.js'
+/**
+ * The Rich Note's toolbar entry point.
+ *
+ * Now the bridge rather than `rich-toolbar.tsx`. The name is kept so
+ * `page-workspace.tsx`'s lazy import is unchanged, and so the old component's
+ * removal is a single-file deletion rather than a rename ripple through the shell.
+ */
+export { RichToolbarBridge as RichToolbar } from './rich-toolbar-bridge.js'

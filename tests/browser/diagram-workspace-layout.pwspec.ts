@@ -272,14 +272,51 @@ test.describe('Diagram page layout', () => {
     // or taken a view control with it.
     await newDiagramPage(page, 'ViewControls')
 
-    for (const id of ['diagram-refresh', 'diagram-zoom-in', 'diagram-zoom-out']) {
+    for (const id of ['diagram-refresh', 'diagram-fullscreen']) {
       await expect(page.getByTestId(id), `${id} stays in the workspace`).toBeVisible()
     }
-    await expect(page.getByTestId('diagram-zoom-label')).toBeVisible()
+    // The fit/actual toggle has no test id; it is addressed by its label, which reads
+    // "Actual size" while fitting is on because that is what the button then offers.
+    await expect(page.getByLabel('Actual size')).toBeVisible()
     // No creation control left behind in the workspace.
     await expect(
       page.locator('[data-testid="diagram-workspace"] [data-testid="diagram-add-block"]')
     ).toHaveCount(0)
+  })
+
+  test('the page carries no second, page-level zoom', async ({ page }) => {
+    // The Diagram page used to scale every diagram on it with `--zoom-level` on a
+    // `.zoomHost`, on top of `DiagramView`'s own `--view-scale`: two multipliers with
+    // different ranges (50-200% against 20-600%), no way to see the product, and the
+    // lower half of the page range inert because the host carried `min-width: 100%`.
+    // `DiagramView` is the single authority, so nothing on the page may scale a
+    // diagram behind its back.
+    await newDiagramPage(page, 'NoPageZoom')
+
+    for (const id of ['diagram-zoom-in', 'diagram-zoom-out', 'diagram-zoom-label']) {
+      await expect(page.getByTestId(id), `${id} is gone`).toHaveCount(0)
+    }
+    await expect(page.locator('[class*="_zoomHost_"]')).toHaveCount(0)
+    // Every diagram on the page is inside a DiagramView layer, and that layer's
+    // transform is the only magnification applied to it.
+    const layers = page.locator('[class*="_layer_"]')
+    await expect(layers).toHaveCount(1)
+    const effective = await layers.first().evaluate((el) => {
+      const picture = el.querySelector('svg')
+      if (picture === null) return null
+      const cs = getComputedStyle(el)
+      const declared = Number.parseFloat(cs.getPropertyValue('--view-scale')) || 1
+      const painted = picture.getBoundingClientRect().width / picture.clientWidth
+      return {
+        declared,
+        painted,
+        zoomHosts: document.querySelectorAll('[class*="_zoomHost_"]').length
+      }
+    })
+    expect(effective).not.toBeNull()
+    // The painted width divided by the layout width is the effective scale, and it has
+    // to be the one the control declared - no second multiplier hiding anywhere.
+    expect(effective?.painted ?? 0).toBeCloseTo(effective?.declared ?? -1, 2)
   })
 
   test('the toolbar is visible without entering edit mode, and picking adds a diagram', async ({
@@ -732,8 +769,8 @@ test.describe('Diagram page layout', () => {
       .toBeGreaterThan(100)
     // Wait for the layout to *settle* before measuring it. Two consecutive identical
     // heights, rather than one sample: the SVG's box is reached through a chain of
-    // flex items (item -> container -> card -> canvas -> svgHost -> zoomHost ->
-    // svgInner) and a single frame can catch it a pixel or two from final, which
+    // flex items (item -> container -> card -> canvas -> svgHost -> svgInner ->
+    // svg) and a single frame can catch it a pixel or two from final, which
     // showed up as a 0.63% non-uniform scale on a diagram that was in fact uniform.
     // Polling for the *assertion* to become true would be circular; this waits for
     // the layout to stop moving and then asserts.

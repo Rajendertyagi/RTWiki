@@ -1,0 +1,705 @@
+/*
+ * Styling for rendered Markdown.
+ *
+ * ## Why this is a plain global stylesheet and not a CSS module
+ *
+ * The preview is injected with `dangerouslySetInnerHTML`, so its elements have no
+ * React owner and no generated class names. A CSS module would need `:global()` on
+ * every selector to reach them, which buys nothing — there is no local scope to
+ * protect. `markdown-columns.css` and `markdown-mermaid.css` are already plain
+ * global files for the same reason, and this one joins them rather than
+ * introducing a third convention.
+ *
+ * It is scoped under `[data-rt-markdown-preview]`, the attribute
+ * `markdown-workspace.tsx` puts on the preview element, so nothing here can leak
+ * into the app shell or the Rich Editor.
+ *
+ * ## Why an attribute and not the `previewPane` class
+ *
+ * The first version scoped every rule under `.previewPane`. **That matched
+ * nothing**, and the only reason it was not caught by the unit tests is that
+ * those assert the rules are *shipped*, which they were — 11.94 KB of CSS in
+ * `markdown-workspace-*.css`, containing `.previewPane h2 {` and every other
+ * selector. The browser suite caught it: `Expected: not "0px none"` on an `h2`
+ * that had a rule in the bundle and no border on the page.
+ *
+ * The cause is the one `markdown-columns.css` documents at length: `previewPane`
+ * is a class in a **CSS module**, so it is emitted as `._previewPane_1ndoc_42`.
+ * The preview element therefore never carries the literal name a global
+ * stylesheet would select on. `markdown-columns.css` sidesteps this by scoping
+ * only to classes **it** emits into the HTML string (`rt-cols*`), which this
+ * stylesheet cannot do — its whole job is styling elements *other* extensions
+ * produced (`<h1>`, `<table>`, `.katex`).
+ *
+ * So it needs a stable name on the container, and an attribute is the right one:
+ * it is already present for the test suite (`data-testid="markdown-rendered"`),
+ * it survives the module hash changing, and `tests/markdown-content-styles.test.ts`
+ * asserts the attribute is on the element that renders the preview.
+ *
+ * ## No external stylesheet
+ *
+ * An audit compared `github-markdown-css` (43 KB light + dark, generated from
+ * GitHub's own CSS) against writing these rules. It was rejected, for three
+ * measured reasons:
+ *
+ *   1. It has **0** rules for `hljs-*`. Its `.pl-*` rules are **Prism**, so
+ *      adopting it would deliver no syntax highlighting at all — the one feature
+ *      it was most wanted for. Shiki emits inline colours anyway, so this is not
+ *      a loss here, but it is not the benefit it appears to be.
+ *   2. It hardcodes hex colours and sets `color-scheme: light` on the root
+ *      selector. RTWiki runs on Mantine's colour scheme and the preview already
+ *      uses `var(--rtwiki-canvas)`; a fixed light palette would fight it.
+ *   3. Its selectors are rooted at `.markdown-body`, a class RTWiki does not use,
+ *      so every rule would need rewriting anyway.
+ *
+ * Every value below is a Mantine token or a derived `color-mix`, which is what
+ * makes both colour schemes work without a second stylesheet.
+ */
+
+/* ========================================================================== *
+ * Typography
+ *
+ * The previous stylesheet set margins on `h1`–`h3` and no `font-size` at all, so
+ * every heading rendered at body size and the only hierarchy was vertical space.
+ * Sizes are in `em` so they scale with the pane's own font-size, and weights step
+ * down so the levels are distinguishable by weight as well as size.
+ * ========================================================================== */
+
+/*
+ * The text measure, matching the Rich Note exactly.
+ *
+ * ## Why padding and not a width cap
+ *
+ * This used to be `max-width: 78ch; margin-inline: auto`. **Measured on the running
+ * app at a 1440 px viewport: a 547 px content box with 145.7 px of dead margin on
+ * each side** — roughly 290 px of empty gutter, which read as a narrow, unfinished
+ * page beside the Rich Note's full-width surface.
+ *
+ * The Rich Note does not cap its width. BlockNote keeps the text at a readable
+ * measure by insetting it *inside* a surface that fills the pane:
+ *
+ * ```css
+ *  @blocknote/core/dist/style.css
+ *  .bn-editor { padding-inline: 54px }
+ * ```
+ *
+ * Measured on a live Rich Note: `.bn-editor` is 790 px wide inside a ~900 px pane,
+ * with `padding: 0px 54px`. The surface fills, the text is inset, and there is no
+ * gutter because the padding is inside the coloured area.
+ *
+ * So this is the same mechanism with the same number. `--rtwiki-document-inset` is
+ * declared once in `customization.css` and **BlockNote's own padding is overridden
+ * to use it**, so the two surfaces cannot drift apart again — a value that only
+ * Markdown honours would be a coincidence, not consistency.
+ */
+[data-rt-markdown-preview] {
+  padding-inline: var(--rtwiki-document-inset);
+}
+
+/*
+ * Below this width a 54 px inset on each side leaves too little room for prose, so
+ * it steps down rather than shrinking the text column to nothing. BlockNote's
+ * `.bn-editor` does the same thing at its own breakpoints.
+ */
+@media (max-width: 30em) {
+  [data-rt-markdown-preview] {
+    padding-inline: var(--mantine-spacing-sm);
+  }
+}
+
+[data-rt-markdown-preview] h1,
+[data-rt-markdown-preview] h2,
+[data-rt-markdown-preview] h3,
+[data-rt-markdown-preview] h4,
+[data-rt-markdown-preview] h5,
+[data-rt-markdown-preview] h6 {
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.011em;
+  color: var(--mantine-color-text);
+}
+
+[data-rt-markdown-preview] h1 {
+  font-size: 1.85em;
+  margin: 0.4em 0 0.5em;
+  letter-spacing: -0.02em;
+}
+
+[data-rt-markdown-preview] h2 {
+  font-size: 1.45em;
+  margin: 1.5em 0 0.45em;
+  /* The rule under an `h2` is the clearest single hierarchy signal available
+   * without an icon, and it is what makes a long document scannable. */
+  padding-bottom: 0.28em;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+[data-rt-markdown-preview] h3 {
+  font-size: 1.2em;
+  margin: 1.35em 0 0.4em;
+}
+
+[data-rt-markdown-preview] h4 {
+  font-size: 1.05em;
+  margin: 1.2em 0 0.35em;
+  color: var(--mantine-color-dimmed);
+}
+
+[data-rt-markdown-preview] h5,
+[data-rt-markdown-preview] h6 {
+  font-size: 0.95em;
+  margin: 1.1em 0 0.3em;
+  color: var(--mantine-color-dimmed);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* An anchor heading gets an id from the outline pass; hide it until hover so it
+ * does not appear on every heading at once. */
+[data-rt-markdown-preview] :is(h1, h2, h3, h4, h5, h6):hover {
+  color: var(--mantine-color-text);
+}
+
+[data-rt-markdown-preview] p {
+  margin: 0 0 0.9em;
+  line-height: 1.7;
+}
+
+/* The first block after a heading has no top margin to collapse against, so the
+ * gap it would have had is added back here. */
+[data-rt-markdown-preview] :is(h1, h2, h3, h4, h5, h6) + :is(p, ul, ol, blockquote, pre, table) {
+  margin-top: 0;
+}
+
+[data-rt-markdown-preview] strong {
+  font-weight: 650;
+}
+
+[data-rt-markdown-preview] a {
+  color: var(--mantine-color-blue-filled);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--mantine-color-blue-filled) 40%, transparent);
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color 120ms ease;
+}
+
+[data-rt-markdown-preview] a:hover {
+  text-decoration-color: currentcolor;
+}
+
+/* Inline code. `[data-rt-markdown-preview] code` rather than `pre code`, so the two never
+ * share a background — that collision was one of the flatness complaints. */
+[data-rt-markdown-preview] :not(pre) > code {
+  background: var(--mantine-color-default-hover);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-xs);
+  padding: 0.1em 0.34em;
+  font-size: 0.875em;
+  /* `0` keeps the code's own line-height from shifting the line it sits in. */
+  font-variant-ligatures: none;
+}
+
+/* ========================================================================== *
+ * Lists
+ *
+ * The task-list rule below uses the `:has()` selector already in
+ * `markdown-workspace.module.css`; the structure it relies on is the only thing
+ * both parsers agree on, and that note still applies. See the comment there.
+ * ========================================================================== */
+
+[data-rt-markdown-preview] :is(ul, ol) {
+  margin: 0 0 0.9em;
+  padding-left: 1.5em;
+  line-height: 1.65;
+}
+
+[data-rt-markdown-preview] li {
+  margin: 0.22em 0;
+}
+
+/* Nested lists need tighter spacing than top-level ones, or a three-level list
+ * reads as nine separate blocks. */
+[data-rt-markdown-preview] li > :is(ul, ol) {
+  margin: 0.25em 0 0.35em;
+}
+
+[data-rt-markdown-preview] li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.5em;
+}
+
+[data-rt-markdown-preview] input[type="checkbox"] {
+  margin-right: 0.55em;
+  vertical-align: -1px;
+  accent-color: var(--mantine-color-blue-filled);
+  cursor: default;
+}
+
+/* A completed task's text is dimmed. The checkbox carries the state, so this is
+ * supporting information rather than the only signal. */
+[data-rt-markdown-preview] li:has(> input[type="checkbox"]:checked) {
+  color: var(--mantine-color-dimmed);
+  text-decoration: line-through;
+  text-decoration-color: var(--mantine-color-default-border);
+}
+
+/* ========================================================================== *
+ * Tables
+ *
+ * `display: block; overflow-x: auto` on the wrapper is what makes a wide table
+ * scroll instead of forcing the whole preview to scroll horizontally. The `min-width`
+ * is what stops the table from squashing to unreadable instead of scrolling.
+ * ========================================================================== */
+
+[data-rt-markdown-preview] table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.2em 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 0.94em;
+  /* A table is the one element that can exceed the measure; letting it scroll
+   * inside its own box keeps the prose width intact. */
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
+[data-rt-markdown-preview] :is(th, td) {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  /* `top` keeps a header visible while a long table scrolls — only meaningful
+   * because the table is its own scroll container. */
+  text-align: left;
+  vertical-align: top;
+}
+
+[data-rt-markdown-preview] thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--mantine-color-default-hover);
+  font-weight: 650;
+  white-space: nowrap;
+  border-bottom-width: 1px;
+}
+
+[data-rt-markdown-preview] tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+/* Zebra striping. `--mantine-color-default-hover` is the same token the header
+ * uses, at a fraction of the strength, so it works in both schemes. */
+[data-rt-markdown-preview] tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--mantine-color-default-hover) 45%, transparent);
+}
+
+[data-rt-markdown-preview] tbody tr:hover {
+  background: color-mix(in srgb, var(--mantine-color-default-hover) 90%, transparent);
+}
+
+/* A long unbroken token in a cell must wrap rather than widen the table. */
+[data-rt-markdown-preview] :is(th, td) {
+  overflow-wrap: anywhere;
+}
+
+/* ========================================================================== *
+ * Block elements
+ * ========================================================================== */
+
+[data-rt-markdown-preview] blockquote {
+  margin: 1.1em 0;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-left: 3px solid var(--mantine-color-default-border);
+  background: color-mix(in srgb, var(--mantine-color-default-hover) 50%, transparent);
+  border-radius: 0 var(--mantine-radius-sm) var(--mantine-radius-sm) 0;
+  color: var(--mantine-color-dimmed);
+}
+
+[data-rt-markdown-preview] blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+[data-rt-markdown-preview] hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+[data-rt-markdown-preview] img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--mantine-radius-sm);
+  /* An image with no intrinsic size collapses to nothing and reads as a
+   * rendering failure; this is the floor. */
+  min-width: 1px;
+}
+
+/*
+ * Code blocks.
+ *
+ * Shiki replaces the inner `<code>` with themed spans carrying inline colours,
+ * so these rules only need to provide the frame. The `pre` is styled, never the
+ * `code`, and the language class stays on the `code` so a future per-language
+ * tweak has a hook.
+ */
+[data-rt-markdown-preview] pre {
+  margin: 1.2em 0;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  overflow-x: auto;
+  line-height: 1.55;
+  background: var(--mantine-color-default-hover);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  /* `tab-size` defaults to 8 in a monospace font, which indents Python and YAML
+   * far more than their authors intended. */
+  tab-size: 2;
+}
+
+[data-rt-markdown-preview] pre code {
+  display: block;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.875em;
+  /* Shiki writes `white-space: pre` on its own `<pre>`; this element is not that
+   * one, and must not inherit the horizontal-scroll behaviour twice. */
+  white-space: pre;
+}
+
+/* A highlighted block sets its own background from the theme, so the frame must
+ * not paint over it. */
+[data-rt-markdown-preview] pre:has(.shiki) {
+  padding: 0;
+  background: var(--mantine-color-default-hover);
+}
+
+[data-rt-markdown-preview] pre:has(.shiki) > code {
+  display: block;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  background: transparent;
+}
+
+/* ========================================================================== *
+ * Footnotes
+ *
+ * GFM footnotes are on (`gfm()` supplies them) and already rendered correctly —
+ * this is presentation only. The reference marker is superscripted and the
+ * section is separated from the body so the end of a note is unambiguous.
+ * ========================================================================== */
+
+/*
+ * The reference is `<sup><a data-footnote-ref>`, measured. `vertical-align: super`
+ * plus `line-height: 0` is what stops the marker raising the paragraph's whole
+ * line box — the default `super` on an `<a>` left a visible gap in the line.
+ */
+[data-rt-markdown-preview] sup > a[data-footnote-ref] {
+  font-size: 0.72em;
+  font-weight: 650;
+  vertical-align: super;
+  line-height: 0;
+  text-decoration: none;
+  padding-inline: 0.1em;
+}
+
+[data-rt-markdown-preview] :is(section.footnotes, .footnotes) {
+  margin-top: 2.5em;
+  padding-top: 1em;
+  border-top: 1px solid var(--mantine-color-default-border);
+  font-size: 0.9em;
+  color: var(--mantine-color-dimmed);
+}
+
+[data-rt-markdown-preview] :is(section.footnotes, .footnotes) ol {
+  padding-left: 1.4em;
+}
+
+[data-rt-markdown-preview] :is(section.footnotes, .footnotes) p {
+  margin-bottom: 0.4em;
+}
+
+/*
+ * The return link. Measured markup: `<a data-footnote-backref class="data-footnote-backref">↩</a>`
+ * — the arrow is already in the text, so a `content` rule would double it. The
+ * link is styled, not replaced.
+ */
+[data-rt-markdown-preview] :is(section.footnotes, .footnotes) a[data-footnote-backref] {
+  text-decoration: none;
+  margin-left: 0.35em;
+  opacity: 0.65;
+}
+
+[data-rt-markdown-preview] :is(section.footnotes, .footnotes) a[data-footnote-backref]:hover {
+  opacity: 1;
+}
+
+/*
+ * The `<h2>` heading `gfm()` emits for the footnote section. It carries `sr-only`,
+ * so it is hidden from sight but is a real heading in the accessibility tree.
+ * This rule removes the border and margin `h2` would otherwise give it, so the
+ * `hr`-like rule above the section is the only separator.
+ */
+[data-rt-markdown-preview] :is(section.footnotes, .footnotes) > h2 {
+  font-size: inherit;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* ========================================================================== *
+ * Callouts
+ *
+ * The variant tints below are the **same Mantine tokens at the same mix
+ * percentages** as `rich-editor/blocks/callout.module.css` — measured against
+ * that file, not chosen to look similar. That is what makes a Markdown callout and
+ * a Rich Note callout read as the same feature rather than two similar ones.
+ *
+ * The class names come from `markdown-callouts.ts` and the variant list from its
+ * `CALLOUT_VARIANTS`, so a new variant is a registry entry plus a rule here, not
+ * a new handler.
+ * ========================================================================== */
+
+[data-rt-markdown-preview] .rt-callout {
+  margin: 1.2em 0;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+
+[data-rt-markdown-preview] .rt-callout__title {
+  margin: 0 0 0.5em;
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-rt-markdown-preview] .rt-callout > :last-child {
+  margin-bottom: 0;
+}
+
+[data-rt-markdown-preview] .rt-callout :is(ul, ol) {
+  margin-bottom: 0;
+}
+
+[data-rt-markdown-preview] .rt-callout--info {
+  background: color-mix(in srgb, var(--mantine-color-blue-filled) 10%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-blue-filled) 35%, transparent);
+}
+
+[data-rt-markdown-preview] .rt-callout--info .rt-callout__title {
+  color: var(--mantine-color-blue-filled);
+}
+
+[data-rt-markdown-preview] .rt-callout--note {
+  background: color-mix(in srgb, var(--mantine-color-gray-filled) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-gray-filled) 35%, transparent);
+}
+
+[data-rt-markdown-preview] .rt-callout--note .rt-callout__title {
+  color: var(--mantine-color-text);
+}
+
+[data-rt-markdown-preview] .rt-callout--tip {
+  background: color-mix(in srgb, var(--mantine-color-teal-filled) 10%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-teal-filled) 35%, transparent);
+}
+
+[data-rt-markdown-preview] .rt-callout--tip .rt-callout__title {
+  color: var(--mantine-color-teal-filled);
+}
+
+[data-rt-markdown-preview] .rt-callout--warning {
+  background: color-mix(in srgb, var(--mantine-color-yellow-filled) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-yellow-filled) 40%, transparent);
+}
+
+[data-rt-markdown-preview] .rt-callout--warning .rt-callout__title {
+  color: var(--mantine-color-yellow-filled);
+}
+
+[data-rt-markdown-preview] .rt-callout--danger {
+  background: color-mix(in srgb, var(--mantine-color-red-filled) 10%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-red-filled) 35%, transparent);
+}
+
+[data-rt-markdown-preview] .rt-callout--danger .rt-callout__title {
+  color: var(--mantine-color-red-filled);
+}
+
+/* ========================================================================== *
+ * Mathematics
+ *
+ * The renderer emits real MathML and KaTeX's own markup for both `$$…$$` and
+ * `$…$`, and **nothing styled any of it** — that is why a display formula sat
+ * flush against the paragraph above it. These rules add spacing and overflow
+ * handling only; the glyphs are KaTeX's and are not touched.
+ * ========================================================================== */
+
+[data-rt-markdown-preview] .katex {
+  font-size: 1.04em;
+}
+
+[data-rt-markdown-preview] .katex-display {
+  margin: 1.25em 0;
+  padding: 0.35em 0;
+  /* A long formula scrolls rather than widening the pane. `hidden` on the
+   * vertical axis stops a deep fraction's overflow from being clipped in some
+   * browsers while still allowing the scrollbar on the horizontal one. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* KaTeX renders each display line as a `katex-display > .katex`. Centring is
+ * KaTeX's default; `margin-inline: auto` on a wider-than-container formula keeps
+ * a short one centred while a long one stays left-aligned and scrollable. */
+[data-rt-markdown-preview] .katex-display > .katex {
+  margin-inline: auto;
+}
+
+/* A formula that ends up as raw TeX because KaTeX rejected it renders in its own
+ * error colour; this only ensures it does not silently match the body text. */
+[data-rt-markdown-preview] .katex-error {
+  color: var(--mantine-color-red-filled);
+}
+
+/* ========================================================================== *
+ * Inline HTML
+ *
+ * `micromark` escapes raw HTML, so `mark`, `kbd`, `sub`, `sup` and `del` cannot
+ * arrive from a document's own source and these rules would match nothing. They
+ * are here because **`gfm()` emits `del` itself** (strikethrough), and because the
+ * Rich Editor's own blocks and future Markdown extensions produce these elements.
+ * A rule that matches nothing today is not dead weight when the element is one the
+ * pipeline already emits — the difference from the task-list class, which the
+ * comment in `markdown-workspace.module.css` records as dead for its whole life.
+ * ========================================================================== */
+
+[data-rt-markdown-preview] mark {
+  background: color-mix(in srgb, var(--mantine-color-yellow-filled) 30%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.05em 0.2em;
+}
+
+[data-rt-markdown-preview] kbd {
+  display: inline-block;
+  padding: 0.1em 0.45em;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.8em;
+  line-height: 1.5;
+  color: var(--mantine-color-text);
+  background: var(--mantine-color-default-hover);
+  border: 1px solid var(--mantine-color-default-border);
+  border-bottom-width: 2px;
+  border-radius: var(--mantine-radius-xs);
+}
+
+[data-rt-markdown-preview] sub,
+[data-rt-markdown-preview] sup {
+  font-size: 0.72em;
+  line-height: 0;
+  /* Without this a superscript raises the whole line box and the surrounding text
+   * sits low. */
+  position: relative;
+  vertical-align: baseline;
+}
+
+[data-rt-markdown-preview] sup {
+  top: -0.5em;
+}
+
+[data-rt-markdown-preview] sub {
+  bottom: -0.25em;
+}
+
+[data-rt-markdown-preview] del {
+  color: var(--mantine-color-dimmed);
+  text-decoration-color: color-mix(in srgb, var(--mantine-color-dimmed) 60%, transparent);
+}
+
+/* ========================================================================== *
+ * Narrow layouts
+ *
+ * The preview is one pane of a split view, so "narrow" is the common case rather
+ * than an edge case. The measure cap does the work on wide panes; these rules stop
+ * the fixed paddings and the sticky header from misbehaving when there is little
+ * room.
+ * ========================================================================== */
+
+@media (max-width: 40em) {
+  [data-rt-markdown-preview] h1 {
+    font-size: 1.55em;
+  }
+
+  [data-rt-markdown-preview] h2 {
+    font-size: 1.3em;
+  }
+
+  [data-rt-markdown-preview] thead th {
+    position: static;
+  }
+}
+
+/* ==========================================================================
+ * Scrollbars inside the rendered page
+ *
+ * The one-axis strips this document contains - a wide table, a code fence, a long
+ * display formula - are the second category in the scrollbar architecture: content
+ * that scrolls horizontally inside a text flow. They cannot use Mantine
+ * `ScrollArea`, because their height has to stay content-driven and a two-axis
+ * overlay component would add a wrapper box to buy nothing.
+ *
+ * They are grouped into ONE rule rather than restated on each selector, and they
+ * read the same `--rtwiki-scrollbar-*` tokens as `.rtwiki-scroll` in
+ * `customization.css`, so the thickness cannot drift from the rest of the app. The
+ * class cannot be used directly here: this markup is injected with
+ * `dangerouslySetInnerHTML` and has no React owner to attach a className to.
+ *
+ * The standard properties come first and the vendor block resets
+ * `scrollbar-width`, because a Chromium browser that sees a non-`auto`
+ * `scrollbar-width` ignores `::-webkit-scrollbar` entirely and would silently
+ * keep its own thick bar.
+ * ========================================================================== */
+[data-rt-markdown-preview] table,
+[data-rt-markdown-preview] pre,
+[data-rt-markdown-preview] .katex-display,
+[data-rt-markdown-preview] .rt-mermaid {
+  scrollbar-width: auto;
+  scrollbar-color: var(--rtwiki-scrollbar-thumb) var(--rtwiki-scrollbar-track);
+}
+
+@supports selector(::-webkit-scrollbar) {
+  [data-rt-markdown-preview] table::-webkit-scrollbar,
+  [data-rt-markdown-preview] pre::-webkit-scrollbar,
+  [data-rt-markdown-preview] .katex-display::-webkit-scrollbar,
+  [data-rt-markdown-preview] .rt-mermaid::-webkit-scrollbar {
+    width: var(--rtwiki-scrollbar-size);
+    height: var(--rtwiki-scrollbar-size);
+  }
+
+  [data-rt-markdown-preview] table::-webkit-scrollbar-track,
+  [data-rt-markdown-preview] pre::-webkit-scrollbar-track,
+  [data-rt-markdown-preview] .katex-display::-webkit-scrollbar-track,
+  [data-rt-markdown-preview] .rt-mermaid::-webkit-scrollbar-track {
+    background: var(--rtwiki-scrollbar-track);
+  }
+
+  [data-rt-markdown-preview] table::-webkit-scrollbar-thumb,
+  [data-rt-markdown-preview] pre::-webkit-scrollbar-thumb,
+  [data-rt-markdown-preview] .katex-display::-webkit-scrollbar-thumb,
+  [data-rt-markdown-preview] .rt-mermaid::-webkit-scrollbar-thumb {
+    background: var(--rtwiki-scrollbar-thumb);
+    border-radius: var(--rtwiki-scrollbar-radius);
+  }
+
+  [data-rt-markdown-preview] table::-webkit-scrollbar-thumb:hover,
+  [data-rt-markdown-preview] pre::-webkit-scrollbar-thumb:hover,
+  [data-rt-markdown-preview] .katex-display::-webkit-scrollbar-thumb:hover,
+  [data-rt-markdown-preview] .rt-mermaid::-webkit-scrollbar-thumb:hover {
+    background: var(--rtwiki-scrollbar-thumb-hover);
+  }
+}

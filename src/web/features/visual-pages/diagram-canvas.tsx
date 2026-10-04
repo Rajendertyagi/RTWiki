@@ -2,7 +2,6 @@ import { Button, Text } from '@mantine/core'
 import { IconRefresh } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
-import type { CSSVars } from '../../style-props.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import classes from './mermaid-workspace.module.css'
 
@@ -33,7 +32,6 @@ export interface DiagramCanvasProps {
   mermaidBlockType: 'diagram' | 'mindMap'
   colorScheme: string
   fit: boolean
-  zoom: number
   /**
    * Page-level refresh counter. Changing it re-renders this block, so one press
    * of Refresh on the page re-renders every diagram on it.
@@ -49,7 +47,6 @@ export function DiagramCanvas({
   mermaidBlockType,
   colorScheme,
   fit,
-  zoom,
   renderSeq,
   testId
 }: DiagramCanvasProps): JSX.Element {
@@ -125,24 +122,26 @@ export function DiagramCanvas({
       // scoped to the card finds a 24x24 icon and reads it as the diagram.
       data-testid={`${testId}-svg`}
     >
-      <div className={classes.zoomHost} style={{ '--zoom-level': `${zoom * 100}%` } as CSSVars}>
-        {/* Sanitized by svg-sanitize.ts + Mermaid strict-mode DOMPurify. */}
-        {/* The injected wrapper needs a class of its own. It sits between
-         * `.zoomHost` and the SVG, and a percentage height on the SVG only
-         * resolves against a *definite* ancestor height - an unclassed wrapper
-         * here left it content-sized, so the SVG fell back to its intrinsic
-         * height and ignored the box it was supposed to fit. Targeting it
-         * structurally (`.zoomHost > div`) would have worked and would also have
-         * broken the day the markup gained a wrapper.
-         *
-         * The suppression below must sit *immediately* above the element it covers.
-         * For a while it did not, because this explanatory block sat between the
-         * two, and the suppression silently stopped applying - the rule reappeared
-         * on a line that had already been reviewed and approved. A suppression
-         * separated from its target is worse than no suppression. */}
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: contained sanitized SVG rendering */}
-        <div className={classes.svgInner} dangerouslySetInnerHTML={{ __html: svg }} />
-      </div>
+      {/* Sanitized by svg-sanitize.ts + Mermaid strict-mode DOMPurify. */}
+      {/* The injected wrapper needs a class of its own. It sits between
+       * `.svgHost` and the SVG, and a percentage height on the SVG only resolves
+       * against a *definite* ancestor height - an unclassed wrapper here left it
+       * content-sized, so the SVG fell back to its intrinsic height and ignored the
+       * box it was supposed to fit. Targeting it structurally (`.svgHost > div`)
+       * would have worked and would also have broken the day the markup gained a
+       * wrapper.
+       *
+       * There used to be a `.zoomHost` between these two, carrying a page-level
+       * `--zoom-level` width. It is gone: the diagram's zoom is `DiagramView`'s
+       * `--view-scale`, and it is the only zoom on either surface.
+       *
+       * The suppression must sit *immediately* above the element it covers. For a
+       * while it did not, because an explanatory block sat between the two and the
+       * suppression silently stopped applying - the rule reappeared on a line that
+       * had already been reviewed and approved. A suppression separated from its
+       * target is worse than no suppression. */}
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: contained sanitized SVG rendering */}
+      <div className={classes.svgInner} dangerouslySetInnerHTML={{ __html: svg }} />
     </div>
   )
 }

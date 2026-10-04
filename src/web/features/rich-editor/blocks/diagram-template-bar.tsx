@@ -1,7 +1,7 @@
-import { ActionIcon, Menu, Tooltip } from '@mantine/core'
+import { ActionIcon, Menu, ScrollArea, Tooltip } from '@mantine/core'
 import { IconDotsVertical } from '@tabler/icons-react'
 import { isValidElement, type ReactNode, useState } from 'react'
-import { UI_TEXT } from '../../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../../config/index.js'
 import { useToolbarOverflow } from '../../../hooks/use-toolbar-overflow.js'
 import { DIAGRAM_TEMPLATES, type DiagramTemplateId, diagramTemplateFor } from '../insert-blocks.js'
 import classes from './diagram-template-bar.module.css'
@@ -259,17 +259,24 @@ export function DiagramTemplateBar({ onPick }: { onPick: (source: string) => voi
           {/* Real Menu.Items and Menu.Subs rather than the nodes that overflowed.
               As well as making the submenus open, this is what makes the
               dropdown reachable by keyboard: Mantine moves focus with the arrow
-              keys and gives each row role="menuitem". */}
+              keys and gives each row role="menuitem".
+
+              `ScrollArea` wraps the rows so this dropdown carries RTWiki's
+              scrollbar like every other floating list. The class on the dropdown
+              keeps the single-column shape and the padding; the cap and the
+              scrolling are the component's, read from `LAYOUT.panelMaxHeight`. */}
           <Menu.Dropdown className={classes.moreMenu}>
-            {overflowedSlots.map((slot) =>
-              slot.kind === 'separator' ? (
-                // Each family appears once in the ordered list, so the family
-                // names the separator uniquely - no array index needed.
-                <Menu.Divider key={`sep-${slot.family}`} />
-              ) : (
-                menuRow(slot.id)
-              )
-            )}
+            <ScrollArea.Autosize mah={LAYOUT.panelMaxHeight} type="always" scrollbars="y">
+              {overflowedSlots.map((slot) =>
+                slot.kind === 'separator' ? (
+                  // Each family appears once in the ordered list, so the family
+                  // names the separator uniquely - no array index needed.
+                  <Menu.Divider key={`sep-${slot.family}`} />
+                ) : (
+                  menuRow(slot.id)
+                )
+              )}
+            </ScrollArea.Autosize>
           </Menu.Dropdown>
         </Menu>
       ) : null}

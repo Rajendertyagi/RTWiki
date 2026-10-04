@@ -1,0 +1,247 @@
+/*
+ * The one toolbar stylesheet, shared by every document surface.
+ *
+ * ## Why this is a module and not a global stylesheet
+ *
+ * It replaces a cross-feature arrangement that was a real problem: the Markdown
+ * toolbar imported `rich-toolbar.module.css` from inside the rich-editor
+ * feature, so one feature's stylesheet was load-bearing for another. A module
+ * keeps the class names scoped and the ownership here, next to the component.
+ *
+ * ## The rule this file follows
+ *
+ * Every value is a token. There is not one literal colour, and no rule is
+ * written for an individual control — a `.boldButton` or a `.diagramButton`
+ * would be the thing to drift, because the next surface would add its own. The
+ * only per-state rules are `.divider` and the disabled dim, and both of those
+ * state *why* they exist rather than restating a number that could be read from
+ * a neighbouring rule.
+ *
+ * The numbers that remain (2px gap, 20px divider) are the ones the existing
+ * `rich-toolbar.module.css` already uses. They are repeated here rather than
+ * imported because that module belongs to another feature, and importing it is
+ * the arrangement being removed. When this replaces that file wholesale the
+ * duplication goes with it.
+ */
+
+/*
+ * The row. Height, padding, surface and hairline all come from the shared chrome
+ * tokens, which is what makes this row the same height as the tab strip above it
+ * and the status bar below.
+ *
+ * `flex-wrap: nowrap` with `overflow: hidden` is load-bearing: the row is one
+ * row, always. Whatever does not fit moves into the overflow menu, measured by
+ * `useToolbarOverflow` rather than by a breakpoint, so a control is never sliced
+ * off mid-icon and the row's height never changes with the window.
+ */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  /*
+   * A known, measured limitation, left visible rather than half-fixed.
+   *
+   * The bar measures **683px inside a 1600px row** on the HTML page, because that row
+   * wraps the bar in a `Group` with `justify="space-between"` alongside the breadcrumb
+   * and the field switcher, so the bar takes only its own content's width instead of the
+   * leftover space.
+   *
+   * Two fixes were tried. `flex: 1 1 auto` alongside `width: 100%` changed nothing,
+   * because `width: 100%` sets the flex basis to the parent's full width and so leaves
+   * no free space to grow into. `flex: 1 1 0%` with `width: 100%` removed made it
+   * *worse* — 530px, narrower than its own content.
+   *
+   * Both were reverted. The correct fix is structural rather than cosmetic: the HTML
+   * page's row should hold the bar directly, the way Rich Note and Markdown do, with
+   * the breadcrumb and the field switcher belonging to the editor header below rather
+   * than to the toolbar row. That is a change to how `html-editor.tsx` publishes its
+   * row, and it wants doing as one deliberate edit with its own verification rather
+   * than as a property tweak guessed at from a screenshot.
+   */
+  flex-wrap: nowrap;
+  overflow: hidden;
+  /*
+   * The chrome surface tint.
+   *
+   * The toolbar row is separated from the tab bar by tone rather than by a hairline,
+   * which is a deliberate design decision and one the existing `chrome-rows` spec
+   * asserts: neither row draws a border, so without a tint the two would read as one
+   * undifferentiated band.
+   *
+   * It was lost when `rich-toolbar.module.css` was deleted with its component, which
+   * is exactly the failure mode of moving a stylesheet: the rule lived next to the
+   * markup it styled rather than next to the other chrome rows that depend on it.
+   * `chrome-rows` caught it — measured, both rows computed to `rgba(0, 0, 0, 0)`.
+   *
+   * The token and its fallback are the deleted rule's, unchanged, and are defined in
+   * `theme/customization.css`.
+   */
+  background: var(--rtwiki-chrome-surface, var(--mantine-color-body));
+}
+
+/*
+ * The slot that opens a right-aligned group.
+ *
+ * `margin-left: auto` is the entire mechanism, and it is chosen over a flexible spacer
+ * element because of how the row is measured. The overflow hook measures each child of
+ * the bar to decide where to split: a zero-width spacer would be measured as a unit,
+ * and a real one would consume the whole bar and leave nothing to split.
+ *
+ * `auto` on one flex item pushes that item and every item after it to the right edge,
+ * adds nothing to the row for the hook to measure, and cannot produce a second row.
+ */
+.pinnedEnd {
+  margin-left: auto;
+}
+
+/*
+ * A rule between groups.
+ *
+ * The hairline token rather than `--mantine-color-default-border` restated: the
+ * named source in `customization.css` exists and nothing referenced it, so this
+ * is the one rule that gives it a user.
+ */
+.divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  flex: 0 0 auto;
+  background: var(--rtwiki-chrome-divider);
+}
+
+/*
+ * The measured box around a control.
+ *
+ * It must be a real box: `display: contents` has no layout box of its own, so
+ * `offsetWidth` would read 0 and every control would measure as zero-width. It
+ * also carries the roving `tabIndex`, so the box that is measured and the box
+ * that takes focus are the same box.
+ */
+.slot {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.slot:focus-within {
+  outline: 2px solid var(--mantine-color-blue-filled);
+  outline-offset: -2px;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.moreButton {
+  flex: 0 0 auto;
+}
+
+/*
+ * A control that cannot act right now must *look* like it cannot.
+ *
+ * Measured before this rule existed: every disabled control on the bar computed
+ * `opacity: 1`, identical to every enabled one. With 35 icon-only controls in a
+ * single row there is no other way to tell them apart, so the bar was claiming
+ * that unavailable commands were available — clicking one did nothing, which
+ * reads as a broken button rather than an unavailable one.
+ *
+ * Dimming the whole control keeps the shape legible while making the state
+ * obvious, and it costs no contrast budget on the enabled controls.
+ */
+.bar [data-disabled],
+.bar :disabled {
+  opacity: 0.35;
+}
+
+.bar [data-disabled]:hover,
+.bar :disabled:hover {
+  /* No hover affordance on a control that will not act. */
+  background: transparent;
+}
+
+/*
+ * `data-disabled` is not only a marker.
+ *
+ * Mantine's own stylesheet matches it and paints a filled
+ * `var(--mantine-color-disabled)` box with disabled-coloured text. Left alone,
+ * an unavailable control becomes the ONLY control on the bar with a background,
+ * so it reads as the one that is selected or hovered rather than the one that
+ * cannot be used. Measured, not assumed: a `data-disabled` control computed
+ * `background-color: rgb(46, 46, 46)` against `rgb(201, 201, 201)` for every
+ * other control. These two declarations restore it to the same resting
+ * appearance, leaving the dim above as the only signal.
+ */
+.bar [data-disabled] {
+  background: transparent;
+  color: var(--mantine-color-text);
+}
+
+/*
+ * Overflowed controls keep their own identity and handlers — they are moved, not
+ * reimplemented — so the panel shows the same icon buttons, each still labelled
+ * for assistive technology. Laid out as a wrapping grid rather than one tall
+ * column: at the narrowest window there can be twenty of them, and a single
+ * column would run off the bottom of the screen.
+ *
+ * The cap and the scrolling belong to the `ScrollArea` inside it now (`.moreScroll`),
+ * so this rule keeps only the grid. It still owns the dropdown's padding, because
+ * `Popover.Dropdown` is the frame and the frame is what pads.
+ */
+.moreMenu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+/*
+ * The scrolling viewport for the overflow grid.
+ *
+ * `flex-wrap` lives on the dropdown, above this element, so the wrapped rows are
+ * laid out by the frame and this is only the axis they scroll on. Keeping the
+ * wrap outside the scroller matters: a wrap inside a scrolling viewport would
+ * re-wrap against the viewport's width, which is narrower by the scrollbar, and
+ * the last row would break one column early.
+ */
+.moreScroll {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.moreItem {
+  display: inline-flex;
+}
+
+/*
+ * The colour swatch panel.
+ *
+ * These rules moved here from `rich-toolbar.module.css` rather than being
+ * written fresh, and the values are unchanged: a 5-column grid of 28px swatches.
+ * They are here because the panel is now shared — the old copy lived inside the
+ * rich-editor feature's stylesheet, which is exactly the cross-feature dependency
+ * this toolbar exists to remove.
+ */
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--mantine-spacing-xs);
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mantine-radius-sm);
+  border: 1px solid var(--mantine-color-default-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mantine-color-dimmed);
+  /* The picked colour arrives as a custom property; painting stays here. */
+  background: var(--swatch-color, transparent);
+}
+
+.swatchActive {
+  outline: 2px solid var(--mantine-color-blue-filled);
+  outline-offset: 1px;
+}

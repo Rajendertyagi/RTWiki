@@ -1,6 +1,6 @@
 import { Button, Group, Text, useComputedColorScheme } from '@mantine/core'
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content'
-import { IconDownload, IconEye, IconPencil } from '@tabler/icons-react'
+import { IconEye, IconPencil } from '@tabler/icons-react'
 // KaTeX's stylesheet, imported here so maths are styled on a **Markdown** page.
 //
 // `@blocknote/math-block` already imports this exact file, but only from the Rich
@@ -12,24 +12,43 @@ import { IconDownload, IconEye, IconPencil } from '@tabler/icons-react'
 //
 // This is the same file, not a second copy, so the CSS has one source. Verified after
 // building rather than assumed; see the note in `markdown-workspace.module.css`.
+/*
+ * KaTeX's stylesheet.
+ *
+ * **Also imported from `main.tsx`, and that is deliberate.** Importing it only here
+ * put it in the lazy `shiki-service-*.css` chunk once syntax highlighting existed —
+ * because this module both imports the highlighter and imports this stylesheet, so
+ * Vite grouped them. With the stylesheet absent, KaTeX's `.katex-mathml` subtree (the
+ * screen-reader-only copy) rendered visibly, and every formula showed its
+ * letter-by-letter glyphs beside the rendered maths. Measured on the running app.
+ *
+ * Keeping it here as well means this module is still correct when loaded outside the
+ * app entry; a bare import of a plain `.css` is idempotent, so the two cannot
+ * conflict.
+ */
 import 'katex/dist/katex.min.css'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { updatePage } from '../../services/pages-api.js'
-import { downloadTextFile, sanitizeFileName } from '../../util/file-download.js'
+import { RTWIKI_SCROLL } from '../../theme/registry.js'
+import type { CodeColorScheme } from '../code/code-registry.js'
 import { CodeEditor } from '../html-editor/code-editor.js'
-import type { EditorStatus } from '../html-editor/use-codemirror.js'
+import type { EditorStatus, UseCodeMirrorResult } from '../html-editor/use-codemirror.js'
 import { renderMermaidSvg } from '../rich-editor/blocks/mermaid-render.js'
 import { useAutosave } from '../rich-editor/use-autosave.js'
+import type { EditorCapabilities } from '../workspace/capabilities.js'
+import { createMarkdownCapabilities } from '../workspace/codemirror-capabilities.js'
 import { useEditorPreferences } from '../workspace/editor-preferences.js'
 import { RightSidebarRegion } from '../workspace/right-sidebar-region.js'
 import type { StatusSaveState } from '../workspace/save-state.js'
 import { isAutosaveDirty, mapAutosaveStatus } from '../workspace/save-state.js'
+import { attachCodeHighlighting } from './markdown-code-highlight.js'
 import { attachColumnDividers } from './markdown-columns-divider.js'
 import { attachMermaidDiagrams } from './markdown-mermaid-hydrate.js'
 import { extractMarkdownOutline, MARKDOWN_HEADING_SELECTOR } from './markdown-outline.js'
 import { renderMarkdown } from './markdown-render.js'
 import classes from './markdown-workspace.module.css'
+import './markdown-content.css'
 /**
  * The `:::columns` stylesheet, imported for its side effect.
  *
@@ -61,6 +80,15 @@ import './markdown-mermaid.css'
 
 export interface MarkdownPageWorkspaceProps {
   pageId: string
+  /**
+   * Declared and deliberately not destructured: the title is rendered by
+   * `EditorHeader` in the row above, not by the editor surface. It stays on the
+   * interface because this workspace is handed the same prop set as every other
+   * surface, and narrowing that per surface would be a second thing to keep in
+   * step. The one consumer that did read it here — the `Export .md` button — was
+   * removed from this row; the tree pane still offers that export and reads the
+   * title there.
+   */
   pageTitle: string
   storedContent: string
   createdDate?: string
@@ -73,6 +101,34 @@ export interface MarkdownPageWorkspaceProps {
     error?: string | null
   }) => void
   onEditorStatusChange?: (status: EditorStatus) => void
+  /**
+   * Hands this page's editing capabilities to the workspace's shared toolbar row.
+   *
+   * Capabilities rather than a rendered node, which is the one deliberate
+   * difference from `html-editor.tsx`'s `onToolbarReady`. That seam hands up JSX
+   * because the HTML toolbar is popover-heavy and predates the model; handing up
+   * capabilities instead means the toolbar row — not the editor — owns the shell,
+   * the roving focus, the overflow and the disabled treatment, so a Markdown Note
+   * cannot grow a second bar that behaves differently.
+   *
+   * Null whenever the editor is not mounted, so the row renders nothing rather
+   * than a bar whose commands would throw.
+   */
+  onCapabilitiesReady?: (capabilities: EditorCapabilities | null) => void
+  /**
+   * Hands the Edit/Preview switch up to the shared toolbar row.
+   *
+   * A rendered node rather than capabilities, and deliberately so: a view switch
+   * is not a formatting command, so putting it in the capability model would
+   * force the toolbar to know that "edit" and "preview" are modes of an editor
+   * rather than things a reader can format. The row's `trailing` slot exists for
+   * exactly this kind of surface-owned control.
+   *
+   * It used to render as a row of its own, directly under the tab strip, which
+   * put a second bar between the tabs and the real toolbar — measured at 6px of
+   * gap, because the workspace's own `gap` was all that separated them.
+   */
+  onViewSwitchReady?: (node: ReactNode | null) => void
   /** Opens a page through the controller/tab flow, for the sidebar's backlinks. */
   onOpenPage?: (pageId: string) => void
 }
@@ -88,7 +144,6 @@ export interface MarkdownPageWorkspaceProps {
  */
 export default function MarkdownPageWorkspace({
   pageId,
-  pageTitle,
   storedContent,
   createdDate,
   updatedDate,
@@ -96,6 +151,8 @@ export default function MarkdownPageWorkspace({
   onFlushRef,
   onSaveStateChange,
   onEditorStatusChange,
+  onCapabilitiesReady,
+  onViewSwitchReady,
   onOpenPage
 }: MarkdownPageWorkspaceProps): JSX.Element {
   const parsed = parseMarkdownPageContent(storedContent)
@@ -104,6 +161,82 @@ export default function MarkdownPageWorkspace({
 
   const [mode, setMode] = useState<'edit' | 'preview'>('preview')
   const [draft, setDraft] = useState(committedSource)
+
+  /*
+   * The live CodeMirror view accessor, for the toolbar.
+   *
+   * A **ref holding a function**, not a view: the view does not exist until CodeMirror
+   * mounts and is replaced if it remounts, so storing a view would capture a detached
+   * one. This is the same seam `html-editor.tsx` uses for its own toolbar — the
+   * `onViewAccessor` prop already exists on `CodeEditor` for exactly this purpose.
+   */
+  const getViewRef = useRef<UseCodeMirrorResult['getView'] | null>(null)
+
+  /*
+   * The capability record handed to the shared toolbar row.
+   *
+   * Built once, from the `getView` accessor, and *not* rebuilt when the caret
+   * moves. The toolbar reads `capabilities.state()` itself, once per render, so
+   * a caret movement updates the pressed and disabled marks without producing a
+   * new object — which is what made the first attempt's bar visibly re-lay-out
+   * on every keystroke.
+   */
+  const capabilities = useMemo(
+    // `getViewRef.current` is the accessor itself, so it is *called* here to reach
+    // the view. Calling it per read rather than storing its result is what makes a
+    // remounted editor safe: a stored view would be the detached one.
+    () => createMarkdownCapabilities(() => getViewRef.current?.() ?? null),
+    []
+  )
+
+  /*
+   * Publishes the capabilities upward, and withdraws them on unmount.
+   *
+   * The withdrawal matters as much as the publish: the row outlives this
+   * workspace when the reader switches tabs, and a row still holding a dead
+   * record would render a full bar of controls whose commands act on a detached
+   * view. An object is stored rather than a bare function for the reason
+   * documented on `diagramActions` in `page-workspace.tsx` — a `setState` given a
+   * function calls it as an updater.
+   */
+  useEffect(() => {
+    onCapabilitiesReady?.(capabilities)
+    return () => onCapabilitiesReady?.(null)
+  }, [capabilities, onCapabilitiesReady])
+
+  /*
+   * The view switch, handed up to the same row.
+   *
+   * Built in an effect rather than inline in the JSX because the row stores what
+   * it is given, and a fresh element on every render would re-publish on every
+   * render — the churn the stable capability record above exists to avoid. `mode`
+   * is a real dependency, so the row's copy does reflect the current mode.
+   */
+  useEffect(() => {
+    onViewSwitchReady?.(
+      <Group gap="xs" wrap="nowrap">
+        <Button
+          size="compact-xs"
+          variant={mode === 'edit' ? 'filled' : 'light'}
+          leftSection={<IconPencil size={12} />}
+          onClick={() => setMode('edit')}
+          data-testid="markdown-edit-button"
+        >
+          {UI_TEXT.markdownWorkspaceEditLabel}
+        </Button>
+        <Button
+          size="compact-xs"
+          variant={mode === 'preview' ? 'filled' : 'light'}
+          leftSection={<IconEye size={12} />}
+          onClick={() => setMode('preview')}
+          data-testid="markdown-preview-button"
+        >
+          {UI_TEXT.markdownWorkspacePreviewLabel}
+        </Button>
+      </Group>
+    )
+    return () => onViewSwitchReady?.(null)
+  }, [mode, onViewSwitchReady])
   const [stats, setStats] = useState<EditorStatus>({
     line: 1,
     column: 1,
@@ -116,6 +249,11 @@ export default function MarkdownPageWorkspace({
   // **render input** and not something CSS can answer: the same diagram, drawn
   // twice, has two different documents.
   const colorScheme = useComputedColorScheme('light')
+
+  // The same scheme, narrowed to what the code registry accepts. Written as a
+  // variable rather than repeated at each call site so the two schemes the registry
+  // carries are the only two this component can ask for.
+  const codeColorScheme: CodeColorScheme = colorScheme === 'dark' ? 'dark' : 'light'
 
   const handleSave = async (pid: string, content: string): Promise<void> => {
     if (onSaveContent) {
@@ -251,6 +389,31 @@ export default function MarkdownPageWorkspace({
     })
   }, [mode, colorScheme, pageId])
 
+  /*
+   * Syntax-highlights every fenced code block in the preview.
+   *
+   * **The same shape as the two effects above, and for the same reasons.** The
+   * preview's children are replaced from scratch on every edit, so nothing React
+   * owns may live inside it, and the signal that they changed is a
+   * `MutationObserver` on the container. `attachCodeHighlighting` owns it.
+   *
+   * Keyed on `mode` and `colorScheme`, both load-bearing:
+   *
+   * - `mode` is the identity of the preview element.
+   * - `colorScheme` is a render input. Shiki bakes token colours into the HTML it
+   *   emits, so a scheme change cannot be handled in CSS and needs a re-render —
+   *   exactly as Mermaid's does, for the same reason.
+   *
+   * Shiki itself is reached through `src/web/features/code/shiki-service.ts`, which
+   * shares one lazy instance with the Rich Editor. Nothing here imports an engine.
+   */
+  useEffect(() => {
+    if (mode !== 'preview') return
+    const preview = previewRef.current
+    if (!preview) return
+    return attachCodeHighlighting(preview, { colorScheme: codeColorScheme })
+  }, [mode, codeColorScheme])
+
   useEffect(() => {
     if (pendingHeading === null) return
     // `blockId` is the heading's position in the lexer's output, which is the same
@@ -283,39 +446,17 @@ export default function MarkdownPageWorkspace({
 
   return (
     <div className={classes.root} data-testid="markdown-workspace">
-      <Group justify="space-between" wrap="nowrap" gap="sm" className={classes.bar}>
-        <Group gap="xs" wrap="nowrap">
-          <Button
-            size="compact-xs"
-            variant={mode === 'edit' ? 'filled' : 'light'}
-            leftSection={<IconPencil size={12} />}
-            onClick={() => setMode('edit')}
-            data-testid="markdown-edit-button"
-          >
-            {UI_TEXT.markdownWorkspaceEditLabel}
-          </Button>
-          <Button
-            size="compact-xs"
-            variant={mode === 'preview' ? 'filled' : 'light'}
-            leftSection={<IconEye size={12} />}
-            onClick={() => setMode('preview')}
-            data-testid="markdown-preview-button"
-          >
-            {UI_TEXT.markdownWorkspacePreviewLabel}
-          </Button>
-        </Group>
-        <Button
-          size="compact-xs"
-          variant="subtle"
-          leftSection={<IconDownload size={12} />}
-          onClick={() =>
-            downloadTextFile(`${sanitizeFileName(pageTitle)}.md`, draft, 'text/markdown')
-          }
-          data-testid="markdown-export-button"
-        >
-          {UI_TEXT.markdownExportLabel}
-        </Button>
-      </Group>
+      {/*
+       * Nothing is rendered above the document, deliberately. Both the formatting
+       * bar and the Edit/Preview switch are published upward to the workspace's
+       * shared toolbar row, so there is one bar per window rather than one per
+       * surface.
+       *
+       * They used to render here, which put a row of their own between the tab
+       * strip and the real toolbar — measured at 6px of gap, since the
+       * workspace's own `gap` was all that separated them, and the row was
+       * neither the tab strip nor the toolbar.
+       */}
 
       <div className={classes.contentRow}>
         {mode === 'edit' ? (
@@ -327,13 +468,28 @@ export default function MarkdownPageWorkspace({
               label={UI_TEXT.markdownEditorLabel}
               wordWrap={editorPrefs.wordWrap}
               onStatsChange={(s) => setStats((prev) => ({ ...prev, ...s }))}
+              onViewAccessor={(getView) => {
+                getViewRef.current = getView
+              }}
             />
           </div>
         ) : (
           <div
             ref={previewRef}
-            className={classes.previewPane}
+            // `RTWIKI_SCROLL` rather than a `ScrollArea` wrapper. The preview is the
+            // scroll target for in-page navigation — `pendingHeading` calls
+            // `scrollIntoView` on a heading inside it — and it is full of nested
+            // one-axis scrollers (wide tables, code fences, diagrams) whose height has
+            // to stay content-driven. Inserting a viewport around it would change
+            // which element those nested strips and the heading jump scroll inside,
+            // for no gain over restyling the element that already scrolls.
+            className={`${classes.previewPane} ${RTWIKI_SCROLL}`}
             data-testid="markdown-rendered"
+            // The scope hook `markdown-content.css` selects on. An attribute rather than
+            // the `previewPane` class, because that class belongs to a CSS module and is
+            // therefore emitted hashed (`._previewPane_1ndoc_42`) - a global stylesheet
+            // selecting `.previewPane` matches nothing. See that file's header.
+            data-rt-markdown-preview=""
             // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized Markdown HTML via DOMPurify (micromark escapes raw HTML; strict allowlist on top)
             dangerouslySetInnerHTML={{ __html: html }}
           />

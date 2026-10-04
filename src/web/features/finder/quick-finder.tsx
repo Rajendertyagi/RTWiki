@@ -1,4 +1,4 @@
-import { Modal, Text, TextInput } from '@mantine/core'
+import { Modal, ScrollArea, Text, TextInput } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconSearch } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -191,49 +191,51 @@ export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderP
         data-autofocus
         autoFocus
       />
-      <div
-        className={classes.results}
-        role="listbox"
-        aria-label={UI_TEXT.quickFinderTitle}
-        data-testid="quick-finder-results"
-      >
-        {rows.length === 0 ? (
-          <Text size="sm" c="dimmed" p="sm" role="status">
-            {UI_TEXT.quickFinderEmptyLabel}
-          </Text>
-        ) : (
-          rows.map((row) => {
-            renderIndex += 1
-            const index = renderIndex
-            const showGroup = row.group !== lastGroup
-            lastGroup = row.group
-            return (
-              <div key={row.page.id}>
-                {showGroup ? (
-                  <Text size="xs" fw={600} c="dimmed" className={classes.groupLabel}>
-                    {groupLabel(row.group)}
-                  </Text>
-                ) : null}
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  className={
-                    index === activeIndex
-                      ? `${classes.resultItem} ${classes.resultItemActive}`
-                      : classes.resultItem
-                  }
-                  data-testid={`quick-finder-option-${row.page.id}`}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => openRow(row)}
-                >
-                  {row.page.title || UI_TEXT.untitledPage}
-                </button>
-              </div>
-            )
-          })
-        )}
-      </div>
+      <ScrollArea.Autosize mah={LAYOUT.panelMaxHeight} type="always" scrollbars="y">
+        <div
+          className={classes.results}
+          role="listbox"
+          aria-label={UI_TEXT.quickFinderTitle}
+          data-testid="quick-finder-results"
+        >
+          {rows.length === 0 ? (
+            <Text size="sm" c="dimmed" p="sm" role="status">
+              {UI_TEXT.quickFinderEmptyLabel}
+            </Text>
+          ) : (
+            rows.map((row) => {
+              renderIndex += 1
+              const index = renderIndex
+              const showGroup = row.group !== lastGroup
+              lastGroup = row.group
+              return (
+                <div key={row.page.id}>
+                  {showGroup ? (
+                    <Text size="xs" fw={600} c="dimmed" className={classes.groupLabel}>
+                      {groupLabel(row.group)}
+                    </Text>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={
+                      index === activeIndex
+                        ? `${classes.resultItem} ${classes.resultItemActive}`
+                        : classes.resultItem
+                    }
+                    data-testid={`quick-finder-option-${row.page.id}`}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => openRow(row)}
+                  >
+                    {row.page.title || UI_TEXT.untitledPage}
+                  </button>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </ScrollArea.Autosize>
     </Modal>
   )
 }

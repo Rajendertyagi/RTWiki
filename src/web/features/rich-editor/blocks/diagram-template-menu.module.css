@@ -1,0 +1,35 @@
+/* The Rich Note's Insert -> Diagram chooser, as it sits inside the shared
+ * toolbar's `Popover.Dropdown`.
+ *
+ * This component used to render its own `Menu.Dropdown`, which positioned itself
+ * with no reference and landed at the viewport origin. Positioning is now the
+ * popover's single job — see the note in `diagram-template-menu.tsx` — so these
+ * rules are only about the list's own shape: one column of rows that scrolls
+ * rather than growing past the bottom of the window.
+ *
+ * Thirty templates at a full row each is roughly 1000px, which does not fit a
+ * 900px window. The cap is the shared panel token rather than a fifth restatement
+ * of `320px`. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /*
+   * No padding, and no `max-height`/`overflow` either.
+   *
+   * The inset belongs to the enclosing `Popover.Dropdown`, which already pads its
+   * content. This rule used to add a second `var(--mantine-spacing-xs)` on top of
+   * that, so the rows sat 26px in from the frame — 16px of popover padding plus 10px
+   * of this — and a panel of short labels looked mostly empty. One owner for the
+   * inset is the whole rule: the frame pads, the list does not.
+   *
+   * The height cap and the scrolling moved to the `ScrollArea.Autosize` that wraps
+   * this element, as `mah`, so the panel gets RTWiki's scrollbar instead of a native
+   * one and the cap comes from `LAYOUT.panelMaxHeight` rather than a literal here.
+   *
+   * `align-items: stretch` is kept: it is what makes the rows fill the viewport's
+   * width, so the scrollbar sits at the frame's edge rather than floating beside a
+   * narrower column of labels.
+   */
+}

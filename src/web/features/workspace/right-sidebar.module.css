@@ -26,10 +26,12 @@
   border-bottom: 1px solid var(--rtwiki-chrome-hairline, var(--mantine-color-default-border));
 }
 
+/* The pane's scroll region is a `ScrollArea` (see `right-sidebar.tsx`), which owns
+   the vertical axis and RTWiki's scrollbar. This rule keeps the flex binding to the
+   pane's height and the inset. */
 .scrollArea {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
   padding: 8px;
 }
 

@@ -160,10 +160,20 @@ describe('an unclaimed :::name is surfaced, and the paragraph after it survives'
    * document, "the rest of the document" is deleted with it.
    *
    * Measured, with the extension installed and a `columns` handler but no `'*'`
-   * fallback: `before\n\n:::warning\n**be careful**\n\nafter\n` renders as
+   * fallback: `before\n\n:::notice\n**be careful**\n\nafter\n` renders as
    * `<p>before</p>` and nothing else. Two paragraphs gone, no error anywhere.
+   *
+   * ## `:::notice`, not `:::warning`
+   *
+   * The example originally used `:::warning`, which was unclaimed then. It is not
+   * any more: `markdown-callouts.ts` claims it, so `:::warning` now renders as a
+   * callout and never reaches the `'*'` fallback this block exists to test. The
+   * *fallback's* behaviour — the thing that must never lose content — is
+   * unchanged; only the name chosen to exercise it had to move. `:::notice` is
+   * measured to still be unclaimed, and the callout test asserts `:::notice` and
+   * friends are unclaimed, so this cannot silently rot into a vacuous test.
    */
-  const UNCLOSED = 'before\n\n:::warning\n**be careful**\n\nafter\n'
+  const UNCLOSED = 'before\n\n:::notice\n**be careful**\n\nafter\n'
 
   it('keeps the content that follows an unclosed unknown directive', () => {
     const doc = parse(renderMarkdown(UNCLOSED))
@@ -175,13 +185,13 @@ describe('an unclaimed :::name is surfaced, and the paragraph after it survives'
     const doc = parse(renderMarkdown(UNCLOSED))
     const unknown = doc.querySelector(`.${columns.COLUMNS_UNKNOWN_CLASS}`)
     expect(unknown, 'an unknown directive must be visible, not silent').not.toBeNull()
-    expect(unknown?.textContent).toContain('warning')
+    expect(unknown?.textContent).toContain('notice')
     // The author's own content is inside it, rendered as Markdown.
     expect(unknown?.querySelector('strong')?.textContent).toBe('be careful')
   })
 
   it('keeps the surrounding document intact around a *closed* unknown directive', () => {
-    const doc = parse(renderMarkdown('before\n\n:::warning\nbe careful\n:::\n\nafter\n'))
+    const doc = parse(renderMarkdown('before\n\n:::notice\nbe careful\n:::\n\nafter\n'))
     expect(doc.body.textContent).toContain('before')
     expect(doc.body.textContent).toContain('be careful')
     expect(doc.body.textContent).toContain('after')
@@ -191,10 +201,11 @@ describe('an unclaimed :::name is surfaced, and the paragraph after it survives'
   it('surfaces a leaf ::name rather than swallowing it', () => {
     // A leaf is a different directive kind with no body, so it reaches the same
     // fallback. Rendered inline, because a leaf cannot hold block content.
-    const doc = parse(renderMarkdown('before\n\n::note\n\nafter\n'))
+    // `::sidebar` rather than `::note`, which is now a claimed callout name.
+    const doc = parse(renderMarkdown('before\n\n::sidebar\n\nafter\n'))
     const unknown = doc.querySelector(`.${columns.COLUMNS_UNKNOWN_CLASS}`)
     expect(unknown, 'a leaf must not vanish').not.toBeNull()
-    expect(unknown?.textContent).toContain('note')
+    expect(unknown?.textContent).toContain('sidebar')
     // Inline form: a `<span>`, not a `<div>` that would break the paragraph.
     expect(unknown?.tagName).toBe('SPAN')
     expect(doc.body.textContent).toContain('after')

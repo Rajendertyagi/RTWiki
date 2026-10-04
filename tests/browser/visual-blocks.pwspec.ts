@@ -630,12 +630,18 @@ test.describe('visual knowledge blocks', () => {
     await expect(page.getByTestId('diagram-preview')).toBeVisible()
   })
 
-  // The zoom controls belong to the retired `mindMap` block and to no other, so
-  // this is the only remaining coverage of them. It is kept deliberately and
-  // seeded with that type on purpose: a note written before the block was retired
-  // still carries it, and this is the behaviour that note keeps. Nothing inserts
-  // this type any more.
-  test('a note that still holds a mindMap block keeps its zoom controls', async ({
+  // This covers a note written before the `mindMap` block was retired: it still
+  // carries that type, and it still has to open, render and zoom. Nothing inserts
+  // this type any more, so the block type is seeded on purpose.
+  //
+  // It used to assert `mindMap-zoom-label` walking 100% -> 125% -> 150% -> 125%.
+  // That was covering a SECOND zoom which changed the diagram's layout width,
+  // living beside the shared view's transform zoom — so a legacy block's scale
+  // depended on which control the reader pressed, and the two sets could collide
+  // on one id. It is gone; `DiagramView` is the only view, and this asserts that
+  // instead. The guarantee that was actually wanted — zoom never clips the diagram
+  // out of reach — is kept, and asserted as reachability instead of as a label.
+  test('a note that still holds a mindMap block renders and uses the one shared view', async ({
     page,
     request
   }) => {
@@ -646,16 +652,40 @@ test.describe('visual knowledge blocks', () => {
     await openNote(page, title)
     await expectRendered(page, 'mindMap')
 
-    const label = page.getByTestId('mindMap-zoom-label')
-    await expect(label).toHaveText('100%')
-    await page.getByTestId('mindMap-zoom-in').click()
-    await expect(label).toHaveText('125%')
-    await page.getByTestId('mindMap-zoom-in').click()
-    await expect(label).toHaveText('150%')
-    await page.getByTestId('mindMap-zoom-out').click()
-    await expect(label).toHaveText('125%')
-    // Zoom never clips: the SVG host keeps its natural width at >100%.
-    await expect(page.locator('[data-testid="mindMap-svg"] svg').first()).toBeVisible()
+    // The legacy block type is only a read alias now, so it gets the shared view.
+    await expect(page.getByTestId('note-view-zoom-in')).toHaveCount(1)
+    await expect(page.getByTestId('note-view-zoom-out')).toHaveCount(1)
+    // The removed width-based zoom leaves nothing behind.
+    await expect(page.getByTestId('mindMap-zoom-label')).toHaveCount(0)
+    await expect(page.getByTestId('mindMap-zoom-in')).toHaveCount(0)
+    await expect(page.getByTestId('mindMap-zoom-out')).toHaveCount(0)
+
+    // And it scales the picture, through the shared view's transform.
+    const stage = page.locator('[data-testid="mindMap-preview"] [class*="_stage_"]')
+    await expect(stage).toHaveCount(1)
+    const svg = page.locator('[data-testid="mindMap-svg"]').first()
+    const drawnWidth = async () =>
+      await page
+        .locator('[data-testid="mindMap-svg"] svg')
+        .first()
+        .evaluate((el) => Math.round(el.getBoundingClientRect().width))
+
+    const before = await drawnWidth()
+    await page.locator('[data-testid="mindMap-preview"]').hover()
+    await page.getByTestId('note-view-zoom-in').click()
+    expect(await drawnWidth(), 'the shared view must scale the picture').toBeGreaterThan(before)
+
+    // Zoom must not push the diagram somewhere it cannot be scrolled back from: the
+    // stage owns the overflow, so a zoomed legacy block reports a real scroll extent.
+    const measured = await stage.evaluate((el) => ({
+      clientH: el.clientHeight,
+      scrollH: el.scrollHeight
+    }))
+    expect(
+      measured.scrollH,
+      'a zoomed legacy block must stay reachable on the shared stage'
+    ).toBeGreaterThanOrEqual(measured.clientH)
+    await expect(svg).toBeVisible()
   })
 
   test('callout: switch variant after insertion preserves rich text', async ({ page, request }) => {

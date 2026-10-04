@@ -42,7 +42,18 @@ describe('preview document construction', () => {
     // canvas colour is passed in and declared explicitly.
     const doc = build({ documentBackground: 'rgb(1, 2, 3)' })
     expect(doc).toContain('background: rgb(1, 2, 3)')
-    expect(doc).not.toContain('background: transparent')
+    /*
+     * Scoped to the canvas rule rather than the whole document.
+     *
+     * This used to be a bare `not.toContain('background: transparent')`, which
+     * asserted the right thing for the wrong reason: it only worked because no
+     * other rule in the document could say those words. The preview now carries
+     * its own scrollbar rules (see `previewScrollbarCss`), and a transparent
+     * scrollbar *track* is exactly what it should say — a visible groove around a
+     * 6px thumb reads as a heavy frame on a compact document. Matching the canvas
+     * rule directly states what is actually being protected.
+     */
+    expect(doc).not.toMatch(/html,\s*body\s*\{[^}]*background:\s*transparent/)
   })
 
   it('gives the document a default text colour for the active theme', () => {

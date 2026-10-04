@@ -65,12 +65,56 @@
   --rtwiki-chrome-border: var(--rtwiki-chrome-hairline);
   /* Shared horizontal chrome padding (left/right of each row). */
   --rtwiki-chrome-pad-x: var(--mantine-spacing-sm);
+  /* The document text inset: how far a note's text sits from the edge of its
+   * surface. ONE value for both document types, because a Rich Note and a
+   * Markdown preview must present the same measure.
+
+     54px is BlockNote's own `.bn-editor { padding-inline: 54px }`
+     (@blocknote/core/dist/style.css) - measured on a live Rich Note at 1440px:
+     a 790px editor inside a ~900px pane. `rich-editor.module.css` overrides
+     BlockNote's padding to read this token, so the number below is the single
+     source and the two surfaces cannot drift.
+
+     The mechanism matters: an inset *inside* a full-width surface, NOT a
+     `max-width` with `margin-inline: auto`. The latter was measured on the
+     Markdown preview at the same viewport and produced a 547px box with 145.7px
+     of dead gutter on each side - a narrow page floating in empty space. See
+     `markdown-content.css` for that measurement. */
+  --rtwiki-document-inset: 54px;
   /* Row heights — tab strip, toolbars and the page header share one equal,
      compact height so the chrome reads as a single stacked bar. */
   --rtwiki-row-height: 40px;
   --rtwiki-tab-height: var(--rtwiki-row-height);
   --rtwiki-toolbar-height: var(--rtwiki-row-height);
   --rtwiki-header-height: var(--rtwiki-row-height);
+  /* The tallest a scrolling dropdown may grow before it scrolls instead.
+     Published from `LAYOUT.panelMaxHeight` by the theme resolver, so the
+     stylesheets that set `max-height` and the `ScrollArea` call sites that set
+     `mah` are reading one number. It used to be a `320px` literal restated in
+     four stylesheets. */
+  --rtwiki-panel-max-height: 320px;
+  /* ---------------------------------------------------------------
+     Scrollbars. Two mechanisms, one set of values.
+
+     RTWiki uses Mantine `ScrollArea` where it owns the scroll container, and
+     restyled native scrollbars where a library owns it (Wunderbaum's tree,
+     BlockNote's editor) or where content scrolls horizontally inside a text
+     flow (markdown tables, code, formulas). The appearance must not depend on
+     which one you get, so both read these values.
+
+     `--rtwiki-scrollbar-size` is published from `LAYOUT.scrollbar.size` by the
+     theme resolver in `theme/index.ts`, not written here — the same number the
+     `ScrollArea` components are given. That is what keeps the two mechanisms
+     from drifting.
+
+     Colours are mixed from Mantine's own text colour rather than hardcoded, so
+     they follow the active theme automatically and need no separate dark-scheme
+     block. A transparent track is deliberate: a visible groove around a
+     6px thumb reads as a heavy frame on a compact window. */
+  --rtwiki-scrollbar-thumb: color-mix(in srgb, var(--mantine-color-text) 26%, transparent);
+  --rtwiki-scrollbar-thumb-hover: color-mix(in srgb, var(--mantine-color-text) 42%, transparent);
+  --rtwiki-scrollbar-track: transparent;
+  --rtwiki-scrollbar-radius: calc(var(--rtwiki-scrollbar-size) / 2);
   /* The status bar's own height is LAYOUT.statusBarHeight (28px), published as
      --rtwiki-status-bar-height by the theme resolver. It used to be restated
      here as 26px, which disagreed with the single source; the stylesheet now
@@ -177,4 +221,93 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/*
+ * The shared native scrollbar, for the surfaces a library owns.
+ *
+ * ## Where this applies, and why it is not a global rule
+ *
+ * Mantine `ScrollArea` is the mechanism wherever RTWiki owns the scroll
+ * container: it draws the scrollbar itself, so those surfaces never show a
+ * native bar and never need this class. This class is for the two cases that
+ * cannot use it:
+ *
+ * 1. **A library owns the scroll container.** Wunderbaum's tree scrolls inside
+ *    the element it creates, and `wb-tree-host.ts` reads and pins that same
+ *    element's `scrollTop` across animation frames; BlockNote's editor scrolls
+ *    in `.blockNoteWrapper`, which its own caret-scrolling depends on. Replacing
+ *    either with `ScrollArea` would mean rewriting the library's scrolling
+ *    architecture to obtain a cosmetic difference, which is not a trade worth
+ *    making.
+ * 2. **Content scrolls horizontally inside a text flow** — a markdown table, a
+ *    code block, a display formula. These are one-dimensional strips whose
+ *    height must stay content-driven, so a two-axis overlay component would add
+ *    a wrapper that buys nothing.
+ *
+ * It is deliberately a class rather than a `*` selector. A universal rule would
+ * also reach browser-level and third-party chrome RTWiki does not own, and would
+ * silently restyle widgets nobody here has looked at.
+ *
+ * ## Why the standard properties alone are not enough
+ *
+ * `scrollbar-width: thin` is a *keyword*, not a measurement: Chromium resolves it
+ * to roughly 11px, which is not the 6px this design uses, and `scrollbar-color`
+ * paints a square-cornered thumb with no radius. Neither can produce the
+ * capsule thumb the size token implies.
+ *
+ * There is also a real conflict between them: per the CSS Scrollbars
+ * specification a Chromium browser that sees a non-`auto` `scrollbar-width`
+ * **ignores** `::-webkit-scrollbar` entirely. So setting both does not layer
+ * them, it discards the vendor rules and leaves the ~11px standard bar — the
+ * opposite of the intent.
+ *
+ * Hence the split below. The standard properties are the base and are what a
+ * browser without vendor pseudo-elements (Firefox) uses. The vendor block is
+ * gated on `@supports selector(::-webkit-scrollbar)`, so it only applies where
+ * those pseudo-elements are honoured, and it resets `scrollbar-width` to `auto`
+ * so the browser does not discard the rules it is about to honour.
+ *
+ * The repository already carried both forms together in
+ * `sidebar/page-tree.module.css`; this is that pairing, generalised and given one
+ * source of values.
+ */
+.rtwiki-scroll {
+  /* Standard properties: the Firefox path, and the base for everything else. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--rtwiki-scrollbar-thumb) var(--rtwiki-scrollbar-track);
+}
+
+@supports selector(::-webkit-scrollbar) {
+  .rtwiki-scroll {
+    /*
+     * Required, not incidental. A non-`auto` `scrollbar-width` makes Chromium
+     * ignore every `::-webkit-scrollbar` rule below, which would silently leave
+     * the ~11px standard bar in place.
+     */
+    scrollbar-width: auto;
+  }
+
+  .rtwiki-scroll::-webkit-scrollbar {
+    width: var(--rtwiki-scrollbar-size);
+    height: var(--rtwiki-scrollbar-size);
+  }
+
+  .rtwiki-scroll::-webkit-scrollbar-track {
+    background: var(--rtwiki-scrollbar-track);
+  }
+
+  .rtwiki-scroll::-webkit-scrollbar-thumb {
+    background: var(--rtwiki-scrollbar-thumb);
+    border-radius: var(--rtwiki-scrollbar-radius);
+  }
+
+  .rtwiki-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--rtwiki-scrollbar-thumb-hover);
+  }
+
+  /* The corner appears when both axes overflow; keep it invisible. */
+  .rtwiki-scroll::-webkit-scrollbar-corner {
+    background: var(--rtwiki-scrollbar-track);
+  }
 }

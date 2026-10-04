@@ -5,6 +5,7 @@ import { gfm, gfmHtml } from 'micromark-extension-gfm'
 import { math, mathHtml } from 'micromark-extension-math'
 import { codes } from 'micromark-util-symbol'
 import { UI_TEXT } from '../../config/index.js'
+import { isCalloutDirective, renderCalloutDirective } from './markdown-callouts.js'
 import {
   COLUMN_CHILD_DIRECTIVE_NAME,
   COLUMNS_DIRECTIVE_NAME,
@@ -135,6 +136,22 @@ const DIRECTIVE_HTML_OPTIONS = {
     return undefined
   },
   '*'(this: EmitContext, directive: Directive): boolean | undefined {
+    /*
+     * A callout name is claimed before the fallback runs, so a `:::warning` becomes
+     * a panel instead of the fallback's diagnostic box.
+     *
+     * The check is on the *name*, not on a list written here: `isCalloutDirective`
+     * reads the same registry `renderCalloutDirective` does, so the set of names
+     * that are callouts and the set that render as callouts cannot disagree.
+     *
+     * A text directive is handed back to the fallback, for the reason the columns
+     * handler gives: `:::note` inline is not a panel request, and emitting a
+     * `<div>` into a `<p>` would be malformed HTML.
+     */
+    if (directive.type !== 'textDirective' && isCalloutDirective(directive.name)) {
+      this.raw(renderCalloutDirective(this.encode, directive as ColumnDirectiveInput))
+      return undefined
+    }
     this.raw(renderUnknownDirective(this.encode, directive as ColumnDirectiveInput))
     // `undefined` is the "handled, and there is nothing after me" signal. It is
     // written explicitly because the return type is `boolean | undefined` and a
