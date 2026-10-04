@@ -85,40 +85,59 @@ column and the wider ceiling is correct there. See 6.1 for how that decision was
 
 **One authority, and it is the one CSS enforces.** A block's width is bounded by exactly one thing:
 `max-width: 100%` on `.sizeContainer`, which resolves against **its containing block's content box**.
-So the only question worth asking is *which element is the containing block?*, and the answer is the
-**first ancestor whose width is not decided by the block itself**:
+**The boundary is a surface contract, declared with `data-block-width-boundary`.** A block's width is
+bounded by exactly one thing: `max-width: 100%` on `.sizeContainer`, which resolves against its
+containing block's content box. Rather than infer which element that is, **each surface declares it**:
 
-- **Rich Note.** `.sizeContainer` sits in `.previewPane`, which is `width: 100%` and `flex: 0 1 auto`.
-  Its content box comes from the note's text column and is independent of the block, so it is the
-  boundary. One level up. Measured 822 / 662 / 506px at 1600x950 / 1440x900 / 700x800.
-- **Diagram page.** `.sizeContainer` sits in Motion's `Reorder.Item`, whose width is
-  `var(--block-width-live, var(--block-width, auto))` — the block's own size, written back onto it.
-  Clamping to it would forbid all growth, and that is the trap: an item that shrink-wraps its
-  content is not a constraint. The boundary is the wrapping flex row, one level further up. Measured
-  974 / 814 / 646px.
+```
+surface owns the boundary
+        —  data-block-width-boundary
+shared resize component (blockWidthBoundary)
+        —
+one authoritative number
+```
 
-An ancestor is "decided by the block" in exactly two ways, and both are read rather than measured:
+| surface | marks | element | measured at 1600x950 / 1440x900 / 700x800 |
+|---|---|---|---|
+| Rich Note | `.previewPane` (`mermaid-block-view.tsx`) | the note's text column | **822 / 662 / 506** |
+| Diagram page | `.blockList` (`mermaid-workspace.tsx`) | the wrapping flex row | **974 / 814 / 646** |
 
-1. **The block's size is written onto it** — an inline `--block-width` or `--block-width-live`. An
-   element's width that comes from the block *is* the block's width.
-2. **It grows into the row's remaining space** — `flex: 1 1 <a definite length>`, which measured as
-   `flex-basis: 352px, flex-grow: 1` on the Diagram page's item while unsized, holding **401px of an
-   814px row** when a second block sat beside it. What it ends up, and what it may become, is the
-   row's decision. A basis of `auto` or of zero means the opposite: the element's own box, or the row
-   it fills, is the boundary — which is `.previewPane` (`auto`) and `.blockList` (`0%`).
+`blockWidthBoundary` walks up from the container to the **nearest** marked ancestor and reads that
+element's content box. Read-only: `closest()` inspects the tree and writes nothing. The pointer drag,
+the keyboard and the size presets all call it, so there is one authority and nothing to keep in step.
 
-**Why it is a read and not a measurement.** Asking the layout was tried and abandoned, and the
-reason is worth recording because it is not obvious. Offering the block maximum through the width
-custom properties, reading what was drawn, and putting everything back is exact — and writing to the
-tree trips the block's own `ResizeObserver`, whose state update **replaces the resize grip**, so the
-pointer capture `onPointerDown` takes is destroyed and every following `pointermove` is delivered to
-whatever is under the cursor. Measured: with the probe, the grip node after `pointerdown` was a
-*different element* and a Rich Note drag moved nothing on either axis; without it, the same node and
-a working drag. A boundary is not worth a drag that does not drag.
+Why these two, in each case:
 
-**The invariant that keeps this honest:** the boundary is the *same number* whether the block is sized
-or not. A boundary derived from the block's own width silently collapses to the block's width the
-moment the block has one, and then no amount of dragging does anything.
+- **Rich Note.** The container's parent is already `.previewPane`, which is `width: 100%` and
+  `flex: 0 1 auto`. Its content box comes from the text column and does not depend on the block, so it
+  is the containing block in CSS's own terms. One level up — and the marker says so.
+- **Diagram page.** The container's parent is Motion's `Reorder.Item`, whose width is
+  `var(--block-width-live, var(--block-width, auto))` — the block's own size, written back onto it — and
+  which then takes a *share* of the wrapping row: measured `flex-basis: 352px, flex-grow: 1`, holding
+  **401px of an 814px row** when a second block sat beside it. Clamping to it forbids all growth, which
+  is the trap. The row, one level higher, is the boundary — and the marker says so rather than leaving
+  the shared component to work out which box it is looking at.
+
+**Boundary discovery is read-only, and that is enforced rather than asserted.** The alternative — offer
+the block maximum through the width custom properties, read what was drawn, put everything back — is
+exact, and was measured and abandoned. Writing to the tree trips the block's own `ResizeObserver`,
+whose state update **replaces the resize grip**, so the pointer capture `onPointerDown` takes is
+destroyed and every following `pointermove` goes to whatever is under the cursor. Measured: with the
+probe, the grip node after `pointerdown` was a *different element* and a Rich Note drag moved nothing on
+either axis; without it, the same node and a working drag. Two tests hold the line: the grip node must
+be the same node for the whole gesture, and a `MutationObserver` over the boundary and every ancestor
+above it must record **no** attribute write during a drag, which is exactly what the probe did.
+
+**A missing marker is reported, not guessed around.** No declared boundary falls back to
+`LAYOUT.blockMaxWidth` — the only other constraint in the product — and logs a `console.warn` once per
+container. It deliberately does **not** fall back to some other ancestor: quietly picking an unmarked
+neighbour is how the earlier version produced a boundary 126px wider than the space a block could ever
+occupy, and it did so silently.
+
+**The declaration is the clamp's ceiling, not a promise CSS will honour.** Both are limits and they are
+not the same limit. Measured: moving the Diagram page's marker up to `.contentRow` (1104px) left the
+block stopping at **814px**, because the `Reorder.Item`'s own `max-width: 100%` still resolves against
+`.blockList`. A block may never draw wider than the declared boundary; it may draw less.
 
 **Correction, measured.** This section previously described **two grips, one on each side edge**,
 and 5.5 claimed the single corner grip left a block unable to grow again. Both claims were checked
@@ -835,12 +854,27 @@ is still wrong on the Diagram page, because an **unsized** block's item carries 
 `width: auto` is a *share* of the wrapping row, not the block's width. Measured: a second-column block
 481px wide was given a 481px ceiling and could not be widened by a single pixel, and the existing
 "the block follows the pointer during a widening drag" check failed at `dx=15` with the box at 481
-against an expected 496. The fix was to add the second clause in 2.3 — a definite `flex-basis` with
-growth — and not to leave the first clause as the whole rule.
+against an expected 496.
 
-**Decision: one authority, and it is the one CSS enforces.** `blockWidthBoundary` answers the single
-question 2.3 sets out — *which ancestor is the containing block?* — and the pointer drag, the
-keyboard and the size presets all call it. Both `widthCeiling` and `contentBoxWidth` are gone.
+Adding a second clause fixed it — a definite `flex-basis` with growth — and then a third question had
+to be asked, which is the one this section settles: **should the shared component keep guessing?** It
+should not. Every attempt here was a way of avoiding one attribute per surface, and each was correct
+only for the layouts that existed when it was written:
+
+| attempt | correct for | wrong because |
+|---|---|---|
+| `contentBoxWidth(parent)` | the Rich Note | the Diagram page's parent shrink-wraps the block, so it forbade all growth |
+| skip ancestors carrying a width property | a **sized** block | an unsized block's item carries none, and its share is not a constraint |
+| add `flex: 1 1 <length>` as a share test | both surfaces, today | it is a *flex* distinction; no other CSS property carries it, and a third surface would need the reasoning re-derived by hand |
+| **declare `data-block-width-boundary`** | any surface that declares it | nothing — and a surface that forgets is reported rather than silently wrong |
+
+So the decision is: **the boundary is a surface contract.** 2.3 states it, each surface marks one
+element, and `blockWidthBoundary` reads the nearest mark. The inference is gone from the code, not
+merely deprecated.
+
+**Decision: one authority, declared by the surface, read by the shared component.** `blockWidthBoundary`
+resolves the nearest `[data-block-width-boundary]` and nothing else. Both `widthCeiling` and
+`contentBoxWidth` are gone, and so is the `flex-grow`/`flex-basis` inference that replaced them.
 
 Measured after the fix, at 1600x950 / 1440x900 / 700x800:
 
@@ -895,6 +929,10 @@ fix:
 | 5.16 | A fitted picture was scaled about the layer's origin while the layout had already centred it — 2816px from the left edge of a 1440px overlay | `diagram-zoom-fit-authority.pwspec.ts` |
 | 5.16 | A `translate()` written with space-separated values is invalid, and the browser drops the **whole** transform: zoom and pan both silently dead | `diagram-zoom-fit-authority.pwspec.ts` |
 | 2.3, 6.3 | The drag's width ceiling and the keyboard's disagreed — 126px apart on a note, and 2px short of the row on the Diagram page — and the drag reported a width the block did not draw | `diagram-width-boundary.pwspec.ts` |
+| 2.3 | Each block-bearing surface must declare its width boundary with `data-block-width-boundary`; discovery is read-only and must never write to the tree | `diagram-width-boundary.pwspec.ts` |
+| 2.3 | No attribute may be written to the boundary or any ancestor during a drag, and the grip element must stay the same node for the whole gesture | `diagram-width-boundary.pwspec.ts` |
+| 2.3 | A missing boundary must be reported and must not fall back to an unrelated ancestor | `diagram-width-boundary.pwspec.ts` |
+| 2.3 | The clamp must follow the declared element, not the layout: declaring the boundary on the Diagram page's own item stops the drag at the item, not at the row | `diagram-width-boundary.pwspec.ts` |
 | 2.3 | The boundary must be the same box whether the block is sized or not | `diagram-width-boundary.pwspec.ts` |
 | 2.3 | Drag, keyboard and size preset must all stop on exactly that boundary, and it must survive a reload | `diagram-width-boundary.pwspec.ts` |
 

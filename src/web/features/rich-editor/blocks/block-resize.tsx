@@ -108,106 +108,99 @@ export function clampHeight(height: number, floor: number = LAYOUT.blockControls
   )
 }
 /**
- * Whether an ancestor's width is decided by this block rather than by its own box.
+ * The attribute a surface puts on the element that bounds its blocks' width.
  *
- * Two ways that happens, and both are read rather than measured:
+ * This is the whole width contract, and it is declared rather than inferred. A surface
+ * that hosts resizable blocks marks the one element whose **content box** is the width a
+ * block may occupy, and the shared resize component asks for exactly that. Two surfaces
+ * mark two elements:
  *
- *  1. **The block's size is written onto it.** An inline `--block-width` or
- *     `--block-width-live` is the component and the surface publishing the block's own
- *     width there; an element's width that comes from the block is the block's width.
- *  2. **It grows into the row's remaining space.** `flex: 1 1 22rem` starts the element at a
- *     definite length and lets the row hand it the rest, so what it ends up — and what it
- *     may become — is the row's decision. Measured: the Diagram page's `Reorder.Item`
- *     computes `flex-basis: 352px, flex-grow: 1` while unsized, and holds 401px of an 814px
- *     row when a second block is beside it. Its maximum is the row's 814, not its share.
+ * - **Rich Note** marks `.previewPane` (in `mermaid-block-view.tsx`) — the note's text column.
+ * - **Diagram page** marks `.blockList` (in `mermaid-workspace.tsx`) — the wrapping flex row.
  *
- * A basis of `auto` or of zero means the opposite thing — the element's own box, or the
- * row it fills, is what decides — and it is a boundary. Measured: the note's
- * `.previewPane` computes `flex-basis: auto, flex-grow: 0` and is the boundary;
- * `.blockList` computes `flex-basis: 0%` and is the boundary the page needs. Growth without
- * a definite basis is how a box says "I fill what I am given", which is exactly what a
- * boundary does.
+ * ## Why this is declared and not inferred
  *
- * ## Why this is a read and not a measurement
+ * The previous implementation walked up from the container while the ancestor's width
+ * "looked like" the block's own, deciding that by two pieces of incidental layout CSS: an
+ * inline `--block-width` property, and `flex: 1 1 <a definite length>`. Both were read from
+ * `getComputedStyle`, and both were correct only because of how these two surfaces happen
+ * to be built today:
  *
- * Asking the layout — offering the block maximum through the width custom properties,
- * reading what was drawn, and putting it back — was tried, and it works, and it has to
- * be abandoned. Writing to the tree trips the block's own `ResizeObserver`, whose state
- * update re-renders and **replaces** the resize grip, so the pointer capture
- * `onPointerDown` took is destroyed and every following `pointermove` is delivered to
- * whatever is under the cursor instead. Measured: with the probe the grip node after
+ * - The Rich Note's `.previewPane` computes `flex-basis: auto, flex-grow: 0`; the Diagram
+ *   page's `Reorder.Item` computes `flex-basis: 352px, flex-grow: 1`. The distinction between
+ *   "the column" and "a share of the row" is a *flex* distinction, and no other CSS signal
+ *   distinguishes them: measured, `max-width` is `none` all the way up the note's chain and
+ *   is `100%` only on the very item the heuristic had to skip.
+ * - A second surface nesting a block inside `flex: 1 1 <length>` would need the same
+ *   reasoning re-derived by hand, and getting it wrong is silent: a boundary taken from a
+ *   shrink-wrapped parent is the block's own width, so nothing can be widened and the
+ *   control looks broken rather than wrong.
+ *
+ * Asking the layout instead — offering the block maximum through the width custom
+ * properties, reading what was drawn, restoring — was measured and abandoned, and the
+ * reason belongs here because it constrains any future attempt: writing to the tree trips
+ * the block's own `ResizeObserver`, whose state update **replaces the resize grip**, so the
+ * pointer capture `onPointerDown` takes is destroyed and every following `pointermove` goes
+ * to whatever is under the cursor. Measured: with the probe, the grip node after
  * `pointerdown` was a *different element* and a Rich Note drag moved nothing on either
- * axis; without it, the same node, and the drag worked. A boundary is not worth a drag that
- * does not drag.
+ * axis; without it, the same node and a working drag.
  *
- * This predicate reads only `getComputedStyle` and inline custom properties, so it has no
- * side effects and costs one style resolution per ancestor.
+ * A marker costs one attribute per surface and cannot be got wrong silently: a surface that
+ * forgets it is reported (see below) instead of quietly clamping to a neighbour.
  */
+export const BLOCK_WIDTH_BOUNDARY_ATTR = 'data-block-width-boundary'
 
-/** `flex-basis` values that are a definite length rather than "auto" or "nothing". */
-const DEFINITE_FLEX_BASIS = /^(?!auto$|0(?:px|%|em|rem|ch|vh|vw)?$)\d/
+/**
+ * Boundaries already reported missing, so a surface that has forgotten its marker is
+ * reported once rather than on every grip press and every arrow key.
+ */
+const reportedMissingBoundary = new Set<string>()
 
-function widthIsDecidedByThisBlock(ancestor: HTMLElement): boolean {
-  const inline = ancestor.style
-  if (
-    inline.getPropertyValue('--block-width').trim() !== '' ||
-    inline.getPropertyValue('--block-width-live').trim() !== ''
-  ) {
-    return true
-  }
-  const style = getComputedStyle(ancestor)
-  const grows = (Number.parseFloat(style.flexGrow) || 0) > 0
-  return grows && DEFINITE_FLEX_BASIS.test(style.flexBasis.trim())
+/**
+ * The nearest ancestor the surface has declared as its width boundary.
+ *
+ * Read-only: `closest()` inspects the tree and writes nothing. The container itself is
+ * excluded — it is the block, never the thing that bounds it — so the walk starts at its
+ * parent.
+ */
+function nearestBlockWidthBoundary(container: HTMLElement): HTMLElement | null {
+  return container.parentElement?.closest<HTMLElement>(`[${BLOCK_WIDTH_BOUNDARY_ATTR}]`) ?? null
 }
 
 /**
- * The one authoritative width boundary for a block.
+ * The one authoritative width boundary for a block: a read-only lookup of the surface's
+ * declared element, measured with its padding removed.
  *
- * A block's width is bounded by CSS and by nothing else: `.sizeContainer` carries
- * `max-width: 100%`, which resolves against its containing block's content box. The one
- * question worth asking is therefore *which element is the containing block?* — and the
- * answer is the first ancestor whose width is **not** decided by this block. See
- * `widthIsDecidedByThisBlock` for how that is decided, and for the two measured chains.
+ * A block's width is bounded by CSS and by nothing else — `.sizeContainer` carries
+ * `max-width: 100%`, which resolves against its containing block's content box — so
+ * reading the boundary's content box is reading the same number CSS enforces. There is no
+ * second authority and nothing to keep in step.
  *
- * The two surfaces nest the container differently, and that is the whole reason there used
- * to be a disagreement:
+ * ## When no surface has declared a boundary
  *
- * - **Rich Note.** `.sizeContainer` sits inside `.previewPane`, which is `width: 100%` and
- *   `flex: 0 1 auto`. Its content box comes from the note's text column and is independent
- *   of the block, so it is the boundary. One level up.
- * - **Diagram page.** `.sizeContainer` sits inside Motion's `Reorder.Item`, whose width is
- *   `var(--block-width-live, var(--block-width, auto))` and which shares the wrapping row.
- *   Both make it the block's own width, and clamping to it forbids all growth. The
- *   independent constraint one level up is the row.
- *
- * ## What this replaced, and what each of those cost
- *
- * - `widthCeiling` walked to the nearest `overflow-y: auto|scroll` ancestor and subtracted
- *   a hardcoded `2`. On a Rich Note that landed on `.blockNoteWrapper`, **126px wider than
- *   the text column**, so mid-drag the handle reported a width the box did not draw and
- *   dragging outwards read as a dead control. On the Diagram page the `- 2` left the drag
- *   2px short of the row it was allowed to fill.
- * - A plain `contentBoxWidth(parent)` is right for the note and forbids all growth on the
- *   Diagram page, whose parent shrink-wraps the block.
- * - Asking the layout by offering the block maximum and reading the result is exact, and
- *   is abandoned for the reason `widthIsDecidedByThisBlock` records: it re-renders the
- *   block and costs the drag its pointer capture.
- *
- * ## Fallback
- *
- * Every ancestor decided by this block — a block not really in a document — so the block
- * maximum applies, which is the only other constraint there is.
+ * Reported once per container, and capped at `LAYOUT.blockMaxWidth`, which is the only
+ * other constraint that exists. Deliberately **not** a fallback to some other ancestor:
+ * picking an unmarked ancestor is how the previous version produced a boundary 126px wider
+ * than the space a block could ever occupy, and it would do so silently. Capping at the
+ * block maximum keeps the failure visible — a block can then be wider than its surface
+ * asks for, which the tests assert is worse than the marker being absent silently.
  */
 function blockWidthBoundary(container: HTMLElement): number {
-  let ancestor: HTMLElement | null = container.parentElement
-  while (ancestor !== null && widthIsDecidedByThisBlock(ancestor)) {
-    ancestor = ancestor.parentElement
+  const boundary = nearestBlockWidthBoundary(container)
+  if (boundary === null) {
+    const who = container.getAttribute('data-testid') ?? container.tagName.toLowerCase()
+    if (!reportedMissingBoundary.has(who)) {
+      reportedMissingBoundary.add(who)
+      console.warn(
+        `rtwiki block width boundary missing: no ancestor of "${who}" carries ${BLOCK_WIDTH_BOUNDARY_ATTR}, so resizing falls back to the block maximum (${String(LAYOUT.blockMaxWidth)}px) instead of the width this surface can actually draw`
+      )
+    }
+    return LAYOUT.blockMaxWidth
   }
-  if (ancestor === null) return LAYOUT.blockMaxWidth
-  const style = getComputedStyle(ancestor)
+  const style = getComputedStyle(boundary)
   const padding =
     (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0)
-  return ancestor.clientWidth - padding
+  return boundary.clientWidth - padding
 }
 
 /**

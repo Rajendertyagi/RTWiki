@@ -301,6 +301,14 @@ test.describe('Diagram page layout', () => {
     // transform is the only magnification applied to it.
     const layers = page.locator('[class*="_layer_"]')
     await expect(layers).toHaveCount(1)
+    // Wait for Mermaid to actually draw. Without this the measurement below races the
+    // render: the layer exists immediately, its `<svg>` does not, and the evaluate
+    // returns null. Observed once, in the heaviest chunk of a full-suite run, where the
+    // same test passed in isolation.
+    await expect(
+      layers.first().locator('svg').first(),
+      'the diagram must be drawn before its scale can be measured'
+    ).toBeVisible({ timeout: 25_000 })
     const effective = await layers.first().evaluate((el) => {
       const picture = el.querySelector('svg')
       if (picture === null) return null

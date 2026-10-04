@@ -721,6 +721,15 @@ export default function MermaidPageWorkspace({
               onReorder={reorderBlocks}
               className={`${classes.blockList} ${RTWIKI_SCROLL}`}
               data-testid={`${pageType}-block-list`}
+              /*
+               * This list is the Diagram page's declared width boundary: its content box
+               * is the wrapping flex row, which is the most a block may occupy here. The
+               * `Reorder.Item` between it and the block shrink-wraps that block, so it is
+               * not a boundary - which is why the boundary is declared up here rather than
+               * inferred one level down. `blockWidthBoundary` reads this attribute; see
+               * `BLOCK_WIDTH_BOUNDARY_ATTR` in `block-resize.tsx`.
+               */
+              data-block-width-boundary=""
             >
               {blocks.map((block, index) => blockCard(block, index))}
             </Reorder.Group>

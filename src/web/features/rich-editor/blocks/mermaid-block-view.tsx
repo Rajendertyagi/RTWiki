@@ -327,6 +327,13 @@ export function MermaidBlockView({
       className={classes.previewPane}
       data-testid={`${blockType}-preview`}
       data-rendered={committedSvg !== null}
+      /*
+       * This pane is the Rich Note's declared width boundary. Its content box is the
+       * note's text column, and that is what bounds a block here.
+       * `blockWidthBoundary` reads this attribute rather than guessing from layout CSS —
+       * see `BLOCK_WIDTH_BOUNDARY_ATTR` in `block-resize.tsx`.
+       */
+      data-block-width-boundary=""
     >
       {sourceHost}
       <Text size="xs" fw={600} className={classes.caption} data-testid={`${blockType}-caption`}>
