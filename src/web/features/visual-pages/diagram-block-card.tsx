@@ -1,3 +1,5 @@
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { ActionIcon, Group, Text, Tooltip } from '@mantine/core'
 import type { VisualPageBlock } from '@rtwiki/shared/schemas/visual-page-content'
 import {
@@ -7,7 +9,6 @@ import {
   IconPencil,
   IconTrash
 } from '@tabler/icons-react'
-import { Reorder, useDragControls } from 'motion/react'
 import type { JSX } from 'react'
 import { useRef } from 'react'
 import { LAYOUT, UI_TEXT } from '../../config/index.js'
@@ -76,61 +77,36 @@ export function DiagramBlockCard({
   onMove,
   onRemove
 }: DiagramBlockCardProps): JSX.Element {
-  const controls = useDragControls()
   const width = block.width ?? ''
   const height = block.height ?? ''
 
-  // The item is the element Motion transforms, and the element the resize container
-  // must paint the in-flight size onto: it is capped to `max-width: 100%` of this
-  // item, so without the item moving a horizontal drag cannot leave its column.
-  // A ref rather than state, because a `setState` per `pointermove` re-rendered the
-  // whole workspace — every Mermaid canvas included — and the box lagged the pointer.
   const itemRef = useRef<HTMLDivElement | null>(null)
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id
+  })
+
+  // Ref merger: supplies @dnd-kit's setNodeRef while keeping itemRef for the live resize target
+  const setCombinedRef = (node: HTMLDivElement | null) => {
+    itemRef.current = node
+    setNodeRef(node)
+  }
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition: transition ?? undefined,
+    zIndex: isDragging ? 100 : 1,
+    '--block-width': width || undefined,
+    '--block-height': height || undefined
+  } as CSSVars
+
   return (
-    <Reorder.Item
-      as="div"
-      // Keyed by the block's own id, not by its position. Without this React
-      // reconciles the list by index, so a diagram added in the middle would reuse
-      // the previous neighbour's `DiagramCanvas` — and with it that component's
-      // already-rendered SVG — showing one diagram twice and another not at all.
+    <div
+      ref={setCombinedRef}
       key={block.id}
-      value={block}
-      // The resize container writes the in-flight size straight onto this element
-      // during a drag, and this ref is the only thing that lets it. Without the ref
-      // the container has nowhere to publish to, and the drag silently does nothing
-      // horizontally: measured, the box sat at 481px for all eight samples of a 160px
-      // drag and snapped to size only on release. `Reorder.Item` forwards a ref to its
-      // DOM node (framer-motion 13.4.4, `ReorderItemComponent(..., externalRef)`).
-      ref={itemRef}
-      // The stored size lives on the **reorder item**, not on the resize container
-      // inside it, because this is the element Motion transforms while dragging.
-      // Sizing a child of a transformed element would scale the child along with the
-      // drag. `data-width` is what the layout CSS keys on to decide whether a block
-      // keeps a user-chosen size or takes a share of the row.
       data-width={width}
       data-height={height}
-      // `data-live` is set and removed by the resize container, not here: it marks the
-      // window during which this item is being dragged, and the layout drops the
-      // row-sharing flex rules for it so the item can take the dragged width instead
-      // of its share. Keeping it out of React is the point — see `itemRef`.
-      //
-      // The stored size is published as a **custom property** so the container
-      // inherits it and no selector has to win a specificity fight over the shared
-      // component's own rule. Absent when the block is unsized, and then the flex
-      // rules alone decide the width — `width: auto` on a block-level child fills
-      // its parent, which is the layout that was already working.
-      //
-      // Custom properties rather than `width`/`height` because the repo forbids an
-      // inline layout property in a `style={{}}` (`tests/theme-registry.test.ts`).
-      style={
-        {
-          '--block-width': width || undefined,
-          '--block-height': height || undefined
-        } as CSSVars
-      }
-      dragListener={false}
-      dragControls={controls}
+      style={style}
       className={classes.blockListItem}
       data-testid={`${pageType}-block-item-${index}`}
     >
@@ -158,7 +134,8 @@ export function DiagramBlockCard({
                   className={classes.blockDragHandle}
                   aria-label={UI_TEXT.diagramDragBlockLabel}
                   data-testid={`${pageType}-block-drag-${index}`}
-                  onPointerDown={(event) => controls.start(event)}
+                  {...attributes}
+                  {...listeners}
                 >
                   <IconGripVertical size={14} />
                 </button>
@@ -254,6 +231,6 @@ export function DiagramBlockCard({
           </DiagramView>
         </section>
       </ResizableBlockContainer>
-    </Reorder.Item>
+    </div>
   )
 }

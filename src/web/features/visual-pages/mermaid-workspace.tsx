@@ -1,4 +1,18 @@
 import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core'
+import {
+  rectSortingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates
+} from '@dnd-kit/sortable'
+import {
   ActionIcon,
   Button,
   Group,
@@ -16,7 +30,6 @@ import {
   type VisualPageBlock
 } from '@rtwiki/shared/schemas/visual-page-content'
 import { IconAspectRatio, IconPlayerPlay, IconRefresh } from '@tabler/icons-react'
-import { Reorder } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
@@ -466,27 +479,36 @@ export default function MermaidPageWorkspace({
     )
   }
 
-  /**
-   * Applies a new order handed over by Motion's `Reorder`.
-   *
-   * Deliberately the same `reorderByIds` path as `moveBlock`, so a drag and a
-   * button press cannot diverge: one ordering rule, one cap, one write.
-   *
-   * Guarded on identity rather than assumed equal. `onReorder` fires on every
-   * frame the pointer crosses a neighbour, including frames where nothing actually
-   * changed order, so writing unconditionally would push a document save on every
-   * mousemove during a drag — a version bump per frame, which is both wasteful and
-   * a way to manufacture the very conflicts the version check exists to catch.
-   */
-  const reorderBlocks = (next: VisualPageBlock[]): void => {
-    const nextIds = next.map((block) => block.id)
-    const currentIds = blocks.map((block) => block.id)
-    if (nextIds.length !== currentIds.length) return
-    if (nextIds.every((id, index) => id === currentIds[index])) return
-    commitBlocks(
-      reorderByIds(blocks, nextIds, (block) => block.id),
-      `${pageType}-block-reorder`
-    )
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5
+      }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  )
+
+  const blockIds = useMemo(() => blocks.map((b) => b.id), [blocks])
+
+  const handleCardDragEnd = (event: DragEndEvent): void => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const fromIndex = blockIds.indexOf(String(active.id))
+    const toIndex = blockIds.indexOf(String(over.id))
+    if (fromIndex === -1 || toIndex === -1) return
+
+    const nextIds = [...blockIds]
+    const [moved] = nextIds.splice(fromIndex, 1)
+    if (moved) {
+      nextIds.splice(toIndex, 0, moved)
+      commitBlocks(
+        reorderByIds(blocks, nextIds, (b) => b.id),
+        `${pageType}-block-reorder`
+      )
+    }
   }
 
   const fitToggle = (
@@ -704,35 +726,21 @@ export default function MermaidPageWorkspace({
             {fullscreenToggle}
           </Group>
           <div className={classes.contentRow}>
-            <Reorder.Group
-              as="div"
-              // "xy" because this list **wraps**. Motion documents "x" for
-              // horizontal rows, "y" for vertical columns and "xy" for grids and
-              // wrapped layouts — which is precisely `flex-flow: row wrap` below.
-              // A single axis cannot express "put this diagram to the left of that
-              // one on the next row", and the installed types confirm the value
-              // exists (`ReorderAxis = "x" | "y" | "xy"`).
-              axis="xy"
-              values={blocks}
-              // Reordered through the same validated path the up/down buttons use,
-              // so there is one persistence route and one cap, not two. Motion
-              // hands back the whole new array; it is mapped by id rather than by
-              // position, because position is exactly what just changed.
-              onReorder={reorderBlocks}
-              className={`${classes.blockList} ${RTWIKI_SCROLL}`}
-              data-testid={`${pageType}-block-list`}
-              /*
-               * This list is the Diagram page's declared width boundary: its content box
-               * is the wrapping flex row, which is the most a block may occupy here. The
-               * `Reorder.Item` between it and the block shrink-wraps that block, so it is
-               * not a boundary - which is why the boundary is declared up here rather than
-               * inferred one level down. `blockWidthBoundary` reads this attribute; see
-               * `BLOCK_WIDTH_BOUNDARY_ATTR` in `block-resize.tsx`.
-               */
-              data-block-width-boundary=""
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleCardDragEnd}
             >
-              {blocks.map((block, index) => blockCard(block, index))}
-            </Reorder.Group>
+              <div
+                className={`${classes.blockList} ${RTWIKI_SCROLL}`}
+                data-testid={`${pageType}-block-list`}
+                data-block-width-boundary=""
+              >
+                <SortableContext items={blockIds} strategy={rectSortingStrategy}>
+                  {blocks.map((block, index) => blockCard(block, index))}
+                </SortableContext>
+              </div>
+            </DndContext>
             {sidebar}
           </div>
         </>

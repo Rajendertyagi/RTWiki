@@ -76,8 +76,7 @@ export interface ResizableBlockContainerProps {
    * it wrote has not changed.
    *
    * A ref, not an id or a query: it keeps the coupling in the type signature, and
-   * `Reorder.Item` forwards a ref to its DOM node (framer-motion 13.4.4,
-   * `ReorderItemComponent(..., externalRef)`).
+   * the sortable block container forwards a ref to its DOM node.
    */
   liveStyleTarget?: React.RefObject<HTMLElement | null>
   testIdPrefix: string
