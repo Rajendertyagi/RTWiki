@@ -197,7 +197,7 @@
      row's accent bar *is* an inset shadow, and at this specificity a blanket
      reset would silently erase it. */
   border: 0;
-  border-radius: var(--mantine-radius-sm);
+  border-radius: 6px;
   margin-inline: 0;
   box-sizing: border-box;
   line-height: normal;
@@ -205,6 +205,7 @@
   /* The pane already insets the row, so a second right padding would make the
      selected fill narrower than the Home row's. */
   padding-right: 0;
+  transition: background-color 150ms ease-out;
 }
 
 /* The library renders ONE span per row carrying both `wb-node` and `wb-col`, so
@@ -306,20 +307,22 @@
    so the disclosure control is visible without hovering. */
 :global(i.wb-expander) {
   color: transparent;
-  cursor: pointer;
   padding: 0;
   margin: 0;
   border: 0;
   border-radius: var(--mantine-radius-xs);
-  background-color: var(--wb-expander-color);
+  background-color: transparent;
   background-image: none;
-  -webkit-mask: var(--rtwiki-chevron) center / var(--rtwiki-tree-expander-glyph) no-repeat;
-  mask: var(--rtwiki-chevron) center / var(--rtwiki-tree-expander-glyph) no-repeat;
+  mask: none;
+  -webkit-mask: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: default;
+  pointer-events: none;
   transition:
     background-color 80ms ease,
+    opacity 150ms ease-in,
     transform 120ms ease;
 }
 
@@ -327,12 +330,32 @@
   content: none;
 }
 
+/* Only real folder / expandable rows show the disclosure chevron mask.
+   Leaf and childless nodes receive wb-indent and remain completely blank/transparent. */
+:global(i.wb-expander.rtw-expander:not(.wb-indent)) {
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.65;
+  background-color: var(--wb-expander-color);
+  -webkit-mask: var(--rtwiki-chevron) center / var(--rtwiki-tree-expander-glyph) no-repeat;
+  mask: var(--rtwiki-chevron) center / var(--rtwiki-tree-expander-glyph) no-repeat;
+}
+
+:global(i.wb-expander.wb-indent) {
+  -webkit-mask: none !important;
+  mask: none !important;
+  background-color: transparent !important;
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
 :global(i.wb-expander.rtw-expanded) {
   transform: rotate(90deg);
 }
 
-:global(div.wb-row:hover i.wb-expander),
-:global(div.wb-row.wb-focus i.wb-expander) {
+:global(div.wb-row:hover i.wb-expander.rtw-expander:not(.wb-indent)),
+:global(div.wb-row.wb-focus i.wb-expander.rtw-expander:not(.wb-indent)) {
+  opacity: 1;
   background-color: color-mix(
     in srgb,
     var(--rtwiki-text-muted, var(--mantine-color-dimmed)) 55%,
@@ -427,23 +450,26 @@
 }
 
 /* Row action button: hidden until hover/focus; absolutely positioned so it
-   never changes row width or shifts the title. */
+   never changes row width or shifts the title. Circular chip matching Trilium Next. */
 :global(button.rtw-row-action) {
   display: none;
   position: absolute;
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border: none;
-  border-radius: var(--mantine-radius-xs);
+  border-radius: 50%;
   background: transparent;
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
   padding: 0;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
 }
 
 :global(button.rtw-row-action::before) {
