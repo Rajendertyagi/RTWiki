@@ -2957,6 +2957,7 @@ dependencies = [
 name = "rtwiki"
 version = "0.1.0"
 dependencies = [
+ "log",
  "opener",
  "serde",
  "serde_json",
