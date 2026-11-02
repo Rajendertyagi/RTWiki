@@ -199,6 +199,15 @@ export class PageTreeHost {
     const tree = this.tree
     if (!tree) return
     this.options = options
+
+    // Deduplication check: if the pages array is identical to what was already
+    // loaded (e.g. initial mount or redundant renders), skip the expensive
+    // and destructive tree.load() pass and only update active node selection.
+    if (this.pagesRef === options.pages) {
+      this.applyActive(options.activePageId)
+      return
+    }
+
     this.pagesRef = options.pages
     const expanded = this.collectExpanded()
     tree.load({
@@ -382,6 +391,7 @@ export class PageTreeHost {
     const tree = new Wunderbaum({
       element: element as HTMLDivElement,
       id: 'rtwiki-page-tree',
+      debugLevel: 0,
       header: null,
       rowHeightPx: ROW_HEIGHT_PX,
       quicksearch: true,
