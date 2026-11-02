@@ -1,11 +1,27 @@
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core'
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
+import {
+  horizontalListSortingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { ActionIcon } from '@mantine/core'
 import { IconChevronLeft, IconChevronRight, IconX } from '@tabler/icons-react'
-import { Reorder, useDragControls } from 'motion/react'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
 import classes from './tab-strip.module.css'
-import type { OpenTab } from './tabs-model.js'
+import { moveInTabs, type OpenTab } from './tabs-model.js'
 
 interface TabStripProps {
   tabs: OpenTab[]
@@ -100,13 +116,6 @@ function useTabOverflow(
       observer.disconnect()
       el.removeEventListener('scroll', measure)
     }
-    // `tabCount` is never referenced in the body, so the rule reads it as
-    // unnecessary. It is a deliberate re-run trigger and the rule is wrong here.
-    // The ResizeObserver watches the scroller (whose border box never changes,
-    // it is `flex: 1`) and the children that exist when the effect runs. A
-    // *newly added* tab therefore fires nothing, yet it changes `scrollWidth`
-    // and can make the row overflow, so the chevrons must re-measure. Removing
-    // this dependency leaves the chevrons stale after opening a page.
   }, [measure, scrollerRef, tabCount])
 
   return state
@@ -121,33 +130,42 @@ interface TabItemProps {
 }
 
 /**
- * One tab.
+ * One tab item using `@dnd-kit/sortable`.
  *
- * Split out so it can hold the `useDragControls` hook, which is per-tab. The
- * hook is what lets the drag start from a handle rather than from the whole
- * element: `dragListener={false}` disables Motion's own pointer listener, and
- * the overlay below calls `controls.start` instead.
+ * Styled without top accent colors or bottom borders, and merges seamlessly
+ * with the workspace below when active.
  *
- * The handle is an absolutely positioned overlay covering the tab, the same
- * arrangement Trilium uses, with the close button stacked above it. That is why
- * a drag can begin anywhere on the tab and the × still closes it: the two never
- * compete for the same pixels, and the × is not part of the handle.
+ * The drag handle overlay covers the whole tab so dragging can start anywhere,
+ * while the close button sits at higher z-index on the far right.
  */
 function TabItem({ tab, active, onSelect, onClose, onKeyDown }: TabItemProps): JSX.Element {
-  const controls = useDragControls()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: tab.pageId
+  })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition: transition ?? undefined,
+    zIndex: isDragging ? 100 : active ? 3 : 1
+  }
+
+  const tabClass = [
+    classes.tab,
+    active ? classes.tabActive : '',
+    isDragging ? classes.tabDragging : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <Reorder.Item
-      as="div"
-      value={tab}
-      // Required by the tablist contract, and all of it verified to reach the
-      // DOM through Reorder.Item rather than being swallowed by it.
+    <div
+      ref={setNodeRef}
+      style={style}
       id={`tab-${tab.pageId}`}
       role="tab"
       tabIndex={active ? 0 : -1}
       aria-selected={active}
-      className={active ? `${classes.tab} ${classes.tabActive}` : classes.tab}
-      dragListener={false}
-      dragControls={controls}
+      className={tabClass}
       onClick={() => onSelect(tab.pageId)}
       onAuxClick={(event) => {
         // Middle click closes tab
@@ -158,11 +176,18 @@ function TabItem({ tab, active, onSelect, onClose, onKeyDown }: TabItemProps): J
       }}
       onKeyDown={onKeyDown}
       data-page-id={tab.pageId}
+      data-dragging={isDragging ? 'true' : 'false'}
     >
+      {/*
+        Drag handle overlay: hooks up dnd-kit listeners and attributes,
+        letting a drag start anywhere across the tab while remaining separate
+        from the close button.
+      */}
       <div
         className={classes.tabDragHandle}
         data-testid={`tab-drag-handle-${tab.pageId}`}
-        onPointerDown={(event) => controls.start(event)}
+        {...attributes}
+        {...listeners}
       />
       <span className={classes.tabTypeIcon}>
         <PageTypeIcon pageType={tab.pageType} size={14} />
@@ -170,7 +195,7 @@ function TabItem({ tab, active, onSelect, onClose, onKeyDown }: TabItemProps): J
       <span className={classes.tabTitle}>{tab.title}</span>
       <ActionIcon
         variant="subtle"
-        size="xs"
+        size="sm"
         className={classes.tabClose}
         aria-label={`${UI_TEXT.tabCloseLabel}: ${tab.title}`}
         onClick={(event) => {
@@ -179,21 +204,20 @@ function TabItem({ tab, active, onSelect, onClose, onKeyDown }: TabItemProps): J
         }}
         onKeyDown={(event) => event.stopPropagation()}
       >
-        <IconX size={12} />
+        <IconX size={15} />
       </ActionIcon>
-    </Reorder.Item>
+    </div>
   )
 }
 
 /**
- * In-session document tabs. Session-only: tabs reference open pages and are
- * never persisted. Horizontal overflow scrolls instead of crushing content.
- * Compact and consistent: a small page-type icon, the truncated title, and a
- * close control. The separate "new page" affordance lives in the launcher
- * rail, so no `+` button is rendered here.
+ * In-session document tabs powered by @dnd-kit.
  *
- * Tabs reorder by dragging, and by Ctrl+Arrow for the keyboard. Both paths go
- * through the same model function, so they cannot disagree.
+ * Session-only: tabs reference open pages and are never persisted.
+ * Horizontal overflow scrolls cleanly with chevrons.
+ *
+ * Tabs reorder by drag-and-drop and by Ctrl+Arrow for keyboard users, both
+ * flowing through `moveInTabs` to guarantee single-source-of-truth ordering.
  */
 export function TabStrip({
   tabs,
@@ -202,29 +226,47 @@ export function TabStrip({
   onClose,
   onReorder
 }: TabStripProps): JSX.Element {
-  // Announced after a keyboard reorder, so a screen reader hears the new
-  // position. A polite live region: it must not interrupt, and it must persist
-  // long enough to be read, so the same text is not re-announced on re-render.
+  // Announced after a keyboard reorder, so a screen reader hears the new position.
   const [announcement, setAnnouncement] = useState('')
-  // The tab that should hold focus once the reorder has rendered.
-  //
-  // Focus has to travel with the tab that moved, or the next keypress lands on
-  // whatever slid into its old slot. It is done in an effect rather than in a
-  // `requestAnimationFrame` callback because the reorder re-renders the row:
-  // inside a frame callback the element can still be the outgoing one, and the
-  // focus call silently lands on a detached node.
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null)
   const liveId = useId()
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5
+      }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  )
 
   useEffect(() => {
     if (pendingFocusId === null) return
     const el = document.getElementById(`tab-${pendingFocusId}`)
     el?.focus()
     setPendingFocusId(null)
-    // No `tabs`: the tab's id and React key are both its page id, so the row is
-    // the same DOM node before and after the reorder. The effect only has to
-    // wait for the commit that `pendingFocusId` itself triggered.
   }, [pendingFocusId])
+
+  const tabIds = useMemo(() => tabs.map((t) => t.pageId), [tabs])
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const fromIndex = tabIds.indexOf(String(active.id))
+      const toIndex = tabIds.indexOf(String(over.id))
+      if (fromIndex === -1 || toIndex === -1) return
+
+      const reordered = moveInTabs(tabs, fromIndex, toIndex)
+      if (reordered !== tabs) {
+        onReorder(reordered.map((t) => t.pageId))
+      }
+    },
+    [tabs, tabIds, onReorder]
+  )
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>, currentIndex: number): void => {
@@ -232,9 +274,6 @@ export function TabStrip({
       const currentTab = tabs[currentIndex]
       if (!currentTab) return
 
-      // Ctrl+Arrow *moves* the tab; a bare Arrow still just switches. The
-      // modifier is what separates rearranging from navigating, and both are
-      // kept because neither replaces the other.
       const wantsMove = event.ctrlKey
       const isForward = event.key === 'ArrowRight'
       const isBack = event.key === 'ArrowLeft'
@@ -242,16 +281,13 @@ export function TabStrip({
       if ((isForward || isBack) && wantsMove) {
         event.preventDefault()
         const target = currentIndex + (isForward ? 1 : -1)
-        // Stop at the ends rather than wrapping: wrapping would silently send
-        // a tab from first to last, which is never what was meant.
         if (target < 0 || target > tabs.length - 1) return
-        const orderedIds = tabs.map((t) => t.pageId)
-        const [movedId] = orderedIds.splice(currentIndex, 1)
-        if (!movedId) return
-        orderedIds.splice(target, 0, movedId)
-        onReorder(orderedIds)
-        setAnnouncement(`${currentTab.title}, moved to position ${target + 1} of ${tabs.length}`)
-        setPendingFocusId(movedId)
+        const reordered = moveInTabs(tabs, currentIndex, target)
+        if (reordered !== tabs) {
+          onReorder(reordered.map((t) => t.pageId))
+          setAnnouncement(`${currentTab.title}, moved to position ${target + 1} of ${tabs.length}`)
+          setPendingFocusId(currentTab.pageId)
+        }
         return
       }
 
@@ -294,33 +330,36 @@ export function TabStrip({
         disabled={atStart}
         onClick={scrollBy.bind(null, -1)}
       />
-      <Reorder.Group
-        as="div"
-        axis="x"
-        values={tabs}
-        onReorder={(next) => onReorder(next.map((tab) => tab.pageId))}
-        // The tablist semantics live here. The group is the tablist and each
-        // item is a tab, so `role` moves off the wrapper the strip used to be.
-        role="tablist"
-        aria-label={UI_TEXT.tabStripLabel}
-        className={classes.tabScroller}
-        ref={scrollerRef}
-        data-testid="tab-scroll-container"
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToHorizontalAxis]}
+        onDragEnd={handleDragEnd}
       >
-        {tabs.map((tab, index) => {
-          const active = tab.pageId === activePageId
-          return (
-            <TabItem
-              key={tab.pageId}
-              tab={tab}
-              active={active}
-              onSelect={onSelect}
-              onClose={onClose}
-              onKeyDown={(event) => handleKeyDown(event, index)}
-            />
-          )
-        })}
-      </Reorder.Group>
+        <div
+          role="tablist"
+          aria-label={UI_TEXT.tabStripLabel}
+          className={classes.tabScroller}
+          ref={scrollerRef}
+          data-testid="tab-scroll-container"
+        >
+          <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
+            {tabs.map((tab, index) => {
+              const active = tab.pageId === activePageId
+              return (
+                <TabItem
+                  key={tab.pageId}
+                  tab={tab}
+                  active={active}
+                  onSelect={onSelect}
+                  onClose={onClose}
+                  onKeyDown={(event) => handleKeyDown(event, index)}
+                />
+              )
+            })}
+          </SortableContext>
+        </div>
+      </DndContext>
       <TabScrollButton
         direction="next"
         overflow={overflow}

@@ -44,22 +44,10 @@
 
 .tabScroller {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 2px;
   flex: 1;
   min-width: 0;
-  /* The band keeps its height when no tab is open.
-   *
-   * `role="tablist"` moved from the outer strip onto this element, which is the
-   * correct home for it - it is what contains the tabs. But the strip's
-   * `min-height` did not come with it, so with zero tabs the tablist collapsed
-   * to 0px and read as hidden. In native mode the band is always rendered and
-   * must reserve the strip's height whether or not a tab is open.
-   *
-   * Safe against the flex layout: `flex: 1` sizes the main axis (width), and
-   * `min-height` is the cross axis, which `align-items: flex-end` already sizes
-   * to content - the same 40px a tab reaches through `.tabActive`.
-   */
   min-height: var(--rtwiki-tab-height);
   overflow-x: auto;
   overflow-y: hidden;
@@ -67,6 +55,7 @@
      on the chrome row. */
   scrollbar-width: none;
   -ms-overflow-style: none;
+  border-bottom: none;
 }
 
 .tabScroller::-webkit-scrollbar {
@@ -77,33 +66,45 @@
   display: inline-flex;
   align-items: center;
   gap: var(--mantine-spacing-xs);
-  max-width: 180px;
-  /* A floor, so a crowded row degrades into scrolling rather than into
-     unreadable slivers. Without it tabs shrink to nothing, the row never
-     overflows, and the chevrons have nothing to reveal. Matches Trilium's
-     100px tab minimum; only bites when there are genuinely too many tabs. */
-  min-width: 100px;
-  height: calc(var(--rtwiki-tab-height) - 6px);
-  /* Inactive tabs hang from the top of the band; the active one drops to the
-     band floor (see .tabActive) so its panel tone meets the toolbar below. */
-  align-self: flex-start;
-  padding: 0 8px;
-  border-radius: var(--mantine-radius-sm) var(--mantine-radius-sm) 0 0;
+  max-width: 220px;
+  min-width: 120px;
+  height: calc(var(--rtwiki-tab-height) - 4px);
+  align-self: flex-end;
+  /* Generous padding with space for the larger, right-aligned close button */
+  padding: 0 4px 0 12px;
+  border-radius: var(--mantine-radius-md) var(--mantine-radius-md) 0 0;
+  /* No top or bottom border lines */
   border: none;
   cursor: pointer;
   user-select: none;
-  /* Required by the drag, not decoration. The reorder library raises the
-     dragged tab with z-index, and z-index does nothing to an element whose
-     position is `static`. Verified: without this the drag still reorders but
-     the dragged tab renders *under* its neighbours. */
   position: relative;
-  transition: background-color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+  background: transparent;
+}
+
+/* Subtle separator line between inactive tabs */
+.tab:not(.tabActive)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--rtwiki-chrome-border, rgba(255, 255, 255, 0.08));
+  transition: opacity 150ms ease;
+}
+
+.tab:hover::after {
+  opacity: 0;
 }
 
 /*
- * Drag handle: an invisible layer covering the whole tab, so a drag can start
- * from anywhere on it rather than only from the title. The close button sits
- * above this (see .tabClose) so the two never compete for the same pixels.
+ * Drag handle: an invisible layer covering the tab body so a drag can start
+ * anywhere across the tab. The close button sits above this (higher z-index)
+ * so clicking close never triggers a drag gesture.
  */
 .tabDragHandle {
   position: absolute;
@@ -117,41 +118,41 @@
 }
 
 /*
- * While a tab is being dragged it follows the pointer, so it must not ease
- * into place - that lag reads as the tab lagging behind the cursor. Every
- * *other* tab keeps its transition, which is what makes the neighbours slide
- * aside and show where the tab will land. Trilium signals the drag the same
- * way: motion on the neighbours, none on the thing you are holding.
+ * When dragging: tab is elevated with no animation lag so it sticks cleanly
+ * to the cursor.
  */
-.tabScroller [data-dragging="true"] {
-  transition: none;
+.tabDragging {
+  opacity: 0.95;
+  cursor: grabbing !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: var(--rtwiki-elevated, var(--mantine-color-default-hover)) !important;
+  border-radius: var(--mantine-radius-md) var(--mantine-radius-md) 0 0 !important;
+  z-index: 100 !important;
+  transition: none !important;
 }
 
 .tab:hover {
   background: var(--rtwiki-elevated, var(--mantine-color-default-hover));
+  color: var(--mantine-color-text);
 }
 
 /*
- * The active tab is distinguished by colour, not by shadow.
- *
- * It used to carry a hard-coded `2px 2px 6px rgba(0,0,0,0.15)` and a canvas
- * background. Because the band behind it is *also* canvas, the background made
- * no difference and the shadow was the only thing marking the tab at all -
- * a directional drop that read as a raised card sitting on the row.
- *
- * The browser idiom is the reverse: the active tab merges with the content
- * below it. The toolbar underneath is panel-toned, so the tab takes the panel
- * tone and the band reads as the inactive background. No shadow, no border, and
- * the separation is carried entirely by the surface step.
+ * The active tab: seamlessly merges into the workspace/toolbar below.
+ * No top accent line. No bottom border line.
  */
 .tabActive {
   background: var(--rtwiki-pane, var(--mantine-color-body));
-  /* To actually *merge* with the toolbar below, the active tab must reach the
-     bottom of the band. It used to sit 34px tall and centred in a 40px strip,
-     so a 6px strip of canvas ran underneath and the tab read as a floating
-     rounded rectangle - a ring. Inactive tabs stay short and hang from the top. */
+  color: var(--mantine-color-text);
+  font-weight: 500;
   height: var(--rtwiki-tab-height);
   align-self: flex-end;
+  border: none;
+  border-bottom: none;
+  z-index: 3;
+}
+
+.tabActive::after {
+  display: none;
 }
 
 .tab:focus-visible {
@@ -160,23 +161,46 @@
 }
 
 .tabTitle {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--mantine-font-size-sm);
-}
-
-.tabClose {
-  flex: 0 0 auto;
-  /* Above the drag handle, so the × closes the tab instead of starting a
-     drag - the two overlap completely, and stacking order is what decides. */
-  position: relative;
-  z-index: 2;
+  letter-spacing: -0.01em;
 }
 
 /*
- * Visually hidden, but not display:none: a live region that is not rendered is
- * not announced. Carries the result of a keyboard reorder.
+ * Close button: bigger (24px target), moved to the far right with margin-left: auto,
+ * and comfortable hover highlight.
+ */
+.tabClose {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: var(--mantine-radius-sm);
+  color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
+  opacity: 0.7;
+  transition: all 120ms ease;
+}
+
+.tab:hover .tabClose {
+  opacity: 1;
+  color: var(--mantine-color-text);
+}
+
+.tabClose:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--mantine-color-text);
+}
+
+/*
+ * Visually hidden, but not display:none: a live region that is not announced.
+ * Carries the result of a keyboard reorder.
  */
 .tabAnnouncer {
   position: absolute;

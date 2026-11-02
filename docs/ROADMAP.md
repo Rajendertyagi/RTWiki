@@ -271,6 +271,16 @@ See [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) for the import co
 
 Each phase beyond Phase 1 requires an explicit owner decision before starting. The roadmap is a living document — phases may be added, removed, or reordered based on user feedback and technical discoveries during earlier phases.
 
+## Deferred Options (not planned work)
+
+Recorded so an option the owner considered is not lost or re-proposed from scratch. **Nothing here is
+scheduled or committed**, and nothing here changes current behaviour.
+
+- [RUST_SERVER_PROPOSAL.md](RUST_SERVER_PROPOSAL.md) — replacing the Bun API server with a Rust one,
+  primarily for a smaller executable. Deferred by owner decision. Its main motivation rests on an
+  **unmeasured** size estimate, and its first recommended step is to measure that. ADR-002 remains
+  accepted and in force.
+
 ## Cross-References
 
 - [MVP_SCOPE.md](MVP_SCOPE.md) — what is in and out of the MVP
@@ -280,3 +290,4 @@ Each phase beyond Phase 1 requires an explicit owner decision before starting. T
 - [AI_CONTENT_IMPORT.md](AI_CONTENT_IMPORT.md) — note-package contract and import pipeline
 - [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) — rich-content model and import contract
 - [ADR-007](adr/ADR-007-sandboxed-custom-content.md) — sandboxed custom content
+- [RUST_SERVER_PROPOSAL.md](RUST_SERVER_PROPOSAL.md) — the deferred Rust server option
