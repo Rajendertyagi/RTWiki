@@ -172,12 +172,22 @@ pub fn boot_timeout() -> Duration {
 /// Spawns the sidecar with stdio detached. On Windows the child gets no
 /// console window so no terminal flashes on launch.
 pub fn spawn_sidecar(exe_dir: &Path, port: u16) -> std::io::Result<Child> {
-  let exe: PathBuf = exe_dir.join(SIDECAR_FILENAME);
-  let mut cmd = Command::new(exe);
-  cmd.args(["--no-open", "--port", &port.to_string()]);
-  cmd.stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
+    let exe: PathBuf = exe_dir.join(SIDECAR_FILENAME);
+    if !exe.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("sidecar not found: {}", exe.display()),
+        ));
+    }
+    let _ = std::fs::create_dir_all(exe_dir.join("logs"));
+    let stderr_target = exe_dir.join("logs").join("sidecar.stderr.log");
+    let mut cmd = Command::new(&exe);
+    cmd.args(["--no-open", "--port", &port.to_string()]);
+    cmd.stdin(Stdio::null()).stdout(Stdio::null());
+    match std::fs::File::create(&stderr_target) {
+        Ok(f) => { cmd.stderr(std::process::Stdio::from(f)); }
+        Err(_) => { cmd.stderr(Stdio::null()); }
+    }
   #[cfg(windows)]
   {
     use std::os::windows::process::CommandExt;
