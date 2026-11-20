@@ -122,6 +122,15 @@ On first launch the application:
 
 SQLite WAL mode is enabled. The WAL (`-wal`) and shutdown (`-shm`) files are stored in the same `data/` directory as the main database file. No WAL files are placed outside the data directory.
 
+At graceful shutdown the server performs a bounded full save
+(`PRAGMA wal_checkpoint(TRUNCATE)`) into the main file before closing, so the
+folder is **normally safe to copy after a clean close** (a failure is logged and
+the database still closes). The `data/` directory also holds the `clean-exit`
+marker (created once bootstrap checks pass, removed on a clean exit) and the
+`sidecar-owner` marker (owner PID + sidecar PID/path, verified against the live
+process image before the shell stops the server). Neither is user content and
+neither is included in backups.
+
 ### Attachments
 
 > **Superseded by [ADR-014](ADR-014-blob-stored-image-bytes.md).** Image bytes are stored in the

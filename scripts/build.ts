@@ -31,7 +31,11 @@ const compileOptions: Parameters<typeof Bun.build>[0]['compile'] = {
           title: 'RTWiki',
           description: 'A personal knowledge workspace for your family',
           version: '0.1.0',
-          publisher: 'RTWiki'
+          publisher: 'RTWiki',
+          // PE subsystem 2 (GUI): the compiled server must not flash a console
+          // window when the desktop shell spawns it as a sidecar. Fatal errors
+          // are still surfaced through the log and STARTUP-ERROR.txt (fatal.ts).
+          hideConsole: true
         }
       }
     : {})

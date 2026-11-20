@@ -182,6 +182,60 @@ export function checkIntegrity(): boolean {
   return ok
 }
 
+/**
+ * Result of the bounded full save at shutdown. `ok: false` is reported, never
+ * thrown: a failed checkpoint must not prevent the database from being closed.
+ */
+export interface FullSaveResult {
+  ok: boolean
+  detail?: string
+}
+
+/**
+ * Copies all committed WAL pages into the main database file before shutdown.
+ *
+ * With `journal_mode = WAL` a clean close of the last connection checkpoints
+ * automatically, but that is implicit and gives no signal when it cannot run.
+ * Doing it explicitly makes the result testable and lets a failure be logged
+ * while the close still proceeds. After this returns the folder is normally
+ * safe to copy after a clean close.
+ *
+ * `timeoutMs` is applied as the connection's `busy_timeout`, but note that
+ * `PRAGMA wal_checkpoint(TRUNCATE)` does NOT honour `busy_timeout`: if the WAL
+ * write lock is held it returns `busy=1` immediately rather than waiting. This
+ * function therefore does not bound a wait for that lock — it reports `busy` as
+ * a failure. The bound on shutdown comes from the caller's overall deadline,
+ * not from a checkpoint lock wait here.
+ */
+export function fullSaveToMainFile(timeoutMs: number): FullSaveResult {
+  const db = dbInstance
+  if (!db) return { ok: false, detail: 'no database connection' }
+  try {
+    // Set the connection's busy timeout for the duration of the call. This does
+    // NOT make wal_checkpoint wait for the WAL lock (that pragma returns busy=1
+    // immediately); it only governs any other statement run before the normal
+    // timeout is restored in `finally` below.
+    db.exec(`PRAGMA busy_timeout = ${timeoutMs}`)
+    const row = db.query('PRAGMA wal_checkpoint(TRUNCATE)').get() as
+      | { busy: number; log: number; checkpointed: number }
+      | undefined
+    if (!row) return { ok: false, detail: 'wal_checkpoint returned no row' }
+    if (row.busy !== 0) {
+      return { ok: false, detail: `wal_checkpoint could not acquire the lock (busy=${row.busy})` }
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) }
+  } finally {
+    // Restore the normal timeout in case the caller continues to use the handle.
+    try {
+      db.exec('PRAGMA busy_timeout = 5000')
+    } catch {
+      // non-fatal: the connection is about to close
+    }
+  }
+}
+
 export async function closeDatabase(): Promise<void> {
   // `dbPath` is cleared whether or not a handle was open. It is only reachable
   // from inside the `if` when there is a handle, which is the case this feature

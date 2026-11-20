@@ -55,16 +55,117 @@ enum ClosePromptClaim {
 }
 
 use sidecar::CloseBehavior;
-use std::path::PathBuf;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::process::Child;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+// Bounds for the shell's own log file (S3): a portable app must not slowly fill
+// the drive. Mirrors SHELL_LOG_MAX_BYTES / SHELL_LOG_MAX_ROTATED_FILES in shared
+// constants (Rust cannot import TypeScript, so these are mirrored deliberately).
+const SHELL_LOG_MAX_BYTES: u64 = 512 * 1024;
+const SHELL_LOG_MAX_ROTATED_FILES: usize = 3;
+const SHELL_LOG_FILENAME: &str = "rtwiki-shell.log";
+
+/// A tiny file logger built on the existing `log` crate facade — no new
+/// dependency. Writes one line per event to logs/rtwiki-shell.log with bounded
+/// rotation so a long-running portable app cannot fill the drive.
+struct ShellLogger {
+  dir: Mutex<Option<PathBuf>>,
+  current_size: Mutex<u64>,
+}
+
+/// Static logger instance: `log::set_logger` needs a `'static` reference, and
+/// this avoids enabling the `alloc` feature of the `log` crate (no new deps).
+static SHELL_LOGGER: ShellLogger = ShellLogger {
+  dir: Mutex::new(None),
+  current_size: Mutex::new(0),
+};
+
+fn shell_log_timestamp() -> String {
+  let secs = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0);
+  // Compact UTC-ish stamp; precision to the second is enough for a step trail.
+  format!("{}", secs)
+}
+
+fn rotate_shell_logs(dir: &Path) {
+  let base = dir.join(SHELL_LOG_FILENAME);
+  for i in (1..SHELL_LOG_MAX_ROTATED_FILES).rev() {
+    let from = base.with_extension(format!("log.{}", i));
+    let to = base.with_extension(format!("log.{}", i + 1));
+    if from.exists() {
+      let _ = std::fs::rename(&from, &to);
+    }
+  }
+  let first = base.with_extension("log.1");
+  if base.exists() {
+    let _ = std::fs::rename(&base, &first);
+  }
+}
+
+impl log::Log for ShellLogger {
+  fn enabled(&self, metadata: &log::Metadata) -> bool {
+    metadata.level() <= log::Level::Info
+  }
+
+  fn log(&self, record: &log::Record) {
+    if !self.enabled(record.metadata()) {
+      return;
+    }
+    let Ok(dir_guard) = self.dir.lock() else {
+      return;
+    };
+    let Some(dir) = dir_guard.as_ref() else {
+      return;
+    };
+    let path = dir.join(SHELL_LOG_FILENAME);
+    let line = format!(
+      "{} [{}] {}\n",
+      shell_log_timestamp(),
+      record.level(),
+      record.args()
+    );
+    let Ok(mut size) = self.current_size.lock() else {
+      return;
+    };
+    let on_disk = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    if on_disk + line.len() as u64 > SHELL_LOG_MAX_BYTES {
+      rotate_shell_logs(dir);
+      *size = 0;
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
+      if file.write_all(line.as_bytes()).is_ok() {
+        *size += line.len() as u64;
+      }
+    }
+  }
+
+  fn flush(&self) {}
+}
+
+/// Installs the shell logger. Called once at the start of main, before any
+/// plugin or setup work, so every step can be logged.
+fn init_shell_logger(exe_dir: &Path) {
+  let dir = exe_dir.join("logs");
+  let _ = std::fs::create_dir_all(&dir);
+  if let Ok(mut guard) = SHELL_LOGGER.dir.lock() {
+    *guard = Some(dir);
+  }
+  if log::set_logger(&SHELL_LOGGER).is_ok() {
+    log::set_max_level(log::LevelFilter::Info);
+  }
+}
 
 /// Shared shell state stored in Tauri's managed state.
 struct ShellState {
@@ -84,6 +185,9 @@ struct ShellState {
   window_revealed: AtomicBool,
   /// Last-known close behavior, used as fallback when the DB read fails.
   close_behavior: Mutex<CloseBehavior>,
+  /// Makes graceful shutdown idempotent across window close, menu quit, restart
+  /// and system shutdown (ExitRequested).
+  shutdown_done: AtomicBool,
 }
 
 fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -178,35 +282,107 @@ fn try_shutdown_child(child: &mut Child, port: u16, exe_dir: &PathBuf) -> Result
   }
 }
 
-fn quit_app(app: &AppHandle) {
-  // Mark quitting
-  if let Some(state) = app.try_state::<ShellState>() {
-    set_quitting(&state);
-  }
-
-  save_geometry(app);
-
-  // Determine port and whether we own the sidecar, and exe_dir for shutdown.
-  let (own, exe_dir, port) = match app.try_state::<ShellState>() {
-    Some(state) => {
-      let own = *state.own_sidecar.lock().unwrap_or_else(|e| e.into_inner());
-      let port = *state.port.lock().unwrap_or_else(|e| e.into_inner());
-      (own, state.exe_dir.clone(), port)
+/// Pure decision: stop the sidecar only when this shell owns it and the recorded
+/// PID still belongs to the expected executable. Extracted so it can be tested
+/// without a live Tauri AppHandle.
+fn should_stop_sidecar(owner: Option<&sidecar::SidecarOwner>, shell_pid: u32) -> bool {
+  match owner {
+    Some(marker) => {
+      marker.shell_pid == shell_pid
+        && sidecar::process_identity_matches(marker.sidecar_pid, &marker.sidecar_path)
     }
-    None => (false, PathBuf::new(), sidecar::DEFAULT_PORT),
-  };
+    None => false,
+  }
+}
 
-  if own {
-    if let Some(state) = app.try_state::<ShellState>() {
-      let child = take_child_from_state(&state);
-      if let Some(mut child) = child {
-        if let Err(e) = try_shutdown_child(&mut child, port, &exe_dir) {
-          report_error(app, &e);
+/// Graceful shutdown, shared by every normal close path: window close, quit
+/// menu, restart and system shutdown (ExitRequested). Idempotent — the first
+/// caller wins and later ones are no-ops.
+///
+/// Order: best-effort geometry → stop the server only when this copy owns it
+/// (verified by the owner marker and process identity) → remove flag files →
+/// exit. Never hangs: the sidecar shutdown is bounded in sidecar.rs.
+fn graceful_shutdown(app: &AppHandle, reason: &str) {
+  let Some(state) = app.try_state::<ShellState>() else {
+    log::warn!("Graceful shutdown ({reason}) with no shell state");
+    return;
+  };
+  if state
+    .shutdown_done
+    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+    .is_err()
+  {
+    return;
+  }
+  log::info!("Graceful shutdown started ({reason})");
+  set_quitting(&state);
+
+  // 1. Best-effort window position. Never blocks close (bounded DB timeout).
+  save_geometry(app);
+  log::info!("Graceful shutdown: window position saved");
+
+  let exe_dir = state.exe_dir.clone();
+  let port = *state.port.lock().unwrap_or_else(|e| e.into_inner());
+
+  // 2. Stop the server only when no other copy is using it. The owner marker
+  // records the owning shell PID and the sidecar PID/path; the PID is verified
+  // against the live process image so a stale marker after a crash can never
+  // kill an unrelated process that reused the number (S2).
+  let owner = sidecar::read_sidecar_owner(&exe_dir);
+  let should_stop = should_stop_sidecar(owner.as_ref(), std::process::id());
+
+  if should_stop {
+    let child = take_child_from_state(&state);
+    if let Some(mut child) = child {
+      if let Err(e) = try_shutdown_child(&mut child, port, &exe_dir) {
+        report_error(app, &e);
+      }
+    } else {
+      // We own the marker but have no child handle (e.g. shell restarted while
+      // the sidecar survived). Stop the recorded PID directly, identity already
+      // verified above.
+      if let Some(marker) = &owner {
+        log::info!("Stopping owned sidecar PID {} without a child handle", marker.sidecar_pid);
+        #[cfg(windows)]
+        {
+          use std::os::windows::process::CommandExt;
+          match std::process::Command::new("taskkill")
+            .args(["/PID", &marker.sidecar_pid.to_string(), "/F"])
+            .creation_flags(0x0800_0000)
+            .status()
+          {
+            Ok(status) if status.success() => {
+              log::info!("taskkill stopped sidecar PID {}", marker.sidecar_pid);
+            }
+            Ok(status) => {
+              log::warn!("taskkill failed to stop sidecar PID {}: {status}", marker.sidecar_pid);
+            }
+            Err(e) => {
+              log::warn!("taskkill could not be launched for sidecar PID {}: {e}", marker.sidecar_pid);
+            }
+          }
         }
       }
     }
+    // Only the owner clears the marker. A shell that attached to another copy's
+    // sidecar must leave the owner's marker intact, or the real owner will later
+    // read no marker, conclude it does not own the sidecar, and orphan it (A3).
+    sidecar::clear_sidecar_owner(&exe_dir);
+    log::info!("Graceful shutdown: owned sidecar stopped");
+  } else {
+    log::info!("Graceful shutdown: sidecar not owned by this copy; leaving it running and preserving the owner marker");
   }
 
+  // 3. Remove IPC flag files after acting on them. These are per-launch signals,
+  // not ownership, so they are cleared unconditionally. The owner marker is
+  // deliberately NOT here — only the owning branch above clears it.
+  sidecar::clear_restart_request(&exe_dir);
+  sidecar::clear_shutdown_request(&exe_dir);
+  log::info!("Graceful shutdown complete ({reason})");
+}
+
+fn quit_app(app: &AppHandle) {
+  graceful_shutdown(app, "quit");
   app.exit(0);
 }
 
@@ -297,6 +473,8 @@ fn respawn_sidecar(app: &AppHandle) -> bool {
   let port = sidecar::configured_port(&exe_dir, remembered_port);
   match sidecar::spawn_sidecar(&exe_dir, port) {
     Ok(child) => {
+      let sidecar_path = exe_dir.join(sidecar::SIDECAR_FILENAME);
+      sidecar::write_sidecar_owner(&exe_dir, std::process::id(), &child, &sidecar_path);
       if let Some(state) = app.try_state::<ShellState>() {
         if let Ok(mut guard) = state.child.lock() { *guard = Some(child); }
         if let Ok(mut guard) = state.port.lock() { *guard = port; }
@@ -362,11 +540,19 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
   };
   let mut own_sidecar = false;
   if !sidecar::health_ok(port) {
+    // No running copy: it is now safe to delete leftover flags from a crashed
+    // run, so an old one cannot trigger a fake restart or shutdown.
+    sidecar::clear_stale_flags(&exe_dir);
+    log::info!("Bootstrap: no running copy; cleared stale flag files");
     if !exe_dir.join(sidecar::SIDECAR_FILENAME).exists() {
       fatal(&app, format!("{} was not found beside the application.\n\nRe-extract the full RTWiki package.", sidecar::SIDECAR_FILENAME));
     }
     match sidecar::spawn_sidecar(&exe_dir, port) {
       Ok(child) => {
+        // Record ownership before moving the child into state. Quit uses this
+        // marker (with a process-identity check) to stop only our own sidecar.
+        let sidecar_path = exe_dir.join(sidecar::SIDECAR_FILENAME);
+        sidecar::write_sidecar_owner(&exe_dir, std::process::id(), &child, &sidecar_path);
         if let Some(state) = app.try_state::<ShellState>() {
           if let Ok(mut guard) = state.child.lock() { *guard = Some(child); }
         }
@@ -380,6 +566,7 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
               let child = state.child.lock().ok().and_then(|mut g| g.take());
               if let Some(mut child) = child { let _ = child.kill(); }
             }
+            sidecar::clear_sidecar_owner(&exe_dir);
             fatal(&app, "The RTWiki server did not start in time.\n\nCheck logs/rtwiki.log for details, then try again.".to_string());
           }
         } else { own_sidecar = true; }
@@ -387,6 +574,22 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
       Err(err) => {
         if sidecar::health_ok(port) { own_sidecar = false; }
         else { fatal(&app, format!("Could not start {0}: {err}\n\nRe-extract the full RTWiki package.", sidecar::SIDECAR_FILENAME)); }
+      }
+    }
+  } else {
+    // Attaching to a sidecar started by an earlier shell (e.g. one that crashed
+    // and left the server running). Adopt ownership so quitting THIS shell stops
+    // the server instead of orphaning it. The recorded sidecar PID/path is
+    // re-verified before it is adopted, so a stale marker is never trusted.
+    if let Some(marker) = sidecar::read_sidecar_owner(&exe_dir) {
+      if sidecar::process_identity_matches(marker.sidecar_pid, &marker.sidecar_path) {
+        sidecar::write_sidecar_owner_for_pid(
+          &exe_dir,
+          std::process::id(),
+          marker.sidecar_pid,
+          &marker.sidecar_path,
+        );
+        log::info!("Adopted existing sidecar PID {} on attach", marker.sidecar_pid);
       }
     }
   }
@@ -458,6 +661,7 @@ fn get_close_behavior(app: AppHandle) -> String {
 /// never emitted into the void. Mirrors Codeg's close-prompt handshake.
 #[tauri::command]
 fn close_dialog_ready(app: AppHandle) {
+  log::info!("close_dialog_ready invoked");
   if let Some(state) = app.try_state::<ShellState>() {
     state.close_prompt_ready.store(true, Ordering::Release);
     if let Ok(mut guard) = state.close_prompt_open.lock() {
@@ -489,6 +693,15 @@ fn resolve_close_request(app: AppHandle, action: String) {
 }
 
 fn main() {
+  // Install the bounded shell logger before any plugin or setup work so every
+  // bootstrap (startup sequence) and graceful shutdown step is recorded.
+  let boot_exe_dir = std::env::current_exe()
+    .ok()
+    .and_then(|p| p.parent().map(PathBuf::from))
+    .unwrap_or_default();
+  init_shell_logger(&boot_exe_dir);
+  log::info!("RTWiki shell starting");
+
   tauri::Builder::default()
     .plugin(tauri_plugin_single_instance::init(
       |app: &AppHandle, args: Vec<String>, _cwd: String| {
@@ -544,6 +757,7 @@ fn main() {
         close_prompt_open: Mutex::new(None),
         window_revealed: AtomicBool::new(false),
         close_behavior: Mutex::new(remembered_behavior),
+        shutdown_done: AtomicBool::new(false),
       });
 
       // Tray first so Quit is always reachable, even during a slow boot.
@@ -671,9 +885,38 @@ fn main() {
                     ClosePromptClaim::Granted if ready && app.emit(CLOSE_REQUEST_EVENT, ()).is_ok() => {
                       // The in-app dialog owns this press and will resolve it.
                     }
-                    _ => {
-                      // No listener ready, or delivery failed. Hide to tray —
-                      // the safe default that discards nothing (Codeg pattern).
+                    ClosePromptClaim::Granted => {
+                      // The readiness handshake has not completed yet (the
+                      // dialog mounts after the page loads). Retry briefly
+                      // instead of silently hiding to tray, so a click during
+                      // boot still shows the dialog.
+                      let retry_app = app.clone();
+                      let retry_win = win.clone();
+                      let retry_dir = exe_dir.clone();
+                      std::thread::spawn(move || {
+                        let deadline = Instant::now() + Duration::from_millis(1500);
+                        loop {
+                          let is_ready = retry_app
+                            .try_state::<ShellState>()
+                            .map(|s| s.close_prompt_ready.load(Ordering::Acquire))
+                            .unwrap_or(false);
+                          if is_ready && retry_app.emit(CLOSE_REQUEST_EVENT, ()).is_ok() {
+                            log::info!("Close dialog handshake completed on retry");
+                            return;
+                          }
+                          if Instant::now() >= deadline {
+                            break;
+                          }
+                          std::thread::sleep(Duration::from_millis(50));
+                        }
+                        // Still no listener: log the failure and apply the safe
+                        // default rather than failing silently.
+                        log::warn!("Close dialog handshake failed; hiding to tray");
+                        geom::save_current(&retry_dir, &retry_win);
+                        let _ = retry_win.hide();
+                      });
+                    }
+                    ClosePromptClaim::Unavailable => {
                       geom::save_current(&exe_dir, &win);
                       let _ = win.hide();
                     }
@@ -690,6 +933,50 @@ fn main() {
       std::thread::spawn(move || boot_and_show(handle, browser_mode));
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("RTWiki failed to start");
+    .build(tauri::generate_context!())
+    .expect("RTWiki failed to build")
+    .run(|app, event| {
+      if let RunEvent::ExitRequested { .. } = event {
+        // Covers system shutdown and any exit path that did not go through
+        // quit_app (window close, quit menu, restart). Idempotent, so a normal
+        // quit that already shut down does no work twice.
+        graceful_shutdown(app, "exit-requested");
+      }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn no_owner_marker_means_do_not_stop_any_sidecar() {
+    // With no marker there is no verified owner, so this shell must not stop
+    // any sidecar. On attach a shell normally adopts the sidecar and writes a
+    // marker naming itself (see boot_and_show); this case covers the residual
+    // path where adoption could not happen (e.g. a stale/unverifiable marker).
+    assert!(!should_stop_sidecar(None, std::process::id()));
+  }
+
+  #[test]
+  fn another_copy_owner_marker_is_not_stopped() {
+    let owner = sidecar::SidecarOwner {
+      shell_pid: std::process::id().wrapping_add(1),
+      sidecar_pid: 999_999,
+      sidecar_path: PathBuf::from("C:/RTWiki/RTWikiServer.exe"),
+    };
+    assert!(!should_stop_sidecar(Some(&owner), std::process::id()));
+  }
+
+  #[test]
+  fn stale_marker_with_reused_pid_is_not_stopped() {
+    // The marker names this shell's PID, but the recorded sidecar PID no longer
+    // belongs to the server program. Must not kill that unrelated process (S2).
+    let owner = sidecar::SidecarOwner {
+      shell_pid: std::process::id(),
+      sidecar_pid: u32::MAX,
+      sidecar_path: PathBuf::from("C:/RTWiki/RTWikiServer.exe"),
+    };
+    assert!(!should_stop_sidecar(Some(&owner), std::process::id()));
+  }
 }

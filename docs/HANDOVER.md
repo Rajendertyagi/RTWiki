@@ -7,6 +7,8 @@ Confidence labels: **VERIFIED** (read from code/config/tests) · **DOCUMENTED** 
 
 **This document is a read-only inspection. Nothing in the project was modified to produce it.**
 
+> **Superseded dependency versions.** This is a point-in-time inspection of commit `9cf3a76`. The version numbers below describe that commit and are intentionally left unchanged. For the current, authoritative dependency versions see [DEPENDENCY_STATUS.md](DEPENDENCY_STATUS.md).
+
 ---
 
 ## 1. Project Overview
@@ -373,7 +375,27 @@ All routes verified from source. `dataDir`-guarded handlers return 503 when unav
 
 **Web vs desktop differences** � native mode adds window controls, OS notifications, autostart, and close behaviour (`ask` / `minimize` / `quit`); the browser build gets a tab and a Stop button. `services/native-bridge.ts` imports Tauri plugins dynamically, only in native mode.
 
-**Status: never built or run on this machine** � there is no Rust toolchain, so `bun run build:desktop` is CI-only.
+**Bootstrap (startup sequence) and graceful shutdown.** Bootstrap detects a
+running copy first (the only earlier access is a read-only port probe), then
+checks the data folder, opens/migrates/verifies the database, reads settings per
+key, chooses the port (a busy port produces a clear `--port` message and is never
+auto-picked), starts the server and waits for health before opening the window.
+Every step logs a named event. Graceful shutdown runs on window close, quit
+menu, restart and system shutdown (`RunEvent::ExitRequested`): best-effort
+geometry, bounded stop of new work, a full save into the main database file with
+a short limit (log-and-continue on failure), clean database close, flag-file
+cleanup, and stopping the server only when no other copy owns it. The folder is
+**normally safe to copy after a clean close**. A clean-exit marker records an
+unclean previous run; an owner marker with PID identity verification prevents a
+stale marker from killing an unrelated process. The compiled server is a
+GUI-subsystem PE image (`hideConsole: true`); fatal errors still reach the log
+and a findable `STARTUP-ERROR.txt`.
+
+**Status: Rust toolchain is available here** (`cargo`/`rustc` 1.99.1), so
+`cargo test` from `src-tauri/` and `bun run build:desktop` can be run locally;
+CI remains the authoritative build for the portable artifact.
+
+**Former status note (superseded): never built or run on this machine** � there is no Rust toolchain, so `bun run build:desktop` is CI-only.
 
 ---
 
@@ -413,7 +435,7 @@ All routes verified from source. `dataDir`-guarded handlers return 503 when unav
 | `windows-smoke.yml` | � | build -> package -> Windows smoke test |
 | `tmp-format.yml` | � | remote `biome check --write`, uploads a patch. **Temporary. VERIFIED** |
 
-**Bun is pinned to `1.4.0` in every workflow. The local runtime is 1.4.2 � VERIFIED skew.**
+**Bun is pinned to `1.4.0` in every workflow. The local runtime is 1.4.2 — VERIFIED skew.**
 
 **Local gate results, all run just now: VERIFIED**
 
@@ -732,9 +754,10 @@ bun run test:compiled-images
 |---|---|
 | `src/server/app.ts` | Route registration, all four middleware layers, `/health`. **The security posture lives here** |
 | `src/server/index.ts` | Process entry, browser launcher, fatal-error reporting |
-| `src/server/bootstrap.ts` | Startup order: paths, migrations, directories, server. Takes `dataDir?` for tests |
+| `src/server/bootstrap.ts` | **Bootstrap (startup sequence)**: running-copy check (read-only port probe), writable check, DB open/migrate/integrity, per-key settings read, port choice (busy port → clear `--port` message, never auto-picked), server start + health, then browser. Logs a named step for each. Takes `dataDir?` for tests |
 | `src/server/config/index.ts` | Executable-relative paths, runtime resolution |
-| `src/server/database/index.ts` | Connection, pragmas, `checkIntegrity`, `closeDatabase` |
+| `src/server/database/index.ts` | Connection, pragmas, `checkIntegrity`, bounded `fullSaveToMainFile`, `closeDatabase` |
+| `src/server/shutdown-coordinator.ts` | **Graceful shutdown**: bounded stop, full save (log-and-continue), DB close, marker cleanup, logger close |
 | `src/server/database/migrations.ts` | All 8 tables, 8 migrations, indexes, FTS5, `requiredMigrationNames()` |
 | `src/server/repositories/page-repository.ts` | All page SQL. The five rowid tie-breaks live here |
 | `src/server/services/page-service.ts` | Page business rules; `createPage` opens `BEGIN IMMEDIATE` |

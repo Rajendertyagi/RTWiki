@@ -31,6 +31,14 @@ export function CloseDialog(): React.ReactElement | null {
     let disposed = false
     let unlisten: (() => void) | null = null
 
+    // Handshake FIRST, independent of the listen() promise. The Rust shell only
+    // emits rtwiki:close-request when close_prompt_ready is true; nesting this
+    // invoke inside listen().then() made a click during boot fall through to
+    // hide-to-tray with no dialog. Arming readiness immediately closes that gap.
+    void invoke('close_dialog_ready').catch((err: unknown) => {
+      console.error('[close-dialog] readiness handshake failed:', err)
+    })
+
     void listen(CLOSE_REQUEST_EVENT, () => {
       if (disposed) return
       // Read the preference fresh: Settings may have changed it this session.
@@ -49,8 +57,9 @@ export function CloseDialog(): React.ReactElement | null {
         return
       }
       unlisten = fn
-      // Handshake: prove a listener is armed and clear any stale prompt flag
-      // left by a webview reload, so a close press is never emitted into the void.
+      // Re-arm after the listener is actually registered: a webview reload can
+      // clear the shell's flag, and this guarantees readiness tracks the real
+      // listener state rather than just "the component mounted".
       void invoke('close_dialog_ready').catch((err: unknown) => {
         console.error('[close-dialog] readiness handshake failed:', err)
       })

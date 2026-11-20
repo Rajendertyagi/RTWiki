@@ -224,3 +224,34 @@ artifact. It supplements, and does not replace, the MVP criteria above.
 8. Cards show readable previews; raw serialized JSON is never displayed.
 9. Search filters pages by title.
 10. No obsolete placeholder copy remains in the UI.
+
+## Bootstrap (startup sequence) and graceful shutdown acceptance criteria
+
+- AC-BOOT-1: A second copy is detected before any data folder or database is
+  created; the only earlier access is a read-only port probe.
+- AC-BOOT-2: An unwritable data folder produces a friendly, actionable message
+  and no database is created.
+- AC-BOOT-3: A damaged database stops startup with a message pointing at
+  `data/backups/`.
+- AC-BOOT-4: Each invalid setting resets only itself, in memory.
+- AC-BOOT-5: A busy port produces a clear message naming the port and the
+  `--port` override; no different port is auto-picked.
+- AC-BOOT-6: The server reports healthy before the window opens, and every step
+  emits a named log event so a failed start shows where it stopped.
+- AC-SHUT-1: Graceful shutdown runs on window close, quit menu, restart and
+  system shutdown, and is idempotent.
+- AC-SHUT-2: Window position is saved best effort; stopping work is bounded and
+  never hangs.
+- AC-SHUT-3: Pending database changes are fully saved into the main file with a
+  short limit; a failure is logged and the database still closes. The folder is
+  **normally safe to copy after a clean close** (asserted by a test).
+- AC-SHUT-4: Flag files are written by the server just before exit and deleted
+  by the shell after acting; leftovers from a crashed run are cleared at startup.
+- AC-SHUT-5: The server is stopped only when no other copy owns it; a stale
+  owner marker with a reused PID never kills an unrelated process.
+- AC-CRASH-1: After a crash the next start recovers with no data loss and the
+  first log line says the previous run did not close cleanly; a second copy does
+  not mistake the first copy's marker for a crash.
+- AC-A1: The compiled server is PE subsystem 2 (GUI) and opens no console window.
+- AC-A2: Clicking X with `closeBehavior = "ask"` shows the close dialog.
+- AC-A3: No `RTWikiServer.exe` remains after quitting by any route.

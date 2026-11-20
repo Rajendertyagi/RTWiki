@@ -15,15 +15,15 @@ tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
 tauri = { version = "2.12.7", features = ["tray-icon"] }
-log = "0.4"
+log = "=0.4.35"
 tauri-plugin-autostart = "2.7.0"
 tauri-plugin-dialog = "2.8.4"
 tauri-plugin-notification = "2.8.1"
 tauri-plugin-single-instance = "2.5.5"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-opener = "0.8"
-# Read-only access to the settings table owned by the Bun server. Pinned to a
-# stable 0.32 release. `bundled` compiles SQLite from source so no system
+serde_json = "=1.0.154"
+opener = "=0.9.0"
+# Read-only access to the settings table owned by the Bun server. Pinned to an
+# exact 0.43.0 release. `bundled` compiles SQLite from source so no system
 # sqlite3.lib is needed (the portable build must not depend on a local SDK).
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "=0.43.0", features = ["bundled"] }

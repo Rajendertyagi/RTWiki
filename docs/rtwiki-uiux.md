@@ -705,11 +705,18 @@ Verified by launching the compiled executable and requesting the root path: HTTP
 
 ### The native desktop gap is narrower than it was
 
-The compiled binary now demonstrably serves the frontend. What remains unverified is
-the **Tauri desktop shell** itself: the custom caption buttons, window dragging and
-the shutdown handshake have only been exercised in a browser against the same
-bundle. `tauri build` was not run — there is no Rust toolchain in this environment
-— so the packaged Windows shell remains unbuilt.
+The compiled binary now demonstrably serves the frontend. The **Tauri desktop
+shell** is built and its Rust unit tests run locally (`cargo test` from
+`src-tauri/`; toolchain 1.99.1). Bootstrap (startup sequence) and graceful
+shutdown are ordered, logged and bounded across both processes: a running copy
+is detected before files are touched (read-only port probe exception), a busy
+port is reported with the `--port` override rather than auto-picked, and shutdown
+runs on window close, quit menu, restart and system shutdown with a full save
+into the main database file. The folder is **normally safe to copy after a clean
+close**. A clean-exit marker records an unclean previous run and an owner marker
+with PID identity verification prevents a stale marker from killing an unrelated
+process. The compiled server is a GUI-subsystem PE image (`hideConsole: true`);
+fatal errors still reach the log and a findable `STARTUP-ERROR.txt`.
 
 ### The save status indicator lied about pending work
 
@@ -1556,8 +1563,8 @@ way the F1 and F2 entries were.
 
 | Item | Reason |
 |---|---|
-| Native Tauri shell behaviour | No Rust toolchain available. The compiled **server executable** was verified to serve the frontend (HTTP 200), but the Tauri window, caption buttons and shutdown handshake have only been exercised in a browser against the same bundle |
-| Windows `decorations(false)` build | Requires a Tauri build |
+| Native Tauri shell GUI behaviour | Rust toolchain is available (1.99.1): `cargo test` passes and the desktop shell builds. Bootstrap (startup sequence) and graceful shutdown are covered by Rust and bun tests; the close dialog's real-window appearance is proven by the desktop smoke test. The compiled server is PE subsystem 2 (GUI) and opens no console |
+| Windows `decorations(false)` build | Built locally; CI remains authoritative for the portable artifact |
 | HTML pages, code pages, Calendar/Study, Settings, Trash, Favorites views | Only Rich Note and dashboard were driven |
 | Empty, loading and error states | Not driven |
 | Keyboard navigation and focus order | Not tested |

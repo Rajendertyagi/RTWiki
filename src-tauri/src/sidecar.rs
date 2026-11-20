@@ -28,6 +28,69 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+/// Win32 process identity lookup. Used to verify that a PID recorded in a stale
+/// owner marker still belongs to the RTWiki server before it is ever killed.
+#[cfg(windows)]
+mod win_process {
+  use std::ffi::OsString;
+  use std::os::windows::ffi::OsStringExt;
+
+  #[link(name = "kernel32")]
+  extern "system" {
+    fn OpenProcess(
+      desired_access: u32,
+      inherit_handle: i32,
+      process_id: u32,
+    ) -> *mut std::ffi::c_void;
+    fn QueryFullProcessImageNameW(
+      process: *mut std::ffi::c_void,
+      flags: u32,
+      name: *mut u16,
+      size: *mut u32,
+    ) -> i32;
+    fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+  }
+
+  const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+
+  pub fn image_path(pid: u32) -> Option<String> {
+    unsafe {
+      let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+      if handle.is_null() {
+        return None;
+      }
+      let mut buffer = [0u16; 32_768];
+      let mut length = buffer.len() as u32;
+      let ok = QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length);
+      CloseHandle(handle);
+      if ok == 0 || length == 0 || length as usize > buffer.len() {
+        return None;
+      }
+      OsString::from_wide(&buffer[..length as usize])
+        .to_str()
+        .map(str::to_owned)
+    }
+  }
+}
+
+/// True when `pid` still belongs to the expected executable. A stale owner
+/// marker whose PID was reused by an unrelated process after a crash must never
+/// cause that process to be killed.
+pub fn process_identity_matches(pid: u32, expected_path: &Path) -> bool {
+  #[cfg(windows)]
+  {
+    match win_process::image_path(pid) {
+      Some(actual) => actual.eq_ignore_ascii_case(&expected_path.to_string_lossy()),
+      None => false,
+    }
+  }
+  #[cfg(not(windows))]
+  {
+    let _ = (pid, expected_path);
+    false
+  }
+}
+
 /// Fallback when the settings table is missing or corrupt. Must match
 /// DEFAULT_PORT in src/shared/constants/index.ts.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -35,6 +98,8 @@ pub const DEFAULT_PORT: u16 = 8080;
 pub const SIDECAR_FILENAME: &str = "RTWikiServer.exe";
 /// Database filename inside data/. Must match DATABASE_FILENAME in shared constants.
 pub const DATABASE_FILENAME: &str = "rtwiki.sqlite";
+/// Owner marker written by the shell that spawns the sidecar.
+pub const SIDECAR_OWNER_FILENAME: &str = "sidecar-owner";
 
 // Setting keys. Must match SETTINGS_KEY_* in src/shared/constants/index.ts.
 pub const SETTINGS_KEY_SERVER_PORT: &str = "server.port";
@@ -171,6 +236,71 @@ pub fn clear_shutdown_request(exe_dir: &Path) {
 /// without it every clean shutdown is immediately undone by a respawn.
 pub fn consume_shutdown_request(exe_dir: &Path) -> bool {
   std::fs::remove_file(shutdown_flag_path(exe_dir)).is_ok()
+}
+
+/// Owner marker: the shell that spawned the sidecar records its own PID, the
+/// sidecar PID and the sidecar path. Quit uses it to stop only the server this
+/// copy actually owns, and only after verifying the process identity (S2).
+#[derive(Debug, Clone)]
+pub struct SidecarOwner {
+  pub shell_pid: u32,
+  pub sidecar_pid: u32,
+  pub sidecar_path: PathBuf,
+}
+
+fn sidecar_owner_path(exe_dir: &Path) -> PathBuf {
+  exe_dir.join("data").join(SIDECAR_OWNER_FILENAME)
+}
+
+/// Writes the owner marker after a successful sidecar spawn.
+pub fn write_sidecar_owner(exe_dir: &Path, shell_pid: u32, child: &Child, sidecar_path: &Path) {
+  write_sidecar_owner_for_pid(exe_dir, shell_pid, child.id(), sidecar_path);
+}
+
+/// Writes the owner marker from a known sidecar PID. Used when a shell adopts a
+/// sidecar started by an earlier shell that is no longer running.
+pub fn write_sidecar_owner_for_pid(
+  exe_dir: &Path,
+  shell_pid: u32,
+  sidecar_pid: u32,
+  sidecar_path: &Path,
+) {
+  let body = format!(
+    "{}\n{}\n{}\n",
+    shell_pid,
+    sidecar_pid,
+    sidecar_path.display()
+  );
+  let _ = std::fs::write(sidecar_owner_path(exe_dir), body);
+}
+
+/// Reads the owner marker, or None when absent or malformed.
+pub fn read_sidecar_owner(exe_dir: &Path) -> Option<SidecarOwner> {
+  let body = std::fs::read_to_string(sidecar_owner_path(exe_dir)).ok()?;
+  let mut lines = body.lines();
+  let shell_pid = lines.next()?.trim().parse().ok()?;
+  let sidecar_pid = lines.next()?.trim().parse().ok()?;
+  let sidecar_path = PathBuf::from(lines.next()?.trim());
+  Some(SidecarOwner {
+    shell_pid,
+    sidecar_pid,
+    sidecar_path,
+  })
+}
+
+/// Removes the owner marker after the shell has acted on it.
+pub fn clear_sidecar_owner(exe_dir: &Path) {
+  let _ = std::fs::remove_file(sidecar_owner_path(exe_dir));
+}
+
+/// Deletes leftover IPC flags from a crashed run. Called at startup only AFTER
+/// the running-copy check has passed, so a second copy never clears the first
+/// copy's live flags. The server's clean-exit marker is deliberately not here:
+/// the server reads and clears it itself on the next start.
+pub fn clear_stale_flags(exe_dir: &Path) {
+  clear_restart_request(exe_dir);
+  clear_shutdown_request(exe_dir);
+  clear_sidecar_owner(exe_dir);
 }
 
 /// Minimal blocking HTTP exchange over loopback. Returns the full response
@@ -435,7 +565,7 @@ mod tests {
   fn cross_build_interop_bun_writes_rusqlite_reads() {
     // Real cross-build proof (plan §6.4): the server's bun:sqlite writes the
     // settings table while the shell's rusqlite reads the SAME file at the same
-    // time. Both link their own SQLite (bun 3.54.x, rusqlite bundled 3.46.x);
+    // time. Both link their own SQLite (bun 3.54.x, rusqlite bundled 3.54.1);
     // this test proves they interoperate on one WAL database without torn reads.
     let db = TestDb::new();
     db.set(SETTINGS_KEY_SERVER_PORT, "8080");
@@ -499,5 +629,88 @@ mod tests {
     );
     // The final value is the last one bun wrote.
     assert_eq!(configured_port(&db.dir, DEFAULT_PORT), 8219);
+  }
+
+  #[test]
+  fn owner_marker_round_trip() {
+    let dir = std::env::temp_dir().join(format!(
+      "rtwiki-owner-marker-{}-{}",
+      std::process::id(),
+      TEST_COUNTER.fetch_add(1, AtomicOrdering::SeqCst)
+    ));
+    fs::create_dir_all(dir.join("data")).unwrap();
+    let marker = SidecarOwner {
+      shell_pid: 4242,
+      sidecar_pid: 4343,
+      sidecar_path: PathBuf::from("C:/RTWiki/RTWikiServer.exe"),
+    };
+    let body = format!(
+      "{}\n{}\n{}\n",
+      marker.shell_pid,
+      marker.sidecar_pid,
+      marker.sidecar_path.display()
+    );
+    fs::write(dir.join("data").join(SIDECAR_OWNER_FILENAME), body).unwrap();
+    let read = read_sidecar_owner(&dir).expect("owner marker must be readable");
+    assert_eq!(read.shell_pid, 4242);
+    assert_eq!(read.sidecar_pid, 4343);
+    assert_eq!(read.sidecar_path, marker.sidecar_path);
+    clear_sidecar_owner(&dir);
+    assert!(read_sidecar_owner(&dir).is_none());
+    let _ = fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn adopting_a_sidecar_updates_the_owner_pid() {
+    let dir = std::env::temp_dir().join(format!(
+      "rtwiki-adopt-marker-{}-{}",
+      std::process::id(),
+      TEST_COUNTER.fetch_add(1, AtomicOrdering::SeqCst)
+    ));
+    fs::create_dir_all(dir.join("data")).unwrap();
+    let path = PathBuf::from("C:/RTWiki/RTWikiServer.exe");
+    write_sidecar_owner_for_pid(&dir, 1111, 2222, &path);
+    // A new shell adopts it by rewriting only the owner PID.
+    write_sidecar_owner_for_pid(&dir, 3333, 2222, &path);
+    let read = read_sidecar_owner(&dir).expect("adopted marker must be readable");
+    assert_eq!(read.shell_pid, 3333);
+    assert_eq!(read.sidecar_pid, 2222);
+    let _ = fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn stale_owner_pid_never_matches_an_unrelated_process() {
+    // A PID that cannot belong to the RTWiki server must never be treated as a
+    // valid owner, so a stale marker after a crash cannot kill a reused PID.
+    assert!(!process_identity_matches(
+      u32::MAX,
+      Path::new("C:/RTWiki/RTWikiServer.exe")
+    ));
+  }
+
+  #[test]
+  fn clear_stale_flags_removes_every_leftover_flag() {
+    let dir = std::env::temp_dir().join(format!(
+      "rtwiki-stale-flags-{}-{}",
+      std::process::id(),
+      TEST_COUNTER.fetch_add(1, AtomicOrdering::SeqCst)
+    ));
+    fs::create_dir_all(dir.join("data")).unwrap();
+    for name in [
+      "restart-requested",
+      "shutdown-requested",
+      SIDECAR_OWNER_FILENAME,
+    ] {
+      fs::write(dir.join("data").join(name), "stale").unwrap();
+    }
+    clear_stale_flags(&dir);
+    for name in [
+      "restart-requested",
+      "shutdown-requested",
+      SIDECAR_OWNER_FILENAME,
+    ] {
+      assert!(!dir.join("data").join(name).exists(), "{name} was not cleared");
+    }
+    let _ = fs::remove_dir_all(&dir);
   }
 }

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "close-dialog"
+description = "Allows the in-app close dialog handshake commands from the loopback origin"
+commands.allow = ["close_dialog_ready", "resolve_close_request", "get_close_behavior"]

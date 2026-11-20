@@ -639,8 +639,21 @@ concerns — window, tray icon, autostart registration, portable window geometry
 application logic stays in the Hono backend; the frontend reaches native
 features through a single guarded bridge module with browser fallbacks, so no
 native feature is ever required for the app to function. Browser mode remains
-available via the tray menu and `RTWiki.exe --browser`. See
-[ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
+available via the tray menu and `RTWiki.exe --browser`.
+
+**Bootstrap (startup sequence)** and **graceful shutdown** are ordered, logged
+and bounded across both processes. Bootstrap detects a running copy first (with
+a read-only port probe as the sole exception), checks the data folder, opens and
+verifies the database, reads settings per key, chooses the port (a busy port is
+reported with the `--port` override, never auto-picked), starts the server and
+waits for health before opening the window. Graceful shutdown runs on window
+close, quit menu, restart and system shutdown: best-effort geometry, bounded
+stop of new work, a full save into the main database file with a short limit,
+clean database close, flag-file cleanup, and stopping the server only when no
+other copy owns it. The folder is **normally safe to copy after a clean close**.
+A clean-exit marker records an unclean previous run; an owner marker with PID
+identity verification prevents a stale marker from killing an unrelated process.
+See [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
 
 ## 7. Cross-References
 

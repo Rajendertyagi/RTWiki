@@ -32,6 +32,17 @@ shifted lines in `src/shared/constants/index.ts`, `src/server/config/index.ts` a
 `src/server/bootstrap.ts`. The *findings* below are unchanged; where a row now says a constant was
 **deleted**, that is a correction to the row, not a new finding.
 
+**Later addition — bootstrap (startup sequence) and graceful shutdown are now
+built.** The ordered, logged bootstrap and bounded graceful shutdown described in
+[ADR-011](ADR-011-tauri-desktop-wrapper.md) are implemented in
+`src/server/bootstrap.ts`, `src/server/shutdown-coordinator.ts`,
+`src/server/database/index.ts` and `src-tauri/src/main.rs`/`sidecar.rs`, with
+tests in `tests/bootstrap-order.test.ts`, `tests/graceful-shutdown.test.ts`,
+`tests/crash-restart.test.ts` and the Rust `#[cfg(test)]` modules. The desktop
+shell is built locally (toolchain 1.99.1) and the compiled server is PE subsystem
+2 (GUI). This note records the new built state; it does not alter the historical
+findings in the table below.
+
 | Documented claim | Where documented | Verified reality |
 |---|---|---|
 | **Drizzle ORM** is the ORM | [ADR-002](ADR-002-bun-hono-sqlite.md), `AGENTS.md` §6, [README](../../README.md), [ARCHITECTURE](../ARCHITECTURE.md), [DEVELOPMENT_STANDARDS](../DEVELOPMENT_STANDARDS.md) | **Absent.** Not in `package.json:27-76`, not in `bun.lock`, not in `node_modules`, 0 imports in `src/`. The code uses `bun:sqlite` with hand-written parameterised SQL: `src/server/repositories/page-repository.ts:1`, `src/server/repositories/schedule-repository.ts:1`, `src/server/services/page-service.ts:1`, `src/server/services/schedule-service.ts:1` |

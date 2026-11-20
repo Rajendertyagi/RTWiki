@@ -442,7 +442,9 @@ The original plan said restore would reuse the desktop restart handshake. **It c
   references are all in `tests/server-settings.test.ts`.
 - `launcher.ts:22` opens the **browser** (`rundll32 url.dll,FileProtocolHandler`), not
   the server.
-- Nothing respawns the server. The desktop shell that would is never built.
+- The desktop shell can respawn the server on a restart request, but restore
+  deliberately does not depend on it: the shell is optional and browser mode has
+  no respawner.
 
 So restore: **validate → move the live database aside → swap → shut down cleanly → tell
 the user plainly "Restored. Close and reopen RTWiki."** No relaunch, no dependency on the
@@ -455,6 +457,15 @@ the restored port differs from the one currently in use, the user is told that a
 restart is required for it to take effect (the server keeps listening on the
 current port until restart; the shell reads the restored port on next launch).
 `tests/backup-restore-settings.test.ts` asserts this behavior.
+
+**Graceful shutdown and copying the folder.** At shutdown the server performs a
+bounded full save (`PRAGMA wal_checkpoint(TRUNCATE)`) into the main database file
+before closing, logging and continuing if it fails. The folder is **normally
+safe to copy after a clean close** — a test copies only `rtwiki.sqlite` into a
+fresh folder and reads committed data back. A crash is different: the clean-exit
+marker is left behind and the next start reports it. Backups remain the
+authoritative recovery path; the full save is a convenience, not a replacement
+for `VACUUM INTO` backups.
 
 ### 7.3 Reversibility
 
@@ -494,7 +505,7 @@ Recommended, smallest version that is honest — and it is Trilium's behaviour e
 ## 9. UI
 
 A **Backup** section in Settings, built from the components the app already uses. Mantine
-is **9.6.2**. Every element below was chosen by reading an existing use site, not by
+is **9.8.2**. Every element below was chosen by reading an existing use site, not by
 reach — introducing a new pattern for a settings panel is not worth it.
 
 ### 9.1 How a section is added

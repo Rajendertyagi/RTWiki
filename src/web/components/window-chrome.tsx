@@ -136,6 +136,7 @@ export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElemen
   }
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: this band is a native window drag region; double-click-to-maximize is a mouse-only OS convention, and the keyboard-accessible maximize control is the dedicated button below, so adding a role/tabIndex/keyboard handler here would be semantically wrong
     <div className={classes.root} data-testid="window-chrome" onDoubleClick={handleDoubleClick}>
       {/* Backdrop and content row are drag regions; the root is not, so the
           caption buttons below stay outside them and keep their clicks. */}

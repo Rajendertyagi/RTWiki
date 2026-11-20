@@ -16,7 +16,7 @@ separate Mind Map block and page type were retired.
 
 | Block | Stored type | Source lives in | Rendering |
 | --- | --- | --- | --- |
-| Formula | `mathBlock` (+ inline `math`) | Plain-text content (LaTeX) | Official `@blocknote/math-block` 0.54 / KaTeX |
+| Formula | `mathBlock` (+ inline `math`) | Plain-text content (LaTeX) | Official `@blocknote/math-block` 0.57 / KaTeX |
 | Diagram | `diagram` | Plain-text content (Mermaid) | RTWiki secure Mermaid pipeline |
 | Diagram (legacy read alias) | `mindMap` | Plain-text content (Mermaid mindmap syntax) | Same pipeline, plus zoom controls |
 | Callout | `callout` | Editable inline rich text + `variant` prop | Native custom block, theme-token styling |
@@ -205,6 +205,6 @@ rendered output. See [Debug Mode](DEBUG_MODE.md).
 
 ## Dependencies
 
-Exact-pinned additions (MPL-2.0): `@blocknote/math-block@0.54.0`
-(pulls KaTeX), `mermaid@11.17.1`. Mermaid is lazy-loaded and never part of
+Exact-pinned additions (MPL-2.0): `@blocknote/math-block@0.57.0`
+(pulls KaTeX), `mermaid@12.3.0`. Mermaid is lazy-loaded and never part of
 the initial application chunk.

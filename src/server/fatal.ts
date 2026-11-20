@@ -1,5 +1,9 @@
-import { resolveRuntimePaths } from './config/index.js'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, joinPaths, resolveRuntimePaths } from './config/index.js'
 import { createLogger } from './logging/index.js'
+
+/** Name of the findable error file written when the console is hidden. */
+const STARTUP_ERROR_FILENAME = 'STARTUP-ERROR.txt'
 
 /**
  * Reports a fatal startup failure, on the terminal first and in the log second.
@@ -35,7 +39,43 @@ export async function reportFatalStartupError(
   })
   await logger.close()
 
+  // With `hideConsole: true` the compiled executable has no console, so stderr
+  // is not a surface a double-clicked executable can read. Write a plain-text
+  // error file beside it (and in logs/) so the failure is findable, never silent.
+  // Dev runs keep a console, so they do not need the artifact.
+  if (resolveRuntimePaths().compiled) {
+    writeStartupErrorFile(message, logPath)
+  }
+
   await waitForTheUserToReadIt()
+}
+
+/**
+ * Writes a human-readable startup error file. Best effort: a protected folder
+ * may refuse the write, but the log line above has already been attempted and
+ * the terminal message (where one exists) has been printed.
+ */
+function writeStartupErrorFile(message: string, logPath: string): void {
+  const paths = resolveRuntimePaths()
+  const body = [
+    'RTWiki could not start.',
+    '',
+    message,
+    '',
+    'The detailed log is in logs/rtwiki.log beside RTWiki.exe.',
+    'Fix the problem above, then start RTWiki again.'
+  ].join('\n')
+  const targets = [joinPaths(paths.exeDir, STARTUP_ERROR_FILENAME)]
+  const logDir = dirname(logPath)
+  if (logDir !== paths.exeDir) targets.push(joinPaths(logDir, STARTUP_ERROR_FILENAME))
+  for (const target of targets) {
+    try {
+      mkdirSync(dirname(target), { recursive: true })
+      writeFileSync(target, body, 'utf8')
+    } catch {
+      // non-fatal: this is a best-effort diagnostic surface
+    }
+  }
 }
 
 /**
@@ -52,12 +92,10 @@ export async function reportFatalStartupError(
  * condition is the opposite way round from what it first looks like: the wait is
  * for the *interactive* case.
  *
- * Honest limit: this makes the message **readable**, not actionable. A GUI dialog
- * would need `bun:ffi` → `MessageBoxW`, and Bun's own documentation calls
- * `bun:ffi` experimental and advises against it in production — and whether
- * `dlopen` survives `bun build --compile` is unestablished here. A window-subsystem
- * build is not the answer either: it would remove the console from *normal*
- * operation, which is the diagnostic surface this whole module exists to use.
+ * The compiled executable is a window-subsystem (GUI) image, so there is no
+ * console to hold open. `writeStartupErrorFile()` above is the durable surface:
+ * a plain-text `STARTUP-ERROR.txt` is written beside the executable and in logs/.
+ * The TTY wait below is kept for development runs, where a console does exist.
  */
 async function waitForTheUserToReadIt(): Promise<void> {
   if (!process.stdin.isTTY) return

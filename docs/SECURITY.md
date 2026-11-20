@@ -586,6 +586,18 @@ rules keep the web content untrusted even inside the native window:
   shell string — so no injection is possible through the launch path.
 - The graceful-shutdown token is generated per launch, passed to the sidecar
   over a local channel (environment), and never logged (see §10).
+- **Bootstrap (startup sequence)** detects a running copy before touching any
+  file (the sole exception is a read-only port probe), and a busy port is
+  reported with the `--port` override rather than auto-picked, so the shell and
+  server cannot drift out of sync. **Graceful shutdown** is bounded and runs on
+  every close path including system shutdown; it performs a full save into the
+  main database file with a short limit (log-and-continue on failure), so the
+  folder is **normally safe to copy after a clean close**. A clean-exit marker
+  records an unclean previous run. The owner marker (`data/sidecar-owner`) is
+  verified against the live process image before the shell stops the server, so
+  a stale marker after a crash can never kill an unrelated process that reused
+  the PID. The compiled server is a GUI-subsystem PE image (`hideConsole: true`);
+  fatal errors still reach the log and a findable `STARTUP-ERROR.txt`.
 - Window geometry lives in the `window.geometry` row of the SQLite `settings`
   table and contains only integers and a boolean (`src-tauri/src/geom.rs`). It
   is therefore **included** in backups (a backup is a `VACUUM INTO` of the whole

@@ -241,8 +241,9 @@ with the browser-first application kept as a secondary mode. See
 | System tray integration | Native tray icon with Open / Open in Browser / Start with Windows / Quit; close-to-tray |
 | Launch at login | Opt-in autostart from Settings and the tray menu |
 | Native notifications and dialogs | OS toasts via the Tauri notification plugin (Web Notification API fallback); OS file picker via WebView2 |
-| Single instance | Second launch focuses the existing window |
-| Managed port | Settings persists `server.port` in the SQLite `settings` table; Restart respawns the sidecar on the new port |
+| Single instance | Second launch focuses the existing window; bootstrap (startup sequence) detects a running copy before touching files (read-only port probe exception) |
+| Managed port | Settings persists `server.port` in the SQLite `settings` table; Restart respawns the sidecar on the new port; a busy port is reported with the `--port` override, never auto-picked |
+| Ordered bootstrap and graceful shutdown | Logged startup steps; bounded shutdown on every close path with a full save into the main DB file (folder normally safe to copy after a clean close), clean-exit and owner markers, and PID-verified sidecar ownership |
 | Close behavior | Settings-managed ask / minimize-to-tray / quit |
 
 Browser mode is preserved via the tray "Open in Browser" action and

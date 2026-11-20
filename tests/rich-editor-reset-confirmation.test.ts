@@ -75,6 +75,11 @@ interface Harness {
   clickByLabel: (label: string) => void
 }
 
+/** A child that always throws, forcing the boundary into its crash state. */
+function Explode(): never {
+  throw new Error('simulated editor failure')
+}
+
 async function mountHarness(): Promise<Harness> {
   const React = await import('react')
   const { act } = React as unknown as { act: (callback: () => void) => void }
@@ -85,10 +90,6 @@ async function mountHarness(): Promise<Harness> {
   const container = dom.window.document.createElement('div')
   dom.window.document.body.appendChild(container)
   const root = createRoot(container)
-
-  function Explode(): React.ReactNode {
-    throw new Error('simulated editor failure')
-  }
 
   const doc = (): Document => dom.window.document
   const harness: Harness = {

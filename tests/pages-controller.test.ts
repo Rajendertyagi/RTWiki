@@ -158,10 +158,10 @@ describe('page API integration', () => {
     cleanup(tempDir)
   })
 
-  const API = () => `http://127.0.0.1:${serverPort}`
+  const apiUrl = () => `http://127.0.0.1:${serverPort}`
 
   it('creates a page via API', async () => {
-    const res = await fetch(`${API()}/api/pages`, {
+    const res = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'Integration Test Page', pageType: 'rich' })
@@ -174,7 +174,7 @@ describe('page API integration', () => {
   })
 
   it('lists pages via API', async () => {
-    const res = await fetch(`${API()}/api/pages`)
+    const res = await fetch(`${apiUrl()}/api/pages`)
     expect(res.status).toBe(200)
     const body = (await res.json()) as { pages: Page[]; total: number }
     expect(body.pages.length).toBeGreaterThan(0)
@@ -182,7 +182,7 @@ describe('page API integration', () => {
 
   it('updates a page title via API', async () => {
     // First create a page.
-    const createRes = await fetch(`${API()}/api/pages`, {
+    const createRes = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'To Rename', pageType: 'rich' })
@@ -191,7 +191,7 @@ describe('page API integration', () => {
 
     // Update title. The version the client read is part of the write: without it
     // the server cannot tell a current write from a superseded one.
-    const updateRes = await fetch(`${API()}/api/pages/${page.id}`, {
+    const updateRes = await fetch(`${apiUrl()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'Renamed Page', version: page.version })
@@ -202,14 +202,14 @@ describe('page API integration', () => {
   })
 
   it('duplicates a page via API', async () => {
-    const createRes = await fetch(`${API()}/api/pages`, {
+    const createRes = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'To Duplicate', pageType: 'html' })
     })
     const { page } = (await createRes.json()) as { page: Page }
 
-    const dupRes = await fetch(`${API()}/api/pages/${page.id}/duplicate`, {
+    const dupRes = await fetch(`${apiUrl()}/api/pages/${page.id}/duplicate`, {
       method: 'POST'
     })
     expect(dupRes.status).toBe(201)
@@ -219,20 +219,20 @@ describe('page API integration', () => {
   })
 
   it('deletes a page via API and clears selection', async () => {
-    const createRes = await fetch(`${API()}/api/pages`, {
+    const createRes = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'To Delete', pageType: 'rich' })
     })
     const { page } = (await createRes.json()) as { page: Page }
 
-    const delRes = await fetch(`${API()}/api/pages/${page.id}`, {
+    const delRes = await fetch(`${apiUrl()}/api/pages/${page.id}`, {
       method: 'DELETE'
     })
     expect(delRes.status).toBe(200)
 
     // Verify deleted page is not in the list.
-    const listRes = await fetch(`${API()}/api/pages`)
+    const listRes = await fetch(`${apiUrl()}/api/pages`)
     const { pages } = (await listRes.json()) as { pages: Page[] }
     const found = pages.find((p) => p.id === page.id)
     expect(found).toBeUndefined()
@@ -240,13 +240,13 @@ describe('page API integration', () => {
 
   it('search returns filtered results', async () => {
     // Create a uniquely-named page.
-    await fetch(`${API()}/api/pages`, {
+    await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'Searchable Unicorn Test', pageType: 'rich' })
     })
 
-    const res = await fetch(`${API()}/api/pages?q=Unicorn`)
+    const res = await fetch(`${apiUrl()}/api/pages?q=Unicorn`)
     expect(res.status).toBe(200)
     const { pages } = (await res.json()) as { pages: Page[] }
     expect(pages.some((p) => p.title.includes('Unicorn'))).toBe(true)
@@ -276,7 +276,7 @@ describe('HTML-page content API validation', () => {
     cleanup(tempDir)
   })
 
-  const API = () => `http://127.0.0.1:${serverPort}`
+  const apiUrl = () => `http://127.0.0.1:${serverPort}`
 
   /** Creates an HTML page and returns it; throws unless the API returned 201. */
   async function createHtmlPage(content?: string): Promise<Page> {
@@ -284,7 +284,7 @@ describe('HTML-page content API validation', () => {
     if (content !== undefined) {
       payload.content = content
     }
-    const res = await fetch(`${API()}/api/pages`, {
+    const res = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -303,7 +303,7 @@ describe('HTML-page content API validation', () => {
   })
 
   it('rejects malformed non-empty html content with the structured error format', async () => {
-    const res = await fetch(`${API()}/api/pages`, {
+    const res = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -319,7 +319,7 @@ describe('HTML-page content API validation', () => {
     const canonical = '{"version":1,"html":"<p>round trip</p>","css":"p{}","javascript":""}'
     const page = await createHtmlPage(canonical)
 
-    const getRes = await fetch(`${API()}/api/pages/${page.id}`)
+    const getRes = await fetch(`${apiUrl()}/api/pages/${page.id}`)
     expect(getRes.status).toBe(200)
     const fetched = (await getRes.json()) as { page: Page }
     expect(fetched.page.content).toBe(canonical)
@@ -327,7 +327,7 @@ describe('HTML-page content API validation', () => {
 
   it('rejects invalid html content on update with a 400', async () => {
     const page = await createHtmlPage()
-    const res = await fetch(`${API()}/api/pages/${page.id}`, {
+    const res = await fetch(`${apiUrl()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: 'not canonical json', version: page.version })
@@ -341,7 +341,7 @@ describe('HTML-page content API validation', () => {
   it('accepts valid canonical html content on update', async () => {
     const page = await createHtmlPage()
     const next = '{"version":1,"html":"<i>ok</i>","css":"","javascript":""}'
-    const res = await fetch(`${API()}/api/pages/${page.id}`, {
+    const res = await fetch(`${apiUrl()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: next, version: page.version })
@@ -353,7 +353,7 @@ describe('HTML-page content API validation', () => {
 
   it('rejects page-type conversion explicitly', async () => {
     const page = await createHtmlPage()
-    const res = await fetch(`${API()}/api/pages/${page.id}`, {
+    const res = await fetch(`${apiUrl()}/api/pages/${page.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'Renamed', pageType: 'rich', version: page.version })
@@ -369,7 +369,7 @@ describe('HTML-page content API validation', () => {
       pageType: 'html',
       content: `{"version":1,"html":"${'a'.repeat(5 * 1024 * 1024)}","css":"","javascript":""}`
     })
-    const res = await fetch(`${API()}/api/pages`, {
+    const res = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: oversized
@@ -378,7 +378,7 @@ describe('HTML-page content API validation', () => {
   })
 
   it('returns 400 for malformed JSON bodies', async () => {
-    const res = await fetch(`${API()}/api/pages`, {
+    const res = await fetch(`${apiUrl()}/api/pages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{not json'

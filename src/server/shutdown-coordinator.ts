@@ -1,11 +1,18 @@
+import type { FullSaveResult } from './database/index.js'
+
 export type ShutdownState = 'running' | 'stopping' | 'stopped' | 'failed'
 
 export type ShutdownResult =
-  | { ok: true; forced: false }
-  | { ok: false; stage: 'server' | 'database' | 'logger'; error: Error }
+  | { ok: true; forced: false; fullSaveOk?: boolean }
+  | { ok: false; stage: 'server' | 'database' | 'logger'; error: Error; fullSaveOk?: boolean }
 
 export interface ShutdownCapabilities {
+  /** Stop accepting new work, then wait a short bounded time for work in progress. */
   stopGracefully: () => Promise<void>
+  /** Full save of pending database changes into the main file, with a short limit. */
+  fullSave?: () => FullSaveResult
+  /** Remove the clean-exit marker once shutdown has reached a terminal state. */
+  clearCleanExitMarker?: () => void
   closeDatabase: () => Promise<void>
   logInfo: (message: string, context?: Record<string, unknown>) => void
   logWarn: (message: string, context?: Record<string, unknown>) => void
@@ -21,10 +28,12 @@ export interface ShutdownCapabilities {
  * ShutdownResult — it does not resolve before shutdown is requested.
  *
  * Cleanup order (strict):
- *  1. await server.stop()  (graceful only — no deadline, no forced stop)
- *  2. close database
- *  3. log "Shutdown complete" while logger is still open
- *  4. close logger
+ *  1. stop accepting work, then wait a short bounded time for work in progress
+ *  2. full save of pending changes into the main database file (log on failure)
+ *  3. close database
+ *  4. remove the clean-exit marker
+ *  5. log "Shutdown complete" while logger is still open
+ *  6. close logger
  */
 export class ShutdownCoordinator {
   private currentState: ShutdownState = 'running'
@@ -81,7 +90,9 @@ export class ShutdownCoordinator {
     this.currentState = 'stopping'
     this.caps.logInfo('Shutting down', { event: 'shutdown' })
 
-    // Phase 1: await graceful server termination.
+    // Phase 1: stop accepting new work, then wait a short bounded time for work
+    // in progress. The bound lives in the injected capability so this module
+    // never owns a timeout value (single source of truth in shared constants).
     try {
       await this.caps.stopGracefully()
     } catch (err) {
@@ -91,7 +102,23 @@ export class ShutdownCoordinator {
     }
     this.caps.logInfo('HTTP server stopped', { event: 'shutdown_server_stopped' })
 
-    // Phase 2: close database (only after server is confirmed stopped).
+    // Phase 2: full save of pending changes into the main database file. A
+    // failure is logged and the shutdown still continues — the guarantee is
+    // only that the folder is normally safe to copy after a clean close.
+    const fullSave = this.caps.fullSave?.() ?? null
+    if (fullSave?.ok) {
+      this.caps.logInfo('Pending database changes saved to the main file', {
+        event: 'shutdown_full_save_ok'
+      })
+    } else if (fullSave) {
+      this.caps.logWarn('Could not fully save pending database changes', {
+        event: 'shutdown_full_save_failed',
+        detail: fullSave.detail ?? 'unknown error'
+      })
+    }
+    const fullSaveField = fullSave ? { fullSaveOk: fullSave.ok } : {}
+
+    // Phase 3: close database (only after the full save was attempted).
     try {
       await this.caps.closeDatabase()
     } catch (err) {
@@ -107,23 +134,26 @@ export class ShutdownCoordinator {
       } catch {
         // non-fatal
       }
-      return { ok: false, stage: 'database', error }
+      return { ok: false, stage: 'database', error, ...fullSaveField }
     }
     this.caps.logInfo('Database closed', { event: 'shutdown_database_closed' })
 
-    // Phase 3: log completion before closing logger.
+    // Phase 4: the process is exiting normally, so the clean-exit marker can go.
+    this.caps.clearCleanExitMarker?.()
+
+    // Phase 5: log completion before closing logger.
     this.caps.logInfo('Shutdown complete', { event: 'shutdown_complete' })
 
-    // Phase 4: close logger.
+    // Phase 6: close logger.
     try {
       await this.caps.closeLogger()
     } catch (err) {
       this.currentState = 'failed'
       const error = err instanceof Error ? err : new Error(String(err))
-      return { ok: false, stage: 'logger', error }
+      return { ok: false, stage: 'logger', error, ...fullSaveField }
     }
 
     this.currentState = 'stopped'
-    return { ok: true, forced: false }
+    return { ok: true, forced: false, ...fullSaveField }
   }
 }

@@ -180,11 +180,11 @@ All styles are defined in Mantine theme tokens, CSS modules, or Emotion styled-c
 
 ## 11. Dependency Management
 
-**The pin is the lockfile, and CI enforces it.** `bun install --frozen-lockfile` runs on every job (`.github/workflows/build.yml:27,52`), so a `package.json` range is a *request* and `bun.lock` is the actual pin. It records the resolved version and integrity hash — `dayjs@1.11.23`, `dompurify@3.4.15` — so a build cannot float.
+**The pin is the lockfile, and CI enforces it.** `bun install --frozen-lockfile` runs on every job (`.github/workflows/build.yml:27,52`), so a `package.json` range is a *request* and `bun.lock` is the actual pin. It records the resolved version and integrity hash — `dayjs@1.11.23`, `dompurify@3.4.18` — so a build cannot float.
 
 - **No floating major versions.** A caret may sit on a minor (`^6.5.2` may resolve to `6.9.0`) but must never permit a major jump. This is the same rule as `AGENTS.md` §6, stated in the terms that are actually enforceable.
 - **The lockfile is the single source of truth for versions.** Changing a version means changing `bun.lock` deliberately, never as a side effect of an install.
-- **Exact pins are preferred** and are the norm: 45 of 48 production dependencies are exact. Three use a caret, and each is within its major — `@codemirror/lang-markdown` `^6.5.2`, `dayjs` `^1.11.23`, `dompurify` `^3.4.15`. These are the accepted exceptions, not a pattern to copy; prefer an exact pin for a new dependency.
+- **Exact pins are preferred** and are the norm: all 57 production dependencies are exact — zero carets remain. The former caret exceptions — `@codemirror/lang-markdown`, `dayjs`, and `dompurify` — are now exact pins (`6.5.2`, `1.11.23`, `3.4.18` respectively). Prefer an exact pin for a new dependency.
 - No runtime CDN assets. All JavaScript and CSS must be bundled locally.
 - No undocumented or unreviewed dependencies. Every new package requires a brief justification comment in `package.json`.
 

@@ -162,14 +162,68 @@ changes apply immediately with no restart:
   in-app dialog with three actions — Minimize to tray, Exit RTWiki, Cancel —
   and a "Remember my choice" checkbox. Checking it persists the chosen
   behavior through the settings API, so the shell acts directly next time.
-  The dialog calls `close_dialog_ready` on mount so the shell knows a listener
-  exists before it emits; a prompt flag with a 10s grace ignores duplicate
-  presses and expires a lost prompt. If no listener is ready or delivery fails,
-  the shell hides to tray — the safe default that discards nothing. Quit stays
-  on the tray menu in every mode.
+  The dialog calls `close_dialog_ready` immediately on mount — before and
+  independently of the `listen()` promise — so the shell knows a listener exists
+  before it emits; it re-arms after the listener registers. The shell retries the
+  emit for up to 1.5s when the handshake is not yet complete, and logs the
+  fallback instead of failing silently. A prompt flag with a 10s grace ignores
+  duplicate presses and expires a lost prompt. If no listener is ready or
+  delivery fails, the shell hides to tray — the safe default that discards
+  nothing. Quit stays on the tray menu in every mode.
 - `rememberCloseChoice` (default `false`) pre-checks that box in the dialog;
   it is exposed as a checkbox in Settings → Desktop app.
 - The settings are meaningless in a browser, so the controls are disabled there.
+
+### Bootstrap (startup sequence) and graceful shutdown
+
+**Bootstrap (startup sequence)** runs in strict order, each step only after the
+previous succeeds, and logs a named `bootstrap_step` event for each:
+
+1. Detect an already-running copy **before touching any file or folder**. The
+   one allowed exception is a short, read-only look at the database to find the
+   saved port — without it the check would miss a copy running on a changed port.
+2. Check the data folder exists and is writable, with a friendly message if not.
+3. Open the database, run upgrades, and run the integrity check. A damaged
+   database stops startup with a message pointing at `data/backups/`.
+4. Read settings; each invalid setting resets only itself, in memory.
+5. Choose the port. If it is already in use, show a clear message naming the port
+   and the `--port` override. Never auto-pick a different port — that would put
+   the shell and server out of sync. The CLI override exists precisely because a
+   Settings screen cannot help when the app cannot start.
+6. Start the server, wait until it reports healthy, then open the window.
+7. Every step is logged, so a failed start shows exactly where it stopped.
+
+A small clean-exit marker (`data/clean-exit`) is created once the checks pass and
+removed on a clean exit. On the next start — **after** the running-copy check, so
+a second copy never mistakes the first copy's marker for a crash — its presence
+makes the first log line say the previous run did not close cleanly.
+
+**Graceful shutdown** runs on every normal close path: window close, quit menu,
+restart, and system shutdown (Tauri `RunEvent::ExitRequested`, available in 2.12).
+It is idempotent and ordered:
+
+1. Save window position (best effort, never blocking).
+2. Stop accepting new work, then wait a short bounded time for work in progress;
+   never hang forever.
+3. Write pending database changes fully into the main file with a short time
+   limit; on failure log it and still close. The folder is **normally safe to
+   copy after a clean close**.
+4. Close the database cleanly.
+5. Remove the flag files: the server writes the signal just before it exits, and
+   the shell deletes it after acting on it. Leftover flags from a crashed run are
+   deleted at startup before use, so an old one cannot trigger a fake restart.
+6. Stop the server process only when no other copy is using it. The shell that
+   spawns the sidecar writes an owner marker (`data/sidecar-owner`) with its PID
+   and the sidecar PID/path; before stopping, the shell verifies the recorded PID
+   still belongs to the server program so a stale marker after a crash can never
+   kill an unrelated process that reused the number.
+7. Exit with a normal exit code.
+
+The compiled server is a GUI-subsystem PE image (`hideConsole: true` in
+`scripts/build.ts`); `CREATE_NO_WINDOW` in `sidecar.rs` remains as defence in
+depth. Fatal startup errors are still written to the log and to a findable
+`STARTUP-ERROR.txt` beside the executable, so the browser-first build does not
+fail silently without a console.
 
 ### Window dragging
 

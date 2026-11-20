@@ -108,6 +108,49 @@ export function writeServerPort(getDb: GetDb, port: number): ServerSettings {
   return { port }
 }
 
+/**
+ * Result of the explicit settings read during bootstrap (startup sequence).
+ * `resetKeys` names the keys whose stored value was invalid and was therefore
+ * reset in memory only — the stored row is left untouched, and every other key
+ * keeps its own value.
+ */
+export interface SettingsReadResult {
+  port: number
+  desktop: DesktopSettings
+  backup: BackupSettings
+  resetKeys: string[]
+}
+
+/**
+ * Reads every setting in one explicit startup step. Each key is validated
+ * independently by the existing readers; this function only reports which keys
+ * fell back so bootstrap can log them. Invalid values are reset in memory, not
+ * persisted back to the table.
+ */
+export function readAllSettings(getDb: GetDb): SettingsReadResult {
+  const resetKeys: string[] = []
+  const portRaw = parseJson(readRaw(getDb, SETTINGS_KEY_SERVER_PORT))
+  if (!isValidUserPort(portRaw)) resetKeys.push(SETTINGS_KEY_SERVER_PORT)
+
+  const behaviorRaw = parseJson(readRaw(getDb, SETTINGS_KEY_CLOSE_BEHAVIOR))
+  if (!isCloseBehavior(behaviorRaw)) resetKeys.push(SETTINGS_KEY_CLOSE_BEHAVIOR)
+
+  const rememberRaw = parseJson(readRaw(getDb, SETTINGS_KEY_REMEMBER_CLOSE_CHOICE))
+  if (typeof rememberRaw !== 'boolean') resetKeys.push(SETTINGS_KEY_REMEMBER_CLOSE_CHOICE)
+
+  const backupRaw = parseJson(readRaw(getDb, SETTINGS_KEY_BACKUP_SLOTS))
+  if (!isRecord(backupRaw) || !isRecord(backupRaw.slots)) {
+    resetKeys.push(SETTINGS_KEY_BACKUP_SLOTS)
+  }
+
+  return {
+    port: readServerPort(getDb),
+    desktop: readDesktopSettings(getDb),
+    backup: readBackupSettings(getDb),
+    resetKeys
+  }
+}
+
 export function defaultDesktopSettings(): DesktopSettings {
   return { closeBehavior: 'ask', rememberCloseChoice: false }
 }

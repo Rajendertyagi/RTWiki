@@ -219,6 +219,30 @@ export const RESTART_REQUEST_FILENAME = 'restart-requested' as const
 // (tray stays resident). Written only after the shutdown token check passes.
 export const SHUTDOWN_REQUEST_FILENAME = 'shutdown-requested' as const
 
+// Marker file created once bootstrap (startup sequence) checks pass and removed
+// on a clean exit. Its presence on the next start means the previous run did not
+// close cleanly. Checked only AFTER the running-copy check, so a second copy
+// never mistakes the first copy's marker for a crash.
+export const CLEAN_EXIT_MARKER_FILENAME = 'clean-exit' as const
+// Owner marker written by the shell that spawns the sidecar. Records the owning
+// shell PID and the sidecar PID/path so quit can stop the server actually in use
+// without killing an unrelated process that reused a PID after a crash.
+export const SIDECAR_OWNER_FILENAME = 'sidecar-owner' as const
+
+// Bounded time, in milliseconds, the graceful shutdown waits for in-flight work
+// after it stops accepting new work. Never hangs forever.
+export const SHUTDOWN_DRAIN_TIMEOUT_MS = 2_000 as const
+// Bounded time, in milliseconds, allowed for the full save of pending database
+// changes into the main file at shutdown. On failure the error is logged and the
+// database is still closed: the folder is normally safe to copy after a clean close.
+export const SHUTDOWN_FULL_SAVE_TIMEOUT_MS = 3_000 as const
+
+// Bounds for the shell's own log file (S3): a portable app must not slowly fill
+// the drive. The shell keeps this many recent rotated files, each capped in size.
+export const SHELL_LOG_FILENAME = 'rtwiki-shell.log' as const
+export const SHELL_LOG_MAX_BYTES = 512 * 1024
+export const SHELL_LOG_MAX_ROTATED_FILES = 3
+
 // Window close behaviors for the desktop shell (ADR-011). Single source of
 // truth shared by the server validator, the Settings UI, and documentation.
 export const CLOSE_BEHAVIORS = ['ask', 'minimize', 'quit'] as const

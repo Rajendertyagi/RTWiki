@@ -87,6 +87,27 @@ if ($hShellBuild -ne $hShellApp) { throw 'SHELL IDENTITY MISMATCH' }
 if ($hSidecarBuild -ne $hSidecarApp) { throw 'SIDECAR IDENTITY MISMATCH' }
 Write-Host 'IDENTITY OK: shell and sidecar match their build outputs'
 
+# A1 proof: the sidecar must be a GUI-subsystem (2) PE image, so Windows never
+# creates a console window for it. CREATE_NO_WINDOW in sidecar.rs is additional
+# defence-in-depth, not the primary control.
+function Get-PeSubsystem([string] $Path) {
+  $stream = [IO.File]::OpenRead((Resolve-Path $Path))
+  try {
+    $reader = New-Object IO.BinaryReader($stream)
+    $stream.Position = 0x3C
+    $peOffset = $reader.ReadInt32()
+    $stream.Position = $peOffset + 4 + 20 + 68
+    return $reader.ReadUInt16()
+  } finally {
+    $stream.Dispose()
+  }
+}
+$sidecarSubsystem = Get-PeSubsystem $sidecar
+if ($sidecarSubsystem -ne 2) {
+  throw "Sidecar PE subsystem is $sidecarSubsystem, expected 2 (GUI). Add hideConsole:true in scripts/build.ts"
+}
+Write-Host "A1 SUBSYSTEM OK: sidecar PE subsystem=$sidecarSubsystem (GUI, no console window)"
+
 $p = $null
 $secondP = $null
 $shutdownToken = $null
@@ -159,6 +180,38 @@ try {
   if ([string]::IsNullOrWhiteSpace($root.Content)) { throw 'GET / returned empty HTML' }
   Write-Host 'ROOT OK: GET / serves the SPA'
 
+  # A2 proof: with closeBehavior="ask", clicking X must show the in-app close
+  # dialog. The Rust shell only emits rtwiki:close-request when the frontend's
+  # close_dialog_ready handshake has armed it; this asserts the real dialog is
+  # visible through Windows UI Automation, then cancels it so the shell lives on.
+  $askBody = '{"closeBehavior":"ask","rememberCloseChoice":false}'
+  Invoke-WebRequest "$Base/api/settings/desktop" -Method PUT -Body $askBody `
+    -Headers @{ 'Content-Type' = 'application/json' } -UseBasicParsing | Out-Null
+  $p.Refresh()
+  if (-not $p.CloseMainWindow()) { throw 'A2: could not send WM_CLOSE to the shell' }
+  Start-Sleep -Seconds 2
+  Add-Type -AssemblyName UIAutomationClient
+  Add-Type -AssemblyName UIAutomationTypes
+  $uiRoot = [System.Windows.Automation.AutomationElement]::RootElement
+  $dialogCondition = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::NameProperty, 'Close RTWiki?')
+  $dialog = $uiRoot.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $dialogCondition)
+  if (-not $dialog) { throw 'A2: close dialog did not appear when X was clicked' }
+  Write-Host 'A2 DIALOG OK: close dialog appeared when X was clicked'
+  # Dismiss with Cancel so the shell stays resident for the remaining checks.
+  $cancelCondition = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::NameProperty, 'Cancel')
+  $cancel = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cancelCondition)
+  if ($cancel) {
+    $invoke = $cancel.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+    $invoke.Invoke()
+  } else {
+    # No Cancel element exposed: the dialog's own Escape handler closes it.
+    $p.Refresh()
+    if (-not $p.HasExited) { $p.CloseMainWindow() | Out-Null }
+  }
+  Start-Sleep -Seconds 1
+
   # Second shell instance must attach (single-instance) and exit cleanly.
   $secondP = Start-Process -FilePath $exe -WorkingDirectory $workDir `
              -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $DiagDir 'desktop-second.out.txt') `
@@ -206,6 +259,118 @@ try {
   }
   if (-not $completeSeen) { throw 'shutdown_complete event missing after authorized shutdown' }
   Write-Host 'LOG FINAL OK: shutdown_complete persisted; shutdown token absent'
+
+  # A3 proof: a SECOND shell attaching to a FIRST shell's live sidecar must not
+  # orphan that sidecar. Sequence:
+  #   1. A fresh shell owns a sidecar; the owner marker records that shell's PID.
+  #   2. That shell is killed forcibly, so no graceful shutdown runs and the
+  #      sidecar survives with a marker naming the now-dead owner shell.
+  #   3. A second shell starts, sees the port already healthy, ATTACHES to the
+  #      existing sidecar and adopts the marker (now naming the second shell).
+  #      It must not spawn a second server.
+  #   4. The second shell quits gracefully (closeBehavior=quit). Having adopted
+  #      the marker it owns the sidecar and must stop it. Assert no orphan.
+  if ($null -ne $p) {
+    $p.Refresh()
+    if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+  }
+  Start-Sleep -Seconds 2
+
+  $ownerP = $null
+  $attachP = $null
+  $a3SidecarPid = $null
+  $ownerMarker = Join-Path $appDir 'data/sidecar-owner'
+  try {
+    $ownerP = Start-Process -FilePath $exe -WorkingDirectory $workDir `
+              -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $DiagDir 'desktop-a3-owner.out.txt') `
+              -RedirectStandardError (Join-Path $DiagDir 'desktop-a3-owner.err.txt')
+    $ownerReady = $false
+    for ($i = 0; $i -lt 60; $i++) {
+      try {
+        $r = Invoke-WebRequest "$Base/health" -UseBasicParsing -TimeoutSec 2
+        if ($r.StatusCode -eq 200) { $ownerReady = $true; break }
+      } catch { }
+      Start-Sleep -Seconds 1
+    }
+    if (-not $ownerReady) { throw 'A3: owner shell did not become ready' }
+    $ownerListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $ownerListener) { throw 'A3: owner shell has no sidecar listener' }
+    $a3SidecarPid = $ownerListener[0].OwningProcess
+    if (-not (Test-Path $ownerMarker -PathType Leaf)) { throw 'A3: owner marker missing after spawn' }
+    $markerOwnerPid = [int]((Get-Content $ownerMarker -TotalCount 1).Trim())
+    if ($markerOwnerPid -ne $ownerP.Id) {
+      throw "A3: owner marker records PID $markerOwnerPid, expected owner shell $($ownerP.Id)"
+    }
+    Write-Host "A3 OWNER OK: shell $($ownerP.Id) owns sidecar PID $a3SidecarPid"
+
+    # Kill the owner forcibly: no graceful shutdown, so the sidecar survives
+    # with a marker that still names the dead owner shell.
+    Stop-Process -Id $ownerP.Id -Force -ErrorAction SilentlyContinue
+    $ownerP | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    $survivor = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $survivor -or $survivor[0].OwningProcess -ne $a3SidecarPid) {
+      throw 'A3: sidecar did not survive the owner shell being killed'
+    }
+    Write-Host "A3 SURVIVOR OK: sidecar PID $a3SidecarPid still owns $Port after owner shell died"
+
+    # Second shell attaches to the still-live sidecar.
+    $attachP = Start-Process -FilePath $exe -WorkingDirectory $workDir `
+               -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $DiagDir 'desktop-a3-attach.out.txt') `
+               -RedirectStandardError (Join-Path $DiagDir 'desktop-a3-attach.err.txt')
+    $attachReady = $false
+    for ($i = 0; $i -lt 60; $i++) {
+      try {
+        $r = Invoke-WebRequest "$Base/health" -UseBasicParsing -TimeoutSec 2
+        if ($r.StatusCode -eq 200) { $attachReady = $true; break }
+      } catch { }
+      Start-Sleep -Seconds 1
+    }
+    if (-not $attachReady) { throw 'A3: attaching shell did not become ready' }
+    $attachListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $attachListener -or $attachListener[0].OwningProcess -ne $a3SidecarPid) {
+      throw 'A3: attaching shell spawned a second sidecar instead of attaching to the existing one'
+    }
+    $adoptedOwnerPid = $null
+    for ($i = 0; $i -lt 20; $i++) {
+      if (Test-Path $ownerMarker -PathType Leaf) {
+        $adoptedOwnerPid = [int]((Get-Content $ownerMarker -TotalCount 1).Trim())
+        if ($adoptedOwnerPid -eq $attachP.Id) { break }
+      }
+      Start-Sleep -Milliseconds 500
+    }
+    if ($adoptedOwnerPid -ne $attachP.Id) {
+      throw "A3: attaching shell did not adopt the owner marker (records $adoptedOwnerPid, expected $($attachP.Id))"
+    }
+    Write-Host "A3 ATTACH OK: shell $($attachP.Id) attached to sidecar PID $a3SidecarPid and adopted the marker"
+
+    # Quit the attaching shell. It adopted the marker, so it must stop the
+    # sidecar it now owns rather than leaving an orphan behind.
+    $setBody = '{"closeBehavior":"quit","rememberCloseChoice":false}'
+    Invoke-WebRequest "$Base/api/settings/desktop" -Method PUT -Body $setBody `
+      -Headers @{ 'Content-Type' = 'application/json' } -UseBasicParsing | Out-Null
+    $attachP.Refresh()
+    if (-not $attachP.CloseMainWindow()) { throw 'A3: could not send WM_CLOSE to the attaching shell' }
+    $attachP | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue
+    $attachP.Refresh()
+    if (-not $attachP.HasExited) { throw 'A3: attaching shell did not exit after window close' }
+    Start-Sleep -Seconds 2
+    $orphans = @(Get-Process -Name 'RTWikiServer' -ErrorAction SilentlyContinue)
+    if ($orphans.Count -gt 0) {
+      throw "A3: orphaned RTWikiServer process(es) after quit: $($orphans.Id -join ',')"
+    }
+    Write-Host 'A3 ORPHAN OK: no RTWikiServer.exe remains after the attaching shell quit'
+  } finally {
+    foreach ($proc in @($ownerP, $attachP)) {
+      if ($null -ne $proc) {
+        $proc.Refresh()
+        if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+      }
+    }
+    if ($null -ne $a3SidecarPid) {
+      Stop-Process -Id $a3SidecarPid -Force -ErrorAction SilentlyContinue
+    }
+  }
 
   Write-Host 'DESKTOP SMOKE TEST PASSED'
 } catch {

@@ -28,7 +28,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: "1.4.4"
+          bun-version: "1.4.5"
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
       - name: Build web
@@ -36,12 +36,14 @@ jobs:
       - name: Build server (compile portable executable)
         run: bun run build:server
 
-      # windows-latest images ship rustup with a stable toolchain; no
-      # third-party setup action is needed.
-      - name: Select Rust stable toolchain
+      # windows-latest images ship rustup; the exact version is pinned by
+      # the committed rust-toolchain.toml. Install it explicitly here so
+      # the version checks below report the version actually used to build.
+      - name: Select Rust 1.100.0 toolchain
         shell: pwsh
         run: |
-          rustup default stable
+          rustup toolchain install 1.100.0 --profile minimal
+          rustup default 1.100.0
           rustc --version
           cargo --version
 

@@ -1,16 +1,19 @@
 import { Database as BunDatabase } from 'bun:sqlite'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import {
   APP_VERSION,
   ATTACHMENTS_DIR,
   BACKUPS_DIR,
+  CLEAN_EXIT_MARKER_FILENAME,
   DATABASE_FILENAME,
   DEBUG_LOG_FILENAME,
   DEBUG_LOG_MAX_BYTES,
   DEBUG_LOG_MAX_ROTATED_FILES,
   DEFAULT_PORT,
-  SETTINGS_KEY_SERVER_PORT
+  SETTINGS_KEY_SERVER_PORT,
+  SHUTDOWN_DRAIN_TIMEOUT_MS,
+  SHUTDOWN_FULL_SAVE_TIMEOUT_MS
 } from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
 import { reclaimUnreferencedAttachments } from './attachments/attachment-retention.js'
@@ -21,6 +24,7 @@ import {
   checkIntegrity,
   closeDatabase,
   type Database,
+  fullSaveToMainFile,
   getDb,
   initDatabase,
   setDatabaseLogger
@@ -30,7 +34,7 @@ import { type Launcher, launchBrowser } from './launcher.js'
 import { createLogger, type Logger } from './logging/index.js'
 import { RotatingJsonlSink } from './logging/rotating-sink.js'
 import { sanitizePathForLog } from './logging/sanitize-path.js'
-import { readServerPort } from './settings/index.js'
+import { readAllSettings } from './settings/index.js'
 import { ShutdownCoordinator } from './shutdown-coordinator.js'
 
 export interface BootstrapOptions {
@@ -121,15 +125,24 @@ function errorCodeOf(cause: unknown): string | null {
 }
 
 /**
- * Probes the port to detect whether an existing RTWiki instance is already running.
- *
- * Returns `null` if the port is free or occupied by a different application.
- * Returns `{ detected: true, url }` if an existing RTWiki instance responds.
+ * Outcome of the running-copy probe. Logging is deliberately left to the caller
+ * so the probe itself touches no files: it runs before any directory is created
+ * and before the file logger exists.
  */
-async function probeExistingInstance(
-  port: number,
-  logger: Logger
-): Promise<ExistingInstanceResult | null> {
+interface ExistingInstanceProbe {
+  detected: boolean
+  url?: string
+  occupiedByOther: boolean
+  status?: number
+}
+
+/**
+ * Probes the port to detect whether an existing RTWiki instance is already running.
+ * This is step 1 of bootstrap (startup sequence) and must run before any file or
+ * directory is created. The only earlier file access is the read-only port probe
+ * in `probePort()`, which is required to find a copy on a changed port.
+ */
+async function probeExistingInstance(port: number): Promise<ExistingInstanceProbe> {
   const url = `http://127.0.0.1:${port}/health`
   try {
     const controller = new AbortController()
@@ -140,27 +153,76 @@ async function probeExistingInstance(
     if (res.ok) {
       const body = (await res.json()) as Record<string, unknown>
       if (body.app === 'RTWiki') {
-        logger.info('Existing RTWiki instance detected', {
-          event: 'single_instance',
-          port,
-          detected: true
-        })
-        return { detected: true, url: `http://127.0.0.1:${port}/` }
+        return { detected: true, url: `http://127.0.0.1:${port}/`, occupiedByOther: false }
       }
     }
 
     // Port is occupied by a different application (responded but not RTWiki).
-    logger.warn('Port occupied by different application', {
-      event: 'single_instance',
-      port,
-      detected: false,
-      status: res.status
-    })
-    return null
+    return { detected: false, occupiedByOther: true, status: res.status }
   } catch {
     // No response — port is free or connection refused. Proceed with startup.
-    return null
+    return { detected: false, occupiedByOther: false }
   }
+}
+
+/** Path of the clean-exit marker inside the data directory. */
+function cleanExitMarkerPath(dataDir: string): string {
+  return joinPaths(dataDir, CLEAN_EXIT_MARKER_FILENAME)
+}
+
+/** True when a previous run left the clean-exit marker behind. */
+function previousRunWasUnclean(dataDir: string): boolean {
+  return existsSync(cleanExitMarkerPath(dataDir))
+}
+
+/** Creates the clean-exit marker once all startup checks have passed. */
+function createCleanExitMarker(dataDir: string): void {
+  try {
+    writeFileSync(cleanExitMarkerPath(dataDir), String(Date.now()), 'utf8')
+  } catch {
+    // A marker is a diagnostic, not a data file: never fail startup over it.
+  }
+}
+
+/** Removes the clean-exit marker on a clean exit. */
+function clearCleanExitMarker(dataDir: string): void {
+  try {
+    rmSync(cleanExitMarkerPath(dataDir), { force: true })
+  } catch {
+    // non-fatal
+  }
+}
+
+/**
+ * A clear, actionable message for a port already in use. It names the port and
+ * the command-line override, because a Settings screen cannot help when the app
+ * cannot start. It never auto-picks another port: that would put the shell and
+ * the server out of sync.
+ */
+export function portInUseMessage(port: number): string {
+  return [
+    `Failed to start server: port ${port} is already in use.`,
+    '',
+    'To use a different port, start RTWiki with:',
+    `  RTWiki.exe --port <other-port>`,
+    '',
+    'If another copy of RTWiki is already running, close it first.',
+    '',
+    'RTWiki has stopped.'
+  ].join('\n')
+}
+
+/** A damaged database aborts startup with a message pointing at the backups. */
+export function damagedDatabaseMessage(): string {
+  return [
+    'RTWiki could not read its database, so it stopped to protect your notes.',
+    '',
+    'Your backups are in the data/backups folder beside RTWiki.exe. You can',
+    'restore the most recent backup from Settings once RTWiki is running again,',
+    'or copy a backup over data/rtwiki.sqlite yourself.',
+    '',
+    'RTWiki has stopped.'
+  ].join('\n')
 }
 
 /**
@@ -222,19 +284,93 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   const attachmentsDir = joinPaths(dataDir, ATTACHMENTS_DIR)
   const backupsDir = joinPaths(dataDir, BACKUPS_DIR)
 
-  // ADR-005 portable layout plus one legacy directory: `attachments/` is where a
-  // database created before ADR-014 still keeps its image files, and the
-  // migration reads from it. It is no longer written to.
+  // ---------------------------------------------------------------------------
+  // Step 1 — detect an already-running copy BEFORE touching any file or folder.
+  // The one allowed exception is the short, read-only look at the database to
+  // find the saved port: without it the check would miss a copy running on a
+  // changed port. No directory is created and no write lock is acquired here.
+  // ---------------------------------------------------------------------------
+  const openBrowser = options.openBrowser ?? true
+  const shutdownToken = randomUUID()
+  const probePortValue = probePort(dataDir, options.port)
+  const probe = await probeExistingInstance(probePortValue)
+
+  if (probe.detected) {
+    // Detection has already happened, so it is now safe to create the log
+    // directory and record the event before exiting.
+    ensureRuntimeDirectory(paths.logDir)
+    const logger = options.logger ?? createLogger(options.logPath ?? paths.logPath)
+    logger.info('Existing RTWiki instance detected', {
+      event: 'single_instance',
+      port: probePortValue,
+      detected: true
+    })
+    if (openBrowser && probe.url) {
+      const launcher = options.launcher ?? launchBrowser
+      try {
+        await launcher(probe.url)
+      } catch (err) {
+        logger.error('Browser-open failure', {
+          event: 'single_instance',
+          error: err instanceof Error ? err.message : String(err)
+        })
+      }
+    }
+    logger.info('Exiting: existing RTWiki instance already running', {
+      event: 'single_instance'
+    })
+    await closeDatabase()
+    await logger.close()
+    return {
+      server: null as unknown as Awaited<ReturnType<typeof Bun.serve>>,
+      logger,
+      paths,
+      db: null as unknown as Database,
+      shutdownToken,
+      coordinator: new ShutdownCoordinator({
+        stopGracefully: async () => {
+          throw new Error('No server — existing instance detected')
+        },
+        fullSave: () => ({ ok: true }),
+        clearCleanExitMarker: () => {},
+        closeDatabase: async () => {},
+        logInfo: () => {},
+        logWarn: () => {},
+        logError: () => {},
+        closeLogger: async () => {}
+      }),
+      backupSchedule: null,
+      shutdown: async () => {}
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Steps 2+ — no running copy. From here on it is safe to create directories
+  // and open the file logger. Every step logs its name so a failed start shows
+  // exactly where it stopped.
+  // ---------------------------------------------------------------------------
   ensureRuntimeDirectory(dataDir)
   ensureRuntimeDirectory(attachmentsDir)
   ensureRuntimeDirectory(backupsDir)
   ensureRuntimeDirectory(paths.logDir)
   ensureRuntimeDirectory(paths.frontendDistDir)
 
-  // The logger constructor eagerly creates <logDir>/rtwiki.log, so it must be
-  // constructed only after the directory exists.
   const logger = options.logger ?? createLogger(options.logPath ?? paths.logPath)
   setDatabaseLogger(logger)
+  const step = (name: string, detail: Record<string, unknown> = {}): void => {
+    logger.info(`Bootstrap step: ${name}`, { event: 'bootstrap_step', step: name, ...detail })
+  }
+
+  // The crash marker is checked only after the running-copy check, so a second
+  // copy never mistakes the first copy's marker for a crash. It is the first
+  // line in the log when present.
+  if (previousRunWasUnclean(dataDir)) {
+    logger.warn('Previous run did not close cleanly', {
+      event: 'startup_unclean_previous_run'
+    })
+    // Report it once, then clear it so later clean starts do not repeat the warning.
+    clearCleanExitMarker(dataDir)
+  }
 
   // Privacy-redacted runtime directories: the Windows username never appears.
   const redaction = { repoRoot: paths.compiled ? undefined : paths.exeDir, exeDir: paths.exeDir }
@@ -248,10 +384,18 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     logDir: sanitizePathForLog(effectiveLogDir, redaction),
     webDir: sanitizePathForLog(paths.frontendDistDir, redaction)
   })
+  step('single_instance_check', { detected: false, port: probePortValue })
+  if (probe.occupiedByOther) {
+    logger.warn('Port occupied by a different application', {
+      event: 'single_instance',
+      port: probePortValue,
+      detected: false,
+      status: probe.status
+    })
+  }
 
-  // Check write access BEFORE opening the database. A protected folder must
-  // produce the friendly "cannot use this folder" message, not a raw SQLite
-  // error from initDatabase's WAL pragma (AGENTS.md §7).
+  // Step 2 — check the data folder is writable, with a friendly message.
+  step('data_directory_writable_check')
   const writeTest = joinPaths(dataDir, '.write-test')
   try {
     await Bun.write(writeTest, 'test')
@@ -261,71 +405,49 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     throw new Error(unusableDirectoryMessage(dataDir, err))
   }
 
-  // Detect an already-running instance BEFORE opening the managed database or
-  // running migrations. The second process must not acquire write locks or
-  // upgrade a database it does not own. The probe uses a short-lived read-only
-  // connection only to learn which port to check.
-  const openBrowser = options.openBrowser ?? true
-  const shutdownToken = randomUUID()
-  const probePortValue = probePort(dataDir, options.port)
-  const existing = await probeExistingInstance(probePortValue, logger)
-  if (existing) {
-    if (openBrowser) {
-      const launcher = options.launcher ?? launchBrowser
-      try {
-        await launcher(existing.url)
-      } catch (err) {
-        logger.error('Browser-open failure', {
-          event: 'single_instance',
-          error: err instanceof Error ? err.message : String(err)
-        })
-      }
+  // Step 3 — open the database, run upgrades, run the integrity check. A damaged
+  // database stops startup with a message pointing at the backups.
+  step('database_open_migrate_integrity')
+  let db: Database
+  try {
+    db = initDatabase(dataDir)
+    // The attachments directory is still created and still passed in: images moved
+    // into the database (ADR-014), but a database created before that change still
+    // has its bytes in files there, and the migration has to be able to find them.
+    await runMigrations(db, attachmentsDir)
+    if (!checkIntegrity()) {
+      throw new Error('integrity check failed')
     }
-    logger.info('Exiting: existing RTWiki instance already running', {
-      event: 'single_instance'
+  } catch (err) {
+    // A damaged database can fail at open, during a pragma, during migration or
+    // at the integrity check. Every one of those is the same user problem, so
+    // they all produce the same actionable message pointing at the backups.
+    logger.error('Database could not be opened or verified', {
+      event: 'startup',
+      action: 'abort',
+      detail: err instanceof Error ? err.message : String(err)
     })
-    // No managed DB was opened on this path; closeDatabase is idempotent and
-    // guarantees no connection survives the early exit.
     await closeDatabase()
-    await logger.close()
-    return {
-      server: null as unknown as Awaited<ReturnType<typeof Bun.serve>>,
-      logger,
-      paths,
-      db: null as unknown as Database,
-      shutdownToken,
-      coordinator: new ShutdownCoordinator({
-        stopGracefully: async () => {
-          throw new Error('No server — existing instance detected')
-        },
-        closeDatabase: async () => {},
-        logInfo: () => {},
-        logWarn: () => {},
-        logError: () => {},
-        closeLogger: async () => {}
-      }),
-      backupSchedule: null,
-      shutdown: async () => {}
-    }
+    throw new Error(damagedDatabaseMessage())
   }
 
-  // The database is opened and migrated AFTER the single-instance probe, because
-  // the persisted port now lives in the settings table. A damaged database still
-  // aborts startup (integrity check below) — no silent fallback to defaults.
-  const db = initDatabase(dataDir)
-  // The attachments directory is still created and still passed in: images moved
-  // into the database (ADR-014), but a database created before that change still
-  // has its bytes in files there, and the migration has to be able to find them.
-  await runMigrations(db, attachmentsDir)
-  if (!checkIntegrity()) {
-    logger.error('Database failed integrity check', { event: 'startup', action: 'abort' })
-    await closeDatabase()
-    throw new Error('Database integrity check failed')
+  // Step 4 — read settings in one explicit step. Each invalid setting resets
+  // only itself, in memory; the stored row is left untouched.
+  step('read_settings')
+  const settings = readAllSettings(getDb)
+  if (settings.resetKeys.length > 0) {
+    logger.info('Invalid settings reset to their defaults', {
+      event: 'startup',
+      action: 'reset_settings',
+      keys: settings.resetKeys
+    })
   }
 
-  // Listening port priority: explicit option (CLI --port, tests) beats the
-  // persisted settings-table value, which beats the compiled default.
-  const port = options.port ?? readServerPort(getDb)
+  // Step 5 — choose the port. Explicit CLI/test option beats the stored value,
+  // which beats the compiled default. Port 0 is a test-only injection; the CLI
+  // parser rejects it, so production never auto-picks a different port.
+  step('choose_port')
+  const port = options.port ?? settings.port
   let boundPort = port
 
   // Opt-in client debug log (Debug Mode): logs/rtwiki-debug.jsonl beside the
@@ -388,7 +510,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     })
   }
 
-  // 1. Create coordinator with late-bound server-stop capability.
+  // Create coordinator with late-bound server-stop capability.
   let serverRef: Awaited<ReturnType<typeof Bun.serve>> | null = null
 
   // The backup schedule. Started here rather than after the server binds so
@@ -406,8 +528,21 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     stopGracefully: async () => {
       if (!serverRef) throw new Error('Server not yet attached')
       backupSchedule?.stop()
-      await serverRef.stop()
+      const server = serverRef
+      // Stop accepting new work, then wait a short bounded time for work in
+      // progress. Never hang forever: force remaining connections closed when
+      // the bound elapses.
+      server.stop()
+      const deadline = Date.now() + SHUTDOWN_DRAIN_TIMEOUT_MS
+      while (server.pendingRequests > 0 && Date.now() < deadline) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 25))
+      }
+      if (server.pendingRequests > 0) {
+        server.stop(true)
+      }
     },
+    fullSave: () => fullSaveToMainFile(SHUTDOWN_FULL_SAVE_TIMEOUT_MS),
+    clearCleanExitMarker: () => clearCleanExitMarker(dataDir),
     closeDatabase: async () => {
       await closeDatabase()
     },
@@ -428,7 +563,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   // whatever this is.
   const bindHost = '127.0.0.1'
 
-  // 2. Create a fresh Hono app with the coordinator injected.
+  // Create a fresh Hono app with the coordinator injected.
   const app = createApp({
     coordinator,
     token: shutdownToken,
@@ -441,23 +576,49 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     host: bindHost
   })
 
-  // 3. Start the Bun HTTP server.
-  const server = await Bun.serve({
-    fetch: app.fetch,
-    port,
-    hostname: bindHost
-  })
+  // Step 6 — start the server. A busy port is reported clearly, naming the port
+  // and the override; no different port is ever auto-picked.
+  step('start_server', { port })
+  let server: Awaited<ReturnType<typeof Bun.serve>>
+  try {
+    server = await Bun.serve({
+      fetch: app.fetch,
+      port,
+      hostname: bindHost
+    })
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code
+    if (code === 'EADDRINUSE' || String(err).includes('EADDRINUSE')) {
+      logger.error('Port already in use', { event: 'startup', action: 'abort', port })
+      throw new Error(portInUseMessage(port))
+    }
+    throw err
+  }
   boundPort = server.port ?? port
 
-  // 4. Synchronously attach the real server handle.
-  //    No request can arrive between Bun.serve() resolving and this assignment
-  //    because JavaScript cannot process another event while the current
-  //    synchronous call stack is still executing.
+  // Synchronously attach the real server handle.
+  // No request can arrive between Bun.serve() resolving and this assignment
+  // because JavaScript cannot process another event while the current
+  // synchronous call stack is still executing.
   serverRef = server
+
+  // All startup checks have passed: create the clean-exit marker now. On the
+  // next start its presence (after the running-copy check) means this run did
+  // not close cleanly.
+  createCleanExitMarker(dataDir)
+  step('server_healthy', { port: server.port })
 
   logger.info('HTTP server listening', { event: 'startup', host: bindHost, port: server.port })
 
+  // Open the browser only after the server reports healthy.
   if (openBrowser) {
+    const healthy = await waitForSelfHealthy(bindHost, server.port ?? port)
+    if (!healthy) {
+      logger.warn('Server did not report healthy before opening the browser', {
+        event: 'startup',
+        port: server.port
+      })
+    }
     const launcher = options.launcher ?? launchBrowser
     await launcher(`http://${bindHost}:${server.port}/`)
   }
@@ -475,6 +636,23 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
       await coordinator.requestShutdown()
     }
   }
+}
+
+/** Bounded wait for the freshly started server to answer /health. */
+async function waitForSelfHealthy(host: string, port: number): Promise<boolean> {
+  const deadline = Date.now() + 5_000
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://${host}:${port}/health`, {
+        signal: AbortSignal.timeout(500)
+      })
+      if (res.ok) return true
+    } catch {
+      // not ready yet
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+  }
+  return false
 }
 
 /**

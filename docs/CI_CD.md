@@ -107,6 +107,11 @@ This document describes the planned GitHub Actions workflow for RTWiki. It speci
 - Run: bun run build:desktop (Tauri CLI bundles RTWiki.exe shell + RTWikiServer.exe sidecar + web/ assets).
 - The TypeScript quality gates above still apply to the web/server code; Rust compilation failures fail this stage.
 - Produces the desktop portable package alongside the browser-first package. See [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
+- The desktop smoke test (`scripts/ci/windows-smoke-desktop.ps1`) proves the
+  A1–A3 fixes: the sidecar is PE subsystem 2 (GUI, no console window), the close
+  dialog handshake is reliable, and no `RTWikiServer.exe` remains after quitting
+  by any route. Rust unit tests (`cargo test` from `src-tauri/`) cover the owner
+  marker, PID-identity guard and stale-flag cleanup.
 ```
 
 ### Stage 10: Portable Artifact Packaging
@@ -195,7 +200,7 @@ If future phases require signing or publishing credentials, they will be added a
 The first implemented, runnable quality gate is the documentation verifier:
 
 - **Workflow:** [`.github/workflows/docs-quality.yml`](../.github/workflows/docs-quality.yml) — runs on pull requests, pushes to `main`, and manual dispatch.
-- **Script:** [`scripts/verify-docs.ts`](../scripts/verify-docs.ts) — a dependency-free Bun script (requires Bun 1.3.14).
+- **Script:** [`scripts/verify-docs.ts`](../scripts/verify-docs.ts) — a dependency-free Bun script (requires Bun 1.3.14 or newer; CI pins 1.4.5).
 - **Checks:** Markdown link integrity, document structure, required-file presence, ADR status and index entries (all seven ADRs), project-status line, portable-layout rules, and requirement-ID integrity. The verifier also validates the new `AI_CONTENT_IMPORT.md` and `REFERENCE_RESEARCH.md` documents and the [ADR-006](adr/ADR-006-rich-content-and-import-contract.md)/[ADR-007](adr/ADR-007-sandboxed-custom-content.md) records.
 - The verifier runs in CI without `bun install` and without any third-party packages.
 
