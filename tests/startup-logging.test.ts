@@ -247,6 +247,38 @@ describe('unusable runtime directory', () => {
     cleanup(dir)
   })
 
+  it('reports a friendly error when the data folder exists but cannot be written to', async () => {
+    const dir = makeTempDir()
+    const dataDir = join(dir, 'data')
+    mkdirSync(dataDir, { recursive: true })
+    // The folder exists and mkdir succeeds, but the write probe cannot create
+    // its file because a directory already occupies that name. This is the
+    // read-only/protected-folder case the write test exists to catch, and it
+    // must be reported before the database is opened (AGENTS.md §7).
+    mkdirSync(join(dataDir, '.write-test'), { recursive: true })
+
+    let thrown: unknown
+    try {
+      await bootstrap({
+        port: 0,
+        openBrowser: false,
+        launcher: noopLauncher,
+        logPath: join(dir, 'logs', 'rtwiki.log'),
+        dataDir
+      })
+    } catch (err) {
+      thrown = err
+    }
+
+    expect(thrown).toBeInstanceOf(Error)
+    const message = (thrown as Error).message
+    expect(message).toMatch(/move|permission|write access|properties/i)
+    expect(message).toMatch(/stop|quit|exit|not be stored|will not/i)
+    // No database was created — the friendly error came before DB init.
+    expect(existsSync(join(dataDir, 'rtwiki.sqlite'))).toBe(false)
+    cleanup(dir)
+  })
+
   it('reports a fatal startup failure on the terminal, not only in the log file', async () => {
     const dir = makeTempDir()
     const logPath = join(dir, 'logs', 'rtwiki.log')

@@ -1,6 +1,7 @@
 import { DEFAULT_PORT } from '@rtwiki/shared/constants'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import type { Database } from '../database/index.js'
 import {
   isCloseBehavior,
   isValidUserPort,
@@ -17,13 +18,15 @@ import { isSameOrigin } from '../utils/request-origin.js'
 const MAX_SETTINGS_BODY_BYTES = 4096
 
 export interface SettingsRouteOptions {
+  getDb: () => Database
+  /** Data directory, used only for the IPC flag files (not settings). */
   dataDir: string
   /** Running port; compared against the saved port for restartRequired. */
   getCurrentPort: () => number
 }
 
 /**
- * Server and desktop-shell settings (data/server.json, data/desktop.json).
+ * Server and desktop-shell settings (SQLite `settings` table).
  *
  * - GET  /server          → running port, configured port, default port
  * - PUT  /server          → validates + persists { port }; changing the port
@@ -56,7 +59,7 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
     try {
       return c.json({
         port: opts.getCurrentPort(),
-        configuredPort: readServerPort(opts.dataDir),
+        configuredPort: readServerPort(opts.getDb),
         defaultPort: DEFAULT_PORT,
         restartRequired: false
       })
@@ -81,7 +84,7 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
       return c.json({ error: 'Port must be an integer between 1024 and 65535' }, 400)
     }
     try {
-      const saved = writeServerPort(opts.dataDir, port)
+      const saved = writeServerPort(opts.getDb, port)
       return c.json({ port: saved.port, restartRequired: saved.port !== opts.getCurrentPort() })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -102,7 +105,7 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
 
   routes.get('/desktop', (c) => {
     try {
-      return c.json(readDesktopSettings(opts.dataDir))
+      return c.json(readDesktopSettings(opts.getDb))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
@@ -130,9 +133,9 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
     try {
       // Merge with the stored values so a partial update (e.g. only the
       // remember checkbox) cannot silently reset the close behavior.
-      const current = readDesktopSettings(opts.dataDir)
+      const current = readDesktopSettings(opts.getDb)
       return c.json(
-        writeDesktopSettings(opts.dataDir, {
+        writeDesktopSettings(opts.getDb, {
           closeBehavior: closeBehavior ?? current.closeBehavior,
           rememberCloseChoice: rememberCloseChoice ?? current.rememberCloseChoice
         })

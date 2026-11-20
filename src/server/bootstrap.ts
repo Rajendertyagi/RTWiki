@@ -1,12 +1,16 @@
+import { Database as BunDatabase } from 'bun:sqlite'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import {
   APP_VERSION,
   ATTACHMENTS_DIR,
   BACKUPS_DIR,
+  DATABASE_FILENAME,
   DEBUG_LOG_FILENAME,
   DEBUG_LOG_MAX_BYTES,
-  DEBUG_LOG_MAX_ROTATED_FILES
+  DEBUG_LOG_MAX_ROTATED_FILES,
+  DEFAULT_PORT,
+  SETTINGS_KEY_SERVER_PORT
 } from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
 import { reclaimUnreferencedAttachments } from './attachments/attachment-retention.js'
@@ -17,6 +21,7 @@ import {
   checkIntegrity,
   closeDatabase,
   type Database,
+  getDb,
   initDatabase,
   setDatabaseLogger
 } from './database/index.js'
@@ -159,6 +164,42 @@ async function probeExistingInstance(
 }
 
 /**
+ * Reads the persisted port for the single-instance probe WITHOUT opening the
+ * managed database or running migrations. A short-lived read-only connection is
+ * enough; if the DB does not exist yet (first launch) or the row is missing or
+ * invalid, the compiled default is used. The authoritative port is read later
+ * from the managed connection after migrations.
+ */
+function probePort(dataDir: string, explicitPort?: number): number {
+  if (explicitPort !== undefined) return explicitPort
+  const path = joinPaths(dataDir, DATABASE_FILENAME)
+  if (!existsSync(path)) return DEFAULT_PORT
+  let conn: BunDatabase | null = null
+  try {
+    conn = new BunDatabase(path, { readonly: true })
+    const row = conn
+      .query('SELECT value FROM settings WHERE key = ?1')
+      .get(SETTINGS_KEY_SERVER_PORT) as { value: string } | undefined
+    if (row) {
+      const parsed = JSON.parse(row.value) as unknown
+      if (
+        typeof parsed === 'number' &&
+        Number.isInteger(parsed) &&
+        parsed >= 1024 &&
+        parsed <= 65535
+      ) {
+        return parsed
+      }
+    }
+  } catch {
+    // Missing table or corrupt value — the probe falls back to the default.
+  } finally {
+    conn?.close()
+  }
+  return DEFAULT_PORT
+}
+
+/**
  * Composition root: owns the config, logger, database, HTTP server, and shutdown
  * coordinator singletons. Each call creates an isolated app and coordinator.
  *
@@ -178,11 +219,6 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
 
   // Effective data directory (tests may inject a temporary location).
   const dataDir = options.dataDir ?? paths.dataDir
-
-  // Listening port priority: explicit option (CLI --port, tests) beats the
-  // persisted data/server.json value, which beats the compiled default.
-  const port = options.port ?? readServerPort(dataDir)
-  let boundPort = port
   const attachmentsDir = joinPaths(dataDir, ATTACHMENTS_DIR)
   const backupsDir = joinPaths(dataDir, BACKUPS_DIR)
 
@@ -200,26 +236,6 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   const logger = options.logger ?? createLogger(options.logPath ?? paths.logPath)
   setDatabaseLogger(logger)
 
-  // Opt-in client debug log (Debug Mode): logs/rtwiki-debug.jsonl beside the
-  // main log, with its own bounded rotation. Created eagerly so enabling the
-  // toggle never has to create files mid-session.
-  const debugLogPath = joinPaths(
-    options.logPath ? options.logPath.replace(/[/\\][^/\\]+$/, '') : paths.logDir,
-    DEBUG_LOG_FILENAME
-  )
-  const debugSink = new RotatingJsonlSink(debugLogPath, {
-    maxBytes: DEBUG_LOG_MAX_BYTES,
-    maxRotatedFiles: DEBUG_LOG_MAX_ROTATED_FILES
-  })
-  const debugEventSink = {
-    append: (event: Record<string, unknown>): void => {
-      debugSink.appendLine(JSON.stringify(event))
-    }
-  }
-
-  const openBrowser = options.openBrowser ?? true
-  const shutdownToken = randomUUID()
-
   // Privacy-redacted runtime directories: the Windows username never appears.
   const redaction = { repoRoot: paths.compiled ? undefined : paths.exeDir, exeDir: paths.exeDir }
   const effectiveLogDir = options.logPath
@@ -233,10 +249,27 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     webDir: sanitizePathForLog(paths.frontendDistDir, redaction)
   })
 
-  // Probe for existing RTWiki instance before binding the port.
-  const existing = await probeExistingInstance(port, logger)
+  // Check write access BEFORE opening the database. A protected folder must
+  // produce the friendly "cannot use this folder" message, not a raw SQLite
+  // error from initDatabase's WAL pragma (AGENTS.md §7).
+  const writeTest = joinPaths(dataDir, '.write-test')
+  try {
+    await Bun.write(writeTest, 'test')
+    rmSync(writeTest, { force: true })
+  } catch (err) {
+    logger.error('Data directory is not writable', { event: 'startup', action: 'abort' })
+    throw new Error(unusableDirectoryMessage(dataDir, err))
+  }
+
+  // Detect an already-running instance BEFORE opening the managed database or
+  // running migrations. The second process must not acquire write locks or
+  // upgrade a database it does not own. The probe uses a short-lived read-only
+  // connection only to learn which port to check.
+  const openBrowser = options.openBrowser ?? true
+  const shutdownToken = randomUUID()
+  const probePortValue = probePort(dataDir, options.port)
+  const existing = await probeExistingInstance(probePortValue, logger)
   if (existing) {
-    // Another RTWiki is already running. Open its browser and exit cleanly.
     if (openBrowser) {
       const launcher = options.launcher ?? launchBrowser
       try {
@@ -251,7 +284,9 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     logger.info('Exiting: existing RTWiki instance already running', {
       event: 'single_instance'
     })
-    // Close the logger created for this second process — it has no server to serve.
+    // No managed DB was opened on this path; closeDatabase is idempotent and
+    // guarantees no connection survives the early exit.
+    await closeDatabase()
     await logger.close()
     return {
       server: null as unknown as Awaited<ReturnType<typeof Bun.serve>>,
@@ -269,25 +304,14 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
         logError: () => {},
         closeLogger: async () => {}
       }),
-      // The second process has no server and no database, so it takes no
-      // backups. The instance that is already running owns the schedule.
       backupSchedule: null,
       shutdown: async () => {}
     }
   }
 
-  const writeTest = joinPaths(dataDir, '.write-test')
-  try {
-    await Bun.write(writeTest, 'test')
-    rmSync(writeTest, { force: true })
-  } catch (err) {
-    logger.error('Data directory is not writable', { event: 'startup', action: 'abort' })
-    // The directory exists but cannot be written to, which is the case the
-    // mkdir above cannot catch. Same words, same remedy: the user is told which
-    // folder and what to do about it rather than being handed an errno.
-    throw new Error(unusableDirectoryMessage(dataDir, err))
-  }
-
+  // The database is opened and migrated AFTER the single-instance probe, because
+  // the persisted port now lives in the settings table. A damaged database still
+  // aborts startup (integrity check below) — no silent fallback to defaults.
   const db = initDatabase(dataDir)
   // The attachments directory is still created and still passed in: images moved
   // into the database (ADR-014), but a database created before that change still
@@ -297,6 +321,28 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     logger.error('Database failed integrity check', { event: 'startup', action: 'abort' })
     await closeDatabase()
     throw new Error('Database integrity check failed')
+  }
+
+  // Listening port priority: explicit option (CLI --port, tests) beats the
+  // persisted settings-table value, which beats the compiled default.
+  const port = options.port ?? readServerPort(getDb)
+  let boundPort = port
+
+  // Opt-in client debug log (Debug Mode): logs/rtwiki-debug.jsonl beside the
+  // main log, with its own bounded rotation. Created eagerly so enabling the
+  // toggle never has to create files mid-session.
+  const debugLogPath = joinPaths(
+    options.logPath ? options.logPath.replace(/[/\\][^/\\]+$/, '') : paths.logDir,
+    DEBUG_LOG_FILENAME
+  )
+  const debugSink = new RotatingJsonlSink(debugLogPath, {
+    maxBytes: DEBUG_LOG_MAX_BYTES,
+    maxRotatedFiles: DEBUG_LOG_MAX_ROTATED_FILES
+  })
+  const debugEventSink = {
+    append: (event: Record<string, unknown>): void => {
+      debugSink.appendLine(JSON.stringify(event))
+    }
   }
 
   // Deletes backups a previous run left half-written. "Delete on failure" does

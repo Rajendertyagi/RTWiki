@@ -448,6 +448,14 @@ So restore: **validate → move the live database aside → swap → shut down c
 the user plainly "Restored. Close and reopen RTWiki."** No relaunch, no dependency on the
 desktop shell.
 
+All persistent settings live in the `settings` table inside the database, so a
+restore also brings back the backed-up port, close behavior, backup schedule and
+window geometry. This is deliberate: a backup is a full workspace snapshot. If
+the restored port differs from the one currently in use, the user is told that a
+restart is required for it to take effect (the server keeps listening on the
+current port until restart; the shell reads the restored port on next launch).
+`tests/backup-restore-settings.test.ts` asserts this behavior.
+
 ### 7.3 Reversibility
 
 Move, never delete. The live database becomes

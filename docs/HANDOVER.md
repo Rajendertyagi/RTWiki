@@ -152,7 +152,7 @@ Confidence labels: **VERIFIED** (read from code/config/tests) · **DOCUMENTED** 
 
 **Shared code** via tsconfig paths `@rtwiki/shared/*`, `@rtwiki/server/*`, `@rtwiki/web/*` and a matching Vite alias. `src/shared/constants/index.ts` is the single source for ~55 named constants; `AGENTS.md` §5 requires this and forbids restating values.
 
-**Configuration** derives all paths from the **executable's** directory, never the working directory ([ADR-005](adr/ADR-005-portable-data-layout.md)). `config/index.ts` exports `createConfig`, `resolveRuntimePaths`, `joinPaths`, `dirname`. Settings persist as JSON beside the database: `server.json`, `desktop.json`, and now `backups.json`.
+**Configuration** derives all paths from the **executable's** directory, never the working directory ([ADR-005](adr/ADR-005-portable-data-layout.md)). `config/index.ts` exports `createConfig`, `resolveRuntimePaths`, `joinPaths`, `dirname`. All persistent settings (port, close behavior, backup schedule, window geometry) live in the `settings` table inside `rtwiki.sqlite` — one source of truth. The legacy JSON files are no longer read or written.
 
 **Data flow.** React state in `App.tsx` → hooks (`use-pages-controller`, `use-schedule-controller`) → thin API clients (`services/pages-api.ts`, `schedule-api.ts`) → `fetch` → Hono routes → services → repositories → `bun:sqlite`. Autosave is a debounced controller (`rich-editor/use-autosave.ts`, `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` = 2000).
 
@@ -282,7 +282,7 @@ Confidence labels: **VERIFIED** (read from code/config/tests) · **DOCUMENTED** 
 
 ```
 RTWiki.exe
-data/   rtwiki.sqlite   attachments/   backups/   server.json   desktop.json
+data/   rtwiki.sqlite   attachments/   backups/
 logs/    rtwiki.log
 ```
 
@@ -567,7 +567,7 @@ Before those: `6e0d800` (`:::columns` with a draggable divider), `f145259` (the 
 
 **Mechanism: `VACUUM INTO`** against the live database, chosen because a file copy of a WAL database passes `integrity_check` while having lost committed data still in the `-wal` sidecar. **Three fixed slots** (`BACKUP_SLOTS`), each overwriting only itself, with **deliberately no retention code**; intervals configurable, 1 hour to 8760.
 
-**Settings persist to `data/backups.json`**, not `server.json`, because `writeServerPort` replaces `server.json` wholesale and sharing it would erase the schedule on every port change.
+**Settings persist in the SQLite `settings` table** (`backup.slots`, `server.port`, etc.) — one source of truth. A backup is a `VACUUM INTO` of the whole database, so restoring a backup also restores the settings it contained.
 
 ### What is genuinely right
 

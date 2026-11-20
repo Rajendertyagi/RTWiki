@@ -57,8 +57,8 @@ export function createBackupRoutes(opts: BackupRouteOptions): Hono {
     if (!dataDir) return unavailable(c)
     return c.json({
       backups: listBackups(dataDir),
-      settings: readBackupSettings(dataDir),
-      due: dueSlots(dataDir),
+      settings: readBackupSettings(getDb),
+      due: dueSlots(getDb),
       filenames: Object.fromEntries(BACKUP_SLOTS.map((s) => [s, slotFilename(s)]))
     })
   })
@@ -80,7 +80,7 @@ export function createBackupRoutes(opts: BackupRouteOptions): Hono {
       return c.json({ error: 'Invalid settings' }, 400)
     }
 
-    const current = readBackupSettings(dataDir)
+    const current = readBackupSettings(getDb)
     for (const [slot, raw] of Object.entries(parsed.body.slots)) {
       if (!isBackupSlot(slot) || !isRecord(raw)) continue
       const target = current.slots[slot]
@@ -94,7 +94,7 @@ export function createBackupRoutes(opts: BackupRouteOptions): Hono {
     }
 
     try {
-      return c.json(writeBackupSettings(dataDir, current))
+      return c.json(writeBackupSettings(getDb, current))
     } catch (error) {
       return c.json(
         { error: error instanceof Error ? error.message : 'Could not save settings' },

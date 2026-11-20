@@ -50,7 +50,7 @@ The following rules were extracted from the TriliumNext study ([trilium-uiux-ref
 | 2 | **Per-region surface tokens** | §9 and §12 | Tokens are named by region (`--rtwiki-canvas`, `--rtwiki-pane`, `--rtwiki-rail`, `--rtwiki-elevated`), never by a generic "surface". The pane is always recessed relative to the document in both colour schemes. |
 | 3 | **Borders as focus indicators, not frames** | §4 | The note canvas border is transparent by default; it appears only when a split is active in a multi-split view. |
 | 4 | **Radii are conditional on layout context** | §4 | Top radius drops when a toolbar spans above; bottom radius drops when the status bar panel is open. |
-| 5 | **Drag regions via a filler element** | §3 | *Adopted target, not yet built.* The band currently uses an absolutely positioned `.dragLayer` backdrop carrying `data-tauri-drag-region`. Replacing it with a filler element removes the overlap and the z-index ordering. Tracked as work-plan item 5. |
+| 5 | **Drag regions via a filler element** | §3 | *Built.* The band's non-interactive surfaces (backdrop, title text, tab slot, tab strip root, scroller, and a 40px spacer) each carry `data-tauri-drag-region` directly; Tauri's drag script only fires for a direct click on an attributed element. Caption buttons sit outside those regions. |
 | 6 | **Component responsiveness via container queries** | §8 | The toolbar should reflow by its own width, not a viewport breakpoint. |
 | 7 | **Caption buttons aligned by explicit centre-line calculation** | §13.8 | *Adopted target, not yet built.* Today the buttons are 46px wide and full band height (40px) inside an `align-items: stretch` row, so no centre-line calculation is needed. The pattern matters only if button and band heights ever diverge. |
 | 8 | **Keep tab strip unmodified** | Task constraint | `TabStrip` is not to be changed during this phase of work. |
@@ -280,9 +280,9 @@ tokens rather than literals.
 single stacking level for every floating layer: menus, popovers, portals, and
 full-screen workspaces. It exists specifically so a collision-shifted dropdown near
 the left edge can never paint behind the sidebar. Within the band, the window
-chrome sets its own local contract (`window-chrome.module.css:11`): the
-`data-tauri-drag-region` backdrop is absolutely positioned and every interactive
-control inside it opts out.
+chrome sets its own local contract (`window-chrome.module.css`): each
+non-interactive surface carries `data-tauri-drag-region` directly, and caption
+buttons sit outside those regions so their clicks are not swallowed.
 
 ### 3.10 Interaction behaviours
 
@@ -297,7 +297,7 @@ control inside it opts out.
 | Scroll ownership | `.main` is the single definite-height flex column at `100dvh`; every region below binds through flex with `min-height: 0`. The rich note is the only vertically scrolling element on its route | `app-shell.module.css`, `customization.css:68-79` |
 | Rich toolbar at narrow widths | `overflow-x: auto`, `overflow-y: hidden`, `flex-wrap: nowrap` — one row that scrolls, never wraps | `rich-toolbar.module.css:52-57` — see F2, whose recorded measurement predates this |
 | Caption buttons | `align-items: stretch`, each button `height: 100%` at 46px wide | `window-chrome.module.css:65-84` |
-| Window dragging | An absolutely positioned backdrop carries `data-tauri-drag-region`; controls opt out | `window-chrome.tsx:127` — the upstream filler-element pattern is still planned |
+| Window dragging | Each non-interactive surface carries `data-tauri-drag-region` directly; a 40px spacer keeps a packed tab row grabbable | `window-chrome.tsx`, `tab-strip.tsx` |
 
 ## 4. Window chrome (desktop mode)
 
@@ -312,7 +312,7 @@ RootContainer
 └── content column
     ├── chrome band (40px)
     │   ├── tab strip (40px, the same DOM row as the band)
-    │   ├── dragLayer (absolute backdrop, data-tauri-drag-region)
+    │   ├── drag regions (backdrop, title text, tab slot, strip, 40px spacer)
     │   └── caption controls (46px wide each, full band height)
     ├── main content area (fills remaining height)
     │   ├── rich editor toolbar (40px)
@@ -327,7 +327,7 @@ RootContainer
 - **Planned, not built:** aligning the buttons by an explicit centre-line calculation rather than by stretch. This only matters if a future change makes the button height differ from the band height; today the two are equal by construction, so the centre-line calculation would be a no-op. Recorded as work-plan item 7.
 - The tab strip is the same visual row as the chrome band — they share the `TAB_STRIP_HEIGHT = 40` constant. There is no dead space between them.
 - The utility rail and the page tree run the **full window height** beside the band; the band only spans the content area, not the rail.
-- Drag-region approach (**current**): an absolutely positioned `.dragLayer` element carrying `data-tauri-drag-region` sits behind the band's interactive controls (`window-chrome.tsx:127`); the layering contract is documented at `window-chrome.module.css:11`. Replacing this backdrop with a filler element is planned work (work-plan item 5), not the current state.
+- Drag-region approach (**current**): each non-interactive surface in the band carries `data-tauri-drag-region` directly — the backdrop, title text, tab slot, tab strip root, scroller, and a 40px spacer at the strip's tail (`window-chrome.tsx`, `tab-strip.tsx`). Tauri's drag script only fires for a direct click on an attributed element, so every grabbable surface needs the attribute; caption buttons sit outside those regions.
 
 ### Tauri capability requirement
 

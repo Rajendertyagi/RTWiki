@@ -57,15 +57,18 @@ RTWiki/
 │   ├── rtwiki.sqlite-wal
 │   ├── rtwiki.sqlite-shm
 │   ├── attachments/
-│   ├── backups/
-│   └── window-state.json (desktop window geometry; UI-only state, excluded from backups)
+│   └── backups/
 └── logs/
     └── rtwiki.log
 ```
 
-`window-state.json` holds only window geometry (integers and a boolean), never
-user content. No system directory (`%APPDATA%`, registry files) is written for
-workspace state.
+All persistent settings — including the listening port, close behavior, backup
+schedule, and desktop window geometry — live in the `settings` table inside
+`rtwiki.sqlite` (single source of truth). Window geometry holds only integers
+and a boolean, never user content. No system directory (`%APPDATA%`, registry
+files) is written for workspace state. The legacy JSON files (`server.json`,
+`desktop.json`, `backups.json`, `window-state.json`) are no longer read or
+written; they are left untouched on existing installs and are not recreated.
 
 ### How Paths Are Determined
 

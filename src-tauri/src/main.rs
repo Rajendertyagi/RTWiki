@@ -9,13 +9,13 @@
 //! Process model:
 //! ```text
 //! RTWiki.exe (this shell)
-//!   ├─ reads data/server.json for the listening port (Settings-managed)
+//!   ├─ reads the SQLite settings table for the listening port (Settings-managed)
 //!   ├─ spawns RTWikiServer.exe --no-open --port <port>   (sidecar.rs)
 //!   ├─ polls GET /health until 200, then shows the window
 //!   ├─ watch thread respawns the sidecar on restart request or crash
 //!   └─ on Quit: graceful shutdown (token) then child-kill fallback
 //! ```
-//! Closing the window follows data/desktop.json (ask / minimize / quit).
+//! Closing the window follows the SQLite `desktop.closeBehavior` setting (ask / minimize / quit).
 //! `RTWiki.exe --browser` keeps browser mode: no window, tray stays resident.
 //!
 //! Handshake flags in data/ (mirrored by the server, ADR-011):
@@ -54,6 +54,7 @@ enum ClosePromptClaim {
   Unavailable,
 }
 
+use sidecar::CloseBehavior;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -81,6 +82,8 @@ struct ShellState {
   close_prompt_open: Mutex<Option<Instant>>,
   /// Guards the one-time reveal of the main window after the app page loads.
   window_revealed: AtomicBool,
+  /// Last-known close behavior, used as fallback when the DB read fails.
+  close_behavior: Mutex<CloseBehavior>,
 }
 
 fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -287,7 +290,11 @@ fn respawn_sidecar(app: &AppHandle) -> bool {
     }
   }
 
-  let port = sidecar::configured_port(&exe_dir);
+  let remembered_port = app
+    .try_state::<ShellState>()
+    .and_then(|s| s.port.lock().ok().map(|g| *g))
+    .unwrap_or(sidecar::DEFAULT_PORT);
+  let port = sidecar::configured_port(&exe_dir, remembered_port);
   match sidecar::spawn_sidecar(&exe_dir, port) {
     Ok(child) => {
       if let Some(state) = app.try_state::<ShellState>() {
@@ -421,12 +428,25 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
   });
 }
 
-/// Tauri invoke command: read current close behaviour from data/desktop.json.
+/// Tauri invoke command: read current close behaviour from the settings table.
 /// Called by the JS `<WindowChrome>` component on every close-button press so
 /// the behaviour always reflects the latest Settings selection without restart.
 #[tauri::command]
-fn get_close_behavior(exe_dir: PathBuf) -> String {
-  match sidecar::close_behavior(&exe_dir) {
+fn get_close_behavior(app: AppHandle) -> String {
+  let (exe_dir, remembered) = match app.try_state::<ShellState>() {
+    Some(state) => (
+      state.exe_dir.clone(),
+      state.close_behavior.lock().ok().map(|g| *g).unwrap_or(sidecar::CloseBehavior::Ask),
+    ),
+    None => (PathBuf::new(), sidecar::CloseBehavior::Ask),
+  };
+  let behavior = sidecar::close_behavior(&exe_dir, remembered);
+  if let Some(state) = app.try_state::<ShellState>() {
+    if let Ok(mut guard) = state.close_behavior.lock() {
+      *guard = behavior;
+    }
+  }
+  match behavior {
     sidecar::CloseBehavior::Minimize => "minimize".to_string(),
     sidecar::CloseBehavior::Quit    => "quit".to_string(),
     sidecar::CloseBehavior::Ask     => "ask".to_string(),
@@ -477,7 +497,11 @@ fn main() {
             .ok()
             .and_then(|p| p.parent().map(PathBuf::from))
             .unwrap_or_default();
-          sidecar::open_in_browser(sidecar::configured_port(&exe_dir));
+          let remembered = app
+            .try_state::<ShellState>()
+            .and_then(|s| s.port.lock().ok().map(|g| *g))
+            .unwrap_or(sidecar::DEFAULT_PORT);
+          sidecar::open_in_browser(sidecar::configured_port(&exe_dir, remembered));
         }
         show_main(app);
       },
@@ -502,9 +526,12 @@ fn main() {
         .ok()
         .and_then(|p| p.parent().map(PathBuf::from))
         .unwrap_or_default();
-      // The listening port is Settings-managed (data/server.json); the
-      // window URL is baked from it so no navigation fix-up is ever needed.
-      let port = sidecar::configured_port(&exe_dir);
+      // The listening port and close behavior are Settings-managed (SQLite
+      // settings table). Seed the remembered values from the DB so a busy-DB
+      // fallback uses the last known setting, not a fixed default.
+      let port = sidecar::configured_port(&exe_dir, sidecar::DEFAULT_PORT);
+      let remembered_behavior =
+        sidecar::close_behavior(&exe_dir, sidecar::CloseBehavior::Ask);
       app.manage(ShellState {
         exe_dir: exe_dir.clone(),
         port: Mutex::new(port),
@@ -516,6 +543,7 @@ fn main() {
         close_prompt_ready: AtomicBool::new(false),
         close_prompt_open: Mutex::new(None),
         window_revealed: AtomicBool::new(false),
+        close_behavior: Mutex::new(remembered_behavior),
       });
 
       // Tray first so Quit is always reachable, even during a slow boot.
@@ -590,12 +618,21 @@ fn main() {
             }
             tauri::WindowEvent::CloseRequested { api, .. } => {
               let app = win.app_handle();
-              let exe_dir = app
-                .try_state::<ShellState>()
-                .map(|s| s.exe_dir.clone())
-                .unwrap_or_default();
+              let (exe_dir, remembered) = match app.try_state::<ShellState>() {
+                Some(state) => (
+                  state.exe_dir.clone(),
+                  state.close_behavior.lock().ok().map(|g| *g).unwrap_or(sidecar::CloseBehavior::Ask),
+                ),
+                None => (PathBuf::new(), sidecar::CloseBehavior::Ask),
+              };
+              let behavior = sidecar::close_behavior(&exe_dir, remembered);
+              if let Some(state) = app.try_state::<ShellState>() {
+                if let Ok(mut guard) = state.close_behavior.lock() {
+                  *guard = behavior;
+                }
+              }
 
-              match sidecar::close_behavior(&exe_dir) {
+              match behavior {
                 sidecar::CloseBehavior::Minimize => {
                   api.prevent_close();
                   geom::save_current(&exe_dir, &win);

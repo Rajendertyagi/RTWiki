@@ -309,6 +309,7 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   app.route(
     '/api/settings',
     createSettingsRoutes({
+      getDb: deps.getDb,
       dataDir: deps.dataDir ?? '',
       getCurrentPort: deps.getCurrentPort ?? (() => DEFAULT_PORT)
     })

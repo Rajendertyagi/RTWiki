@@ -68,8 +68,7 @@ RTWiki/
 ├── data/
 │   ├── rtwiki.sqlite
 │   ├── attachments/
-│   ├── backups/
-│   └── window-state.json (desktop window geometry; UI-only state)
+│   └── backups/
 └── logs/
     └── rtwiki.log
 ```
@@ -90,13 +89,13 @@ written (AC-058).
 | System tray | Core `tray-icon` feature; menu: Open RTWiki / Open in Browser / Start with Windows / Quit |
 | Single instance | `tauri-plugin-single-instance` (registered first); focuses the existing window |
 | Close to tray | Window close hides to tray; Quit only from the tray menu |
-| Window geometry | Custom portable persistence to `data/window-state.json` |
+| Window geometry | Stored in the SQLite `settings` table (`window.geometry`); shell writes best-effort |
 | Native notifications | `tauri-plugin-notification` when the IPC bridge is available, otherwise the Web Notification API |
 | Native file dialogs | WebView2 renders `<input type="file">` with the OS picker; no change to the import path |
 | Startup errors | `tauri-plugin-dialog` message dialog (Rust side) |
 | Browser mode | Tray "Open in Browser" and `RTWiki.exe --browser` open the default browser |
-| Managed port | Settings persists `data/server.json`; shell and server both honor it |
-| Close behavior | Settings persists `data/desktop.json` (ask / minimize / quit); shell reads it on every close |
+| Managed port | Settings persists `server.port` in the SQLite `settings` table; shell and server both honor it |
+| Close behavior | Settings persists `desktop.closeBehavior` (ask / minimize / quit) in the SQLite `settings` table; shell reads it fresh on every close with a remembered-value fallback |
 | Restart handshake | Frontend records `data/restart-requested`, shuts down, shell respawns the sidecar |
 | Shutdown handshake | Server records `data/shutdown-requested` on an authorized shutdown, so the shell does not respawn the sidecar it was told to stop |
 
@@ -114,12 +113,15 @@ The native app is the default. Browser mode is preserved:
 
 The loopback port is Settings-managed, not hardcoded:
 
-- `data/server.json` (`{ port }`) is the source of truth. Priority at boot:
-  CLI `--port` beats the file, which beats the compiled default (8080).
-  Only unprivileged ports (1024–65535) are accepted; anything else falls back
-  to the default and the Settings API rejects it with 400.
-- The shell reads the file at boot, spawns the sidecar with that port, and
-  bakes it into the window URL — no navigation fix-up is ever needed.
+- The `server.port` row in the SQLite `settings` table is the source of truth.
+  Priority at boot: CLI `--port` beats the stored value, which beats the
+  compiled default (8080). Only unprivileged ports (1024–65535) are accepted;
+  anything else falls back to the default and the Settings API rejects it with
+  400. The server opens and migrates the DB before reading the port.
+- The shell reads the value at boot with a short busy timeout, falling back to
+  the remembered value on any failure (missing DB, mid-restore swap, busy),
+  spawns the sidecar with that port, and bakes it into the window URL — no
+  navigation fix-up is ever needed.
 - Changing the port takes effect on restart. The frontend flow is: save the
   port (`PUT /api/settings/server`), record a restart request
   (`POST /api/settings/server/restart`, creating `data/restart-requested`),
@@ -150,9 +152,10 @@ never took effect. The server therefore records the intent before it exits:
 
 ### Close behavior
 
-`data/desktop.json` (`{ closeBehavior: "ask" | "minimize" | "quit",
-rememberCloseChoice: boolean }`) is managed in Settings and read by the shell
-on every close, so changes apply immediately with no restart:
+The `desktop.closeBehavior` and `desktop.rememberCloseChoice` rows in the
+SQLite `settings` table are managed in Settings and read by the shell fresh on
+every close (with a short busy timeout and a remembered-value fallback), so
+changes apply immediately with no restart:
 
 - `minimize` hides to the tray (geometry saved); `quit` exits the app.
 - `ask` (default) emits `rtwiki:close-request` to the frontend, which shows an
@@ -215,8 +218,8 @@ desktop shell additive and prevents a broken IPC bridge from blocking core use.
   shell, or network permission is granted to remote content.
 - The sidecar is spawned from Rust with an explicit path and an argument array —
   no shell string interpolation.
-- The desktop window geometry file contains no user content, only integers and a
-  boolean.
+- The desktop window geometry setting (`window.geometry` in the SQLite settings
+  table) contains no user content, only integers and a boolean.
 
 ## Alternatives Considered
 

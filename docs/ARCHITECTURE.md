@@ -635,7 +635,7 @@ The desktop distribution adds a thin Tauri shell (`RTWiki.exe`, Rust +
 WebView2) that spawns the Bun server as a sidecar (`RTWikiServer.exe`) and
 loads the same loopback URL a browser would. The shell owns only native
 concerns — window, tray icon, autostart registration, portable window geometry
-(`data/window-state.json`), sidecar lifecycle, and startup error dialogs. All
+(`window.geometry` in the SQLite `settings` table), sidecar lifecycle, and startup error dialogs. All
 application logic stays in the Hono backend; the frontend reaches native
 features through a single guarded bridge module with browser fallbacks, so no
 native feature is ever required for the app to function. Browser mode remains

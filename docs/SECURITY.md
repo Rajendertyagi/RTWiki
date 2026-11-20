@@ -586,10 +586,10 @@ rules keep the web content untrusted even inside the native window:
   shell string — so no injection is possible through the launch path.
 - The graceful-shutdown token is generated per launch, passed to the sidecar
   over a local channel (environment), and never logged (see §10).
-- `data/window-state.json` contains only window geometry (integers and a
-  boolean) and is excluded from backups. **Verified** for the content claim
-  (`src-tauri/src/geom.rs:4,13`); the backup-exclusion half is **untestable
-  today** because no backup feature exists (§8).
+- Window geometry lives in the `window.geometry` row of the SQLite `settings`
+  table and contains only integers and a boolean (`src-tauri/src/geom.rs`). It
+  is therefore **included** in backups (a backup is a `VACUUM INTO` of the whole
+  database), so restoring a backup also restores the saved window position.
 - Autostart registers the current executable path. Moving the application
   folder after enabling autostart leaves a stale entry until the toggle is
   reset; the Settings/tray toggle rewrites the entry on change.

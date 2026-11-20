@@ -211,10 +211,6 @@ export const COMPILED_EXE_BASENAMES = [
   'RTWikiServer'
 ] as const
 
-// Server-managed settings files inside data/ (portable, beside the database).
-// The server owns reads/writes; the desktop shell reads them at boot.
-export const SERVER_SETTINGS_FILENAME = 'server.json' as const
-export const DESKTOP_SETTINGS_FILENAME = 'desktop.json' as const
 // Flag file the frontend writes (via the server) to request a sidecar
 // restart; the desktop shell consumes and deletes it. Never user-edited.
 export const RESTART_REQUEST_FILENAME = 'restart-requested' as const
@@ -232,6 +228,14 @@ export type CloseBehavior = (typeof CLOSE_BEHAVIORS)[number]
 /// Event emitted by the desktop shell when a window close needs confirmation.
 /// The in-app close dialog listens for it; mirrored in src-tauri/src/main.rs.
 export const CLOSE_REQUEST_EVENT = 'rtwiki:close-request' as const
+
+// Settings keys in the SQLite `settings` table (single source of truth).
+// Shared by the server settings service and the desktop shell (mirrored in Rust).
+export const SETTINGS_KEY_SERVER_PORT = 'server.port' as const
+export const SETTINGS_KEY_CLOSE_BEHAVIOR = 'desktop.closeBehavior' as const
+export const SETTINGS_KEY_REMEMBER_CLOSE_CHOICE = 'desktop.rememberCloseChoice' as const
+export const SETTINGS_KEY_BACKUP_SLOTS = 'backup.slots' as const
+export const SETTINGS_KEY_WINDOW_GEOMETRY = 'window.geometry' as const
 
 // ---------------------------------------------------------------------------
 // Backup and restore (docs/BACKUP_PLAN.md)
@@ -281,13 +285,6 @@ export const BACKUP_FILENAME_PREFIX = 'rtwiki-backup-' as const
  * never itself a backup candidate.
  */
 export const PRE_RESTORE_FILENAME_PREFIX = 'rtwiki.pre-restore-' as const
-
-/**
- * Backup settings live in their own file beside `server.json`, not in it.
- * `writeServerPort` replaces `server.json` wholesale with `{ port }`, so
- * sharing the file would mean every port change silently erased the schedule.
- */
-export const BACKUP_SETTINGS_FILENAME = 'backups.json' as const
 
 // Schedule cadence. A short periodic check plus a kickoff shortly after
 // startup: a fixed slot means catching up overwrites rather than accumulates,

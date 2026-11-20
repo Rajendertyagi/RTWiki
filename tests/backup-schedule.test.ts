@@ -15,6 +15,7 @@ import {
 } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import type { Logger } from '../src/server/logging/index.js'
+import { writeBackupSettings } from '../src/server/settings/index.js'
 import { BACKUP_FILENAME_PREFIX } from '../src/shared/constants/index.js'
 
 /**
@@ -77,22 +78,23 @@ function dailySlotPath(): string {
 
 /** Leaves exactly one period enabled and due, so a run does one predictable thing. */
 function onlyDailyDue(): void {
-  writeFileSync(
-    join(tempDir, 'backups.json'),
-    JSON.stringify({
-      slots: {
-        daily: { enabled: true, intervalHours: 24, lastRunAt: null },
-        weekly: { enabled: false, intervalHours: 168, lastRunAt: null },
-        monthly: { enabled: false, intervalHours: 720, lastRunAt: null }
-      }
-    })
-  )
+  writeBackupSettings(() => db, {
+    slots: {
+      daily: { enabled: true, intervalHours: 24, lastRunAt: null },
+      weekly: { enabled: false, intervalHours: 168, lastRunAt: null },
+      monthly: { enabled: false, intervalHours: 720, lastRunAt: null }
+    }
+  })
 }
 
-function start(checkIntervalMs = 3_600_000, kickoffMs = 3_600_000): BackupSchedule {
+function start(
+  checkIntervalMs = 3_600_000,
+  kickoffMs = 3_600_000,
+  getDbOverride?: () => Db
+): BackupSchedule {
   const created = startBackupSchedule({
     dataDir: tempDir,
-    getDb: () => db,
+    getDb: getDbOverride ?? (() => db),
     logger: recordingLogger(),
     // Long enough that the timers never fire during a test: every run here is
     // triggered explicitly, so what is under test is the guard and not a race
@@ -152,7 +154,7 @@ describe('the overlap guard', () => {
 
     await schedule.runDue()
     expect(backupsWritten()).toBe(1)
-    expect(dueSlots(tempDir)).toEqual([])
+    expect(dueSlots(() => db)).toEqual([])
 
     // A successful run stamps the slot, so nothing is due. Make it due again --
     // this is the next day's check -- and the guard must not still be held.
@@ -194,11 +196,19 @@ describe('the overlap guard', () => {
     process.on('unhandledRejection', onUnhandled)
 
     try {
-      // A real throw: `backups.json` as a directory. `readBackupSettings`
-      // tolerates that, but `recordBackupRun`'s write-then-rename cannot replace
-      // a directory, so the run body throws *after* the backup is written.
-      rmSync(join(tempDir, 'backups.json'), { force: true })
-      mkdirSync(join(tempDir, 'backups.json'), { recursive: true })
+      // A real throw in the bookkeeping step: a getDb whose `run` rejects only
+      // the settings upsert. `createBackup`'s VACUUM INTO still succeeds, but
+      // `recordBackupRun`'s settings write throws *after* the backup is written.
+      const writeFailingDb = {
+        query: db.query.bind(db),
+        run: (sql: string, params?: unknown) => {
+          if (sql.includes('INSERT INTO settings')) {
+            throw new Error('simulated settings write failure')
+          }
+          return db.run(sql, params as never)
+        }
+      } as unknown as Db
+      schedule = start(3_600_000, 3_600_000, () => writeFailingDb)
 
       await schedule.runDue()
       // Give any unhandled rejection a chance to surface before it is asserted.
@@ -216,8 +226,7 @@ describe('the overlap guard', () => {
       expect(backupsWritten()).toBe(1)
 
       // And the guard was released, so the next run works once the fault clears.
-      rmSync(join(tempDir, 'backups.json'), { recursive: true, force: true })
-      onlyDailyDue()
+      schedule = start()
       await schedule.runDue()
       expect(backupsWritten()).toBe(2)
     } finally {

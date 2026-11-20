@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { closeDatabase, initDatabase } from '../src/server/database/index.js'
+import { runMigrations } from '../src/server/database/migrations.js'
 import { createSettingsRoutes } from '../src/server/routes/settings.js'
 import {
   clearRestartRequest,
@@ -69,37 +71,42 @@ describe('settings validation', () => {
 
 describe('settings file store', () => {
   let dir: string
+  let getDb: () => ReturnType<typeof initDatabase>
 
-  beforeEach(() => {
+  beforeEach(async () => {
     dir = makeTempDir()
+    const db = initDatabase(dir)
+    await runMigrations(db)
+    getDb = () => db
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await closeDatabase()
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('readServerPort falls back to the default when no file exists', () => {
-    expect(readServerPort(dir)).toBe(DEFAULT_PORT)
+    expect(readServerPort(getDb)).toBe(DEFAULT_PORT)
   })
 
   it('writeServerPort round-trips through readServerPort', () => {
-    writeServerPort(dir, 8090)
-    expect(readServerPort(dir)).toBe(8090)
+    writeServerPort(getDb, 8090)
+    expect(readServerPort(getDb)).toBe(8090)
   })
 
   it('writeServerPort rejects invalid ports without writing', () => {
-    expect(() => writeServerPort(dir, 80)).toThrow()
-    expect(() => writeServerPort(dir, 0)).toThrow()
-    expect(readServerPort(dir)).toBe(DEFAULT_PORT)
+    expect(() => writeServerPort(getDb, 80)).toThrow()
+    expect(() => writeServerPort(getDb, 0)).toThrow()
+    expect(readServerPort(getDb)).toBe(DEFAULT_PORT)
   })
 
   it('readDesktopSettings falls back to ask', () => {
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: false })
+    expect(readDesktopSettings(getDb)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: false })
   })
 
   it('writeDesktopSettings round-trips through readDesktopSettings', () => {
-    writeDesktopSettings(dir, { closeBehavior: 'minimize', rememberCloseChoice: true })
-    expect(readDesktopSettings(dir)).toEqual({
+    writeDesktopSettings(getDb, { closeBehavior: 'minimize', rememberCloseChoice: true })
+    expect(readDesktopSettings(getDb)).toEqual({
       closeBehavior: 'minimize',
       rememberCloseChoice: true
     })
@@ -123,14 +130,19 @@ describe('settings file store', () => {
 
 describe('settings routes', () => {
   let dir: string
+  let getDb: () => ReturnType<typeof initDatabase>
   let routes: ReturnType<typeof createSettingsRoutes>
 
-  beforeEach(() => {
+  beforeEach(async () => {
     dir = makeTempDir()
-    routes = createSettingsRoutes({ dataDir: dir, getCurrentPort: () => 8080 })
+    const db = initDatabase(dir)
+    await runMigrations(db)
+    getDb = () => db
+    routes = createSettingsRoutes({ getDb, dataDir: dir, getCurrentPort: () => 8080 })
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await closeDatabase()
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -150,7 +162,7 @@ describe('settings routes', () => {
     const body = (await res.json()) as Record<string, unknown>
     expect(body.port).toBe(8090)
     expect(body.restartRequired).toBe(true)
-    expect(readServerPort(dir)).toBe(8090)
+    expect(readServerPort(getDb)).toBe(8090)
   })
 
   it('PUT /server with the running port reports no restart needed', async () => {
@@ -165,7 +177,7 @@ describe('settings routes', () => {
       const res = await routes.fetch(putJson('/server', { port }))
       expect(res.status).toBe(400)
     }
-    expect(readServerPort(dir)).toBe(DEFAULT_PORT)
+    expect(readServerPort(getDb)).toBe(DEFAULT_PORT)
   })
 
   it('PUT /server rejects malformed JSON with 400', async () => {
@@ -176,7 +188,7 @@ describe('settings routes', () => {
   it('PUT /server with an external Origin is rejected', async () => {
     const res = await routes.fetch(putJson('/server', { port: 8090 }, 'http://evil.com'))
     expect(res.status).toBe(403)
-    expect(readServerPort(dir)).toBe(DEFAULT_PORT)
+    expect(readServerPort(getDb)).toBe(DEFAULT_PORT)
   })
 
   it('POST /server/restart records a restart request', async () => {
@@ -197,19 +209,22 @@ describe('settings routes', () => {
     const res = await routes.fetch(putJson('/desktop', { closeBehavior: 'quit' }))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ closeBehavior: 'quit', rememberCloseChoice: false })
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'quit', rememberCloseChoice: false })
+    expect(readDesktopSettings(getDb)).toEqual({
+      closeBehavior: 'quit',
+      rememberCloseChoice: false
+    })
   })
 
   it('PUT /desktop merges a partial rememberCloseChoice update', async () => {
     const res = await routes.fetch(putJson('/desktop', { rememberCloseChoice: true }))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ closeBehavior: 'ask', rememberCloseChoice: true })
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: true })
+    expect(readDesktopSettings(getDb)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: true })
   })
 
   it('PUT /desktop rejects unknown behaviors with 400', async () => {
     const res = await routes.fetch(putJson('/desktop', { closeBehavior: 'tray' }))
     expect(res.status).toBe(400)
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: false })
+    expect(readDesktopSettings(getDb)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: false })
   })
 })

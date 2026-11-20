@@ -1,4 +1,13 @@
 import { readFileSync } from 'node:fs'
+import {
+  BACKUP_DEFAULT_INTERVAL_HOURS,
+  BACKUP_SLOTS,
+  DEFAULT_PORT,
+  SETTINGS_KEY_BACKUP_SLOTS,
+  SETTINGS_KEY_CLOSE_BEHAVIOR,
+  SETTINGS_KEY_REMEMBER_CLOSE_CHOICE,
+  SETTINGS_KEY_SERVER_PORT
+} from '@rtwiki/shared/constants'
 import { joinPaths } from '../config/index.js'
 import { ensureStoragePragmas, getDatabaseLogger, type getDb } from './index.js'
 
@@ -348,6 +357,35 @@ export async function runMigrations(
     db.run('DROP TABLE attachments')
     db.run('ALTER TABLE attachments_with_optional_bytes RENAME TO attachments')
     db.run('CREATE INDEX idx_attachments_created_at ON attachments(created_at)')
+  })
+
+  await applyMigration(db, '012_create_settings', (db) => {
+    // Single source of truth for persistent settings. One key/value table; each
+    // value is a JSON scalar or object. Defaults are seeded here so a fresh
+    // database has every key, and the settings service validates per key on read
+    // (an invalid value resets only that key). No old JSON files are imported or
+    // deleted — they are simply left unused.
+    db.run(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `)
+    const defaultSlots = Object.fromEntries(
+      BACKUP_SLOTS.map((slot) => [
+        slot,
+        { enabled: true, intervalHours: BACKUP_DEFAULT_INTERVAL_HOURS[slot], lastRunAt: null }
+      ])
+    )
+    const defaults: Array<[string, string]> = [
+      [SETTINGS_KEY_SERVER_PORT, String(DEFAULT_PORT)],
+      [SETTINGS_KEY_CLOSE_BEHAVIOR, '"ask"'],
+      [SETTINGS_KEY_REMEMBER_CLOSE_CHOICE, 'false'],
+      [SETTINGS_KEY_BACKUP_SLOTS, JSON.stringify({ slots: defaultSlots })]
+    ]
+    for (const [key, value] of defaults) {
+      db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, value])
+    }
   })
 }
 

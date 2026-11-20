@@ -193,10 +193,10 @@ available. See [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
 | AC-089 | Closing the window minimizes to the tray instead of quitting. | Clicking the window close button hides the window; the tray icon remains and the server keeps running. |
 | AC-090 | A second launch focuses the existing window. | Starting `RTWiki.exe` while an instance runs brings the existing window forward; no second server starts. |
 | AC-091 | Autostart is opt-in and effective after login. | Enabling Start with Windows (Settings or tray) registers launch-at-login; after reboot and login the app is running without manual start. |
-| AC-092 | Window geometry persists across restarts in the portable folder. | Resizing/moving the window, quitting, and relaunching restores the geometry from `data/window-state.json`; no state is written outside the application folder. |
+| AC-092 | Window geometry persists across restarts in the portable folder. | Resizing/moving the window, quitting, and relaunching restores the geometry from the `window.geometry` row in the SQLite `settings` table; no state is written outside the application folder. |
 | AC-093 | Scheduler notifications surface as OS toasts from the desktop app. | A due study reminder shows a native OS notification while the window is minimized to the tray. |
 | AC-094 | Browser mode still works from the desktop package. | Tray "Open in Browser" and `RTWiki.exe --browser` open the default browser at the running server with full functionality. |
-| AC-095 | A saved port applies after relaunch. | Saving a valid port persists `data/server.json`; after relaunch the server listens on the new port. Invalid ports are rejected with a clear error. |
+| AC-095 | A saved port applies after relaunch. | Saving a valid port persists the `server.port` row in the SQLite `settings` table; after relaunch the server listens on the new port. Invalid ports are rejected with a clear error. |
 | AC-096 | The desktop Restart button respawns the server on the new port. | After saving a port, Restart now shuts the server down, the shell respawns the sidecar, and the window reloads on the new URL. |
 | AC-097 | Window close follows the configured behavior. | `ask` shows a dialog, `minimize` hides to the tray, `quit` exits; a Settings change applies to the next close without restart. |
 

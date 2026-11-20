@@ -15,6 +15,7 @@ import { dueSlots } from '../src/server/backup/schedule.js'
 import { closeDatabase, type Database as Db, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import { createPage, nextChildPosition } from '../src/server/repositories/page-repository.js'
+import { writeBackupSettings } from '../src/server/settings/index.js'
 import { BACKUP_PARTIAL_SUFFIX } from '../src/shared/constants/index.js'
 
 let tempDir: string
@@ -248,40 +249,34 @@ describe('listing', () => {
 
 describe('due slots', () => {
   it('treats every never-taken slot as due', () => {
-    expect(dueSlots(tempDir)).toEqual(['daily', 'weekly', 'monthly'])
+    expect(dueSlots(() => db)).toEqual(['daily', 'weekly', 'monthly'])
   })
 
   it('catches a missed run up exactly once rather than once per missed period', () => {
     // Three days closed. The daily is overdue by three days, but there is one
     // daily slot, so one backup -- not three identical files.
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString()
-    writeFileSync(
-      join(tempDir, 'backups.json'),
-      JSON.stringify({
-        slots: {
-          daily: { enabled: true, intervalHours: 24, lastRunAt: threeDaysAgo },
-          weekly: { enabled: true, intervalHours: 168, lastRunAt: threeDaysAgo },
-          monthly: { enabled: true, intervalHours: 720, lastRunAt: threeDaysAgo }
-        }
-      })
-    )
+    writeBackupSettings(() => db, {
+      slots: {
+        daily: { enabled: true, intervalHours: 24, lastRunAt: threeDaysAgo },
+        weekly: { enabled: true, intervalHours: 168, lastRunAt: threeDaysAgo },
+        monthly: { enabled: true, intervalHours: 720, lastRunAt: threeDaysAgo }
+      }
+    })
 
     // Only the daily has elapsed its 24h interval. One due slot, so one backup.
-    expect(dueSlots(tempDir)).toEqual(['daily'])
+    expect(dueSlots(() => db)).toEqual(['daily'])
   })
 
   it('ignores a disabled slot', () => {
-    writeFileSync(
-      join(tempDir, 'backups.json'),
-      JSON.stringify({
-        slots: {
-          daily: { enabled: false, intervalHours: 24, lastRunAt: null },
-          weekly: { enabled: true, intervalHours: 168, lastRunAt: null },
-          monthly: { enabled: true, intervalHours: 720, lastRunAt: null }
-        }
-      })
-    )
-    expect(dueSlots(tempDir)).toEqual(['weekly', 'monthly'])
+    writeBackupSettings(() => db, {
+      slots: {
+        daily: { enabled: false, intervalHours: 24, lastRunAt: null },
+        weekly: { enabled: true, intervalHours: 168, lastRunAt: null },
+        monthly: { enabled: true, intervalHours: 720, lastRunAt: null }
+      }
+    })
+    expect(dueSlots(() => db)).toEqual(['weekly', 'monthly'])
   })
 })
 

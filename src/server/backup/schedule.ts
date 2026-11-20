@@ -46,8 +46,8 @@ export interface BackupSchedule {
 }
 
 /** Which slots are due at `now`, ignoring whether one is already running. */
-export function dueSlots(dataDir: string, now: Date = new Date()): BackupSlot[] {
-  const settings = readBackupSettings(dataDir)
+export function dueSlots(getDb: () => Database, now: Date = new Date()): BackupSlot[] {
+  const settings = readBackupSettings(getDb)
   const due: BackupSlot[] = []
   for (const [slot, config] of Object.entries(settings.slots) as [
     BackupSlot,
@@ -90,7 +90,7 @@ export function startBackupSchedule(opts: BackupScheduleOptions): BackupSchedule
   const runDue = async (): Promise<void> => {
     if (inFlight) return inFlight
     inFlight = (async () => {
-      const due = dueSlots(dataDir)
+      const due = dueSlots(getDb)
       if (due.length === 0) return
       for (const slot of due) {
         const result = await createBackup(dataDir, getDb(), slot)
@@ -99,7 +99,7 @@ export function startBackupSchedule(opts: BackupScheduleOptions): BackupSchedule
           // is retried on the next check instead of being silently skipped for
           // a whole interval -- a schedule that quietly stops is the failure
           // this feature exists to prevent.
-          recordBackupRun(dataDir, slot)
+          recordBackupRun(getDb, slot)
         } else {
           logger.warn('Scheduled backup did not complete', {
             event: 'backup_scheduled_failed',

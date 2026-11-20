@@ -1,31 +1,36 @@
 /**
- * Portable server-managed settings (data/server.json, data/desktop.json).
+ * Persistent settings stored in the SQLite `settings` table (single source of
+ * truth). The server owns the database; callers pass `getDb` explicitly rather
+ * than reaching for a hidden global (DEVELOPMENT_STANDARDS.md §1.2, §14).
  *
- * These files live beside the database so the workspace stays portable
- * (ADR-005). The server owns all reads and writes; the desktop shell reads
- * them at boot (listening port, window close behavior) and the Settings UI
- * edits them through the /api/settings routes. Nothing here is ever logged.
+ * Each key is validated independently on read: an invalid value resets only
+ * that key to its default, leaving all others intact. The flag-file helpers at
+ * the bottom are cross-process IPC signals, not settings, and keep `dataDir`.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import {
   BACKUP_DEFAULT_INTERVAL_HOURS,
-  BACKUP_SETTINGS_FILENAME,
   BACKUP_SLOTS,
   type BackupSlot,
   CLOSE_BEHAVIORS,
   type CloseBehavior,
   DEFAULT_PORT,
-  DESKTOP_SETTINGS_FILENAME,
   MAX_BACKUP_INTERVAL_HOURS,
   MAX_USER_PORT,
   MIN_BACKUP_INTERVAL_HOURS,
   MIN_USER_PORT,
   RESTART_REQUEST_FILENAME,
-  SERVER_SETTINGS_FILENAME,
+  SETTINGS_KEY_BACKUP_SLOTS,
+  SETTINGS_KEY_CLOSE_BEHAVIOR,
+  SETTINGS_KEY_REMEMBER_CLOSE_CHOICE,
+  SETTINGS_KEY_SERVER_PORT,
   SHUTDOWN_REQUEST_FILENAME
 } from '@rtwiki/shared/constants'
 import { dirname, joinPaths } from '../config/index.js'
+import type { Database } from '../database/index.js'
+
+type GetDb = () => Database
 
 export interface ServerSettings {
   port: number
@@ -51,89 +56,84 @@ export function isCloseBehavior(value: unknown): value is CloseBehavior {
   return typeof value === 'string' && (CLOSE_BEHAVIORS as readonly string[]).includes(value)
 }
 
-function settingsPath(dataDir: string, filename: string): string {
-  if (!dataDir) throw new Error('Server settings unavailable: data directory is not configured')
-  return joinPaths(dataDir, filename)
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
-function readJsonFile(path: string): unknown {
+/** Reads one raw value; returns null when the key is absent or unreadable. */
+function readRaw(getDb: GetDb, key: string): string | null {
   try {
-    if (!existsSync(path)) return null
-    return JSON.parse(readFileSync(path, 'utf8')) as unknown
+    const row = getDb().query('SELECT value FROM settings WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined
+    return row?.value ?? null
   } catch {
     return null
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+/** Writes one value (upsert). Parameterized; no user content in SQL text. */
+function writeRaw(getDb: GetDb, key: string, value: string): void {
+  getDb().run(
+    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [key, value]
+  )
 }
 
-/** Atomic write (tmp + rename) so a crash mid-write never corrupts settings. */
-function writeJsonFile(path: string, value: unknown): void {
-  const dir = dirname(path)
-  mkdirSync(dir, { recursive: true })
-  const tmp = `${path}.tmp`
-  writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8')
-  renameSync(tmp, path)
+/** Parses a JSON value, returning null on malformed input. */
+function parseJson(raw: string | null): unknown {
+  if (raw === null) return null
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return null
+  }
 }
 
 /**
- * Effective listening port: persisted file value when valid, otherwise the
- * compiled default. A corrupt or missing file can never block startup.
+ * Effective listening port: persisted value when valid, otherwise the compiled
+ * default. A corrupt or missing row can never block startup.
  */
-export function readServerPort(dataDir: string): number {
-  if (!dataDir) return DEFAULT_PORT
-  const parsed = readJsonFile(joinPaths(dataDir, SERVER_SETTINGS_FILENAME))
-  if (isRecord(parsed) && isValidUserPort(parsed.port)) return parsed.port
-  return DEFAULT_PORT
+export function readServerPort(getDb: GetDb): number {
+  const value = parseJson(readRaw(getDb, SETTINGS_KEY_SERVER_PORT))
+  return isValidUserPort(value) ? value : DEFAULT_PORT
 }
 
 /** Persists the listening port. Throws on invalid values. */
-export function writeServerPort(dataDir: string, port: number): ServerSettings {
+export function writeServerPort(getDb: GetDb, port: number): ServerSettings {
   if (!isValidUserPort(port)) {
     throw new Error(`Port must be an integer between ${MIN_USER_PORT} and ${MAX_USER_PORT}`)
   }
-  const settings: ServerSettings = { port }
-  writeJsonFile(settingsPath(dataDir, SERVER_SETTINGS_FILENAME), settings)
-  return settings
+  writeRaw(getDb, SETTINGS_KEY_SERVER_PORT, JSON.stringify(port))
+  return { port }
 }
 
 export function defaultDesktopSettings(): DesktopSettings {
   return { closeBehavior: 'ask', rememberCloseChoice: false }
 }
 
-/** Desktop shell preferences; unknown values fall back to defaults. */
-export function readDesktopSettings(dataDir: string): DesktopSettings {
+/** Desktop shell preferences; each field falls back independently. */
+export function readDesktopSettings(getDb: GetDb): DesktopSettings {
   const fallback = defaultDesktopSettings()
-  if (!dataDir) return fallback
-  const parsed = readJsonFile(joinPaths(dataDir, DESKTOP_SETTINGS_FILENAME))
-  if (!isRecord(parsed)) return fallback
-  return {
-    closeBehavior: isCloseBehavior(parsed.closeBehavior)
-      ? parsed.closeBehavior
-      : fallback.closeBehavior,
-    rememberCloseChoice:
-      typeof parsed.rememberCloseChoice === 'boolean'
-        ? parsed.rememberCloseChoice
-        : fallback.rememberCloseChoice
-  }
+  const parsed = parseJson(readRaw(getDb, SETTINGS_KEY_CLOSE_BEHAVIOR))
+  const closeBehavior = isCloseBehavior(parsed) ? parsed : fallback.closeBehavior
+  const rememberRaw = parseJson(readRaw(getDb, SETTINGS_KEY_REMEMBER_CLOSE_CHOICE))
+  const rememberCloseChoice =
+    typeof rememberRaw === 'boolean' ? rememberRaw : fallback.rememberCloseChoice
+  return { closeBehavior, rememberCloseChoice }
 }
 
 /** Persists the desktop shell preferences. Throws on invalid values. */
-export function writeDesktopSettings(dataDir: string, settings: DesktopSettings): DesktopSettings {
+export function writeDesktopSettings(getDb: GetDb, settings: DesktopSettings): DesktopSettings {
   if (!isCloseBehavior(settings.closeBehavior)) {
     throw new Error(`closeBehavior must be one of: ${CLOSE_BEHAVIORS.join(', ')}`)
   }
   if (typeof settings.rememberCloseChoice !== 'boolean') {
     throw new Error('rememberCloseChoice must be a boolean')
   }
-  const next: DesktopSettings = {
-    closeBehavior: settings.closeBehavior,
-    rememberCloseChoice: settings.rememberCloseChoice
-  }
-  writeJsonFile(settingsPath(dataDir, DESKTOP_SETTINGS_FILENAME), next)
-  return next
+  writeRaw(getDb, SETTINGS_KEY_CLOSE_BEHAVIOR, JSON.stringify(settings.closeBehavior))
+  writeRaw(getDb, SETTINGS_KEY_REMEMBER_CLOSE_CHOICE, JSON.stringify(settings.rememberCloseChoice))
+  return { ...settings }
 }
 
 // ---------------------------------------------------------------------------
@@ -186,15 +186,13 @@ function readSlot(raw: unknown, fallback: BackupSlotSettings): BackupSlotSetting
 }
 
 /**
- * The backup schedule. A missing or corrupt file yields defaults, so a bad
- * settings file can never stop backups — the same rule the port reader follows.
- * A slot absent from the file falls back individually, so adding a slot later
- * does not require a migration of everyone's settings.
+ * The backup schedule. A missing or corrupt row yields defaults, so a bad
+ * setting can never stop backups. A slot absent from the row falls back
+ * individually, so adding a slot later needs no migration of stored settings.
  */
-export function readBackupSettings(dataDir: string): BackupSettings {
+export function readBackupSettings(getDb: GetDb): BackupSettings {
   const defaults = defaultBackupSettings()
-  if (!dataDir) return defaults
-  const parsed = readJsonFile(joinPaths(dataDir, BACKUP_SETTINGS_FILENAME))
+  const parsed = parseJson(readRaw(getDb, SETTINGS_KEY_BACKUP_SLOTS))
   if (!isRecord(parsed) || !isRecord(parsed.slots)) return defaults
   const slots = {} as Record<BackupSlot, BackupSlotSettings>
   for (const slot of BACKUP_SLOTS) {
@@ -203,7 +201,7 @@ export function readBackupSettings(dataDir: string): BackupSettings {
   return { slots }
 }
 
-export function writeBackupSettings(dataDir: string, settings: BackupSettings): BackupSettings {
+export function writeBackupSettings(getDb: GetDb, settings: BackupSettings): BackupSettings {
   const slots = {} as Record<BackupSlot, BackupSlotSettings>
   for (const slot of BACKUP_SLOTS) {
     const next = settings.slots[slot]
@@ -219,7 +217,7 @@ export function writeBackupSettings(dataDir: string, settings: BackupSettings): 
     }
   }
   const next: BackupSettings = { slots }
-  writeJsonFile(settingsPath(dataDir, BACKUP_SETTINGS_FILENAME), next)
+  writeRaw(getDb, SETTINGS_KEY_BACKUP_SLOTS, JSON.stringify(next))
   return next
 }
 
@@ -229,13 +227,22 @@ export function writeBackupSettings(dataDir: string, settings: BackupSettings): 
  * than being silently skipped for a whole interval.
  */
 export function recordBackupRun(
-  dataDir: string,
+  getDb: GetDb,
   slot: BackupSlot,
   at: Date = new Date()
 ): BackupSettings {
-  const settings = readBackupSettings(dataDir)
+  const settings = readBackupSettings(getDb)
   settings.slots[slot].lastRunAt = at.toISOString()
-  return writeBackupSettings(dataDir, settings)
+  return writeBackupSettings(getDb, settings)
+}
+
+// ---------------------------------------------------------------------------
+// Cross-process handshake flags (NOT settings — IPC signals, kept as files)
+// ---------------------------------------------------------------------------
+
+function settingsPath(dataDir: string, filename: string): string {
+  if (!dataDir) throw new Error('Server settings unavailable: data directory is not configured')
+  return joinPaths(dataDir, filename)
 }
 
 /**
