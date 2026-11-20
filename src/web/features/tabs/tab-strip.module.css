@@ -62,6 +62,14 @@
   display: none;
 }
 
+/* Guaranteed window-drag surface at the tail of the strip. Floored at 40px so
+   even a packed tab row leaves a grabbable gap (Codeg's tab-bar pattern). */
+.dragSpacer {
+  flex: 0 0 40px;
+  min-width: 40px;
+  height: 100%;
+}
+
 .tab {
   display: inline-flex;
   align-items: center;

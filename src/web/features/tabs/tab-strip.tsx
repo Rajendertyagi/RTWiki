@@ -20,6 +20,7 @@ import { IconChevronLeft, IconChevronRight, IconX } from '@tabler/icons-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
+import { isNativeMode } from '../../services/native-bridge.js'
 import classes from './tab-strip.module.css'
 import { moveInTabs, type OpenTab } from './tabs-model.js'
 
@@ -342,6 +343,7 @@ export function TabStrip({
           className={classes.tabScroller}
           ref={scrollerRef}
           data-testid="tab-scroll-container"
+          data-tauri-drag-region={isNativeMode() ? true : undefined}
         >
           <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
             {tabs.map((tab, index) => {
@@ -366,6 +368,11 @@ export function TabStrip({
         disabled={atEnd}
         onClick={scrollBy.bind(null, 1)}
       />
+      {/* Guaranteed grabbable window-drag gap. Floored at 40px so a packed tab
+          row still leaves a surface to drag the window by (Codeg pattern). */}
+      {isNativeMode() ? (
+        <div data-tauri-drag-region data-testid="tab-drag-spacer" className={classes.dragSpacer} />
+      ) : null}
       <span
         id={liveId}
         role="status"

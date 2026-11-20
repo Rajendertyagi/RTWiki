@@ -8,10 +8,10 @@
  * `LAYOUT.chromeBandHeight`, so the band cannot disagree with the offset
  * Mantine applies to the content regions.
  *
- * Dragging is handled in JS via `startDragging()` on the band's mousedown
- * (see window-chrome.tsx), not with a `data-tauri-drag-region` backdrop: that
- * attribute only applies to the element it is directly on, so a backdrop
- * behind the tab strip would leave most of the band undraggable.
+ * Dragging uses Tauri's native `data-tauri-drag-region` on the band and its
+ * content row (the attribute only applies to the element that receives the
+ * click). The tab strip carries its own drag spacer so a packed strip stays
+ * grabbable. Caption buttons sit outside the drag regions.
  */
 
 .root {
@@ -33,6 +33,12 @@
   -webkit-user-select: none;
 }
 
+.dragBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
 .titleText {
   position: relative;
   z-index: 1;
@@ -42,7 +48,6 @@
   color: var(--mantine-color-text);
   opacity: 0.65;
   white-space: nowrap;
-  pointer-events: none;
 }
 
 .tabSlot {

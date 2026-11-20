@@ -9,12 +9,12 @@
  * derives the band's height and offsets the content regions from it rather
  * than this component computing offsets by hand.
  *
- * Window dragging uses Tauri's documented manual implementation: a mousedown
- * handler on the band calls `startDragging()` for left-clicks on non-interactive
- * areas, and `toggleMaximize()` on double-click. Tabs, buttons and other
- * controls are excluded so their own interactions keep working. A backdrop with
- * `data-tauri-drag-region` cannot do this: that attribute only applies to the
- * element it is directly on, and the tab strip covers most of the band.
+ * Window dragging uses Tauri's native `data-tauri-drag-region` attribute on the
+ * band and its content row — the attribute only applies to the element that
+ * actually receives the click, so a backdrop alone leaves the row undraggable.
+ * The tab strip carries its own drag spacer (see tab-strip.tsx) so the packed
+ * strip stays grabbable. Caption buttons sit outside the drag regions.
+ * Double-click on a non-interactive part of the band toggles maximize.
  */
 
 import { invoke } from '@tauri-apps/api/core'
@@ -31,9 +31,8 @@ interface WindowChromeProps {
 
 type CloseBehavior = 'minimize' | 'quit' | 'ask'
 
-/** Elements that own their own pointer interactions and must never start a window drag. */
-const INTERACTIVE_SELECTOR =
-  'button, [role="tab"], a, input, select, textarea, [data-no-window-drag]'
+/** Interactive elements that must not trigger window drag or double-click maximize. */
+const INTERACTIVE_SELECTOR = 'button, [role="tab"], a, input, select, textarea'
 
 /** Reads the current close behaviour from data/desktop.json, never stale. */
 async function readCloseBehavior(): Promise<CloseBehavior> {
@@ -130,28 +129,41 @@ export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElemen
   }
 
   /**
-   * Tauri's `data-tauri-drag-region` only applies to the element it is directly
-   * on, so a backdrop behind the tab strip leaves most of the band undraggable.
-   * The documented manual implementation drives dragging from mousedown here,
-   * skipping anything interactive so tabs and caption buttons keep working.
+   * Native `data-tauri-drag-region` handles movement, but on the loopback remote
+   * origin the core `start_dragging` permission can be denied. This custom
+   * command is a fallback that does not need that permission. Interactive
+   * elements are excluded so tabs and caption buttons keep their clicks.
    */
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>): void => {
+    if (event.button !== 0 || event.detail !== 1) return
+    if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return
+    void invoke('start_window_drag').catch(reportFailure('start window drag'))
+  }
+
+  /** Double-click on empty chrome toggles maximize. */
+  const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
     if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return
-    const appWindow = windowRef.current
-    if (!appWindow) return
-    if (event.detail === 2) {
-      void appWindow.toggleMaximize().catch(reportFailure('toggle maximize'))
-      return
-    }
-    void appWindow.startDragging().catch(reportFailure('start dragging'))
+    void windowRef.current?.toggleMaximize().catch(reportFailure('toggle maximize'))
   }
 
   return (
-    <div className={classes.root} data-testid="window-chrome" onMouseDown={handleMouseDown}>
-      <span className={classes.titleText}>{UI_TEXT.appName}</span>
+    <div
+      className={classes.root}
+      data-testid="window-chrome"
+      onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
+    >
+      {/* Backdrop and content row are drag regions; the root is not, so the
+          caption buttons below stay outside them and keep their clicks. */}
+      <div data-tauri-drag-region className={classes.dragBackdrop} />
+      <span className={classes.titleText} data-tauri-drag-region>
+        {UI_TEXT.appName}
+      </span>
 
-      <div className={classes.tabSlot}>{tabStrip}</div>
+      <div className={classes.tabSlot} data-tauri-drag-region>
+        {tabStrip}
+      </div>
 
       <div className={classes.controls}>
         <button

@@ -159,12 +159,26 @@ on every close, so changes apply immediately with no restart:
   in-app dialog with three actions — Minimize to tray, Exit RTWiki, Cancel —
   and a "Remember my choice" checkbox. Checking it persists the chosen
   behavior through the settings API, so the shell acts directly next time.
-  If the webview cannot receive the event, the shell falls back to the native
-  prompt so the window is never left uncloseable. Quit stays on the tray menu
-  in every mode.
+  The dialog calls `close_dialog_ready` on mount so the shell knows a listener
+  exists before it emits; a prompt flag with a 10s grace ignores duplicate
+  presses and expires a lost prompt. If no listener is ready or delivery fails,
+  the shell hides to tray — the safe default that discards nothing. Quit stays
+  on the tray menu in every mode.
 - `rememberCloseChoice` (default `false`) pre-checks that box in the dialog;
   it is exposed as a checkbox in Settings → Desktop app.
 - The settings are meaningless in a browser, so the controls are disabled there.
+
+### Window dragging
+
+The frameless window is dragged by Tauri's native `data-tauri-drag-region`
+attribute placed on the elements that actually receive clicks — the chrome
+band's backdrop and content row, plus a dedicated 40px-minimum spacer at the
+tail of the tab strip so a packed tab row stays grabbable. Caption buttons sit
+outside those regions so their clicks are not swallowed. Because the webview
+loads the loopback origin, the core `start_dragging` permission can be denied;
+the chrome also calls a custom `start_window_drag` command on mousedown as a
+fallback that does not depend on that permission. Double-click on empty chrome
+toggles maximize.
 
 ### Frontend bridge and graceful degradation
 The frontend reaches native features through one guarded module

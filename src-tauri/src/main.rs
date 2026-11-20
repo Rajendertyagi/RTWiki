@@ -41,7 +41,21 @@ mod sidecar;
 /// Mirrored by the in-app close dialog in close-dialog.tsx.
 const CLOSE_REQUEST_EVENT: &str = "rtwiki:close-request";
 
+/// How long a close prompt may go unanswered before it is treated as lost and
+/// the safe default (hide to tray) is applied. Prevents a dead close button.
+const CLOSE_PROMPT_GRACE: Duration = Duration::from_secs(10);
+
+/// Outcome of trying to claim the single outstanding close prompt.
+enum ClosePromptClaim {
+  Granted,
+  /// A dialog is already up; this press is a duplicate.
+  Duplicate,
+  /// No state or a poisoned lock; fall back to the safe default.
+  Unavailable,
+}
+
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use std::process::Child;
@@ -59,6 +73,12 @@ struct ShellState {
   child: Mutex<Option<Child>>,
   quitting: Mutex<bool>,
   last_geometry_save: Mutex<Instant>,
+  /// Set by the in-app close dialog on mount; without a listener, emitting a
+  /// close request would show nothing and leave the press unanswered.
+  close_prompt_ready: AtomicBool,
+  /// Timestamp of an outstanding close prompt, used to ignore duplicate presses
+  /// and to expire a prompt that never reached a listener.
+  close_prompt_open: Mutex<Option<Instant>>,
 }
 
 fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -377,11 +397,49 @@ fn get_close_behavior(exe_dir: PathBuf) -> String {
   }
 }
 
-/// Tauri invoke command used by the in-app close dialog's "Exit" action.
-/// Quits directly so the close request is not re-raised in a loop.
+/// Starts a native window drag from the frontend. A custom command (rather than
+/// `plugin:window|start_dragging`) so it does not depend on the core window
+/// permission being granted to the loopback remote origin.
 #[tauri::command]
-fn quit_from_dialog(app: AppHandle) {
-  quit_app(&app);
+fn start_window_drag(app: AppHandle) {
+  if let Some(window) = main_window(&app) {
+    let _ = window.start_dragging();
+  }
+}
+
+/// Called by the in-app close dialog on mount. Proves a listener exists and
+/// clears any prompt flag left behind by a webview reload, so a close press is
+/// never emitted into the void. Mirrors Codeg's close-prompt handshake.
+#[tauri::command]
+fn close_dialog_ready(app: AppHandle) {
+  if let Some(state) = app.try_state::<ShellState>() {
+    state.close_prompt_ready.store(true, Ordering::Release);
+    if let Ok(mut guard) = state.close_prompt_open.lock() {
+      *guard = None;
+    }
+  }
+}
+
+/// Resolves an outstanding close prompt. Releases the prompt flag first so a
+/// persistence failure can never wedge the close button, then carries out the
+/// chosen action. `action` is "minimize", "quit" or "cancel".
+#[tauri::command]
+fn resolve_close_request(app: AppHandle, action: String) {
+  if let Some(state) = app.try_state::<ShellState>() {
+    if let Ok(mut guard) = state.close_prompt_open.lock() {
+      *guard = None;
+    }
+  }
+  match action.as_str() {
+    "minimize" => {
+      save_geometry(&app);
+      if let Some(window) = main_window(&app) {
+        let _ = window.hide();
+      }
+    }
+    "quit" => quit_app(&app),
+    _ => {}
+  }
 }
 
 fn main() {
@@ -409,7 +467,9 @@ fn main() {
     // it fresh on every click (no restart needed).
     .invoke_handler(tauri::generate_handler![
       get_close_behavior,
-      quit_from_dialog,
+      start_window_drag,
+      close_dialog_ready,
+      resolve_close_request,
     ])
     .setup(|app| {
       let browser_mode = std::env::args().any(|a| a == "--browser");
@@ -428,6 +488,8 @@ fn main() {
         quitting: Mutex::new(false),
         // Allow the first move/resize event to save immediately.
         last_geometry_save: Mutex::new(Instant::now() - geom::SAVE_THROTTLE),
+        close_prompt_ready: AtomicBool::new(false),
+        close_prompt_open: Mutex::new(None),
       });
 
       // Tray first so Quit is always reachable, even during a slow boot.
@@ -511,16 +573,36 @@ fn main() {
                 }
                 sidecar::CloseBehavior::Ask => {
                   api.prevent_close();
-                  // Let the in-app dialog handle it. If the webview cannot
-                  // receive the event, fall back to the native prompt so the
-                  // window is never left uncloseable.
-                  if app.emit(CLOSE_REQUEST_EVENT, ()).is_err() {
-                    let minimize = app
-                      .dialog()
-                      .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
-                      .title("RTWiki")
-                      .blocking_show();
-                    if minimize {
+                  let state = app.try_state::<ShellState>();
+                  let ready = state
+                    .as_ref()
+                    .map(|s| s.close_prompt_ready.load(Ordering::Acquire))
+                    .unwrap_or(false);
+                  // Claim the prompt: a second press while a dialog is up is a
+                  // duplicate; an unanswered prompt past the grace is lost.
+                  let claim = if let Some(s) = state.as_ref() {
+                    match s.close_prompt_open.lock() {
+                      Ok(mut guard) => {
+                        if guard.map(|at| at.elapsed() < CLOSE_PROMPT_GRACE).unwrap_or(false) {
+                          ClosePromptClaim::Duplicate
+                        } else {
+                          *guard = Some(Instant::now());
+                          ClosePromptClaim::Granted
+                        }
+                      }
+                      Err(_) => ClosePromptClaim::Unavailable,
+                    }
+                  } else {
+                    ClosePromptClaim::Unavailable
+                  };
+                  match claim {
+                    ClosePromptClaim::Duplicate => {} // a dialog is already open
+                    ClosePromptClaim::Granted if ready && app.emit(CLOSE_REQUEST_EVENT, ()).is_ok() => {
+                      // The in-app dialog owns this press and will resolve it.
+                    }
+                    _ => {
+                      // No listener ready, or delivery failed. Hide to tray —
+                      // the safe default that discards nothing (Codeg pattern).
                       geom::save_current(&exe_dir, &win);
                       let _ = win.hide();
                     }

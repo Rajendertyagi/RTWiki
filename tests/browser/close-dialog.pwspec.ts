@@ -74,11 +74,11 @@ test.describe('In-app close dialog', () => {
 
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { __invoked: string[] }).__invoked))
-      .toContain('plugin:window|hide')
+      .toContain('resolve_close_request')
     const invoked = await page.evaluate(
       () => (window as unknown as { __invoked: string[] }).__invoked
     )
-    expect(invoked).not.toContain('quit_from_dialog')
+    expect(invoked).toContain('close_dialog_ready')
   })
 
   test('remember saves the chosen behavior through the settings API', async ({ page }) => {
@@ -111,7 +111,6 @@ test.describe('In-app close dialog', () => {
     const invoked = await page.evaluate(
       () => (window as unknown as { __invoked: string[] }).__invoked
     )
-    expect(invoked).not.toContain('plugin:window|hide')
-    expect(invoked).not.toContain('quit_from_dialog')
+    expect(invoked).toContain('resolve_close_request')
   })
 })

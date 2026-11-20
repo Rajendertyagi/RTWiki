@@ -3,16 +3,16 @@
  *
  * The Rust shell prevents the native close and emits `rtwiki:close-request`
  * when the saved close behavior is "ask". This component shows a dialog with
- * three explicit actions and a "Remember my choice" checkbox. When checked,
- * the chosen behavior is persisted through the settings API so the shell acts
- * on it directly next time, without asking again.
+ * three explicit actions and a "Remember my choice" checkbox. On mount it calls
+ * `close_dialog_ready` so the shell knows a listener exists before it emits;
+ * without that handshake a press during boot would be lost. Every answer goes
+ * through `resolve_close_request` so the shell releases its prompt flag first.
  */
 
 import { Button, Checkbox, Group, Modal, Stack, Text } from '@mantine/core'
 import { CLOSE_REQUEST_EVENT } from '@rtwiki/shared/constants'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../config/index.js'
 import { isNativeMode } from '../services/native-bridge.js'
@@ -44,8 +44,16 @@ export function CloseDialog(): React.ReactElement | null {
       setError(null)
       setOpened(true)
     }).then((fn) => {
-      if (disposed) fn()
-      else unlisten = fn
+      if (disposed) {
+        fn()
+        return
+      }
+      unlisten = fn
+      // Handshake: prove a listener is armed and clear any stale prompt flag
+      // left by a webview reload, so a close press is never emitted into the void.
+      void invoke('close_dialog_ready').catch((err: unknown) => {
+        console.error('[close-dialog] readiness handshake failed:', err)
+      })
     })
 
     return () => {
@@ -56,18 +64,25 @@ export function CloseDialog(): React.ReactElement | null {
 
   if (!isNativeMode()) return null
 
+  const resolve = (action: 'minimize' | 'quit' | 'cancel'): void => {
+    void invoke('resolve_close_request', { action }).catch((err: unknown) => {
+      console.error('[close-dialog] failed to resolve close request:', err)
+    })
+  }
+
+  const cancel = (): void => {
+    setOpened(false)
+    resolve('cancel')
+  }
+
   const choose = (behavior: CloseChoice): void => {
     setBusy(true)
     setError(null)
     const apply = async (): Promise<void> => {
       if (remember) await updateCloseBehavior(behavior)
-      if (behavior === 'minimize') {
-        setOpened(false)
-        await getCurrentWindow().hide()
-      } else {
-        // Quit directly through Rust so the close request is not re-raised.
-        await invoke('quit_from_dialog')
-      }
+      // Rust releases the prompt flag and performs hide/quit in one command.
+      await invoke('resolve_close_request', { action: behavior })
+      setOpened(false)
     }
     void apply().catch((err: unknown) => {
       console.error('[close-dialog] failed to apply close choice:', err)
@@ -79,7 +94,7 @@ export function CloseDialog(): React.ReactElement | null {
   return (
     <Modal
       opened={opened}
-      onClose={() => setOpened(false)}
+      onClose={cancel}
       title={UI_TEXT.closeDialogTitle}
       centered
       closeOnClickOutside={!busy}
@@ -99,7 +114,7 @@ export function CloseDialog(): React.ReactElement | null {
           </Text>
         ) : null}
         <Group justify="flex-end" gap="xs">
-          <Button variant="default" onClick={() => setOpened(false)} disabled={busy}>
+          <Button variant="default" onClick={cancel} disabled={busy}>
             {UI_TEXT.closeDialogCancel}
           </Button>
           <Button variant="light" loading={busy} onClick={() => choose('minimize')}>

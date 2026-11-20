@@ -146,33 +146,44 @@ test.describe('Native window chrome', () => {
     }
   })
 
-  test('mousedown on an empty part of the band starts a window drag', async ({ page }) => {
+  test('the band and its content row are native drag regions', async ({ page }) => {
     await installNativeBridge(page)
     await page.setViewportSize(DESKTOP)
     await page.goto('/')
 
-    // Tauri's `data-tauri-drag-region` only applies to the element it is
-    // directly on, so the band uses the documented manual implementation:
-    // a mousedown handler that calls startDragging() on non-interactive areas.
-    const chrome = await box(page, '[data-testid="window-chrome"]')
-    await page.mouse.click(chrome.x + 200, chrome.y + 20)
+    // Tauri's `data-tauri-drag-region` only applies to the element that receives
+    // the click, so the attribute must be on the band AND its content row — a
+    // backdrop alone leaves the row undraggable (Codeg's title-bar pattern).
+    const chrome = page.locator('[data-testid="window-chrome"]')
+    // Backdrop + title text + tab slot are drag regions; the root is not.
+    expect(await chrome.evaluate((el) => el.hasAttribute('data-tauri-drag-region'))).toBe(false)
+    expect(await chrome.locator('[data-tauri-drag-region]').count()).toBeGreaterThanOrEqual(3)
+    // The tab strip contributes its own guaranteed drag spacer, and the
+    // scroller itself is a drag region for its empty areas.
+    await expect(page.getByTestId('tab-drag-spacer')).toHaveAttribute('data-tauri-drag-region')
+    await expect(page.getByRole('tablist')).toHaveAttribute('data-tauri-drag-region')
 
+    // The custom-command fallback fires on a non-interactive mousedown.
+    const chromeBox = await box(page, '[data-testid="window-chrome"]')
+    await page.mouse.click(chromeBox.x + 200, chromeBox.y + 20)
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { __invoked: string[] }).__invoked))
-      .toContain('plugin:window|start_dragging')
+      .toContain('start_window_drag')
   })
 
-  test('mousedown on a window control does not start a window drag', async ({ page }) => {
+  test('window controls are not inside a drag region', async ({ page }) => {
     await installNativeBridge(page)
     await page.setViewportSize(DESKTOP)
     await page.goto('/')
 
-    await page.getByRole('button', { name: 'Minimize window' }).click()
-
-    const invoked = await page.evaluate(
-      () => (window as unknown as { __invoked: string[] }).__invoked
+    // Buttons must sit outside the drag regions or their clicks are swallowed.
+    const nested = await page.evaluate(
+      () =>
+        Array.from(document.querySelectorAll('[data-testid="window-chrome"] button')).filter(
+          (button) => button.closest('[data-tauri-drag-region]') !== null
+        ).length
     )
-    expect(invoked).not.toContain('plugin:window|start_dragging')
+    expect(nested).toBe(0)
   })
 
   test('double-click on an empty part of the band toggles maximize', async ({ page }) => {
