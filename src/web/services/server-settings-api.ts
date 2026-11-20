@@ -24,6 +24,7 @@ export interface ServerPortSettings {
 
 export interface DesktopSettings {
   closeBehavior: CloseBehavior
+  rememberCloseChoice: boolean
 }
 
 async function readError(res: Response, fallback: string): Promise<string> {
@@ -64,6 +65,18 @@ export async function updateCloseBehavior(closeBehavior: CloseBehavior): Promise
     body: JSON.stringify({ closeBehavior })
   })
   if (!res.ok) throw new Error(await readError(res, 'Could not save close behavior'))
+  return (await res.json()) as DesktopSettings
+}
+
+export async function updateRememberCloseChoice(
+  rememberCloseChoice: boolean
+): Promise<DesktopSettings> {
+  const res = await fetch(`${SETTINGS_BASE}/desktop`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rememberCloseChoice })
+  })
+  if (!res.ok) throw new Error(await readError(res, 'Could not save the close-dialog preference'))
   return (await res.json()) as DesktopSettings
 }
 

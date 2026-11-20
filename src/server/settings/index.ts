@@ -33,6 +33,8 @@ export interface ServerSettings {
 
 export interface DesktopSettings {
   closeBehavior: CloseBehavior
+  /** Pre-check "Remember my choice" in the in-app close dialog. */
+  rememberCloseChoice: boolean
 }
 
 /** True for an integer in the unprivileged TCP range. */
@@ -98,7 +100,7 @@ export function writeServerPort(dataDir: string, port: number): ServerSettings {
 }
 
 export function defaultDesktopSettings(): DesktopSettings {
-  return { closeBehavior: 'ask' }
+  return { closeBehavior: 'ask', rememberCloseChoice: false }
 }
 
 /** Desktop shell preferences; unknown values fall back to defaults. */
@@ -110,7 +112,11 @@ export function readDesktopSettings(dataDir: string): DesktopSettings {
   return {
     closeBehavior: isCloseBehavior(parsed.closeBehavior)
       ? parsed.closeBehavior
-      : fallback.closeBehavior
+      : fallback.closeBehavior,
+    rememberCloseChoice:
+      typeof parsed.rememberCloseChoice === 'boolean'
+        ? parsed.rememberCloseChoice
+        : fallback.rememberCloseChoice
   }
 }
 
@@ -119,7 +125,13 @@ export function writeDesktopSettings(dataDir: string, settings: DesktopSettings)
   if (!isCloseBehavior(settings.closeBehavior)) {
     throw new Error(`closeBehavior must be one of: ${CLOSE_BEHAVIORS.join(', ')}`)
   }
-  const next: DesktopSettings = { closeBehavior: settings.closeBehavior }
+  if (typeof settings.rememberCloseChoice !== 'boolean') {
+    throw new Error('rememberCloseChoice must be a boolean')
+  }
+  const next: DesktopSettings = {
+    closeBehavior: settings.closeBehavior,
+    rememberCloseChoice: settings.rememberCloseChoice
+  }
   writeJsonFile(settingsPath(dataDir, DESKTOP_SETTINGS_FILENAME), next)
   return next
 }

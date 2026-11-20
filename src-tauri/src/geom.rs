@@ -8,9 +8,14 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tauri::{PhysicalPosition, PhysicalSize, Position, Size, WebviewWindow};
 
 const STATE_FILENAME: &str = "window-state.json";
+
+/// Minimum interval between geometry writes while the window is being moved or
+/// resized. Close/quit still save unthrottled as the authoritative final write.
+pub const SAVE_THROTTLE: Duration = Duration::from_millis(500);
 
 /// Serializable window geometry.
 #[derive(Debug, Clone, Serialize, Deserialize)]

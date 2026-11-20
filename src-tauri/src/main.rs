@@ -37,6 +37,10 @@
 mod geom;
 mod sidecar;
 
+/// Event emitted to the frontend when a window close needs confirmation.
+/// Mirrored by the in-app close dialog in close-dialog.tsx.
+const CLOSE_REQUEST_EVENT: &str = "rtwiki:close-request";
+
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -54,6 +58,7 @@ struct ShellState {
   own_sidecar: Mutex<bool>,
   child: Mutex<Option<Child>>,
   quitting: Mutex<bool>,
+  last_geometry_save: Mutex<Instant>,
 }
 
 fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -78,6 +83,25 @@ fn save_geometry(app: &AppHandle) {
   if let (Some(window), Some(state)) = (main_window(app), app.try_state::<ShellState>()) {
     geom::save_current(&state.exe_dir, &window);
   }
+}
+
+/// Persist geometry on move/resize, throttled so a drag does not write the file
+/// on every event. Close/quit remain the authoritative, unthrottled final write.
+fn maybe_save_geometry(app: &AppHandle) {
+  let Some(state) = app.try_state::<ShellState>() else {
+    return;
+  };
+  let Ok(mut last) = state.last_geometry_save.lock() else {
+    return;
+  };
+  let now = Instant::now();
+  if now.duration_since(*last) < geom::SAVE_THROTTLE {
+    return;
+  }
+  if let Some(window) = main_window(app) {
+    geom::save_current(&state.exe_dir, &window);
+  }
+  *last = now;
 }
 
 /// Safely take the child process out of state (if any) and return it.
@@ -148,19 +172,29 @@ fn quit_app(app: &AppHandle) {
 /// Use sparingly; prefer `report_error` so the UI can present actions.
 fn fatal(app: &AppHandle, message: String) -> ! {
   let handle = app.clone();
-  let _ = handle.clone().run_on_main_thread(move || {
-    handle
-      .dialog()
-      .message(message)
-      .title("RTWiki")
-      .kind(MessageDialogKind::Error)
-      .blocking_show();
-    // Use Tauri's exit for proper cleanup instead of std::process::exit
-    handle.exit(1);
-  });
-  // Fallback exit if run_on_main_thread didn't execute for some reason.
-  std::thread::sleep(Duration::from_secs(2));
-  std::process::exit(1);
+  if handle
+    .clone()
+    .run_on_main_thread(move || {
+      handle
+        .dialog()
+        .message(message)
+        .title("RTWiki")
+        .kind(MessageDialogKind::Error)
+        .blocking_show();
+      // Graceful exit only after the user has dismissed the dialog.
+      handle.exit(1);
+    })
+    .is_err()
+  {
+    // The main thread is gone, so no dialog can be shown.
+    std::process::exit(1);
+  }
+  // The main-thread closure owns shutdown. Park this worker so the process
+  // stays alive until the dialog is dismissed and exit is processed. A timed
+  // process::exit here would kill the dialog before it could be read.
+  loop {
+    std::thread::park();
+  }
 }
 
 fn autostart_enabled(app: &AppHandle) -> bool {
@@ -343,6 +377,13 @@ fn get_close_behavior(exe_dir: PathBuf) -> String {
   }
 }
 
+/// Tauri invoke command used by the in-app close dialog's "Exit" action.
+/// Quits directly so the close request is not re-raised in a loop.
+#[tauri::command]
+fn quit_from_dialog(app: AppHandle) {
+  quit_app(&app);
+}
+
 fn main() {
   tauri::Builder::default()
     .plugin(tauri_plugin_single_instance::init(
@@ -368,6 +409,7 @@ fn main() {
     // it fresh on every click (no restart needed).
     .invoke_handler(tauri::generate_handler![
       get_close_behavior,
+      quit_from_dialog,
     ])
     .setup(|app| {
       let browser_mode = std::env::args().any(|a| a == "--browser");
@@ -384,6 +426,8 @@ fn main() {
         own_sidecar: Mutex::new(false),
         child: Mutex::new(None),
         quitting: Mutex::new(false),
+        // Allow the first move/resize event to save immediately.
+        last_geometry_save: Mutex::new(Instant::now() - geom::SAVE_THROTTLE),
       });
 
       // Tray first so Quit is always reachable, even during a slow boot.
@@ -444,36 +488,47 @@ fn main() {
         // so Settings changes apply immediately without restart.
         let win = window.clone();
         window.on_window_event(move |event| {
-          if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            let app = win.app_handle();
-            let exe_dir = app
-              .try_state::<ShellState>()
-              .map(|s| s.exe_dir.clone())
-              .unwrap_or_default();
+          match event {
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+              maybe_save_geometry(win.app_handle());
+            }
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+              let app = win.app_handle();
+              let exe_dir = app
+                .try_state::<ShellState>()
+                .map(|s| s.exe_dir.clone())
+                .unwrap_or_default();
 
-            match sidecar::close_behavior(&exe_dir) {
-              sidecar::CloseBehavior::Minimize => {
-                api.prevent_close();
-                geom::save_current(&exe_dir, &win);
-                let _ = win.hide();
-              }
-              sidecar::CloseBehavior::Quit => {
-                api.prevent_close();
-                quit_app(app);
-              }
-              sidecar::CloseBehavior::Ask => {
-                api.prevent_close();
-                let minimize = app
-                  .dialog()
-                  .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
-                  .title("RTWiki")
-                  .blocking_show();
-                if minimize {
+              match sidecar::close_behavior(&exe_dir) {
+                sidecar::CloseBehavior::Minimize => {
+                  api.prevent_close();
                   geom::save_current(&exe_dir, &win);
                   let _ = win.hide();
                 }
+                sidecar::CloseBehavior::Quit => {
+                  api.prevent_close();
+                  quit_app(app);
+                }
+                sidecar::CloseBehavior::Ask => {
+                  api.prevent_close();
+                  // Let the in-app dialog handle it. If the webview cannot
+                  // receive the event, fall back to the native prompt so the
+                  // window is never left uncloseable.
+                  if app.emit(CLOSE_REQUEST_EVENT, ()).is_err() {
+                    let minimize = app
+                      .dialog()
+                      .message("Minimize RTWiki to the tray instead of quitting?\n\nYou can quit anytime from the tray menu.")
+                      .title("RTWiki")
+                      .blocking_show();
+                    if minimize {
+                      geom::save_current(&exe_dir, &win);
+                      let _ = win.hide();
+                    }
+                  }
+                }
               }
             }
+            _ => {}
           }
         });
       }

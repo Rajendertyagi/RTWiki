@@ -94,12 +94,15 @@ describe('settings file store', () => {
   })
 
   it('readDesktopSettings falls back to ask', () => {
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask' })
+    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: false })
   })
 
   it('writeDesktopSettings round-trips through readDesktopSettings', () => {
-    writeDesktopSettings(dir, { closeBehavior: 'minimize' })
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'minimize' })
+    writeDesktopSettings(dir, { closeBehavior: 'minimize', rememberCloseChoice: true })
+    expect(readDesktopSettings(dir)).toEqual({
+      closeBehavior: 'minimize',
+      rememberCloseChoice: true
+    })
   })
 
   it('requestRestart is consumed exactly once', () => {
@@ -187,19 +190,26 @@ describe('settings routes', () => {
   it('GET /desktop reports the default close behavior', async () => {
     const res = await routes.fetch(new Request('http://127.0.0.1:8080/desktop'))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ closeBehavior: 'ask' })
+    expect(await res.json()).toEqual({ closeBehavior: 'ask', rememberCloseChoice: false })
   })
 
   it('PUT /desktop persists a valid close behavior', async () => {
     const res = await routes.fetch(putJson('/desktop', { closeBehavior: 'quit' }))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ closeBehavior: 'quit' })
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'quit' })
+    expect(await res.json()).toEqual({ closeBehavior: 'quit', rememberCloseChoice: false })
+    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'quit', rememberCloseChoice: false })
+  })
+
+  it('PUT /desktop merges a partial rememberCloseChoice update', async () => {
+    const res = await routes.fetch(putJson('/desktop', { rememberCloseChoice: true }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ closeBehavior: 'ask', rememberCloseChoice: true })
+    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: true })
   })
 
   it('PUT /desktop rejects unknown behaviors with 400', async () => {
     const res = await routes.fetch(putJson('/desktop', { closeBehavior: 'tray' }))
     expect(res.status).toBe(400)
-    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask' })
+    expect(readDesktopSettings(dir)).toEqual({ closeBehavior: 'ask', rememberCloseChoice: false })
   })
 })

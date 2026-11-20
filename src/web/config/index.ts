@@ -769,6 +769,20 @@ export const UI_TEXT = {
   desktopCloseUnavailable: 'Window close options apply to the desktop app only.',
   desktopCloseSaveFailed:
     'Could not save the window close option. Your previous choice is still in effect.',
+  desktopRememberCloseChoice: 'Remember my choice',
+  desktopRememberCloseChoiceHint:
+    'Pre-select "Remember my choice" in the close dialog. Picking an option then saves it as the default.',
+  desktopRememberCloseSaveFailed:
+    'Could not save the close-dialog preference. Your previous choice is still in effect.',
+  // In-app close confirmation dialog (desktop shell only).
+  closeDialogTitle: 'Close RTWiki?',
+  closeDialogMessage:
+    'RTWiki can keep running in the tray so your pages stay open, or exit completely.',
+  closeDialogRemember: 'Remember my choice',
+  closeDialogMinimize: 'Minimize to tray',
+  closeDialogExit: 'Exit RTWiki',
+  closeDialogCancel: 'Cancel',
+  closeDialogFailed: 'Could not complete that action. Please try again.',
   // Window-control button labels (desktop shell chrome only).
   minimizeWindow: 'Minimize window',
   maximizeWindow: 'Maximize window',

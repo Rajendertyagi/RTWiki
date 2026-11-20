@@ -4,6 +4,7 @@ import { convertImportedDocument, markdownNoteTitle } from '@rtwiki/shared/impor
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content.js'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CloseDialog } from './components/close-dialog.js'
 import { pageTypeLabel } from './components/page-type-badge.js'
 import { WindowChrome } from './components/window-chrome.js'
 import { UI_TEXT } from './config/index.js'
@@ -1148,6 +1149,8 @@ export function App(): JSX.Element {
       />
 
       <ShortcutHelpModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      <CloseDialog />
 
       <ScheduleNotifierHost />
     </>

@@ -150,14 +150,21 @@ never took effect. The server therefore records the intent before it exits:
 
 ### Close behavior
 
-`data/desktop.json` (`{ closeBehavior: "ask" | "minimize" | "quit" }`) is
-managed in Settings and read by the shell on every close, so changes apply
-immediately with no restart:
+`data/desktop.json` (`{ closeBehavior: "ask" | "minimize" | "quit",
+rememberCloseChoice: boolean }`) is managed in Settings and read by the shell
+on every close, so changes apply immediately with no restart:
 
 - `minimize` hides to the tray (geometry saved); `quit` exits the app.
-- `ask` (default) shows a one-shot native dialog: OK minimizes, dismissing
-  keeps the window open. Quit stays on the tray menu in every mode.
-- The setting is meaningless in a browser, so the control is disabled there.
+- `ask` (default) emits `rtwiki:close-request` to the frontend, which shows an
+  in-app dialog with three actions — Minimize to tray, Exit RTWiki, Cancel —
+  and a "Remember my choice" checkbox. Checking it persists the chosen
+  behavior through the settings API, so the shell acts directly next time.
+  If the webview cannot receive the event, the shell falls back to the native
+  prompt so the window is never left uncloseable. Quit stays on the tray menu
+  in every mode.
+- `rememberCloseChoice` (default `false`) pre-checks that box in the dialog;
+  it is exposed as a checkbox in Settings → Desktop app.
+- The settings are meaningless in a browser, so the controls are disabled there.
 
 ### Frontend bridge and graceful degradation
 The frontend reaches native features through one guarded module

@@ -9,9 +9,12 @@
  * derives the band's height and offsets the content regions from it rather
  * than this component computing offsets by hand.
  *
- * The drag region is a sibling *behind* the row, never an ancestor of the
- * controls: Tauri's drag region claims mousedown from the region and everything
- * inside it, which would swallow the buttons' clicks.
+ * Window dragging uses Tauri's documented manual implementation: a mousedown
+ * handler on the band calls `startDragging()` for left-clicks on non-interactive
+ * areas, and `toggleMaximize()` on double-click. Tabs, buttons and other
+ * controls are excluded so their own interactions keep working. A backdrop with
+ * `data-tauri-drag-region` cannot do this: that attribute only applies to the
+ * element it is directly on, and the tab strip covers most of the band.
  */
 
 import { invoke } from '@tauri-apps/api/core'
@@ -27,6 +30,10 @@ interface WindowChromeProps {
 }
 
 type CloseBehavior = 'minimize' | 'quit' | 'ask'
+
+/** Elements that own their own pointer interactions and must never start a window drag. */
+const INTERACTIVE_SELECTOR =
+  'button, [role="tab"], a, input, select, textarea, [data-no-window-drag]'
 
 /** Reads the current close behaviour from data/desktop.json, never stale. */
 async function readCloseBehavior(): Promise<CloseBehavior> {
@@ -122,11 +129,26 @@ export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElemen
       })
   }
 
-  return (
-    <div className={classes.root} data-testid="window-chrome">
-      <div className={classes.dragLayer} data-tauri-drag-region />
+  /**
+   * Tauri's `data-tauri-drag-region` only applies to the element it is directly
+   * on, so a backdrop behind the tab strip leaves most of the band undraggable.
+   * The documented manual implementation drives dragging from mousedown here,
+   * skipping anything interactive so tabs and caption buttons keep working.
+   */
+  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return
+    if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return
+    const appWindow = windowRef.current
+    if (!appWindow) return
+    if (event.detail === 2) {
+      void appWindow.toggleMaximize().catch(reportFailure('toggle maximize'))
+      return
+    }
+    void appWindow.startDragging().catch(reportFailure('start dragging'))
+  }
 
-      {/* Non-interactive: clicks fall through to the drag layer beneath. */}
+  return (
+    <div className={classes.root} data-testid="window-chrome" onMouseDown={handleMouseDown}>
       <span className={classes.titleText}>{UI_TEXT.appName}</span>
 
       <div className={classes.tabSlot}>{tabStrip}</div>

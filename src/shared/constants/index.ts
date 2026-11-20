@@ -229,6 +229,10 @@ export const CLOSE_BEHAVIORS = ['ask', 'minimize', 'quit'] as const
 
 export type CloseBehavior = (typeof CLOSE_BEHAVIORS)[number]
 
+/// Event emitted by the desktop shell when a window close needs confirmation.
+/// The in-app close dialog listens for it; mirrored in src-tauri/src/main.rs.
+export const CLOSE_REQUEST_EVENT = 'rtwiki:close-request' as const
+
 // ---------------------------------------------------------------------------
 // Backup and restore (docs/BACKUP_PLAN.md)
 // ---------------------------------------------------------------------------

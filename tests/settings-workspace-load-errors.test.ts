@@ -54,7 +54,7 @@ const SERVER_OK: ServerPortSettings = {
   restartRequired: false
 }
 
-const DESKTOP_OK: DesktopSettings = { closeBehavior: 'minimize' }
+const DESKTOP_OK: DesktopSettings = { closeBehavior: 'minimize', rememberCloseChoice: false }
 
 let serverRead: Stubbed<ServerPortSettings>
 let desktopRead: Stubbed<DesktopSettings>

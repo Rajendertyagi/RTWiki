@@ -2,6 +2,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Group,
   Radio,
   ScrollArea,
@@ -54,6 +55,7 @@ import {
   type ServerPortSettings,
   serverBaseUrl,
   updateCloseBehavior,
+  updateRememberCloseChoice,
   updateServerPort
 } from '../../services/server-settings-api.js'
 import { setWordWrap, useEditorPreferences } from '../workspace/editor-preferences.js'
@@ -342,6 +344,19 @@ export function SettingsWorkspace({
         // swallowing this was so quiet. The user was left clicking a control
         // that appeared to work and never took effect, with nothing to say so.
         setCloseMessage(err instanceof Error ? err.message : UI_TEXT.desktopCloseSaveFailed)
+      })
+  }
+
+  const handleRememberCloseChoice = (checked: boolean): void => {
+    setCloseMessage(null)
+    void updateRememberCloseChoice(checked)
+      .then((s) => {
+        setDesktopSettings(s)
+        setCloseMessage(null)
+      })
+      .catch((err: unknown) => {
+        debugLog('error', 'error_api_failure', { code: 'update_remember_close_choice' })
+        setCloseMessage(err instanceof Error ? err.message : UI_TEXT.desktopRememberCloseSaveFailed)
       })
   }
 
@@ -689,6 +704,13 @@ export function SettingsWorkspace({
               <Text size="xs" c="dimmed">
                 {nativeMode ? UI_TEXT.desktopCloseHint : UI_TEXT.desktopCloseUnavailable}
               </Text>
+              <Checkbox
+                checked={desktopSettings?.rememberCloseChoice ?? false}
+                onChange={(event) => handleRememberCloseChoice(event.currentTarget.checked)}
+                label={UI_TEXT.desktopRememberCloseChoice}
+                description={UI_TEXT.desktopRememberCloseChoiceHint}
+                disabled={!nativeMode}
+              />
               {closeMessage ? (
                 <Text size="xs" c="red" data-testid="desktop-close-message">
                   {closeMessage}

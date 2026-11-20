@@ -39,6 +39,10 @@ const BOOT_TIMEOUT: Duration = Duration::from_secs(30);
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(8);
 
+/// Win32 CREATE_NO_WINDOW: keeps the sidecar fully headless on launch.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Window close behavior (mirrors CloseBehavior in shared constants).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseBehavior {
@@ -191,8 +195,8 @@ pub fn spawn_sidecar(exe_dir: &Path, port: u16) -> std::io::Result<Child> {
   #[cfg(windows)]
   {
     use std::os::windows::process::CommandExt;
-    // CREATE_NO_WINDOW: keep the sidecar fully headless.
-    cmd.creation_flags(0x0800_0000);
+    // Keep the sidecar fully headless.
+    cmd.creation_flags(CREATE_NO_WINDOW);
   }
   cmd.spawn()
 }
@@ -207,13 +211,13 @@ fn fetch_shutdown_token(port: u16) -> Option<String> {
   if !status_ok(&response) {
     return None;
   }
-  let marker = "\"token\"";
-  let at = response.find(marker)?;
-  let rest = response[at + marker.len()..].trim_start();
-  let rest = rest.strip_prefix(':')?.trim_start();
-  let rest = rest.strip_prefix('"')?;
-  let end = rest.find('"')?;
-  Some(rest[..end].to_string())
+  // Parse the JSON body properly instead of scanning for a quoted key: the
+  // endpoint returns `{"token": "..."}` and a hand-rolled scan breaks on
+  // escaped characters or a different key order.
+  let body = response.split_once("\r\n\r\n")?.1;
+  let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
+  let token = parsed.get("token")?.as_str()?;
+  (!token.is_empty()).then(|| token.to_string())
 }
 
 /// Asks the server to shut itself down, then waits for the child to exit
@@ -239,8 +243,9 @@ pub fn shutdown_sidecar(child: &mut Child, port: u16, exe_dir: &Path) -> bool {
       Err(_) => break,
     }
   }
-  // Fallback: the server did not exit on request — kill it.
-  if child.try_wait().is_err() || child.try_wait().unwrap_or(None).is_none() {
+  // Fallback: the server did not exit on request — kill it. A single try_wait
+  // avoids the race between two consecutive calls.
+  if !matches!(child.try_wait(), Ok(Some(_))) {
     let _ = child.kill();
   }
   // Wait for the final shutdown log event to be visible on disk.

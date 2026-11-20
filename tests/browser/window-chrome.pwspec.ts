@@ -146,26 +146,46 @@ test.describe('Native window chrome', () => {
     }
   })
 
-  test('control buttons are not descendants of a drag region', async ({ page }) => {
+  test('mousedown on an empty part of the band starts a window drag', async ({ page }) => {
     await installNativeBridge(page)
     await page.setViewportSize(DESKTOP)
     await page.goto('/')
 
-    // Tauri's drag region claims mousedown from the region and its
-    // descendants, so a button nested inside one never receives its click.
-    // Drag regions must be siblings behind the controls, never their parent.
-    const nested = await page.evaluate(
-      () =>
-        Array.from(document.querySelectorAll('[data-testid="window-chrome"] button')).filter(
-          (button) => button.closest('[data-tauri-drag-region]') !== null
-        ).length
-    )
-    expect(nested).toBe(0)
+    // Tauri's `data-tauri-drag-region` only applies to the element it is
+    // directly on, so the band uses the documented manual implementation:
+    // a mousedown handler that calls startDragging() on non-interactive areas.
+    const chrome = await box(page, '[data-testid="window-chrome"]')
+    await page.mouse.click(chrome.x + 200, chrome.y + 20)
 
-    // ...and a drag area still exists behind the row for its empty parts.
-    expect(
-      await page.locator('[data-testid="window-chrome"] [data-tauri-drag-region]').count()
-    ).toBe(1)
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __invoked: string[] }).__invoked))
+      .toContain('plugin:window|start_dragging')
+  })
+
+  test('mousedown on a window control does not start a window drag', async ({ page }) => {
+    await installNativeBridge(page)
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+
+    await page.getByRole('button', { name: 'Minimize window' }).click()
+
+    const invoked = await page.evaluate(
+      () => (window as unknown as { __invoked: string[] }).__invoked
+    )
+    expect(invoked).not.toContain('plugin:window|start_dragging')
+  })
+
+  test('double-click on an empty part of the band toggles maximize', async ({ page }) => {
+    await installNativeBridge(page)
+    await page.setViewportSize(DESKTOP)
+    await page.goto('/')
+
+    const chrome = await box(page, '[data-testid="window-chrome"]')
+    await page.mouse.dblclick(chrome.x + 200, chrome.y + 20)
+
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __invoked: string[] }).__invoked))
+      .toContain('plugin:window|toggle_maximize')
   })
 
   test('close falls back to the shell when the behaviour read fails', async ({ page }) => {

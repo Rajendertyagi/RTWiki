@@ -120,11 +120,23 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
       return c.json({ error: 'Invalid JSON' }, 400)
     }
     const closeBehavior = (body as Record<string, unknown>).closeBehavior
-    if (!isCloseBehavior(closeBehavior)) {
+    if (closeBehavior !== undefined && !isCloseBehavior(closeBehavior)) {
       return c.json({ error: 'closeBehavior must be one of: ask, minimize, quit' }, 400)
     }
+    const rememberCloseChoice = (body as Record<string, unknown>).rememberCloseChoice
+    if (rememberCloseChoice !== undefined && typeof rememberCloseChoice !== 'boolean') {
+      return c.json({ error: 'rememberCloseChoice must be a boolean' }, 400)
+    }
     try {
-      return c.json(writeDesktopSettings(opts.dataDir, { closeBehavior }))
+      // Merge with the stored values so a partial update (e.g. only the
+      // remember checkbox) cannot silently reset the close behavior.
+      const current = readDesktopSettings(opts.dataDir)
+      return c.json(
+        writeDesktopSettings(opts.dataDir, {
+          closeBehavior: closeBehavior ?? current.closeBehavior,
+          rememberCloseChoice: rememberCloseChoice ?? current.rememberCloseChoice
+        })
+      )
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
