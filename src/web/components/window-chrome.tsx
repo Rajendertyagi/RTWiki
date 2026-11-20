@@ -128,18 +128,6 @@ export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElemen
       })
   }
 
-  /**
-   * Native `data-tauri-drag-region` handles movement, but on the loopback remote
-   * origin the core `start_dragging` permission can be denied. This custom
-   * command is a fallback that does not need that permission. Interactive
-   * elements are excluded so tabs and caption buttons keep their clicks.
-   */
-  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (event.button !== 0 || event.detail !== 1) return
-    if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return
-    void invoke('start_window_drag').catch(reportFailure('start window drag'))
-  }
-
   /** Double-click on empty chrome toggles maximize. */
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
@@ -148,12 +136,7 @@ export function WindowChrome({ tabStrip }: WindowChromeProps): React.ReactElemen
   }
 
   return (
-    <div
-      className={classes.root}
-      data-testid="window-chrome"
-      onMouseDown={handleMouseDown}
-      onDoubleClick={handleDoubleClick}
-    >
+    <div className={classes.root} data-testid="window-chrome" onDoubleClick={handleDoubleClick}>
       {/* Backdrop and content row are drag regions; the root is not, so the
           caption buttons below stay outside them and keep their clicks. */}
       <div data-tauri-drag-region className={classes.dragBackdrop} />

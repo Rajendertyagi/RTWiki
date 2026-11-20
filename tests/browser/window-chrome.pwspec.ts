@@ -158,17 +158,13 @@ test.describe('Native window chrome', () => {
     // Backdrop + title text + tab slot are drag regions; the root is not.
     expect(await chrome.evaluate((el) => el.hasAttribute('data-tauri-drag-region'))).toBe(false)
     expect(await chrome.locator('[data-tauri-drag-region]').count()).toBeGreaterThanOrEqual(3)
-    // The tab strip contributes its own guaranteed drag spacer, and the
-    // scroller itself is a drag region for its empty areas.
+    // The tab strip contributes its own guaranteed drag spacer, and both the
+    // strip root and scroller are drag regions for their empty areas. Tauri's
+    // drag.js only fires for a direct click on an attributed element, so every
+    // non-interactive surface in the band must carry the attribute.
     await expect(page.getByTestId('tab-drag-spacer')).toHaveAttribute('data-tauri-drag-region')
     await expect(page.getByRole('tablist')).toHaveAttribute('data-tauri-drag-region')
-
-    // The custom-command fallback fires on a non-interactive mousedown.
-    const chromeBox = await box(page, '[data-testid="window-chrome"]')
-    await page.mouse.click(chromeBox.x + 200, chromeBox.y + 20)
-    await expect
-      .poll(() => page.evaluate(() => (window as unknown as { __invoked: string[] }).__invoked))
-      .toContain('start_window_drag')
+    await expect(page.getByTestId('tab-strip')).toHaveAttribute('data-tauri-drag-region')
   })
 
   test('window controls are not inside a drag region', async ({ page }) => {

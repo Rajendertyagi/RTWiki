@@ -2,13 +2,38 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RTWiki</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #1a1b1e;
+        color: #c9cbd1;
+        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        user-select: none;
+      }
+      .status { text-align: center; }
+      .spinner {
+        width: 22px;
+        height: 22px;
+        margin: 0 auto 12px;
+        border: 2px solid #3a3c42;
+        border-top-color: #6c8cff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <p>
-      RTWiki desktop shell placeholder. The application window loads the local
-      server at <code>http://127.0.0.1:8080</code>; this file exists only so the
-      Tauri build has a frontend directory and is never shown to the user.
-    </p>
+    <div class="status">
+      <div class="spinner"></div>
+      <div>Starting RTWiki…</div>
+    </div>
   </body>
 </html>

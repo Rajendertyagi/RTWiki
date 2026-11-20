@@ -324,7 +324,12 @@ export function TabStrip({
   }, [])
 
   return (
-    <div className={classes.strip} role="presentation">
+    <div
+      className={classes.strip}
+      role="presentation"
+      data-testid="tab-strip"
+      data-tauri-drag-region={isNativeMode() ? true : undefined}
+    >
       <TabScrollButton
         direction="prev"
         overflow={overflow}

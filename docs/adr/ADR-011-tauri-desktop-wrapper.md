@@ -171,14 +171,14 @@ on every close, so changes apply immediately with no restart:
 ### Window dragging
 
 The frameless window is dragged by Tauri's native `data-tauri-drag-region`
-attribute placed on the elements that actually receive clicks — the chrome
-band's backdrop and content row, plus a dedicated 40px-minimum spacer at the
-tail of the tab strip so a packed tab row stays grabbable. Caption buttons sit
-outside those regions so their clicks are not swallowed. Because the webview
-loads the loopback origin, the core `start_dragging` permission can be denied;
-the chrome also calls a custom `start_window_drag` command on mousedown as a
-fallback that does not depend on that permission. Double-click on empty chrome
-toggles maximize.
+attribute placed on every element that can receive a non-interactive click —
+the chrome band's backdrop, title text and tab slot, plus the tab strip root,
+its scroller and a dedicated 40px-minimum spacer at the tail so a packed tab
+row stays grabbable. Tauri's `drag.js` only fires for a direct click on an
+attributed element, so each surface needs the attribute; caption buttons sit
+outside those regions so their clicks are not swallowed. The loopback remote
+capability grants `core:window:allow-start-dragging`, which this mechanism
+uses. Double-click on empty chrome toggles maximize.
 
 ### Frontend bridge and graceful degradation
 The frontend reaches native features through one guarded module

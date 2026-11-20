@@ -79,6 +79,8 @@ struct ShellState {
   /// Timestamp of an outstanding close prompt, used to ignore duplicate presses
   /// and to expire a prompt that never reached a listener.
   close_prompt_open: Mutex<Option<Instant>>,
+  /// Guards the one-time reveal of the main window after the app page loads.
+  window_revealed: AtomicBool,
 }
 
 fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -97,6 +99,23 @@ fn show_main(app: &AppHandle) {
     let _ = window.show();
     let _ = window.set_focus();
   }
+}
+
+/// Reveals the main window exactly once, after the real app page has loaded.
+/// Both the page-load handler and the safety timeout call this; the atomic
+/// guard makes the first caller win and later ones no-ops.
+fn reveal_main_window(app: &AppHandle) {
+  let Some(state) = app.try_state::<ShellState>() else {
+    return;
+  };
+  if state
+    .window_revealed
+    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+    .is_err()
+  {
+    return;
+  }
+  show_main(app);
 }
 
 fn save_geometry(app: &AppHandle) {
@@ -379,9 +398,26 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
       if let Some(state) = ui_app.try_state::<ShellState>() {
         if let Some(saved) = geom::load(&state.exe_dir) { geom::apply(&window, &saved); }
       }
-      let _ = window.show();
-      let _ = window.set_focus();
+      // The server is healthy now. Navigate to the real app; the window stays
+      // hidden until the page-load handler confirms the app finished loading.
+      let url: tauri::Url = match sidecar::base_url(shell_port(&ui_app)).parse() {
+        Ok(url) => url,
+        Err(err) => {
+          log::error!("Invalid server URL: {err}");
+          return;
+        }
+      };
+      if let Err(err) = window.navigate(url) {
+        log::error!("Failed to navigate to the app: {err}");
+      }
     }
+  });
+  // Safety net: if the page-load event never arrives (webview issue, cached
+  // page, navigation race), still reveal the window so the app is usable.
+  let safety_app = app.clone();
+  std::thread::spawn(move || {
+    std::thread::sleep(Duration::from_secs(5));
+    reveal_main_window(&safety_app);
   });
 }
 
@@ -394,16 +430,6 @@ fn get_close_behavior(exe_dir: PathBuf) -> String {
     sidecar::CloseBehavior::Minimize => "minimize".to_string(),
     sidecar::CloseBehavior::Quit    => "quit".to_string(),
     sidecar::CloseBehavior::Ask     => "ask".to_string(),
-  }
-}
-
-/// Starts a native window drag from the frontend. A custom command (rather than
-/// `plugin:window|start_dragging`) so it does not depend on the core window
-/// permission being granted to the loopback remote origin.
-#[tauri::command]
-fn start_window_drag(app: AppHandle) {
-  if let Some(window) = main_window(&app) {
-    let _ = window.start_dragging();
   }
 }
 
@@ -467,7 +493,6 @@ fn main() {
     // it fresh on every click (no restart needed).
     .invoke_handler(tauri::generate_handler![
       get_close_behavior,
-      start_window_drag,
       close_dialog_ready,
       resolve_close_request,
     ])
@@ -490,6 +515,7 @@ fn main() {
         last_geometry_save: Mutex::new(Instant::now() - geom::SAVE_THROTTLE),
         close_prompt_ready: AtomicBool::new(false),
         close_prompt_open: Mutex::new(None),
+        window_revealed: AtomicBool::new(false),
       });
 
       // Tray first so Quit is always reachable, even during a slow boot.
@@ -516,15 +542,13 @@ fn main() {
       tray.build(app)?;
 
       if !browser_mode {
-        // Created hidden with the configured loopback URL; revealed after
-        // /health answers so the user never sees a connection error.
-        let url: tauri::Url = sidecar::base_url(port)
-          .parse()
-          .map_err(|e| format!("Invalid server URL: {e}"))?;
+        // Created hidden on the bundled placeholder page. The loopback URL is
+        // navigated to only after /health answers, so WebView2 never renders a
+        // connection-error page during the sidecar's boot gap.
         let builder = tauri::WebviewWindowBuilder::new(
           app,
           "main",
-          tauri::WebviewUrl::External(url),
+          tauri::WebviewUrl::default(),
         )
         .title("RTWiki")
         .inner_size(1280.0, 860.0)
@@ -536,6 +560,16 @@ fn main() {
           let scheme_ok = url.scheme() == "http";
           let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
           scheme_ok && host_ok
+        })
+        // Reveal only when the real app page (not the bundled loading page)
+        // finishes loading, so the user never sees a connection-error page.
+        .on_page_load(|window, payload| {
+          use tauri::webview::PageLoadEvent;
+          if matches!(payload.event(), PageLoadEvent::Finished)
+            && payload.url().host_str() == Some("127.0.0.1")
+          {
+            reveal_main_window(window.app_handle());
+          }
         });
 
         // Strip the native title bar on Windows so the frontend renders its
