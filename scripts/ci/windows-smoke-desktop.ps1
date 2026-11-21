@@ -187,15 +187,42 @@ try {
   $askBody = '{"closeBehavior":"ask","rememberCloseChoice":false}'
   Invoke-WebRequest "$Base/api/settings/desktop" -Method PUT -Body $askBody `
     -Headers @{ 'Content-Type' = 'application/json' } -UseBasicParsing | Out-Null
+
+  # The frontend arms the handshake on mount. On a loaded CI runner that mount
+  # can outlast the shell's 1.5s retry window, after which the shell hides to
+  # tray and no dialog ever appears. Wait for the explicit readiness log before
+  # clicking X so the assertion tests the dialog, not mount timing.
+  $shellLog = Join-Path $appDir 'logs/rtwiki-shell.log'
+  $readyDeadline = (Get-Date).AddSeconds(30)
+  $handshakeArmed = $false
+  while ((Get-Date) -lt $readyDeadline) {
+    if ((Test-Path $shellLog -PathType Leaf) -and
+        (Select-String -Path $shellLog -SimpleMatch 'close_dialog_ready invoked' -Quiet)) {
+      $handshakeArmed = $true
+      break
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  if (-not $handshakeArmed) { throw 'A2: frontend close_dialog_ready handshake never armed' }
+  Write-Host 'A2 HANDSHAKE OK: frontend armed the close dialog listener'
+
   $p.Refresh()
   if (-not $p.CloseMainWindow()) { throw 'A2: could not send WM_CLOSE to the shell' }
-  Start-Sleep -Seconds 2
+
+  # Poll the UI Automation tree instead of a single fixed-delay lookup: tree
+  # population is not deterministic on a shared runner.
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
   $uiRoot = [System.Windows.Automation.AutomationElement]::RootElement
   $dialogCondition = New-Object System.Windows.Automation.PropertyCondition(
     [System.Windows.Automation.AutomationElement]::NameProperty, 'Close RTWiki?')
-  $dialog = $uiRoot.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $dialogCondition)
+  $dialogDeadline = (Get-Date).AddSeconds(15)
+  $dialog = $null
+  while ((Get-Date) -lt $dialogDeadline) {
+    $dialog = $uiRoot.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $dialogCondition)
+    if ($dialog) { break }
+    Start-Sleep -Milliseconds 250
+  }
   if (-not $dialog) { throw 'A2: close dialog did not appear when X was clicked' }
   Write-Host 'A2 DIALOG OK: close dialog appeared when X was clicked'
   # Dismiss with Cancel so the shell stays resident for the remaining checks.
