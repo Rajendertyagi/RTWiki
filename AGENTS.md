@@ -145,7 +145,7 @@ Mandatory rules:
 - Comments that explain **decisions**, not obvious syntax; no swallowed exceptions.
 - No runtime CDN dependency; no secrets in source control.
 
-The `2000 ms` autosave debounce and `50 MB` attachment limit are **provisional centralized defaults** — define them once in configuration and never repeat the values across the codebase. Both are real: `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` and `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` in `src/shared/constants/index.ts`. The `50 MB` figure is the **attachment** limit only; the configuration defines no import-package size cap, and an agent must not invent one.
+The `2000 ms` autosave debounce and `100 MB` attachment limit are **provisional centralized defaults** — define them once in configuration and never repeat the values across the codebase. Both are real: `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` and `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` in `src/shared/constants/index.ts`. The `100 MB` figure is the **attachment** limit only; the separate `50 MB` `DOCUMENT_SIZE_WARNING_BYTES` is an advisory document warning threshold, not a limit. The configuration defines no import-package size cap, and an agent must not invent one.
 
 ## 9. Security Protocol
 

@@ -222,8 +222,8 @@ and policy, because a regression here would be silent.
 
 **Unchanged:** images are still served inline and still carry no disposition — an image is not a
 program, and this decision does not touch [ADR-013](ADR-013-image-attachments.md). SVG remains refused
-for images. A signature-less document (`.txt`, `.md`, `.html`) still has no servable bytes and still
-returns 404 on both routes; its text is reachable through View text.
+for images. A signature-less document (`.txt`, `.md`, `.html`, `.csv`) still has no servable bytes and
+still returns 404 on both routes; its text is reachable through View text.
 
 ## Risks
 

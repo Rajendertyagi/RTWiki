@@ -72,8 +72,8 @@ describe('document upload failure messages', () => {
 
   it('names the limit, and says document rather than image', () => {
     // The defect: a 60 MB PDF was refused with `imageTooLarge`, so the user was
-    // told "That image is larger than the 50 MB limit."
-    expect(UI_TEXT.documentTooLarge).toContain('50 MB')
+    // told "That image is larger than the 100 MB limit." The ceiling is now 100 MB.
+    expect(UI_TEXT.documentTooLarge).toContain('100 MB')
     expect(UI_TEXT.documentTooLarge).toMatch(/document/i)
     expect(UI_TEXT.documentTooLarge).not.toMatch(/image/i)
   })

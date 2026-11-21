@@ -9,13 +9,15 @@ import { parseOffice } from 'officeparser'
 import {
   type AcceptedDocumentFormat,
   acceptedDocumentFormatByExt,
+  acceptedDocumentFormatFor,
   normaliseMimeType,
   signaturelessDocumentFormatFor
 } from '../../shared/attachments/document-formats.js'
 import {
   DOCUMENT_MAX_TABLE_CELLS,
   DOCUMENT_MAX_UNCOMPRESSED_BYTES,
-  DOCUMENT_MAX_ZIP_ENTRIES
+  DOCUMENT_MAX_ZIP_ENTRIES,
+  DOCUMENT_PARSE_TIMEOUT_MS
 } from '../../shared/constants/index.js'
 
 /**
@@ -28,28 +30,43 @@ import {
  * authority, and the recorded type is the allowlist's name for it, so a
  * mislabelled upload is stored as what it actually is.
  *
- * `.txt`, `.md` and `.html` have no signature. `officeparser` refuses them, and
- * no library can do better. For those the reported extension is consulted, and
- * because that is a claim rather than evidence they are marked `signatureless` in
- * the allowlist and are **never served back as a document** — their text is
- * extracted and stored as page content instead. The distinction is the whole
- * reason the two paths are separate.
+ * `.txt`, `.md`, `.html` and `.csv` have no signature. `officeparser` refuses
+ * them, and no library can do better. For those the reported extension is
+ * consulted, and because that is a claim rather than evidence they are marked
+ * `signatureless` in the allowlist and are **never served back as a document** —
+ * their text is extracted and stored as page content instead. The distinction is
+ * the whole reason the two paths are separate.
+ *
+ * LaTeX is the one format with no signature that is still a *structured document*:
+ * its reported type supplies a hint to `officeparser` (which parses it), rather
+ * than sending it down RTWiki's own text reader.
  */
 
 /** Why an upload was refused. */
-export type DocumentRejectionReason = 'unsupported_type' | 'empty' | 'extract_failed'
+export type DocumentRejectionReason =
+  | 'unsupported_type'
+  | 'empty'
+  | 'extract_failed'
+  /** An old OLE/CFB Office file (.doc/.xls/.ppt), which needs a save-as to a modern format. */
+  | 'legacy_office'
+  /**
+   * An encrypted OOXML file (.docx/.xlsx/.pptx). It is also a CFB container, so it
+   * must be told apart from a legacy binary before the save-as message is shown.
+   */
+  | 'password_protected'
 
 /**
  * Why a recognised container could not be opened.
  *
- * A diagnostic, not a fourth rejection reason: both values produce the same user-facing
- * refusal, because both are answered by "this file could not be opened". The distinction
- * earns its place by making the resource guard **observable** — without it, "a bomb was
- * refused" and "the parser did not recognise my hand-built fixture" are indistinguishable,
- * and a test asserting only that a bomb is refused would pass whether or not any limit was
- * ever configured.
+ * A diagnostic, not a fourth rejection reason: every value produces the same user-facing
+ * refusal, because each is answered by "this file could not be opened". The distinction
+ * earns its place by making the resource guards **observable** — without it, "a bomb was
+ * refused", "a parse ran past its deadline" and "the parser did not recognise my hand-built
+ * fixture" are indistinguishable, and a test asserting only that a file is refused would
+ * pass whether or not any limit was ever configured. `timeout` is the wall-clock guard's
+ * signal; the other two come from the parser's own structured error.
  */
-export type DocumentRefusalDetail = 'limit_exceeded' | 'malformed'
+export type DocumentRefusalDetail = 'limit_exceeded' | 'malformed' | 'timeout'
 
 /**
  * How a container parse ended.
@@ -79,6 +96,8 @@ export interface DocumentResourceLimits {
   maxUncompressedBytes: number
   maxZipEntries: number
   maxTableCells: number
+  /** Wall-clock ceiling for one parse, in ms. Overridable so tests can prove the abort. */
+  parseTimeoutMs: number
 }
 
 /**
@@ -91,7 +110,8 @@ export interface DocumentResourceLimits {
 export const DOCUMENT_RESOURCE_LIMITS: Readonly<DocumentResourceLimits> = Object.freeze({
   maxUncompressedBytes: DOCUMENT_MAX_UNCOMPRESSED_BYTES,
   maxZipEntries: DOCUMENT_MAX_ZIP_ENTRIES,
-  maxTableCells: DOCUMENT_MAX_TABLE_CELLS
+  maxTableCells: DOCUMENT_MAX_TABLE_CELLS,
+  parseTimeoutMs: DOCUMENT_PARSE_TIMEOUT_MS
 })
 
 /**
@@ -167,6 +187,13 @@ export async function inspectDocumentUpload(
 ): Promise<DocumentInspection> {
   if (bytes.length === 0) return { ok: false, reason: 'empty' }
 
+  // OLE/CFB containers are ambiguous: an old .doc/.xls/.ppt needs a save-as, but
+  // a password-protected .docx/.xlsx/.pptx is already a modern format and needs
+  // its password removed. Both are reported as `cfb` by `file-type`, so ask
+  // officeparser which one this is before choosing the user-facing message.
+  const cfbKind = await classifyCfbContainer(bytes, limits)
+  if (cfbKind) return { ok: false, reason: cfbKind }
+
   // ## Order matters, and the naive order is a vulnerability
   //
   // Checking the reported type first would mean a PDF renamed to `.txt` is
@@ -177,7 +204,7 @@ export async function inspectDocumentUpload(
   // reached when the bytes turned out *not* to be a recognisable document. That
   // inverts the obvious order deliberately, and it is the reason a mislabelled
   // upload is stored as what it actually is.
-  const parsed = await tryParseContainer(bytes, limits)
+  const parsed = await tryParseContainer(bytes, limits, reportedType)
 
   if (parsed.outcome === 'parsed') {
     const format = acceptedDocumentFormatByExt(parsed.type)
@@ -224,6 +251,34 @@ export async function inspectDocumentUpload(
 }
 
 /**
+ * The options every `parseOffice` call in this module shares.
+ *
+ * Factored out so the CFB classifier below asks the parser the exact same question
+ * the main parse does — same in-process PDF mode, same ceilings, same deadline —
+ * and the two cannot drift apart. `hint` is the only thing that varies per call.
+ */
+function parseOfficeOptions(
+  limits: Readonly<DocumentResourceLimits>,
+  signal: AbortSignal,
+  hint?: string | null
+): Record<string, unknown> {
+  return {
+    ...(hint ? { fileType: hint } : {}),
+    // officeparser's default `separateProcess: true` never completes its child-process
+    // handshake under Bun, so a PDF parse hangs forever. In-process pdf.js works; the
+    // `abortSignal` cancels work that yields to the event loop, though it cannot
+    // interrupt a synchronous CPU-bound parse (see the characterization test).
+    pdfParserConfig: { separateProcess: false },
+    decompressionLimits: {
+      maxUncompressedBytes: limits.maxUncompressedBytes,
+      maxZipEntries: limits.maxZipEntries,
+      maxTableCells: limits.maxTableCells
+    },
+    abortSignal: signal
+  }
+}
+
+/**
  * Identifies a real container and reads its text, or reports why it could not.
  *
  * The three outcomes are distinguished because the caller must treat them
@@ -242,7 +297,8 @@ export async function inspectDocumentUpload(
  */
 async function tryParseContainer(
   bytes: Uint8Array,
-  limits: Readonly<DocumentResourceLimits>
+  limits: Readonly<DocumentResourceLimits>,
+  reportedType?: string | null
 ): Promise<ContainerParse> {
   // The format is detected here, by `file-type`, and handed to the parser as a
   // hint rather than letting the parser detect it for itself.
@@ -259,17 +315,23 @@ async function tryParseContainer(
   // `bun run test:compiled-images`, which parses a PDF three times in a row in the
   // real executable.
   const detected = await detectContainerFormat(bytes)
+  // A format with no magic number (LaTeX) cannot be identified from the bytes. For
+  // those, fall back to a hint from the reported type — but only for a format the
+  // allowlist accepts as a served document, and only when the bytes are plausibly
+  // text, so a binary file renamed to .tex is not decoded as LaTeX.
+  const hint = detected ?? reportedTypeHint(bytes, reportedType)
+
+  // A wall-clock backstop for the parse. officeparser's own PDF time limit applies only
+  // when pdf.js runs in a separate process, which is disabled below, so this timer is
+  // what stops a hostile document from hanging the server. `abortSignal` is a top-level
+  // parseOffice option; the timer is cleared in `finally` so a fast parse never leaves a
+  // pending abort behind.
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), limits.parseTimeoutMs)
 
   let ast: unknown
   try {
-    ast = await parseOffice(bytes, {
-      ...(detected ? { fileType: detected } : {}),
-      decompressionLimits: {
-        maxUncompressedBytes: limits.maxUncompressedBytes,
-        maxZipEntries: limits.maxZipEntries,
-        maxTableCells: limits.maxTableCells
-      }
-    } as never)
+    ast = await parseOffice(bytes, parseOfficeOptions(limits, controller.signal, hint) as never)
   } catch (err) {
     // The parser's message names the format it guessed at. That is not something
     // to show a user and must never be echoed back as an error.
@@ -279,6 +341,8 @@ async function tryParseContainer(
     // refuse every image in the application.
     if (!looksLikeAContainer(bytes)) return { outcome: 'not_a_document' }
     return { outcome: 'refused', detail: refusalDetail(err) }
+  } finally {
+    clearTimeout(timeout)
   }
   return { outcome: 'parsed', type: detectOfficeType(ast), text: await readText(ast) }
 }
@@ -289,13 +353,39 @@ async function tryParseContainer(
  * Read from the structured `officeIssue` the parser attaches to its errors, and read
  * defensively: the property is not part of any type RTWiki can import, and a value of
  * an unexpected shape must answer "malformed" rather than throw inside an error path.
+ *
+ * An abort is checked first: officeparser rejects with an error whose `name` is
+ * 'AbortError' (a DOMException or a plain Error), deliberately unwrapped so callers can
+ * recognise cancellation. It is our own deadline firing, not a parse failure, so it is
+ * reported as `timeout` rather than falling through to `malformed`. Exported so the
+ * mapping can be asserted directly — the timer itself cannot be relied on to fire
+ * during synchronous pdf.js work (see the characterization test in document-detect.test.ts).
  */
-function refusalDetail(err: unknown): DocumentRefusalDetail {
+export function refusalDetail(err: unknown): DocumentRefusalDetail {
+  if (typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'AbortError')
+    return 'timeout'
   if (typeof err !== 'object' || err === null) return 'malformed'
   const issue = (err as { officeIssue?: unknown }).officeIssue
   if (typeof issue !== 'object' || issue === null) return 'malformed'
   const code = (issue as { code?: unknown }).code
   return typeof code === 'string' && LIMIT_EXCEEDED_CODES.has(code) ? 'limit_exceeded' : 'malformed'
+}
+
+/**
+ * The raw format key `file-type` reports from the bytes, or `null`.
+ *
+ * Shared by the container hint and the legacy-Office check so the prefix is read
+ * and the detector called the same way in both places.
+ */
+async function detectBytesFormat(bytes: Uint8Array): Promise<string | null> {
+  const prefix = bytes.subarray(0, DETECTION_PREFIX_BYTES)
+  if (prefix.length === 0) return null
+  try {
+    const detected = await fileTypeFromBuffer(prefix)
+    return detected?.ext ?? null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -305,15 +395,72 @@ function refusalDetail(err: unknown): DocumentRefusalDetail {
  * format the allowlist has not already agreed to.
  */
 async function detectContainerFormat(bytes: Uint8Array): Promise<string | null> {
-  const prefix = bytes.subarray(0, DETECTION_PREFIX_BYTES)
-  if (prefix.length === 0) return null
+  const ext = await detectBytesFormat(bytes)
+  return ext !== null && acceptedDocumentFormatByExt(ext)?.signatureless === false ? ext : null
+}
+
+/**
+ * The codes officeparser uses when an encrypted document needs a password it was
+ * not given. Both mean "this file is password-protected", whatever the format.
+ */
+const PASSWORD_CODES = new Set(['PASSWORD_REQUIRED', 'PASSWORD_INCORRECT'])
+
+/**
+ * Classifies an OLE/CFB container, or returns `null` when the bytes are not CFB.
+ *
+ * A CFB container is ambiguous: it is either an old binary Office file
+ * (.doc/.xls/.ppt) or a *modern* Office file (.docx/.xlsx/.pptx) locked with a
+ * password. Both are reported as `cfb` by `file-type`, so the bytes alone cannot
+ * tell them apart. officeparser can: it recognises the encryption streams and
+ * refuses with `PASSWORD_REQUIRED` before doing any decryption work, while a
+ * legacy binary is refused as an unsupported `cfb` type. Asking it is the
+ * authoritative answer and avoids duplicating its container parsing here.
+ */
+async function classifyCfbContainer(
+  bytes: Uint8Array,
+  limits: Readonly<DocumentResourceLimits>
+): Promise<'password_protected' | 'legacy_office' | null> {
+  if ((await detectBytesFormat(bytes)) !== 'cfb') return null
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), limits.parseTimeoutMs)
   try {
-    const detected = await fileTypeFromBuffer(prefix)
-    if (!detected) return null
-    return acceptedDocumentFormatByExt(detected.ext)?.signatureless === false ? detected.ext : null
-  } catch {
-    return null
+    await parseOffice(bytes, parseOfficeOptions(limits, controller.signal) as never)
+    // A CFB container that actually parsed is not expected; treat it as legacy
+    // rather than accepting a format RTWiki has no allowlist entry for.
+    return 'legacy_office'
+  } catch (err) {
+    const code = (err as { officeIssue?: { code?: unknown } })?.officeIssue?.code
+    return typeof code === 'string' && PASSWORD_CODES.has(code)
+      ? 'password_protected'
+      : 'legacy_office'
+  } finally {
+    clearTimeout(timeout)
   }
+}
+
+/**
+ * The officeparser hint for a format `file-type` could not identify from the bytes.
+ *
+ * Two families need this. LaTeX has no magic number at all. The macro-enabled and
+ * template OOXML files are ZIPs whose content-type override `file-type` does not
+ * read, so it reports a bare `zip` — which is not on the allowlist and yields no
+ * hint. In both cases the reported media type names a format the allowlist already
+ * accepts, and officeparser resolves the variant to its base parser itself.
+ *
+ * The hint comes from a claim rather than from the bytes, so it is gated: a
+ * text-based format requires plausible text, and a container requires a container
+ * signature. A binary upload renamed to `.tex` is therefore not decoded as LaTeX.
+ */
+function reportedTypeHint(
+  bytes: Uint8Array,
+  reportedType: string | null | undefined
+): string | null {
+  const format = acceptedDocumentFormatFor(normaliseMimeType(reportedType))
+  // Signature-less formats go down RTWiki's own text reader, never through the
+  // parser, so they must not produce a hint here.
+  if (!format || format.signatureless) return null
+  if (format.ext === 'tex') return looksLikeText(bytes) ? 'tex' : null
+  return looksLikeAContainer(bytes) ? format.ext : null
 }
 
 /**

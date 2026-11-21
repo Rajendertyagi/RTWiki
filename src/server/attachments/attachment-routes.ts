@@ -1,4 +1,5 @@
 import {
+  DOCUMENT_SIZE_WARNING_BYTES,
   PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES,
   PROVISIONAL_MAX_IMAGE_PIXELS
 } from '@rtwiki/shared/constants'
@@ -33,7 +34,16 @@ export interface AttachmentRouteOptions {
   logger: Logger
   /** Bounded by tests and by the default test instance. */
   available?: boolean
+  /**
+   * Advisory warning threshold for documents. Defaults to the shared constant;
+   * overridable so a test can exercise the warning without a 50 MB fixture.
+   */
+  documentSizeWarningBytes?: number
 }
+
+/** The user-facing warning for a large-but-accepted document. */
+export const DOCUMENT_SIZE_WARNING_MESSAGE =
+  'This document is large. It was added, but it may be slow to open and search.'
 
 /** Why an upload was refused. */
 type RejectionReason =
@@ -51,6 +61,10 @@ type RejectionReason =
    * do about it.
    */
   | 'extract_failed'
+  /** An old .doc/.xls/.ppt file: the user can fix this by saving in a modern format. */
+  | 'legacy_office'
+  /** An encrypted modern Office file: the user can fix this by removing the password. */
+  | 'password_protected'
 
 /**
  * The message a rejection produces.
@@ -82,6 +96,18 @@ const REJECTION_MESSAGES: Record<RejectionReason, { status: 400 | 413 | 415; err
     // Both are fixed by opening the file and saving it again.
     error:
       'That document could not be opened. It may be damaged, or too large to read — try opening it and saving a fresh copy.'
+  },
+  legacy_office: {
+    status: 415,
+    // Old OLE/CFB Office files are recognised but not accepted. Unlike a generic
+    // "unsupported type", this tells the user exactly how to make the file usable.
+    error: 'Save as .docx, .xlsx or .pptx and try again.'
+  },
+  password_protected: {
+    status: 415,
+    // Encrypted modern Office files are also CFB, but telling these users to
+    // "save as .docx" would be wrong — the file already is one.
+    error: 'This file is password-protected. Remove the password and try again.'
   }
 }
 
@@ -143,6 +169,7 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
   const routes = new Hono<{ Variables: AttachmentRouteVariables }>()
   const { getDb, logger } = opts
   const available = opts.available ?? true
+  const warningBytes = opts.documentSizeWarningBytes ?? DOCUMENT_SIZE_WARNING_BYTES
 
   // Applies the stricter document policy when a route asked for one.
   //
@@ -186,6 +213,18 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     const accepted = await acceptUpload(bytes, file.type, logger)
     if (!accepted.ok) return reject(c, accepted.reason, logger)
 
+    // A large document is still accepted — this is advisory, not a limit. Log it
+    // for the operator and tell the user in the response; the client turns the
+    // code into a non-blocking notification.
+    const oversized =
+      accepted.upload.kind === 'document' && bytes.length > warningBytes
+    if (oversized) {
+      logger.warn('Large document accepted', {
+        event: 'document_size_warning',
+        bytes: bytes.length
+      })
+    }
+
     const id = crypto.randomUUID()
     const originalName = normaliseOriginalName(file.name)
     /*
@@ -216,7 +255,20 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
         checksum: checksumOf(bytes),
         data: keepsBytes ? bytes : null
       })
-      return c.json({ attachment: toResponse(record) }, 201)
+      return c.json(
+        {
+          attachment: toResponse(record),
+          ...(oversized
+            ? {
+                warning: {
+                  code: 'document_size_warning',
+                  message: DOCUMENT_SIZE_WARNING_MESSAGE
+                }
+              }
+            : {})
+        },
+        201
+      )
     } catch (err) {
       logger?.error('Attachment write failed', {
         event: 'attachment_write_failed',
@@ -406,6 +458,17 @@ async function acceptUpload(
       code: document.detail ?? 'unknown'
     })
     return { ok: false, reason: 'extract_failed' }
+  }
+  if (!document.ok && document.reason === 'legacy_office') {
+    // An old .doc/.xls/.ppt is a real container RTWiki recognises but cannot read.
+    // Refuse here rather than falling through to the image path, which would replace
+    // the actionable "save as" message with a generic "unsupported type".
+    return { ok: false, reason: 'legacy_office' }
+  }
+  if (!document.ok && document.reason === 'password_protected') {
+    // An encrypted modern Office file needs its own message, not the legacy
+    // save-as one — and must not fall through to the image path either.
+    return { ok: false, reason: 'password_protected' }
   }
   if (document.ok) {
     return {

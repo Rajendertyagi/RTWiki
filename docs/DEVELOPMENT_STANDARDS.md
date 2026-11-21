@@ -83,7 +83,7 @@ const config = {
 };
 ```
 
-**Provisional defaults** — The autosave debounce interval (`2000 ms`) and maximum attachment size (`50 MB`) are provisional defaults. They are defined once in the centralized configuration object and may be adjusted after MVP usability testing. Changing them must not require modifying multiple modules.
+**Provisional defaults** — The autosave debounce interval (`2000 ms`) and maximum attachment size (`100 MB`, raised from 50 MB) are provisional defaults. A separate `50 MB` document size warning is advisory, not a limit. They are defined once in the centralized configuration object and may be adjusted after MVP usability testing. Changing them must not require modifying multiple modules.
 
 All modules import from this object. No module reads environment variables directly.
 

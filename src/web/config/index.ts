@@ -410,7 +410,7 @@ export const UI_TEXT = {
   imageLabel: 'Image',
   imageUploadFailedTitle: 'Image not added',
   imageUploadFailed: 'That image could not be added. Try a PNG, JPEG, GIF, WebP, AVIF or BMP file.',
-  imageTooLarge: 'That image is larger than the 50 MB limit.',
+  imageTooLarge: 'That image is larger than the 100 MB limit.',
   // Multi-block diagram pages
   diagramAddBlockLabel: 'Add diagram',
   diagramEditBlockLabel: 'Edit this diagram',
@@ -431,7 +431,13 @@ export const UI_TEXT = {
   documentLabel: 'Document',
   documentUploadFailedTitle: 'Document not added',
   documentUploadFailed: 'That document could not be added.',
-  documentTooLarge: 'That document is larger than the 50 MB limit.',
+  /** Old .doc/.xls/.ppt files: the user can fix this by saving in a modern format. */
+  legacyOfficeFormat: 'Save as .docx, .xlsx or .pptx and try again.',
+  /** Encrypted modern Office files: the user can fix this by removing the password. */
+  passwordProtectedFormat: 'This file is password-protected. Remove the password and try again.',
+  /** Title of the non-blocking notice for a large-but-accepted document. */
+  documentSizeWarningTitle: 'Large document',
+  documentTooLarge: 'That document is larger than the 100 MB limit.',
   /** The three ways to open an attached document. Visible text, not icon-only. */
   documentViewTextLabel: 'View text',
   documentViewLabel: 'View',

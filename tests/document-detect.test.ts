@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { deflateRawSync } from 'node:zlib'
 import {
   DOCUMENT_RESOURCE_LIMITS,
   DOCUMENT_TEXT_MAX_CHARS,
   decodeText,
   inspectDocumentUpload,
-  looksLikeText
+  looksLikeText,
+  refusalDetail
 } from '../src/server/attachments/document-detect.js'
 import {
   ACCEPTED_DOCUMENT_EXTENSIONS,
@@ -127,6 +130,84 @@ const REAL_DOCX = zip([
   ]
 ])
 
+/**
+ * A minimal ODF Draw document. `file-type` reads the `mimetype` entry to identify
+ * it, and officeparser reads `content.xml` for the text.
+ */
+const REAL_ODG = zip([
+  ['mimetype', 'application/vnd.oasis.opendocument.graphics'],
+  [
+    'content.xml',
+    '<?xml version="1.0" encoding="UTF-8"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.2"><office:body><office:drawing><draw:page draw:name="Page 1"><draw:frame><draw:text-box><text:p>Photosynthesis diagram label.</text:p></draw:text-box></draw:frame></draw:page></office:drawing></office:body></office:document-content>'
+  ]
+])
+
+/**
+ * Minimal macro-enabled OOXML files. Each differs from its base document only in
+ * the main part's content-type override; officeparser reads them through the base
+ * format's parser, leaving the macros unread.
+ */
+const REAL_DOCM = zip([
+  [
+    '[Content_Types].xml',
+    '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.ms-word.document.macroEnabled.12"/></Types>'
+  ],
+  [
+    '_rels/.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+  ],
+  [
+    'word/document.xml',
+    '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Macro enabled Word text.</w:t></w:r></w:p></w:body></w:document>'
+  ]
+])
+
+const REAL_XLSM = zip([
+  [
+    '[Content_Types].xml',
+    '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.ms-excel.sheet.macroEnabled.12"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'
+  ],
+  [
+    '_rels/.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'
+  ],
+  [
+    'xl/workbook.xml',
+    '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>'
+  ],
+  [
+    'xl/_rels/workbook.xml.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'
+  ],
+  [
+    'xl/worksheets/sheet1.xml',
+    '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Macro enabled Excel text.</t></is></c></row></sheetData></worksheet>'
+  ]
+])
+
+const REAL_PPTM = zip([
+  [
+    '[Content_Types].xml',
+    '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.ms-powerpoint.presentation.macroEnabled.12"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>'
+  ],
+  [
+    '_rels/.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'
+  ],
+  [
+    'ppt/presentation.xml',
+    '<?xml version="1.0"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>'
+  ],
+  [
+    'ppt/_rels/presentation.xml.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'
+  ],
+  [
+    'ppt/slides/slide1.xml',
+    '<?xml version="1.0"?><p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Macro enabled PowerPoint text.</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'
+  ]
+])
+
 /** A real, minimal one-page PDF with extractable text. */
 function makePdf(body: string): Uint8Array {
   const content = `BT /F1 18 Tf 60 700 Td (${body}) Tj ET`
@@ -159,9 +240,9 @@ describe('accepted document formats', () => {
     }
   })
 
-  it('marks exactly the signature-less trio as signature-less', () => {
+  it('marks exactly the signature-less formats as signature-less', () => {
     const signatureless = ACCEPTED_DOCUMENT_FORMATS.filter((f) => f.signatureless).map((f) => f.ext)
-    expect(signatureless.sort()).toEqual(['html', 'md', 'txt'])
+    expect(signatureless.sort()).toEqual(['csv', 'html', 'md', 'txt'])
   })
 
   it('never serves a signature-less format as a document', () => {
@@ -358,6 +439,251 @@ describe('document inspection', () => {
 })
 
 /**
+ * PDF failure cases: a document with no text, a damaged document, and a large one.
+ *
+ * These are the three outcomes a PDF upload can have that the happy-path test above
+ * does not cover. The first two are deliberately asymmetric: a PDF with no text is
+ * still a valid, storable document, while a PDF that cannot be opened is a refusal.
+ * Conflating them would either throw away scanned documents or index broken ones.
+ */
+describe('PDF failure cases', () => {
+  it('accepts a textless PDF with empty text rather than refusing it', async () => {
+    // A scanned PDF with no OCR layer is structurally valid but yields no text.
+    // `readText()` deliberately returns '' for that case — it is a normal outcome,
+    // not a failure — so the document is still stored. Refusing it would discard
+    // every scanned page a user uploads.
+    const result = await inspectDocumentUpload(makePdf(''))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.text).toBe('')
+    expect(result.format.ext).toBe('pdf')
+    expect(result.format.mime).toBe('application/pdf')
+  })
+
+  it('refuses a truncated PDF with a clear reason, without hanging', async () => {
+    // The header survives the truncation, so `file-type` still recognises a PDF and
+    // the parser is asked to open it. It throws; because the bytes still look like a
+    // container, that is a refusal (`extract_failed`, detail `malformed`) rather than
+    // "not a document". It must also come back quickly — a damaged file must never
+    // turn into a hang.
+    const truncated = REAL_PDF.subarray(0, Math.floor(REAL_PDF.byteLength / 2))
+    const start = performance.now()
+    const result = await inspectDocumentUpload(truncated)
+    const elapsed = performance.now() - start
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('extract_failed')
+      expect(result.detail).toBe('malformed')
+    }
+    expect(elapsed).toBeLessThan(2_000)
+  })
+
+  it('parses a large PDF without hanging and extracts its text', async () => {
+    // A 50 MB fixture is impractical in a unit test, so this exercises the same
+    // in-process pdf.js path at ~1 MB: one content stream holding 200k text-show
+    // operators. It must finish well inside the budget with text actually read —
+    // a large document that hangs or silently yields nothing is the failure here.
+    const large = makePdf('word '.repeat(200_000))
+    expect(large.byteLength).toBeGreaterThan(500_000)
+    const start = performance.now()
+    const result = await inspectDocumentUpload(large)
+    const elapsed = performance.now() - start
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.format.ext).toBe('pdf')
+    expect(result.text).toContain('word')
+    expect(elapsed).toBeLessThan(5_000)
+  }, 10_000)
+})
+
+/**
+ * The formats added beyond the original set: OpenDocument Draw, the macro-enabled
+ * and template Office variants, CSV, LaTeX and old OLE/CFB Office files.
+ */
+describe('additional accepted document formats', () => {
+  it('parses an OpenDocument Draw file from its bytes', async () => {
+    const result = await inspectDocumentUpload(REAL_ODG)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.format.ext).toBe('odg')
+    expect(result.format.signatureless).toBe(false)
+    expect(result.text).toContain('Photosynthesis diagram label')
+  })
+
+  it('offers macro-enabled and template files on the upload screen', () => {
+    // The picker's accept attribute is built from the same allowlist, so adding a
+    // format there must make it selectable — detection alone is not enough.
+    for (const ext of [
+      'docm', 'dotx', 'dotm', 'xlsm', 'xltx', 'xltm', 'pptm', 'potx', 'potm', 'ppsx', 'ppsm'
+    ]) {
+      expect(acceptedDocumentFormatByExt(ext), ext).not.toBeNull()
+      expect(DOCUMENT_FILE_ACCEPT_ATTRIBUTE, ext).toContain(`.${ext}`)
+    }
+  })
+
+  it('parses a Word macro-enabled document', async () => {
+    const result = await inspectDocumentUpload(
+      REAL_DOCM,
+      'application/vnd.ms-word.document.macroEnabled.12'
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Stored as its base format: officeparser reads the variant through the base parser.
+    expect(result.format.ext).toBe('docx')
+    expect(result.text).toContain('Macro enabled Word text')
+  })
+
+  it('parses an Excel macro-enabled document', async () => {
+    const result = await inspectDocumentUpload(
+      REAL_XLSM,
+      'application/vnd.ms-excel.sheet.macroEnabled.12'
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.format.ext).toBe('xlsx')
+    expect(result.text).toContain('Macro enabled Excel text')
+  })
+
+  it('parses a PowerPoint macro-enabled document', async () => {
+    const result = await inspectDocumentUpload(
+      REAL_PPTM,
+      'application/vnd.ms-powerpoint.presentation.macroEnabled.12'
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.format.ext).toBe('pptx')
+    expect(result.text).toContain('Macro enabled PowerPoint text')
+  })
+
+  it('parses REAL macro-enabled files from the oletools test corpus', async () => {
+    // The fixtures above are hand-built. These are genuine Office files with a
+    // real VBA project, so they prove the hand-made ones were not hiding a
+    // problem with the extra parts a real macro file carries.
+    for (const [name, mime, expectedExt, expectedText] of [
+      [
+        'real-macro.docm',
+        'application/vnd.ms-word.document.macroEnabled.12',
+        'docx',
+        'harmless test document'
+      ],
+      [
+        'real-macro.xlsm',
+        'application/vnd.ms-excel.sheet.macroEnabled.12',
+        'xlsx',
+        'Long live open source'
+      ]
+    ] as Array<[string, string, string, string]>) {
+      const bytes = new Uint8Array(readFileSync(join(import.meta.dir, 'fixtures', name)))
+      const result = await inspectDocumentUpload(bytes, mime)
+      expect(result.ok, name).toBe(true)
+      if (!result.ok) continue
+      expect(result.format.ext, name).toBe(expectedExt)
+      expect(result.text, name).toContain(expectedText)
+    }
+  })
+
+  it('reads CSV through RTWiki text reader, not officeparser', async () => {
+    const result = await inspectDocumentUpload(
+      enc('name,value\nphotosynthesis,light\nrespiration,energy\n'),
+      'text/csv'
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.format.ext).toBe('csv')
+    expect(result.format.signatureless).toBe(true)
+    expect(result.text).toContain('photosynthesis')
+  })
+
+  it('parses LaTeX through officeparser with a hint from the reported type', async () => {
+    const tex = enc(
+      '\\documentclass{article}\n\\begin{document}\nPhotosynthesis converts light to chemical energy.\n\\end{document}\n'
+    )
+    const result = await inspectDocumentUpload(tex, 'application/x-tex')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // A plain .tex buffer has no magic number, so officeparser cannot auto-detect
+    // it. Reaching a served `tex` format proves the reported-type hint was passed
+    // and the parser reported its own AST type as `tex`.
+    expect(result.format.ext).toBe('tex')
+    expect(result.format.signatureless).toBe(false)
+    expect(result.text).toContain('Photosynthesis converts light')
+  })
+
+  it('extracts real content from a structured .tex document', async () => {
+    // Acceptance alone would pass even if officeparser returned an empty AST.
+    // This asserts the parser actually read the title, sections, prose and math.
+    const tex = `\\documentclass{article}
+\\usepackage{amsmath}
+\\title{Photosynthesis Notes}
+\\author{A Student}
+\\begin{document}
+\\maketitle
+\\section{Introduction}
+Photosynthesis converts light energy into chemical energy in chloroplasts.
+\\subsection{The Calvin Cycle}
+The Calvin cycle fixes carbon dioxide using the enzyme RuBisCO.
+\\section{Equation}
+The overall reaction is $6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2$.
+\\end{document}
+`
+    const result = await inspectDocumentUpload(enc(tex), 'application/x-tex')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.text).toContain('Photosynthesis Notes')
+    expect(result.text).toContain('A Student')
+    expect(result.text).toContain('Introduction')
+    expect(result.text).toContain('The Calvin Cycle')
+    expect(result.text).toContain('RuBisCO')
+    expect(result.text).toContain('6CO_2 + 6H_2O')
+  })
+
+  it('refuses an old OLE/CFB Office file with a distinct reason', async () => {
+    // The CFB signature is enough: file-type reports `cfb`, which is not on the
+    // allowlist, and the user gets a save-as message rather than "unsupported".
+    const cfb = new Uint8Array([
+      0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+      ...new Array(504).fill(0)
+    ])
+    expect(await inspectDocumentUpload(cfb)).toEqual({ ok: false, reason: 'legacy_office' })
+  })
+
+  it('refuses a plain, unrelated zip rather than accepting it or hanging', async () => {
+    // A zip with no document markers is not a document. It must be refused, and
+    // quickly — adding macro/template support must not turn every zip into a
+    // parse attempt that can hang. (Overleaf/zip support is deliberately absent.)
+    const plainZip = zip([
+      ['hello.txt', 'just a plain text file inside a zip'],
+      ['notes.md', '# nothing special']
+    ])
+    const start = performance.now()
+    const result = await inspectDocumentUpload(plainZip, 'application/zip')
+    const elapsed = performance.now() - start
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('extract_failed')
+    expect(elapsed).toBeLessThan(2_000)
+  })
+
+  it('tells a password-protected .docx/.xlsx apart from a legacy .doc', async () => {
+    // Both are CFB containers, so file-type reports `cfb` for each. A naive
+    // "CFB means legacy" check would tell these users to save as .docx — which
+    // they already have. These are real files encrypted with msoffcrypto-tool;
+    // officeparser recognises the encryption streams and asks for a password.
+    for (const name of [
+      'encrypted-docx.bin',
+      'encrypted-xlsx.bin',
+      // A real-world .docx from the oletools test corpus, not one we generated.
+      'real-encrypted.docx'
+    ]) {
+      const bytes = new Uint8Array(
+        readFileSync(join(import.meta.dir, 'fixtures', name))
+      )
+      const result = await inspectDocumentUpload(bytes, 'application/octet-stream')
+      expect(result, name).toEqual({ ok: false, reason: 'password_protected' })
+    }
+  })
+})
+
+/**
  * Resource ceilings, and what they refuse.
  *
  * ## Why this suite exists
@@ -405,7 +731,8 @@ describe('document resource limits', () => {
   const TIGHT = Object.freeze({
     maxUncompressedBytes: 1024,
     maxZipEntries: 10_000,
-    maxTableCells: 1_000_000
+    maxTableCells: 1_000_000,
+    parseTimeoutMs: DOCUMENT_RESOURCE_LIMITS.parseTimeoutMs
   })
 
   it('refuses a container that would expand past the uncompressed ceiling', async () => {
@@ -504,4 +831,98 @@ describe('document resource limits', () => {
     // rather than arbitrary.
     expect(DOCUMENT_MAX_UNCOMPRESSED_BYTES).toBeGreaterThan(1_000_000)
   })
+})
+
+/**
+ * PDF parsing configuration and the wall-clock guard.
+ *
+ * ## Why the in-process mode is pinned
+ *
+ * officeparser's default `pdfParserConfig.separateProcess: true` never completes its
+ * child-process handshake under Bun, so a PDF parse hangs forever. The fix is to run
+ * pdf.js in-process. A source-level assertion guards against a dependency upgrade
+ * silently restoring the default and reintroducing the hang.
+ *
+ * ## What the abort guard can and cannot do
+ *
+ * The `AbortController` timer is a real backstop for work that yields to the event loop
+ * (worker startup, OCR, an already-expired deadline). It is **not** a hard execution-time
+ * limit: pdf.js's in-process text extraction of a CPU-bound PDF runs synchronously, so a
+ * timer cannot fire until it ends. The characterization test below records that honestly
+ * rather than claiming a protection the guard does not provide.
+ */
+describe('PDF parse configuration and deadline', () => {
+  it('pins pdf.js to in-process mode so an upgrade cannot reintroduce the Bun hang', () => {
+    const source = readFileSync(
+      join(import.meta.dir, '..', 'src', 'server', 'attachments', 'document-detect.ts'),
+      'utf8'
+    )
+    // Strip comments so the assertion cannot be satisfied by prose explaining it.
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    expect(code).toContain('separateProcess: false')
+  })
+
+  it('parses a real PDF in well under two seconds', async () => {
+    // The regression guard: with the default child-process mode this never returned.
+    const start = performance.now()
+    const result = await inspectDocumentUpload(REAL_PDF)
+    const elapsed = performance.now() - start
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.text).toContain('Krebs')
+    expect(elapsed).toBeLessThan(2_000)
+  })
+
+  it('maps an AbortError to a clear timeout refusal', () => {
+    // officeparser rejects a cancelled parse with an error whose `name` is 'AbortError'
+    // (a DOMException or a plain Error). Both forms must become `timeout`, never
+    // `malformed`, so the user is told the parse was cut short rather than that the
+    // file was broken. Asserted directly because the timer cannot be relied on to fire
+    // during synchronous pdf.js work (see the characterization test below).
+    expect(refusalDetail({ name: 'AbortError' })).toBe('timeout')
+    expect(refusalDetail(new DOMException('aborted', 'AbortError'))).toBe('timeout')
+    // The existing mappings still hold — the abort check must not swallow them.
+    expect(refusalDetail({ officeIssue: { code: 'ZIP_SIZE_LIMIT_EXCEEDED' } })).toBe('limit_exceeded')
+    expect(refusalDetail({ officeIssue: { code: 'SOMETHING_ELSE' } })).toBe('malformed')
+  })
+
+  /** A one-page PDF whose content stream holds `n` text-show operators. */
+  function makeHugeStreamPdf(n: number): Uint8Array {
+    const content = 'BT /F1 8 Tf 10 10 Td (x) Tj ET\n'.repeat(n)
+    const objects = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 4 0 R >>',
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+    ]
+    let pdf = '%PDF-1.4\n'
+    const offsets: number[] = []
+    objects.forEach((object, index) => {
+      offsets.push(pdf.length)
+      pdf += `${index + 1} 0 obj\n${object}\nendobj\n`
+    })
+    const xref = pdf.length
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+    for (const offset of offsets) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
+    return new Uint8Array(Buffer.from(pdf, 'latin1'))
+  }
+
+  it('cannot interrupt a CPU-bound PDF parse — the guard is not a hard time limit', async () => {
+    // Honest characterization, not a claim of protection. A 100k-operator stream takes
+    // well over a second of synchronous pdf.js work; a 50 ms deadline cannot fire while
+    // that work blocks the event loop, so the parse completes. The guard still bounds
+    // work that yields (see the expired-deadline test above), but a hostile CPU-bound
+    // document would need a worker/child process to be cut short — which is exactly what
+    // Bun cannot do here. Recorded so nobody mistakes this for a hard execution limit.
+    const hard = makeHugeStreamPdf(100_000)
+    const start = performance.now()
+    const result = await inspectDocumentUpload(hard, 'application/pdf', {
+      ...DOCUMENT_RESOURCE_LIMITS,
+      parseTimeoutMs: 50
+    })
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeGreaterThan(50)
+    expect(result.ok).toBe(true)
+  }, 15_000)
 })

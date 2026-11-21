@@ -60,7 +60,19 @@ export const MARKDOWN_IMPORT_MAX_FILE_BYTES = 1024 * 1024
 // keystroke so typing never rebuilds the sandboxed document per keystroke.
 export const PREVIEW_REBUILD_DEBOUNCE_MS = 800 as const
 export const PROVISIONAL_AUTOSAVE_DEBOUNCE_MS = 2000 as const
-export const PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024
+export const PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES = 100 * 1024 * 1024
+
+/**
+ * Size above which an accepted document is flagged with a warning.
+ *
+ * This is advisory, not a limit: a document over it is still stored and indexed.
+ * It is one number so the threshold cannot drift between the server that decides
+ * to warn and the client that shows the message. The hard upload ceiling
+ * (`PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES`) is 100 MB, so this 50 MB warning is
+ * observable for documents between 50 MB and 100 MB: they pass the body limit and
+ * are stored, but still carry the advisory warning.
+ */
+export const DOCUMENT_SIZE_WARNING_BYTES = 50 * 1024 * 1024
 
 /**
  * Ceiling on the **uncompressed** size of a document's ZIP container.
@@ -109,6 +121,19 @@ export const DOCUMENT_MAX_ZIP_ENTRIES = 10_000
  * so a genuinely enormous sheet still yields usable output.
  */
 export const DOCUMENT_MAX_TABLE_CELLS = 1_000_000
+
+/**
+ * Wall-clock ceiling, in milliseconds, for a single document parse.
+ *
+ * The decompression ceilings above bound what a container may *expand* into, but a
+ * PDF read by pdf.js in the host process (`pdfParserConfig.separateProcess: false`)
+ * has no CPU-time limit of its own. This is a backstop: an `AbortController` timer ends
+ * a parse that runs past it when the work yields to the event loop. It is deliberately
+ * generous — far above any real note — and overridable in tests through
+ * `DocumentResourceLimits.parseTimeoutMs`. It is not a hard execution-time limit: a
+ * CPU-bound synchronous parse cannot be interrupted by a timer (see document-detect.test.ts).
+ */
+export const DOCUMENT_PARSE_TIMEOUT_MS = 30_000
 // Ceiling on total pixels (width x height) of an uploaded image, enforced at
 // ingest from the file's own header. This bounds what the browser must decode
 // when the note is opened: 50 MP is about 8000x6000, which comfortably admits a

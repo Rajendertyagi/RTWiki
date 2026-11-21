@@ -70,7 +70,7 @@ Files on disk with no row are **left alone**. They are unreferenced, so they are
 
 - **The blast radius of database corruption grows.** Today a corrupt database costs the notes, but the image files survive on disk as ordinary files. In the database, one damaged file takes both. Mitigated by `integrity_check` on startup, which is instant even over 100 MB of blobs, and by single-file backups — but it is a genuine reduction in fault isolation, and it is the strongest argument against this decision.
 - Streaming costs roughly 10× the time of a single read per image. Accepted to bound memory.
-- A blob is capped by `SQLITE_MAX_LENGTH`, which is 1,000,000,000 bytes in this build (verified: 900 MB accepted, 1.5 GB refused). The 50 MB attachment ceiling is four orders of magnitude below it, so the existing limit already prevents this from mattering.
+- A blob is capped by `SQLITE_MAX_LENGTH`, which is 1,000,000,000 bytes in this build (verified: 900 MB accepted, 1.5 GB refused). The 100 MB attachment ceiling (raised from 50 MB) is well below it, so the existing limit already prevents this from mattering.
 - `auto_vacuum` moves pages rather than repacking them, and SQLite's documentation states it can make fragmentation worse. For an application that writes each image once and rarely deletes, this is acceptable; an application that churned would want periodic `VACUUM` instead.
 
 **Neutral**

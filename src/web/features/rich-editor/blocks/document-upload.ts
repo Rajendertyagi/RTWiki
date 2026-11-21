@@ -59,7 +59,27 @@ async function postDocument(file: File): Promise<string> {
   const payload: unknown = await response.json().catch(() => null)
   const url = readAttachmentUrl(payload)
   if (!url) throw new Error(UI_TEXT.documentUploadFailed)
+  // A large document is still stored; the server's advisory warning is shown
+  // without interrupting the insert.
+  const warning = readWarning(payload)
+  if (warning) {
+    notifications.show({
+      title: UI_TEXT.documentSizeWarningTitle,
+      message: warning,
+      color: 'yellow',
+      autoClose: 8000
+    })
+  }
   return url
+}
+
+/** The advisory message from a successful upload, if the server sent one. */
+function readWarning(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const warning = (payload as { warning?: unknown }).warning
+  if (typeof warning !== 'object' || warning === null) return null
+  const message = (warning as { message?: unknown }).message
+  return typeof message === 'string' && message.length > 0 ? message : null
 }
 
 /**
@@ -73,6 +93,8 @@ async function postDocument(file: File): Promise<string> {
  */
 function messageForStatus(status: number, code: string | null): string {
   if (code === 'unsupported_type') return UI_TEXT.attachmentUnsupportedType
+  if (code === 'legacy_office') return UI_TEXT.legacyOfficeFormat
+  if (code === 'password_protected') return UI_TEXT.passwordProtectedFormat
   if (status === 413) return UI_TEXT.documentTooLarge
   return UI_TEXT.documentUploadFailed
 }

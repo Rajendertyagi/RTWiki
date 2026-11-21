@@ -111,15 +111,17 @@ describe('format policy is internally consistent', () => {
       // It must be a real entry, not a new format smuggled in beside one.
       expect(ACCEPTED_DOCUMENT_FORMATS).toContain(resolved as never)
     }
-    expect(acceptedFormatForExtension('.csv')).toBeNull()
+    // CSV is now accepted through the signature-less text path, so it resolves to
+    // a real allowlist entry rather than being an unsupported format.
+    expect(acceptedFormatForExtension('.csv')?.mime).toBe('text/csv')
     expect(acceptedFormatForExtension('.tsv')).toBeNull()
     expect(acceptedFormatForExtension('.svg')).toBeNull()
   })
 
   it('records the deliberately unsupported formats with a reason', () => {
     // A rejection of an unsupported type is a correct outcome, not a gap. The reason is
-    // recorded so nobody re-adds .csv because a dependency once mentioned it.
-    for (const ext of ['.csv', '.tsv', '.svg']) {
+    // recorded so nobody re-adds .tsv because a dependency once mentioned it.
+    for (const ext of ['.tsv', '.svg']) {
       const entry = UNSUPPORTED_IMPORT_FORMATS.find((f) => f.ext === ext)
       expect(entry, `${ext} must have a recorded reason`).toBeDefined()
       expect((entry?.reason ?? '').length).toBeGreaterThan(10)
@@ -139,6 +141,6 @@ describe('format policy is internally consistent', () => {
       // then refused.
       expect(acceptedDocumentFormatFor(format.mime)).not.toBeNull()
     }
-    expect(expected).toEqual(['text/plain', 'text/markdown', 'text/html'])
+    expect(expected).toEqual(['text/plain', 'text/markdown', 'text/html', 'text/csv'])
   })
 })

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
@@ -11,7 +11,11 @@ import { contentDisposition } from '../src/server/attachments/content-dispositio
 import { closeDatabase, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import type { LogContext, Logger } from '../src/server/logging/index.js'
-import { ATTACHMENTS_DIR } from '../src/shared/constants/index.js'
+import {
+  ATTACHMENTS_DIR,
+  DOCUMENT_SIZE_WARNING_BYTES,
+  PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES
+} from '../src/shared/constants/index.js'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 
@@ -98,6 +102,32 @@ const REAL_DOCX = zip([
     'word/document.xml',
     '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Enzyme kinetics notes</w:t></w:r></w:p></w:body></w:document>'
   ]
+])
+
+/** A macro-enabled Word document: the main part's content type is the only difference from REAL_DOCX. */
+const REAL_DOCM = zip([
+  [
+    '[Content_Types].xml',
+    '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.ms-word.document.macroEnabled.12"/></Types>'
+  ],
+  [
+    '_rels/.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+  ],
+  [
+    'word/document.xml',
+    '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Macro enabled Word text.</w:t></w:r></w:p></w:body></w:document>'
+  ]
+])
+
+const REAL_CSV = enc('name,value\nphotosynthesis,light\n')
+const REAL_TEX = enc(
+  '\\documentclass{article}\n\\begin{document}\nPhotosynthesis converts light to chemical energy.\n\\end{document}\n'
+)
+/** The leading bytes of an OLE/CFB container, as an old .doc/.xls/.ppt begins. */
+const OLD_OFFICE = new Uint8Array([
+  0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+  ...new Array(504).fill(0)
 ])
 
 function makePdf(body: string): Uint8Array {
@@ -187,11 +217,11 @@ afterAll(async () => {
 
 describe('document upload', () => {
   it('accepts a real PDF and records its type from the bytes', async () => {
-    // This is the first test in the file to run document detection, so it pays
-    // the whole cold start: measured at 11.4s on a GitHub Windows runner, which
-    // is over Bun's 5s default and failed there as a timeout. The very next test
-    // (DOCX) passes in 22ms on the same run, so the cost is one-off warm-up, not
-    // per-call work. The assertions are unchanged; only the budget is stated.
+    // PDF parsing runs pdf.js in-process (`pdfParserConfig.separateProcess: false`):
+    // officeparser's default child-process handshake never completes under Bun, so a
+    // PDF used to hang forever here. A 30s per-file AbortController guard now bounds
+    // the parse, so a hostile document ends in a clear refusal instead of hanging.
+    // The generous per-test budget below is only to accommodate a slow CI runner.
     const response = await upload(REAL_PDF, 'lecture.pdf', 'application/pdf')
     expect(response.status).toBe(201)
     const payload = (await response.json()) as {
@@ -222,6 +252,36 @@ describe('document upload', () => {
     expect(text.status).toBe(200)
     const payload = (await text.json()) as { text: string }
     expect(payload.text).toContain('Photosynthesis')
+  })
+
+  it('accepts a textless PDF and stores it with empty text', async () => {
+    // A scanned PDF with no OCR layer is still a valid document. The route must not
+    // turn "no extractable text" into a refusal — that would discard every scan.
+    const response = await upload(makePdf(''), 'scanned.pdf', 'application/pdf')
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { id: string; kind: string; mimeType: string }
+    }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.mimeType).toBe('application/pdf')
+    const text = await app.request(`/api/attachments/${payload.attachment.id}/text`)
+    expect(text.status).toBe(200)
+    expect(((await text.json()) as { text: string }).text).toBe('')
+  })
+
+  it('refuses a truncated PDF with a clear message, without hanging', async () => {
+    // The damaged-container counterpart to the textless case: this one cannot be
+    // opened, so it is a 415 with the actionable "could not be opened" message —
+    // never a silent 201, and never a hang.
+    const truncated = REAL_PDF.subarray(0, Math.floor(REAL_PDF.byteLength / 2))
+    const start = performance.now()
+    const response = await upload(truncated, 'broken.pdf', 'application/pdf')
+    const elapsed = performance.now() - start
+    expect(response.status).toBe(415)
+    const payload = (await response.json()) as { error: string; code: string }
+    expect(payload.code).toBe('extract_failed')
+    expect(payload.error).toContain('could not be opened')
+    expect(elapsed).toBeLessThan(2_000)
   })
 
   it('still accepts an image, and records it as one', async () => {
@@ -275,6 +335,79 @@ describe('document upload', () => {
     expect(text.text).toContain('study notes')
   })
 
+  it('accepts a CSV through the text reader and keeps its text', async () => {
+    const response = await upload(REAL_CSV, 'data.csv', 'text/csv')
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { kind: string; mimeType: string; signatureless: boolean; id: string }
+    }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.mimeType).toBe('text/csv')
+    expect(payload.attachment.signatureless).toBe(true)
+    const text = (await (
+      await app.request(`/api/attachments/${payload.attachment.id}/text`)
+    ).json()) as { text: string }
+    expect(text.text).toContain('photosynthesis')
+  })
+
+  it('accepts LaTeX as a served document parsed by officeparser', async () => {
+    const response = await upload(REAL_TEX, 'notes.tex', 'application/x-tex')
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { kind: string; mimeType: string; signatureless: boolean }
+    }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.mimeType).toBe('application/x-tex')
+    expect(payload.attachment.signatureless).toBe(false)
+  })
+
+  it('accepts a macro-enabled Word document, stored as its base format', async () => {
+    const response = await upload(
+      REAL_DOCM,
+      'notes.docm',
+      'application/vnd.ms-word.document.macroEnabled.12'
+    )
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { kind: string; mimeType: string }
+    }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.attachment.mimeType).toContain('wordprocessingml')
+  })
+
+  it('refuses an old .doc with an actionable save-as message', async () => {
+    const response = await upload(OLD_OFFICE, 'old.doc', 'application/msword')
+    expect(response.status).toBe(415)
+    const payload = (await response.json()) as { error: string; code: string }
+    expect(payload.code).toBe('legacy_office')
+    expect(payload.error).toBe('Save as .docx, .xlsx or .pptx and try again.')
+  })
+
+  it('refuses a password-protected .docx with its own message, not the save-as one', async () => {
+    // A real encrypted .docx is also a CFB container. It must not be told to
+    // "save as .docx" — the file already is one.
+    const bytes = new Uint8Array(
+      readFileSync(join(import.meta.dir, 'fixtures', 'encrypted-docx.bin'))
+    )
+    const response = await upload(bytes, 'locked.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    expect(response.status).toBe(415)
+    const payload = (await response.json()) as { error: string; code: string }
+    expect(payload.code).toBe('password_protected')
+    expect(payload.error).toBe('This file is password-protected. Remove the password and try again.')
+  })
+
+  it('refuses a plain zip with a clear message, not as a document', async () => {
+    const plainZip = zip([
+      ['hello.txt', 'just a plain text file inside a zip'],
+      ['notes.md', '# nothing special']
+    ])
+    const response = await upload(plainZip, 'archive.zip', 'application/zip')
+    expect(response.status).toBe(415)
+    const payload = (await response.json()) as { error: string; code: string }
+    expect(payload.code).toBe('extract_failed')
+    expect(payload.error).toContain('could not be opened')
+  })
+
   it('refuses a file that is neither an image nor a document', async () => {
     for (const [label, bytes] of [
       ['a Windows executable', new Uint8Array([0x4d, 0x5a, 0x90, 0x00, 0x03])],
@@ -284,6 +417,66 @@ describe('document upload', () => {
       const response = await upload(bytes, 'thing.bin', 'application/octet-stream')
       expect(response.status, label).toBe(415)
     }
+  })
+})
+
+describe('large document warning', () => {
+  it('the warning threshold sits below the upload ceiling, so the warning is reachable', () => {
+    // The warning only fires for a document that passes bodyLimit. If the warning
+    // threshold were at or above the ceiling, a 413 would always win and no user
+    // could ever see the warning. This guards the gap the ceiling raise created.
+    expect(DOCUMENT_SIZE_WARNING_BYTES).toBeLessThan(PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES)
+  })
+
+  it('accepts a large document with a warning, and logs it — without rejecting', async () => {
+    // A small threshold stands in for the 50 MB default so the test needs no
+    // huge fixture. The document is still stored (201); the warning is advisory.
+    // The injected threshold is below the real ceiling, so this is the "over the
+    // warning line but under the ceiling" case, not a 413.
+    const threshold = 10
+    expect(threshold).toBeLessThan(PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES)
+    const logger = new MemoryLogger()
+    const warned = new Hono().route(
+      '/api/attachments',
+      createAttachmentRoutes({
+        getDb: () => db,
+        logger,
+        documentSizeWarningBytes: threshold
+      })
+    )
+    const body = new FormData()
+    body.append('file', new File([REAL_PDF as unknown as BlobPart], 'big.pdf', { type: 'application/pdf' }))
+
+    const response = await warned.request('/api/attachments', { method: 'POST', body })
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as {
+      attachment: { kind: string }
+      warning?: { code: string; message: string }
+    }
+    expect(payload.attachment.kind).toBe('document')
+    expect(payload.warning?.code).toBe('document_size_warning')
+    expect(payload.warning?.message).toContain('large')
+    expect(logger.lines.some((line) => line.includes('document_size_warning'))).toBe(true)
+  })
+
+  it('does not warn for a document under the threshold', async () => {
+    const logger = new MemoryLogger()
+    const warned = new Hono().route(
+      '/api/attachments',
+      createAttachmentRoutes({
+        getDb: () => db,
+        logger,
+        documentSizeWarningBytes: 10 * 1024 * 1024
+      })
+    )
+    const body = new FormData()
+    body.append('file', new File([REAL_PDF as unknown as BlobPart], 'small.pdf', { type: 'application/pdf' }))
+
+    const response = await warned.request('/api/attachments', { method: 'POST', body })
+    expect(response.status).toBe(201)
+    const payload = (await response.json()) as { warning?: unknown }
+    expect(payload.warning).toBeUndefined()
+    expect(logger.lines.some((line) => line.includes('document_size_warning'))).toBe(false)
   })
 })
 

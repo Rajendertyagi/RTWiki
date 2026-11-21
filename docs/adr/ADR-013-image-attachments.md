@@ -43,7 +43,7 @@ Accepting a format most readers cannot display would be worse than refusing it, 
 
 A file's dimensions are read from its header — never by decoding pixels — and an image above `PROVISIONAL_MAX_IMAGE_PIXELS` (50 MP, about 8000×6000) is refused with a message naming the limit.
 
-This bounds what the browser must decode when a note is opened, which is what the deliberately-constructed images that exhaust a decoder are aimed at. It is a limit on rendering cost, not on bytes; the byte ceiling is the separate 50 MB attachment limit. An image whose header cannot be read is **not** refused on that basis: the format has already been established, and refusing it would make an accepted format depend on a second parser agreeing.
+This bounds what the browser must decode when a note is opened, which is what the deliberately-constructed images that exhaust a decoder are aimed at. It is a limit on rendering cost, not on bytes; the byte ceiling is the separate 100 MB attachment limit (raised from 50 MB). An image whose header cannot be read is **not** refused on that basis: the format has already been established, and refusing it would make an accepted format depend on a second parser agreeing.
 
 The limit is enforced in the route rather than inside the detector, so that "what is this" and "is this too big to open" stay separable questions.
 
@@ -111,7 +111,7 @@ An insertion entry declares which toolbar run it belongs to. The toolbar groups 
 - Detection is no longer hand-rolled, so the accepted-format table no longer carries the format signatures. The trade is deliberate: a maintained parser is stronger than a signature list, and the allowlist that decides what is *accepted* is still ours alone.
 - Deleting a page does not delete its images. The files become orphans, reclaimable from the `attachments` table but not yet reclaimed automatically — an open retention decision. Wiring a page foreign key was rejected for now because an attachment may legitimately be uploaded before it is referenced, and a note may be deleted while its images are still wanted.
 - The catalogue grows without bound until a retention pass exists. Same open item.
-- The size limit is the provisional 50 MB default, and the pixel limit the provisional 50 MP default, both defined once in shared constants.
+- The size limit is the provisional 100 MB default (raised from 50 MB), and the pixel limit the provisional 50 MP default, both defined once in shared constants.
 - The pixel limit is checked against a *declared* header. A file whose header understates its true size would pass. That is accepted: the header is what every decoder reads first, so a mismatch is a malformed-image problem rather than a way to reach a decoder.
 
 **Neutral**

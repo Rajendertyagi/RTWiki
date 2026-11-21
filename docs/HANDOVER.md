@@ -7,7 +7,7 @@ Confidence labels: **VERIFIED** (read from code/config/tests) · **DOCUMENTED** 
 
 **This document is a read-only inspection. Nothing in the project was modified to produce it.**
 
-> **Superseded dependency versions.** This is a point-in-time inspection of commit `9cf3a76`. The version numbers below describe that commit and are intentionally left unchanged. For the current, authoritative dependency versions see [DEPENDENCY_STATUS.md](DEPENDENCY_STATUS.md).
+> **Superseded dependency versions and limits.** This is a point-in-time inspection of commit `9cf3a76`. The version numbers below describe that commit and are intentionally left unchanged. For the current, authoritative dependency versions see [DEPENDENCY_STATUS.md](DEPENDENCY_STATUS.md). Likewise, the attachment size limit and document-format details below describe that commit: the hard attachment ceiling is now **100 MB** with a separate **50 MB** advisory document warning, and the accepted format list is wider. For the current values see [AGENTS.md](../AGENTS.md) §8, [SECURITY.md](SECURITY.md) §3 and [ADR-015](adr/ADR-015-document-attachments.md).
 
 ---
 

@@ -29,6 +29,7 @@ stabilized; packages not listed here have not yet been addressed.
 | `dayjs` | `1.11.23` | Pinned (removed caret range; version unchanged) | 2026-11-21 |
 | `dompurify` | `3.4.18` | Pinned (removed caret range; version unchanged) | 2026-11-21 |
 | `latest` | `0.2.0` | Pinned (removed caret range; version unchanged) | 2026-11-21 |
+| `officeparser` | `8.9.0` | Pinned (bumped 8.5.0 → 8.9.0, the latest release). PDF parsing is pinned to in-process mode (`pdfParserConfig: { separateProcess: false }`) because the default child-process handshake never completes under Bun; the 30 s `DOCUMENT_PARSE_TIMEOUT_MS` abort guard is a backstop for cooperative work, **not** a hard CPU-time limit. See [ADR-015](adr/ADR-015-document-attachments.md) §§4, 10 | 2026-11-21 |
 
 ## Runtime (CI workflows)
 

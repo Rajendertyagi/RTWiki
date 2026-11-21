@@ -11,7 +11,7 @@ R-024 and AC-030/AC-031 commit RTWiki to attaching "images, PDFs, and documents"
 
 A document is not an image. An image is bytes the browser draws; a document is a program. A PDF can carry JavaScript, an office file can carry macros, and served inline either executes in RTWiki's own origin. ADR-013 already reached this conclusion for SVG and refused it; a document is a strictly larger version of the same problem, and refusing it outright would defeat a committed requirement.
 
-There is a second problem, which the reference implementation documents plainly. `.txt`, `.md` and `.html` have **no signature at all**. Verified here: `officeparser` refuses all three with *"Auto-detection of file type from buffer failed"*, and no library can do better, because there is nothing in the bytes that says "this is Markdown". Any design has to answer that, not route around it.
+There is a second problem, which the reference implementation documents plainly. `.txt`, `.md`, `.html` and `.csv` have **no signature at all**. Verified here: `officeparser` refuses all four with *"Auto-detection of file type from buffer failed"*, and no library can do better, because there is nothing in the bytes that says "this is Markdown". Any design has to answer that, not route around it.
 
 ## Decision
 
@@ -69,17 +69,17 @@ keeps `sandbox`, and why the card is not a link that renders anything on its own
 
 ### 4. The parser is given the format as a hint, and this is not an optimisation
 
-`officeparser` is asked to parse with an explicit `fileType` hint, taken from RTWiki's own `file-type` detection.
+`officeparser` is pinned at **8.9.0** (the latest release at the time of writing) and is asked to parse with an explicit `fileType` hint, taken from RTWiki's own `file-type` detection.
 
 This is load-bearing. The parser's internal auto-detection **fails inside the compiled `RTWiki.exe`**: the copy of `file-type` inside it cannot run there, and the failure is reported as *"auto-detection of file type from buffer failed"* — indistinguishable from "not a document". Left alone, **every document would be silently refused in the shipped build while working perfectly in development.** The same class of problem ruled out `sharp` (ADR-014) and is why `bun run test:compiled-images` exists at all.
 
-`file-type` is already a dependency, is already trusted for images, and is verified to work in the compiled build. The hint can only name a format the allowlist has already agreed to, so it cannot introduce anything new.
+`file-type` is already a dependency, is already trusted for images, and is verified to work in the compiled build. The hint can only name a format the allowlist has already agreed to, so it cannot introduce anything new. For formats with no magic number of their own (LaTeX) or whose container `file-type` reports only as a bare `zip` (the macro-enabled and template OOXML variants), the hint comes from the reported media type instead — gated so a binary renamed to `.tex` is not decoded as LaTeX.
 
-The parser emits two harmless warnings in the compiled build — it cannot load the optional native `@napi-rs/canvas`, and cannot polyfill `Path2D`. Both affect **rendering**, which RTWiki does not do. Text extraction is unaffected and is verified in the executable, three parses in a row.
+The parser emits two harmless warnings in the compiled build — it cannot load the optional native `@napi-rs/canvas`, and cannot polyfill `Path2D`. Both affect **rendering**, which RTWiki does not do. Text extraction is unaffected and was re-verified in the executable with 8.9.0 across the full format set (see "Verifying the shipped build" below).
 
 ### 5. One library, not two
 
-`unpdf` was evaluated and **rejected on measurement**: it parsed a PDF exactly once per process, and every subsequent call failed with `DataCloneError` from a pdf.js worker's `postMessage`. A second PDF import would have failed in production while the first succeeded. `officeparser` parses PDFs reliably and repeatedly, which is why one library covers everything.
+`unpdf` was evaluated and **rejected on measurement**: it parsed a PDF exactly once per process, and every subsequent call failed with `DataCloneError` from a pdf.js worker's `postMessage`. A second PDF import would have failed in production while the first succeeded. `officeparser` 8.9.0 parses PDFs reliably and repeatedly, which is why one library covers everything.
 
 ### 6. The download filename is encoded, not sanitised
 
@@ -89,9 +89,11 @@ A filename *sanitiser* is the wrong tool here, and was measured: `sanitize-filen
 
 ### 7. A signature-less upload is stored as text, and is not served back
 
-`.txt`, `.md` and `.html` are accepted: their text is extracted and stored in `extracted_text`, and appended to the owning page's `search_index` row so the file is findable by what is inside it. Their bytes are neither offered for download nor kept: a `GET` of such an attachment answers 404, because there is nothing meaningful to serve and serving it would mean serving bytes whose type was never established. Storing bytes nothing can retrieve only duplicated unreachable content into every backup, so the row records their absence explicitly (`bytes_stored = 0`).
+`.txt`, `.md`, `.html` and `.csv` are accepted: their text is extracted and stored in `extracted_text`, and appended to the owning page's `search_index` row so the file is findable by what is inside it. CSV takes this path through RTWiki's own text reader, not through `officeparser` — it is a text file with no magic bytes, and the parser cannot establish a type for it. Their bytes are neither offered for download nor kept: a `GET` of such an attachment answers 404, because there is nothing meaningful to serve and serving it would mean serving bytes whose type was never established. Storing bytes nothing can retrieve only duplicated unreachable content into every backup, so the row records their absence explicitly (`bytes_stored = 0`).
 
 This matches the reference implementation, which converts text to HTML on import and never stores it as a servable file. The `signatureless` flag in the allowlist makes the distinction explicit rather than implicit, and a test asserts no signature-less type is ever in the served set.
+
+**Plain `.zip` archives and Overleaf projects are not supported.** A ZIP that is not one of the recognised document containers is refused as `extract_failed` ("could not be opened"), not silently unpacked. There is no archive-import path and no Overleaf integration; tabular data should arrive as `.ods` or `.xlsx`, and `.tsv` remains deliberately unsupported.
 
 ### 8. Every parse carries RTWiki's own resource ceilings
 
@@ -101,35 +103,58 @@ This is a real control rather than a restatement of the upload size limit. `PROV
 
 A container recognised and then refused is reported as `extract_failed`, not `unsupported_type`. The distinction matters to a user in the only way that matters: telling someone their valid DOCX is a file type this application does not accept is a claim they can do nothing about. Whether the refusal was a tripped ceiling or a damaged archive is retained on the rejection as a diagnostic and logged, never shown — both are fixed by opening the file and saving a fresh copy.
 
+Separate from these decompression ceilings is a wall-clock backstop, `DOCUMENT_PARSE_TIMEOUT_MS` (30 s), described in §10. It is not a decompression ceiling and, importantly, **not a hard execution-time limit**.
+
 ### 9. A document outlives the note that referenced it
 
 Pages are soft-deleted and attachments have no page foreign key, so deleting a note does not delete its documents. This is a deliberate policy, matching the existing attachment behaviour and the reference implementation: an attachment may be uploaded before it is referenced, and a note may be deleted while its document is still wanted. A cascade would destroy documents still in use elsewhere.
 
 The cost is the same one already recorded for images: nothing reclaims an unreferenced document automatically. That remains a retention decision, not a defect.
 
+### 10. PDF parsing runs in-process, behind a wall-clock backstop that is not a hard limit
+
+`officeparser`'s default `pdfParserConfig.separateProcess: true` never completes its child-process handshake under Bun, so a PDF parse hangs forever. Every parse therefore pins `pdfParserConfig: { separateProcess: false }`, running pdf.js in the host process. A source-level test asserts the literal `separateProcess: false` so a dependency upgrade cannot silently restore the default and reintroduce the hang.
+
+Because pdf.js now runs in-process, the library's own PDF time limit — which applies only in separate-process mode — is unavailable. `DOCUMENT_PARSE_TIMEOUT_MS` (30 s) is an `AbortController` timer passed to every `parseOffice` call as a backstop. It ends work that yields to the event loop (worker startup, OCR, an already-expired deadline), and an `AbortError` is mapped to a `timeout` refusal detail rather than being reported as a malformed file.
+
+**This is deliberately not described as a hard limit.** A CPU-bound synchronous parse blocks the event loop, so the timer cannot fire until the work ends. A characterization test proves this honestly: a PDF with 100 000 text-show operators parses to completion even with a 50 ms deadline. Cutting such a parse short would require a worker or child process — exactly what Bun cannot do here. The guard is a backstop for cooperative work, not an execution-time ceiling.
+
+### 11. Password-protected and legacy Office files get their own messages
+
+An OLE/CFB container is ambiguous: it is either an old binary Office file (`.doc`, `.xls`, `.ppt`) or a *modern* Office file (`.docx`, `.xlsx`, `.pptx`) locked with a password. `file-type` reports `cfb` for both, so the bytes alone cannot tell them apart. `officeparser` can: it recognises the encryption streams and refuses with `PASSWORD_REQUIRED` / `PASSWORD_INCORRECT` before doing any decryption work, while a legacy binary is refused as an unsupported `cfb` type. RTWiki asks it before choosing the user-facing message:
+
+- **Password-protected** → *"This file is password-protected. Remove the password and try again."*
+- **Legacy binary** → *"Save as .docx, .xlsx or .pptx and try again."*
+
+Both are 415 refusals. Telling an encrypted `.docx` user to "save as .docx" would be wrong — the file already is one — which is why the two cases are separated rather than collapsed into a generic "unsupported type".
+
+### 12. A large document is warned about, not refused
+
+`PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` is the hard upload ceiling, enforced by Hono's `bodyLimit` before the body is buffered. It was raised from 50 MB to **100 MB**. A separate, advisory threshold `DOCUMENT_SIZE_WARNING_BYTES` (**50 MB**) flags a document that is accepted but may be slow to open and search. Because the warning sits below the ceiling, it is observable for documents between 50 MB and 100 MB: they pass the body limit, are stored and indexed, and carry a non-blocking `document_size_warning` in the response that the client shows as a notification. The warning never rejects an upload.
+
 ## Consequences
 
 **Positive**
 
-- R-024 and AC-030/AC-031 are satisfied: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP, RTF, EPUB, TXT and MD.
+- R-024 and AC-030/AC-031 are satisfied, and the accepted set is now wider: **PDF**; **DOCX, DOCM, DOTX, DOTM**; **PPTX, PPTM, POTX, POTM, PPSX, PPSM**; **XLSX, XLSM, XLTX, XLTM**; **ODT, ODP, ODS, ODG**; **RTF, EPUB**; **TeX**; and the signature-less text formats **TXT, MD, HTML, CSV**. The 11 macro/template variants are packaged like their base documents and are read through the base parser (their macros are not executed). Plain ZIP archives and Overleaf projects are not supported.
 - **A document's text is searchable.** For a study tool this is most of the value: a PDF you imported becomes findable by what is in it. The text is appended to the **owning page's** `search_index` row, not given an index of its own, so a note with both prose and an attached PDF appears once in results and is found by words from either.
 - No new storage, endpoint, or backup path. One table, one upload route, one streaming path.
 - A renamed document cannot be downgraded to text, and a mislabelled upload is stored as what it actually is.
 - The download name cannot terminate a response header, and cannot be used to reverse how it displays.
-- One new dependency, pure JavaScript, verified to work in the shipped executable.
+- One new dependency, `officeparser` pinned at 8.9.0, verified to work in the shipped executable across the full format set. Its optional native `@napi-rs/canvas` dependency is not used for text extraction.
 
 **Negative / accepted costs**
 
-- **In-browser preview is not implemented.** A document downloads rather than opening in a tab. That is the safe default, and the same one the security model demands; an inline preview would need the sandboxed-iframe treatment ADR-007 gives custom content, which is a separate decision.
+- **There is no in-app renderer.** A document downloads by default; [ADR-016](ADR-016-inline-document-viewing.md) later added a separate View route that lets the browser draw the document in a new tab. That is browser rendering, not an embedded preview, and it did not relax the download route.
 - **Scanned PDFs yield no text.** A PDF that is an image of a page has no text layer and no OCR, so it is stored and downloadable but not searchable. Reported as an empty extraction rather than a failure, because a structurally valid document with no text is a normal thing to upload.
-- **Legacy binary formats are not supported.** `.doc` and `.xls` are OLE compound files that this parser does not handle; they are refused. AC-031 names DOCX and ODT, not DOC.
-- **Extraction is synchronous with the upload.** A large PDF is parsed before the response is sent, so a 40 MB PDF takes measurably longer to upload than a 40 MB image. Accepted: the alternative is background work with a write ledger, which is a larger design than the requirement warrants.
+- **Legacy binary formats are not supported.** `.doc`, `.xls` and `.ppt` are OLE compound files that this parser does not handle; they are refused with an actionable "Save as .docx, .xlsx or .pptx and try again." message (§11). AC-031 names DOCX and ODT, not DOC.
+- **Extraction is synchronous with the upload.** A document is parsed before the response is sent, so a large PDF takes measurably longer to upload than an image of the same size. The 30 s guard (§10) is a backstop for cooperative work, not a hard limit on a CPU-bound parse. Accepted: the alternative is background work with a write ledger, which is a larger design than the requirement warrants.
 - The `kind` column is stored *and* derivable from the MIME type. It is stored so a listing need not re-derive, and it is not the authority — ADR-013's rule still holds, that the recorded MIME comes from the bytes.
 
 **Neutral**
 
-- No native code is introduced. `officeparser` pulls `@napi-rs/canvas` as an *optional* dependency, unused for text extraction.
-- The 50 MB attachment ceiling and the 50 MP image ceiling are unchanged and shared. A document is bounded by bytes only; it has no pixel dimension, so the pixel rule never applies to it.
+- No native code is required for text extraction. `officeparser` pulls `@napi-rs/canvas` as an *optional* dependency, unused here.
+- The hard attachment ceiling is now **100 MB** (raised from 50 MB), with a separate **50 MB** advisory document warning (§12). The 50 MP image ceiling is unchanged. A document is bounded by bytes only; it has no pixel dimension, so the pixel rule never applies to it.
 
 ## Alternatives considered
 
@@ -151,11 +176,13 @@ Every claim here was produced on the development machine against this schema, Bu
 
 | Measurement | Result |
 |---|---|
-| `officeparser` on a real DOCX (built as a genuine ZIP) | text, Markdown and HTML all correct |
-| `officeparser` on a real PDF, repeated 4× | 4/4 correct |
+| `officeparser` 8.9.0 on a real DOCX (built as a genuine ZIP) | text, Markdown and HTML all correct |
+| `officeparser` 8.9.0 on a real PDF, repeated 4× | 4/4 correct |
 | `unpdf` on a real PDF, repeated 6× | 1 correct, then `DataCloneError` on all others |
-| `officeparser` on TXT / MD / HTML / CSV | all refused: no magic bytes |
+| `officeparser` on TXT / MD / HTML / CSV | all refused: no magic bytes. CSV is accepted through RTWiki's own text reader instead |
 | Parser auto-detection inside `RTWiki.exe` | **fails**; with an explicit `fileType` hint, succeeds 3/3 |
+| Default `pdfParserConfig.separateProcess: true` under Bun | child-process handshake never completes; `separateProcess: false` parses in well under 2 s |
+| A 100 000-operator PDF with a 50 ms deadline | parses to completion — the 30 s guard is **not** a hard execution-time limit |
 | `sanitize-filename` on `report.pdf\r\nX-Injected: pwned` | CRLF removed, but **U+202E preserved** |
 | A `File` built from text | reports `text/plain;charset=utf-8`, which matches no exact allowlist entry |
 | A PDF renamed `.txt`, through the endpoint | accepted as text — **the bug this ordering exists to prevent** |
@@ -170,3 +197,5 @@ Two checks exist because two defects were invisible to the unit suite:
 - `bun run scripts/verify-compiled-e2e.ts` — starts the built `RTWiki.exe` and drives it over HTTP as a browser would: uploads a real PDF, DOCX and PNG, then asserts the disposition, the policy, byte integrity, the type-confusion case and the extracted text. This is what found the policy being overwritten.
 
 The end-to-end script passes `--no-open`, because the application otherwise opens a browser tab on the user's screen on every run, and it stops the server on every exit path including a thrown assertion.
+
+**Re-verified against the built executable with `officeparser` 8.9.0 (2026-11-21).** Beyond the scripted checks above, real files were uploaded through the compiled `RTWiki.exe` and produced the expected results: PDF, ODG, CSV, TeX, DOCM, XLSM, a legacy `.doc` (save-as message), a password-protected `.docx` (password message), and a 60 MB document (accepted with the advisory size warning). This confirms the in-process PDF mode, the expanded format list, the two distinct refusal messages and the warning behaviour in the shipped build, not just in development.

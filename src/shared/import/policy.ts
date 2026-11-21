@@ -66,21 +66,14 @@ const EXTENSION_ALIASES: Readonly<Record<string, string>> = {
  * Recorded so the answer is findable and so nobody re-adds them by accident. A rejection
  * of an unsupported type is a correct outcome, not a gap.
  *
- * - `.csv` / `.tsv` — **not supported.** `officeparser` refuses them: they have no magic
- *   bytes, so its own auto-detection cannot establish a type, and its spreadsheet
- *   reader expects a real spreadsheet container. RTWiki's answer to tabular data is
- *   `.ods` and `.xlsx`, which are in the allowlist and are genuinely detectable. A CSV
- *   would have to arrive through the signature-less text path, at which point it is
- *   plain text with commas, not a document.
+ * - `.tsv` — **not supported.** Like CSV it has no magic bytes, but unlike CSV it is
+ *   not on the allowlist. RTWiki's answer to tabular data is `.ods` and `.xlsx`, which
+ *   are genuinely detectable.
  * - `.svg` — **not supported as a document.** Rejected as an image too, deliberately
  *   (`image-formats.ts`), because an SVG is an active document that can carry script.
  *   RTWiki's own HTML pages have a sandboxed renderer; an uploaded SVG has no equivalent.
  */
 export const UNSUPPORTED_IMPORT_FORMATS: readonly { ext: string; reason: string }[] = [
-  {
-    ext: '.csv',
-    reason: 'officeparser cannot establish a type for comma-separated values. Use .ods or .xlsx.'
-  },
   {
     ext: '.tsv',
     reason: 'officeparser cannot establish a type for tab-separated values. Use .ods or .xlsx.'

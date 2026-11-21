@@ -68,10 +68,28 @@ export interface AcceptedDocumentFormat {
  */
 export const ACCEPTED_DOCUMENT_FORMATS: readonly AcceptedDocumentFormat[] = [
   { mime: 'application/pdf', ext: 'pdf', signatureless: false },
-  // Office Open XML
+  // Office Open XML. The macro-enabled and template variants are packaged exactly
+  // like their base document (their macros are left unread), so officeparser reads
+  // them through the base format's parser. They are listed here so the file picker
+  // offers them and so byte detection can hand the parser a hint for them.
   {
     mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     ext: 'docx',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.ms-word.document.macroEnabled.12',
+    ext: 'docm',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+    ext: 'dotx',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.ms-word.template.macroEnabled.12',
+    ext: 'dotm',
     signatureless: false
   },
   {
@@ -80,8 +98,48 @@ export const ACCEPTED_DOCUMENT_FORMATS: readonly AcceptedDocumentFormat[] = [
     signatureless: false
   },
   {
+    mime: 'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+    ext: 'pptm',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.openxmlformats-officedocument.presentationml.template',
+    ext: 'potx',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.ms-powerpoint.template.macroEnabled.12',
+    ext: 'potm',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+    ext: 'ppsx',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.ms-powerpoint.slideshow.macroEnabled.12',
+    ext: 'ppsm',
+    signatureless: false
+  },
+  {
     mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ext: 'xlsx',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+    ext: 'xlsm',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+    ext: 'xltx',
+    signatureless: false
+  },
+  {
+    mime: 'application/vnd.ms-excel.template.macroEnabled.12',
+    ext: 'xltm',
     signatureless: false
   },
   // OpenDocument
@@ -92,19 +150,36 @@ export const ACCEPTED_DOCUMENT_FORMATS: readonly AcceptedDocumentFormat[] = [
     signatureless: false
   },
   { mime: 'application/vnd.oasis.opendocument.spreadsheet', ext: 'ods', signatureless: false },
+  { mime: 'application/vnd.oasis.opendocument.graphics', ext: 'odg', signatureless: false },
   // Rich Text, and e-books
   { mime: 'application/rtf', ext: 'rtf', signatureless: false },
   { mime: 'application/epub+zip', ext: 'epub', signatureless: false },
+  // LaTeX is a structured document read by officeparser, not by RTWiki's own text
+  // reader. It has no magic number, so the reported type supplies the parser hint;
+  // it is still `signatureless: false` because the result is a served document.
+  { mime: 'application/x-tex', ext: 'tex', signatureless: false },
   // No signature: identified by the reported extension, converted on import,
-  // and never served back as a document.
+  // and never served back as a document. CSV is a text file, so it takes this
+  // path (RTWiki's own decoder) rather than going through officeparser.
   { mime: 'text/plain', ext: 'txt', signatureless: true },
   { mime: 'text/markdown', ext: 'md', signatureless: true },
-  { mime: 'text/html', ext: 'html', signatureless: true }
+  { mime: 'text/html', ext: 'html', signatureless: true },
+  { mime: 'text/csv', ext: 'csv', signatureless: true }
 ]
 
-/** Fast lookup from a type to the format RTWiki stores. */
+/**
+ * Fast lookup from a type to the format RTWiki stores.
+ *
+ * Keys are normalised because {@link acceptedDocumentFormatFor} normalises its
+ * input, and media types are case-insensitive. The macro-enabled MIMEs are spelled
+ * canonically (`macroEnabled`) in the allowlist, so without this the lookup would
+ * never match them.
+ */
 const ACCEPTED_BY_MIME: ReadonlyMap<string, AcceptedDocumentFormat> = new Map(
-  ACCEPTED_DOCUMENT_FORMATS.map((format) => [format.mime, format])
+  ACCEPTED_DOCUMENT_FORMATS.map((format) => [
+    normaliseMimeType(format.mime) ?? format.mime,
+    format
+  ])
 )
 
 /**

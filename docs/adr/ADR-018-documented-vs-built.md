@@ -66,7 +66,7 @@ accurate claims would be as damaging as one that left the wrong ones in place.
 | Claim | Status |
 |---|---|
 | `2000 ms` autosave debounce | **Accurate.** `PROVISIONAL_AUTOSAVE_DEBOUNCE_MS` at `src/shared/constants/index.ts:32` |
-| `50 MB` **attachment** limit | **Accurate.** `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` at `:33`, enforced at `src/server/attachments/attachment-routes.ts:145`, `src/web/features/rich-editor/blocks/document-upload.ts:36`, `image-upload.ts:47`. Only the *import-package* cap is fictional |
+| `50 MB` **attachment** limit | **Accurate at the audit (`476de71`), since changed.** `PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES` was 50 MB then; it is now **100 MB** at `src/shared/constants/index.ts:63`, with a separate advisory `DOCUMENT_SIZE_WARNING_BYTES` of 50 MB at `:75` (a warning, not a limit). Only the *import-package* cap is fictional |
 | Mermaid `securityLevel: "strict"`; security headers | **Accurate.** `src/web/features/rich-editor/blocks/mermaid-render.ts:81`; headers via `hono/secure-headers` at `src/server/app.ts:3,67,128` |
 
 ## Decision

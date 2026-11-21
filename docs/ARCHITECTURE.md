@@ -242,7 +242,8 @@ An assertion made against a stale bundle measures the previous code.
 - **Responsibility:** Central typed configuration object loaded once at startup. The executable directory is resolved once and all paths are derived from it. No environment-variable override exists for the data directory.
 - **Provisional defaults** (defined once, may be adjusted after MVP usability testing):
   - Autosave debounce: `2000 ms`
-  - Maximum attachment size: `50 MB`
+  - Maximum attachment size: `100 MB` (raised from 50 MB)
+  - Document size warning (advisory, non-blocking): `50 MB`
   - Maximum import package size: `50 MB` (ZIP-bomb guard)
   - Custom content (CSS/JS) enabled: `false` (active content off by default)
 - **Constraint:** No hardcoded ports, paths, limits, colours, or environment-specific values scattered across modules. All values are read from the config object.
