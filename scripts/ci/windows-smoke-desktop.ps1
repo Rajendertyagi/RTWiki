@@ -378,7 +378,31 @@ try {
       -Headers @{ 'Content-Type' = 'application/json' } -UseBasicParsing | Out-Null
     $attachP.Refresh()
     if (-not $attachP.CloseMainWindow()) { throw 'A3: could not send WM_CLOSE to the attaching shell' }
-    $attachP | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue
+    # The shell reads closeBehavior from SQLite at close time. Under transient
+    # DB contention it can fall back to the remembered "ask" and show the dialog
+    # instead of quitting directly. Accept either path: wait for exit, and if
+    # the dialog appears, dismiss it with Exit RTWiki. The assertion is that the
+    # owning shell stops its sidecar, not which close path was taken.
+    $exitDeadline = (Get-Date).AddSeconds(25)
+    $exitClicked = $false
+    while ((Get-Date) -lt $exitDeadline) {
+      $attachP.Refresh()
+      if ($attachP.HasExited) { break }
+      if (-not $exitClicked) {
+        $dlg = $uiRoot.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $dialogCondition)
+        if ($dlg) {
+          $exitCondition = New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty, 'Exit RTWiki')
+          $exitButton = $dlg.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $exitCondition)
+          if ($exitButton) {
+            $invoke = $exitButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+            $invoke.Invoke()
+            $exitClicked = $true
+          }
+        }
+      }
+      Start-Sleep -Milliseconds 500
+    }
     $attachP.Refresh()
     if (-not $attachP.HasExited) { throw 'A3: attaching shell did not exit after window close' }
     Start-Sleep -Seconds 2
