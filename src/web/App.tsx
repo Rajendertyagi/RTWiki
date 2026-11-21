@@ -3,6 +3,7 @@ import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { convertImportedDocument, markdownNoteTitle } from '@rtwiki/shared/import/conversion'
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content.js'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
+import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CloseDialog } from './components/close-dialog.js'
 import { pageTypeLabel } from './components/page-type-badge.js'
@@ -114,6 +115,18 @@ function syncHistory(id: string | null, isPopstate: boolean): void {
 const isNative = isNativeMode()
 
 export function App(): JSX.Element {
+  // Tell the native shell to reveal the window only once React has actually
+  // mounted and rendered. The shell used to reveal on WebView2's page-load
+  // event, which also fires for ERR_CONNECTION_REFUSED error pages — showing a
+  // connection-error flash during boot. This signal proves the real app is on
+  // screen. Browser mode has no shell bridge, so the call is a safe no-op there.
+  useEffect(() => {
+    if (!isNative) return
+    void invoke('app_ready').catch(() => {
+      // Best-effort: the shell's safety timeout reveals the window regardless.
+    })
+  }, [])
+
   const controller = usePagesController()
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
   // Pane geometry preferences (Slice 2): explicit user widths and collapse

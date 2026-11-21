@@ -660,6 +660,19 @@ fn get_close_behavior(app: AppHandle) -> String {
   }
 }
 
+/// Called by the frontend once React has actually mounted and rendered. This
+/// is the authoritative "the app is on screen" signal: WebView2 fires
+/// `PageLoadEvent::Finished` even for an `ERR_CONNECTION_REFUSED` error page,
+/// so revealing on that event showed a connection-error flash during boot. The
+/// frontend only reaches this call when the real SPA rendered, so the window is
+/// revealed only when there is something real to show. The safety timeout in
+/// `boot_and_show` remains the fallback if this never arrives.
+#[tauri::command]
+fn app_ready(app: AppHandle) {
+  log::info!("app_ready invoked");
+  reveal_main_window(&app);
+}
+
 /// Called by the in-app close dialog on mount. Proves a listener exists and
 /// clears any prompt flag left behind by a webview reload, so a close press is
 /// never emitted into the void. Mirrors Codeg's close-prompt handshake.
@@ -736,6 +749,7 @@ fn main() {
       get_close_behavior,
       close_dialog_ready,
       resolve_close_request,
+      app_ready,
     ])
     .setup(|app| {
       let browser_mode = std::env::args().any(|a| a == "--browser");
@@ -806,17 +820,13 @@ fn main() {
           let scheme_ok = url.scheme() == "http";
           let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("tauri.localhost"));
           scheme_ok && host_ok
-        })
-        // Reveal only when the real app page (not the bundled loading page)
-        // finishes loading, so the user never sees a connection-error page.
-        .on_page_load(|window, payload| {
-          use tauri::webview::PageLoadEvent;
-          if matches!(payload.event(), PageLoadEvent::Finished)
-            && payload.url().host_str() == Some("127.0.0.1")
-          {
-            reveal_main_window(window.app_handle());
-          }
         });
+        // Reveal is driven by the frontend's `app_ready` command, not by
+        // PageLoadEvent::Finished: WebView2 fires Finished even for an
+        // ERR_CONNECTION_REFUSED error page, which caused a connection-error
+        // flash during boot. The frontend calls app_ready only once React has
+        // actually rendered. The safety timeout in boot_and_show is the
+        // fallback if that signal never arrives.
 
         // Strip the native title bar on Windows so the frontend renders its
         // own chrome (custom tab strip + window controls in window-chrome.tsx).
