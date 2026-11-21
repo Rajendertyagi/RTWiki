@@ -87,9 +87,10 @@ if ($hShellBuild -ne $hShellApp) { throw 'SHELL IDENTITY MISMATCH' }
 if ($hSidecarBuild -ne $hSidecarApp) { throw 'SIDECAR IDENTITY MISMATCH' }
 Write-Host 'IDENTITY OK: shell and sidecar match their build outputs'
 
-# A1 proof: the sidecar must be a GUI-subsystem (2) PE image, so Windows never
-# creates a console window for it. CREATE_NO_WINDOW in sidecar.rs is additional
-# defence-in-depth, not the primary control.
+# A1 proof: BOTH the shell and the sidecar must be GUI-subsystem (2) PE images,
+# so Windows never creates a console window for either. CREATE_NO_WINDOW in
+# sidecar.rs is additional defence-in-depth, not the primary control. The shell
+# is made GUI by the windows_subsystem attribute in src-tauri/src/main.rs.
 function Get-PeSubsystem([string] $Path) {
   $stream = [IO.File]::OpenRead((Resolve-Path $Path))
   try {
@@ -102,11 +103,15 @@ function Get-PeSubsystem([string] $Path) {
     $stream.Dispose()
   }
 }
+$shellSubsystem = Get-PeSubsystem $exe
+if ($shellSubsystem -ne 2) {
+  throw "Shell PE subsystem is $shellSubsystem, expected 2 (GUI). Add the windows_subsystem attribute to src-tauri/src/main.rs"
+}
 $sidecarSubsystem = Get-PeSubsystem $sidecar
 if ($sidecarSubsystem -ne 2) {
   throw "Sidecar PE subsystem is $sidecarSubsystem, expected 2 (GUI). Add hideConsole:true in scripts/build.ts"
 }
-Write-Host "A1 SUBSYSTEM OK: sidecar PE subsystem=$sidecarSubsystem (GUI, no console window)"
+Write-Host "A1 SUBSYSTEM OK: shell and sidecar PE subsystem=2 (GUI, no console window)"
 
 $p = $null
 $secondP = $null

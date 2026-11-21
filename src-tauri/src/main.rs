@@ -1,3 +1,7 @@
+// Release builds must link as a Windows GUI app so no console window appears
+// beside the main window. Debug builds keep the console for diagnostics.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! RTWiki desktop shell (ADR-011).
 //!
 //! A thin Tauri 2 + WebView2 host for the existing web UI. The shell owns only
