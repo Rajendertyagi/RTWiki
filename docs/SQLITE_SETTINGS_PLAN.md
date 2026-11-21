@@ -28,7 +28,7 @@ Move all persistent settings from JSON files into the existing SQLite database. 
 **Out of scope (do not do):**
 - No import of old JSON settings, no deletion of JSON files, no upgrade path. Old JSON files become unused and are left untouched. This is deliberate: there is nothing to move, and deleting files is the one step that could destroy data.
 - No `refresh_settings_cache` command (replaced by fresh-read-with-fallback).
-- No replacement of the `restart-requested` / `shutdown-requested` flag files — they are IPC signals, not settings.
+- No flag files for restart/shutdown ownership. **Superseded:** the later desktop-lifecycle rebuild removed the `restart-requested` / `shutdown-requested` flag files and the `sidecar-owner` marker entirely. Ownership is now a process relationship: the shell puts the server in a Windows Job Object with `KILL_ON_JOB_CLOSE`, restarts it directly via the `restart_server` command, and never stops a server it did not start. See `docs/DEPENDENCY_STATUS.md` and the desktop-lifecycle ADR update.
 - No change to the damaged-DB abort policy.
 - No new server, no second DB, no provider/AI/M6 work, no unrelated refactoring.
 

@@ -39,6 +39,7 @@
 //! behaviour is always honoured even if the JS component fails to load.
 
 mod geom;
+mod job;
 mod sidecar;
 
 /// Event emitted to the frontend when a window close needs confirmation.
@@ -175,7 +176,13 @@ fn init_shell_logger(exe_dir: &Path) {
 struct ShellState {
   exe_dir: PathBuf,
   port: Mutex<u16>,
-  own_sidecar: Mutex<bool>,
+  /// True only when this shell spawned the current server. A borrowed server
+  /// (one already answering at startup, e.g. from browser mode) is never owned,
+  /// never stopped, and never restarted by this shell.
+  owns_server: Mutex<bool>,
+  /// The Job Object that ties an owned sidecar to this shell. Held for the
+  /// process lifetime; dropping it at exit is what kills the server.
+  job: Mutex<Option<job::SidecarJob>>,
   child: Mutex<Option<Child>>,
   quitting: Mutex<bool>,
   last_geometry_save: Mutex<Instant>,
@@ -274,38 +281,22 @@ fn report_error(app: &AppHandle, message: &str) {
 }
 
 /// Attempt to gracefully shutdown a child process; return Result to caller.
-/// Wraps sidecar::shutdown_sidecar (sync) and falls back to kill on failure.
-fn try_shutdown_child(child: &mut Child, port: u16, exe_dir: &PathBuf) -> Result<(), String> {
-  match sidecar::shutdown_sidecar(child, port, exe_dir) {
+/// `shutdown_sidecar` already force-kills on budget expiry, so a false result
+/// is reported but needs no second kill here.
+fn try_shutdown_child(child: &mut Child, port: u16) -> Result<(), String> {
+  match sidecar::shutdown_sidecar(child, port) {
     true => Ok(()),
-    false => {
-      log::warn!("Graceful shutdown of sidecar failed; forcing process kill.");
-      let _ = child.kill();
-      Err("Failed to gracefully shutdown sidecar; killed child.".to_string())
-    }
-  }
-}
-
-/// Pure decision: stop the sidecar only when this shell owns it and the recorded
-/// PID still belongs to the expected executable. Extracted so it can be tested
-/// without a live Tauri AppHandle.
-fn should_stop_sidecar(owner: Option<&sidecar::SidecarOwner>, shell_pid: u32) -> bool {
-  match owner {
-    Some(marker) => {
-      marker.shell_pid == shell_pid
-        && sidecar::process_identity_matches(marker.sidecar_pid, &marker.sidecar_path)
-    }
-    None => false,
+    false => Err("Server did not exit within budget; it was force-stopped.".to_string()),
   }
 }
 
 /// Graceful shutdown, shared by every normal close path: window close, quit
-/// menu, restart and system shutdown (ExitRequested). Idempotent — the first
-/// caller wins and later ones are no-ops.
+/// menu and system shutdown (ExitRequested). Idempotent — the first caller wins.
 ///
-/// Order: best-effort geometry → stop the server only when this copy owns it
-/// (verified by the owner marker and process identity) → remove flag files →
-/// exit. Never hangs: the sidecar shutdown is bounded in sidecar.rs.
+/// Ownership is a process relationship, not a file: if this shell spawned the
+/// server it holds the child handle and a Job Object; stopping the child is the
+/// whole ownership story. A borrowed server is never touched. The OS Job Object
+/// is the backstop if this function never runs (e.g. Task Manager kill).
 fn graceful_shutdown(app: &AppHandle, reason: &str) {
   let Some(state) = app.try_state::<ShellState>() else {
     log::warn!("Graceful shutdown ({reason}) with no shell state");
@@ -321,67 +312,25 @@ fn graceful_shutdown(app: &AppHandle, reason: &str) {
   log::info!("Graceful shutdown started ({reason})");
   set_quitting(&state);
 
-  // 1. Best-effort window position. Never blocks close (bounded DB timeout).
+  // Best-effort window position. Never blocks close (bounded DB timeout).
   save_geometry(app);
   log::info!("Graceful shutdown: window position saved");
 
-  let exe_dir = state.exe_dir.clone();
-  let port = *state.port.lock().unwrap_or_else(|e| e.into_inner());
-
-  // 2. Stop the server only when no other copy is using it. The owner marker
-  // records the owning shell PID and the sidecar PID/path; the PID is verified
-  // against the live process image so a stale marker after a crash can never
-  // kill an unrelated process that reused the number (S2).
-  let owner = sidecar::read_sidecar_owner(&exe_dir);
-  let should_stop = should_stop_sidecar(owner.as_ref(), std::process::id());
-
-  if should_stop {
+  let owns = state.owns_server.lock().unwrap_or_else(|e| e.into_inner()).clone();
+  if owns {
+    let port = *state.port.lock().unwrap_or_else(|e| e.into_inner());
     let child = take_child_from_state(&state);
     if let Some(mut child) = child {
-      if let Err(e) = try_shutdown_child(&mut child, port, &exe_dir) {
+      if let Err(e) = try_shutdown_child(&mut child, port) {
         report_error(app, &e);
       }
     } else {
-      // We own the marker but have no child handle (e.g. shell restarted while
-      // the sidecar survived). Stop the recorded PID directly, identity already
-      // verified above.
-      if let Some(marker) = &owner {
-        log::info!("Stopping owned sidecar PID {} without a child handle", marker.sidecar_pid);
-        #[cfg(windows)]
-        {
-          use std::os::windows::process::CommandExt;
-          match std::process::Command::new("taskkill")
-            .args(["/PID", &marker.sidecar_pid.to_string(), "/F"])
-            .creation_flags(0x0800_0000)
-            .status()
-          {
-            Ok(status) if status.success() => {
-              log::info!("taskkill stopped sidecar PID {}", marker.sidecar_pid);
-            }
-            Ok(status) => {
-              log::warn!("taskkill failed to stop sidecar PID {}: {status}", marker.sidecar_pid);
-            }
-            Err(e) => {
-              log::warn!("taskkill could not be launched for sidecar PID {}: {e}", marker.sidecar_pid);
-            }
-          }
-        }
-      }
+      log::warn!("Owned server has no child handle; relying on the Job Object to stop it");
     }
-    // Only the owner clears the marker. A shell that attached to another copy's
-    // sidecar must leave the owner's marker intact, or the real owner will later
-    // read no marker, conclude it does not own the sidecar, and orphan it (A3).
-    sidecar::clear_sidecar_owner(&exe_dir);
-    log::info!("Graceful shutdown: owned sidecar stopped");
+    log::info!("Graceful shutdown: owned server stopped");
   } else {
-    log::info!("Graceful shutdown: sidecar not owned by this copy; leaving it running and preserving the owner marker");
+    log::info!("Graceful shutdown: using a borrowed server; leaving it running");
   }
-
-  // 3. Remove IPC flag files after acting on them. These are per-launch signals,
-  // not ownership, so they are cleared unconditionally. The owner marker is
-  // deliberately NOT here — only the owning branch above clears it.
-  sidecar::clear_restart_request(&exe_dir);
-  sidecar::clear_shutdown_request(&exe_dir);
   log::info!("Graceful shutdown complete ({reason})");
 }
 
@@ -453,38 +402,65 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
   }
 }
 
-/// Respawn the sidecar: shutdown previous child if present, spawn a new one,
-/// update state and wait for health. Returns true on success.
-fn respawn_sidecar(app: &AppHandle) -> bool {
-  let (exe_dir, old_port) = match app.try_state::<ShellState>() {
-    Some(state) => (state.exe_dir.clone(), state.port.lock().ok().map(|g| *g)),
+/// Spawns a server this shell owns, puts it in the Job Object, records it in
+/// state, and waits for health. Returns true on success. The caller must have
+/// established that no server is already answering (a borrowed server is never
+/// replaced).
+fn spawn_owned_server(app: &AppHandle, port: u16) -> bool {
+  let exe_dir = match app.try_state::<ShellState>() {
+    Some(state) => state.exe_dir.clone(),
     None => return false,
   };
-  let old_port = old_port.unwrap_or(sidecar::DEFAULT_PORT);
-
-  if let Some(state) = app.try_state::<ShellState>() {
-    let previous = state.child.lock().ok().and_then(|mut guard| guard.take());
-    if let Some(mut child) = previous {
-      // best-effort shutdown; ignore return value but log if needed
-      let _ = sidecar::shutdown_sidecar(&mut child, old_port, &exe_dir);
-    }
-  }
-
-  let remembered_port = app
-    .try_state::<ShellState>()
-    .and_then(|s| s.port.lock().ok().map(|g| *g))
-    .unwrap_or(sidecar::DEFAULT_PORT);
-  let port = sidecar::configured_port(&exe_dir, remembered_port);
   match sidecar::spawn_sidecar(&exe_dir, port) {
-    Ok(child) => {
-      let sidecar_path = exe_dir.join(sidecar::SIDECAR_FILENAME);
-      sidecar::write_sidecar_owner(&exe_dir, std::process::id(), &child, &sidecar_path);
+    Ok(mut child) => {
+      // Wait for health while ALSO watching our child. If the child exits at
+      // any point (e.g. the port was taken by a server the fast probe missed),
+      // fall back to borrowed mode instead of waiting the full boot timeout or
+      // claiming ownership of a server we did not start.
+      let started = Instant::now();
+      let deadline = started + sidecar::boot_timeout();
+      let mut child_exited = false;
+      let mut healthy = false;
+      loop {
+        if let Ok(Some(_)) = child.try_wait() { child_exited = true; break; }
+        if sidecar::health_ok(port) { healthy = true; break; }
+        if Instant::now() >= deadline { break; }
+        std::thread::sleep(Duration::from_millis(10));
+      }
+
+      if child_exited {
+        // Our server died. If another server is answering, borrow it; otherwise
+        // fail with a clear message. Never hang hidden waiting for health.
+        if sidecar::health_ok(port) {
+          if let Some(state) = app.try_state::<ShellState>() {
+            if let Ok(mut guard) = state.owns_server.lock() { *guard = false; }
+          }
+          log::info!("Spawned server exited (port in use); using the existing server on port {port} without owning it");
+          return true;
+        }
+        report_error(app, "The server exited and no existing server is answering. Check logs/rtwiki.log.");
+        return false;
+      }
+      if !healthy {
+        report_error(app, "The server did not become healthy in time. Check logs/rtwiki.log.");
+        return false;
+      }
+
+      // Our child is alive and healthy: tie it to this shell via the Job Object.
+      let job = job::SidecarJob::create();
+      let assigned = job.as_ref().map(|j| j.assign(child.id())).unwrap_or(false);
       if let Some(state) = app.try_state::<ShellState>() {
+        if let Ok(mut guard) = state.job.lock() { *guard = job; }
         if let Ok(mut guard) = state.child.lock() { *guard = Some(child); }
         if let Ok(mut guard) = state.port.lock() { *guard = port; }
-        if let Ok(mut guard) = state.own_sidecar.lock() { *guard = true; }
+        if let Ok(mut guard) = state.owns_server.lock() { *guard = true; }
       }
-      sidecar::wait_for_healthy(port, sidecar::boot_timeout())
+      if !assigned {
+        log::warn!("Could not assign the server to the Job Object; OS-level kill-on-exit is unavailable");
+      } else {
+        log::info!("Server assigned to the shell's Job Object");
+      }
+      true
     }
     Err(err) => {
       report_error(app, &format!("Failed to spawn sidecar: {err}"));
@@ -493,118 +469,74 @@ fn respawn_sidecar(app: &AppHandle) -> bool {
   }
 }
 
-fn watch_sidecar(app: AppHandle) {
-  let mut crash_respawns: Vec<Instant> = Vec::new();
+/// Minimal crash detection: if the server this shell owns exits unexpectedly
+/// (not during shutdown or restart), emit an event so the UI can show a clear
+/// message with a Restart button. No respawn, no flags — the user decides.
+fn watch_owned_server(app: AppHandle) {
   loop {
     std::thread::sleep(Duration::from_secs(1));
-    let quitting = app.try_state::<ShellState>().and_then(|s| s.quitting.lock().ok().map(|g| *g)).unwrap_or(true);
+    let state = match app.try_state::<ShellState>() { Some(s) => s, None => break };
+    let quitting = state.quitting.lock().ok().map(|g| *g).unwrap_or(true);
     if quitting { break; }
-    let exe_dir = match app.try_state::<ShellState>() { Some(state) => state.exe_dir.clone(), None => break };
-    let requested = sidecar::consume_restart_request(&exe_dir);
-    let crashed = if requested { false } else {
-      match app.try_state::<ShellState>() {
-        Some(state) => match state.child.lock() {
-          Ok(mut guard) => match guard.as_mut() {
-            Some(child) => match child.try_wait() { Ok(Some(_)) => { guard.take(); true }, _ => false },
-            None => false,
-          },
-          Err(_) => false,
-        },
+    let owns = state.owns_server.lock().ok().map(|g| *g).unwrap_or(false);
+    if !owns { break; }
+    let exited = match state.child.lock() {
+      Ok(mut guard) => match guard.as_mut() {
+        Some(child) => matches!(child.try_wait(), Ok(Some(_))),
         None => false,
-      }
+      },
+      Err(_) => false,
     };
-
-    // An authorized shutdown already stopped the sidecar deliberately. The
-    // tray stays resident, so keep watching (a later restart request or launch
-    // can still bring it back) but never respawn into a shutdown the user or
-    // the shell already asked for.
-    if crashed && sidecar::consume_shutdown_request(&exe_dir) {
-      log::info!("Sidecar exited after an authorized shutdown; leaving it stopped.");
-      continue;
-    }
-
-    if !requested && !crashed { continue; }
-    if crashed {
-      crash_respawns.retain(|t| t.elapsed() < Duration::from_secs(60));
-      if crash_respawns.len() >= 3 {
-        fatal(&app, "The RTWiki server keeps stopping unexpectedly.\n\nCheck logs/rtwiki.log for details, then relaunch RTWiki.".to_string());
-      }
-      crash_respawns.push(Instant::now());
-    }
-    if !respawn_sidecar(&app) {
-      fatal(&app, "The RTWiki server did not restart in time.\n\nCheck logs/rtwiki.log for details, then relaunch RTWiki.".to_string());
+    if exited {
+      log::warn!("Owned server exited unexpectedly; notifying the UI");
+      let _ = app.emit("sidecar:crashed", ());
+      break;
     }
   }
 }
 
-fn boot_and_show(app: AppHandle, browser_mode: bool) {
+/// Starts (or borrows) the server. Runs in parallel with WebView2 window
+/// creation so the slow window engine and the server boot overlap. Never shows
+/// a dialog: on failure it logs, and `navigate_and_reveal` (which runs after the
+/// window exists) shows a clear message instead of leaving a hidden window.
+fn start_server(app: AppHandle) {
   let (exe_dir, port) = match app.try_state::<ShellState>() {
     Some(state) => (state.exe_dir.clone(), state.port.lock().ok().map(|g| *g).unwrap_or(sidecar::DEFAULT_PORT)),
     None => return,
   };
-  let mut own_sidecar = false;
-  if !sidecar::health_ok(port) {
-    // No running copy: it is now safe to delete leftover flags from a crashed
-    // run, so an old one cannot trigger a fake restart or shutdown.
-    sidecar::clear_stale_flags(&exe_dir);
-    log::info!("Bootstrap: no running copy; cleared stale flag files");
-    if !exe_dir.join(sidecar::SIDECAR_FILENAME).exists() {
-      fatal(&app, format!("{} was not found beside the application.\n\nRe-extract the full RTWiki package.", sidecar::SIDECAR_FILENAME));
-    }
-    match sidecar::spawn_sidecar(&exe_dir, port) {
-      Ok(child) => {
-        // Record ownership before moving the child into state. Quit uses this
-        // marker (with a process-identity check) to stop only our own sidecar.
-        let sidecar_path = exe_dir.join(sidecar::SIDECAR_FILENAME);
-        sidecar::write_sidecar_owner(&exe_dir, std::process::id(), &child, &sidecar_path);
-        if let Some(state) = app.try_state::<ShellState>() {
-          if let Ok(mut guard) = state.child.lock() { *guard = Some(child); }
-        }
-        if !sidecar::wait_for_healthy(port, sidecar::boot_timeout()) {
-          if sidecar::health_ok(port) {
-            if let Some(state) = app.try_state::<ShellState>() {
-              if let Ok(mut guard) = state.child.lock() { guard.take(); }
-            }
-          } else {
-            if let Some(state) = app.try_state::<ShellState>() {
-              let child = state.child.lock().ok().and_then(|mut g| g.take());
-              if let Some(mut child) = child { let _ = child.kill(); }
-            }
-            sidecar::clear_sidecar_owner(&exe_dir);
-            fatal(&app, "The RTWiki server did not start in time.\n\nCheck logs/rtwiki.log for details, then try again.".to_string());
-          }
-        } else { own_sidecar = true; }
-      }
-      Err(err) => {
-        if sidecar::health_ok(port) { own_sidecar = false; }
-        else { fatal(&app, format!("Could not start {0}: {err}\n\nRe-extract the full RTWiki package.", sidecar::SIDECAR_FILENAME)); }
-      }
+
+  // The borrowed-server check MUST happen before starting a new server: if a
+  // server is already answering (e.g. browser mode), use it but never own,
+  // stop, or restart it.
+  if sidecar::health_ok(port) {
+    log::info!("Using an existing server on port {port}; this shell does not own it");
+    if let Some(state) = app.try_state::<ShellState>() {
+      if let Ok(mut guard) = state.owns_server.lock() { *guard = false; }
     }
   } else {
-    // Attaching to a sidecar started by an earlier shell (e.g. one that crashed
-    // and left the server running). Adopt ownership so quitting THIS shell stops
-    // the server instead of orphaning it. The recorded sidecar PID/path is
-    // re-verified before it is adopted, so a stale marker is never trusted.
-    if let Some(marker) = sidecar::read_sidecar_owner(&exe_dir) {
-      if sidecar::process_identity_matches(marker.sidecar_pid, &marker.sidecar_path) {
-        sidecar::write_sidecar_owner_for_pid(
-          &exe_dir,
-          std::process::id(),
-          marker.sidecar_pid,
-          &marker.sidecar_path,
-        );
-        log::info!("Adopted existing sidecar PID {} on attach", marker.sidecar_pid);
-      }
+    if !exe_dir.join(sidecar::SIDECAR_FILENAME).exists() {
+      log::error!("{} was not found beside the application", sidecar::SIDECAR_FILENAME);
+      return;
     }
+    if !spawn_owned_server(&app, port) {
+      log::error!("The RTWiki server did not start in time");
+      return;
+    }
+    let handle = app.clone();
+    std::thread::spawn(move || watch_owned_server(handle));
   }
-  if let Some(state) = app.try_state::<ShellState>() {
-    if let Ok(mut guard) = state.own_sidecar.lock() { *guard = own_sidecar; }
+}
+
+/// Navigates the window to the app once the server is healthy and reveals it
+/// only after the frontend confirms it rendered. Runs after the window exists.
+fn navigate_and_reveal(app: AppHandle, browser_mode: bool) {
+  let port = shell_port(&app);
+  // If the server never became healthy, show a clear message now that a window
+  // exists — never leave the window hidden with no explanation.
+  if !sidecar::wait_for_healthy(port, Duration::from_secs(10)) {
+    fatal(&app, "The RTWiki server did not start in time.\n\nCheck logs/rtwiki.log for details, then try again.".to_string());
   }
-  // Both handshake flags are per-launch intent, never state to resume: a flag
-  // left behind by a crash must not suppress this run's recovery.
-  sidecar::clear_restart_request(&exe_dir);
-  sidecar::clear_shutdown_request(&exe_dir);
-  if own_sidecar { let handle = app.clone(); std::thread::spawn(move || watch_sidecar(handle)); }
+
   let ui_app = app.clone();
   let _ = app.run_on_main_thread(move || {
     if browser_mode { sidecar::open_in_browser(shell_port(&ui_app)); return; }
@@ -626,12 +558,25 @@ fn boot_and_show(app: AppHandle, browser_mode: bool) {
       }
     }
   });
-  // Safety net: if the page-load event never arrives (webview issue, cached
-  // page, navigation race), still reveal the window so the app is usable.
-  let safety_app = app.clone();
+  // Fallback for the case where the frontend never calls `app_ready` (e.g. a
+  // webview issue). Unlike the old unconditional 5s timer, this only reveals
+  // once the server is confirmed healthy — so a connection-refused error page
+  // can never be shown. It retries navigation briefly if the server is not yet
+  // answering, then gives up with a clear log rather than showing an error.
+  let fallback_app = app.clone();
+  let fallback_port = shell_port(&app);
   std::thread::spawn(move || {
-    std::thread::sleep(Duration::from_secs(5));
-    reveal_main_window(&safety_app);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+      std::thread::sleep(Duration::from_millis(500));
+      if sidecar::health_ok(fallback_port) {
+        // Server is healthy; if the frontend mounted it will have called
+        // app_ready already. Reveal now as the bounded fallback.
+        reveal_main_window(&fallback_app);
+        return;
+      }
+    }
+    log::warn!("Server never became healthy; leaving the window hidden rather than showing a connection error");
   });
 }
 
@@ -658,6 +603,40 @@ fn get_close_behavior(app: AppHandle) -> String {
     sidecar::CloseBehavior::Quit    => "quit".to_string(),
     sidecar::CloseBehavior::Ask     => "ask".to_string(),
   }
+}
+
+/// Restarts the server this shell owns on a new port. The frontend calls this
+/// directly instead of writing a flag file. Guarded two ways: the port must be
+/// a valid user port, and the shell must actually own the current server (a
+/// borrowed server cannot be restarted). The capability system restricts this
+/// command to the app's own loopback origin, so no window parameter is needed.
+#[tauri::command]
+fn restart_server(app: AppHandle, port: u16) -> Result<(), String> {
+  log::info!("restart_server invoked for port {port}");
+  if !(1024..=65535).contains(&port) {
+    return Err("Port must be between 1024 and 65535".to_string());
+  }
+  let state = app
+    .try_state::<ShellState>()
+    .ok_or_else(|| "Shell state unavailable".to_string())?;
+  let owns = *state.owns_server.lock().map_err(|e| e.to_string())?;
+  if !owns {
+    return Err("This server was started elsewhere and cannot be restarted here".to_string());
+  }
+
+  // Stop the current owned server within a bounded budget.
+  let old_port = *state.port.lock().map_err(|e| e.to_string())?;
+  if let Some(mut child) = take_child_from_state(&state) {
+    let _ = sidecar::shutdown_sidecar(&mut child, old_port);
+  }
+  *state.owns_server.lock().map_err(|e| e.to_string())? = false;
+
+  // Spawn the replacement on the new port and re-establish ownership.
+  if !spawn_owned_server(&app, port) {
+    return Err("The server did not become healthy on the new port".to_string());
+  }
+  log::info!("Server restarted on port {port}");
+  Ok(())
 }
 
 /// Called by the frontend once React has actually mounted and rendered. This
@@ -750,6 +729,7 @@ fn main() {
       close_dialog_ready,
       resolve_close_request,
       app_ready,
+      restart_server,
     ])
     .setup(|app| {
       let browser_mode = std::env::args().any(|a| a == "--browser");
@@ -766,7 +746,8 @@ fn main() {
       app.manage(ShellState {
         exe_dir: exe_dir.clone(),
         port: Mutex::new(port),
-        own_sidecar: Mutex::new(false),
+        owns_server: Mutex::new(false),
+        job: Mutex::new(None),
         child: Mutex::new(None),
         quitting: Mutex::new(false),
         // Allow the first move/resize event to save immediately.
@@ -800,6 +781,13 @@ fn main() {
         tray = tray.icon(icon.clone());
       }
       tray.build(app)?;
+
+      // FIX A: start the server NOW, in parallel with the slow WebView2 window
+      // creation below. Previously the server was only launched after the window
+      // engine finished (~2.6-3.5s), serialising the two. The borrowed-server
+      // check and Job Object ownership are unchanged — only the ordering moves.
+      let server_app = app.handle().clone();
+      std::thread::spawn(move || start_server(server_app));
 
       if !browser_mode {
         // Created hidden on the bundled placeholder page. The loopback URL is
@@ -944,7 +932,7 @@ fn main() {
       }
 
       let handle = app.handle().clone();
-      std::thread::spawn(move || boot_and_show(handle, browser_mode));
+      std::thread::spawn(move || navigate_and_reveal(handle, browser_mode));
       Ok(())
     })
     .build(tauri::generate_context!())
@@ -963,34 +951,16 @@ fn main() {
 mod tests {
   use super::*;
 
-  #[test]
-  fn no_owner_marker_means_do_not_stop_any_sidecar() {
-    // With no marker there is no verified owner, so this shell must not stop
-    // any sidecar. On attach a shell normally adopts the sidecar and writes a
-    // marker naming itself (see boot_and_show); this case covers the residual
-    // path where adoption could not happen (e.g. a stale/unverifiable marker).
-    assert!(!should_stop_sidecar(None, std::process::id()));
-  }
+  // Ownership is now a process relationship (Job Object + child handle), not a
+  // file, so the old marker/PID-verification tests are gone. The OS-level
+  // guarantees are proven by the real-folder smoke tests in scripts/ci.
 
   #[test]
-  fn another_copy_owner_marker_is_not_stopped() {
-    let owner = sidecar::SidecarOwner {
-      shell_pid: std::process::id().wrapping_add(1),
-      sidecar_pid: 999_999,
-      sidecar_path: PathBuf::from("C:/RTWiki/RTWikiServer.exe"),
-    };
-    assert!(!should_stop_sidecar(Some(&owner), std::process::id()));
-  }
-
-  #[test]
-  fn stale_marker_with_reused_pid_is_not_stopped() {
-    // The marker names this shell's PID, but the recorded sidecar PID no longer
-    // belongs to the server program. Must not kill that unrelated process (S2).
-    let owner = sidecar::SidecarOwner {
-      shell_pid: std::process::id(),
-      sidecar_pid: u32::MAX,
-      sidecar_path: PathBuf::from("C:/RTWiki/RTWikiServer.exe"),
-    };
-    assert!(!should_stop_sidecar(Some(&owner), std::process::id()));
+  fn health_probe_bounds_connect_short_but_allows_a_slow_reply() {
+    // The fast connect timeout must be much shorter than the reply timeout: a
+    // dead port fails fast, but a running server that is slow to answer still
+    // gets the full IO_TIMEOUT to reply. This is the guard against the 150ms
+    // probe wrongly declaring a slow-but-live server absent.
+    assert!(sidecar::HEALTH_CONNECT_TIMEOUT < sidecar::IO_TIMEOUT_FOR_TEST);
   }
 }

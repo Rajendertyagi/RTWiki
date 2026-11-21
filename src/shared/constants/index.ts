@@ -211,23 +211,11 @@ export const COMPILED_EXE_BASENAMES = [
   'RTWikiServer'
 ] as const
 
-// Flag file the frontend writes (via the server) to request a sidecar
-// restart; the desktop shell consumes and deletes it. Never user-edited.
-export const RESTART_REQUEST_FILENAME = 'restart-requested' as const
-// Flag file the server writes when an authorized shutdown is accepted, so the
-// shell can tell an intentional exit from a crash and leave the sidecar down
-// (tray stays resident). Written only after the shutdown token check passes.
-export const SHUTDOWN_REQUEST_FILENAME = 'shutdown-requested' as const
-
 // Marker file created once bootstrap (startup sequence) checks pass and removed
 // on a clean exit. Its presence on the next start means the previous run did not
 // close cleanly. Checked only AFTER the running-copy check, so a second copy
 // never mistakes the first copy's marker for a crash.
 export const CLEAN_EXIT_MARKER_FILENAME = 'clean-exit' as const
-// Owner marker written by the shell that spawns the sidecar. Records the owning
-// shell PID and the sidecar PID/path so quit can stop the server actually in use
-// without killing an unrelated process that reused a PID after a crash.
-export const SIDECAR_OWNER_FILENAME = 'sidecar-owner' as const
 
 // Bounded time, in milliseconds, the graceful shutdown waits for in-flight work
 // after it stops accepting new work. Never hangs forever.

@@ -437,14 +437,13 @@ From [SECURITY.md](SECURITY.md) §8, in order. Any failure aborts with a named r
 
 The original plan said restore would reuse the desktop restart handshake. **It cannot.**
 
-- `requestRestart()` writes a flag file; `consumeRestartRequest()`
-  (`src/server/settings/index.ts:133`) has **zero production call sites**. Its six
-  references are all in `tests/server-settings.test.ts`.
+- The old `requestRestart()` flag-file path was removed in the desktop-lifecycle
+  rebuild. Restart is now a direct `restart_server` Tauri command that only the
+  shell can serve; there is no flag file to write.
 - `launcher.ts:22` opens the **browser** (`rundll32 url.dll,FileProtocolHandler`), not
   the server.
-- The desktop shell can respawn the server on a restart request, but restore
-  deliberately does not depend on it: the shell is optional and browser mode has
-  no respawner.
+- The desktop shell can restart the server it owns, but restore deliberately does
+  not depend on it: the shell is optional and browser mode has no shell.
 
 So restore: **validate → move the live database aside → swap → shut down cleanly → tell
 the user plainly "Restored. Close and reopen RTWiki."** No relaunch, no dependency on the

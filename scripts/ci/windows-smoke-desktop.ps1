@@ -292,16 +292,12 @@ try {
   if (-not $completeSeen) { throw 'shutdown_complete event missing after authorized shutdown' }
   Write-Host 'LOG FINAL OK: shutdown_complete persisted; shutdown token absent'
 
-  # A3 proof: a SECOND shell attaching to a FIRST shell's live sidecar must not
-  # orphan that sidecar. Sequence:
-  #   1. A fresh shell owns a sidecar; the owner marker records that shell's PID.
-  #   2. That shell is killed forcibly, so no graceful shutdown runs and the
-  #      sidecar survives with a marker naming the now-dead owner shell.
-  #   3. A second shell starts, sees the port already healthy, ATTACHES to the
-  #      existing sidecar and adopts the marker (now naming the second shell).
-  #      It must not spawn a second server.
-  #   4. The second shell quits gracefully (closeBehavior=quit). Having adopted
-  #      the marker it owns the sidecar and must stop it. Assert no orphan.
+  # A3 proof (new design): ownership is a process relationship, not a marker.
+  #   1. A shell starts and owns a sidecar via a Windows Job Object.
+  #   2. The shell is killed forcibly (Task Manager equivalent). The OS must
+  #      terminate the sidecar with it — no orphan, no marker involved.
+  #   3. A standalone server is started (as browser mode would). A shell launched
+  #      against it must USE it but never stop it — the borrowed-server rule.
   if ($null -ne $p) {
     $p.Refresh()
     if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
@@ -309,10 +305,11 @@ try {
   Start-Sleep -Seconds 2
 
   $ownerP = $null
-  $attachP = $null
+  $borrowShellP = $null
+  $standaloneP = $null
   $a3SidecarPid = $null
-  $ownerMarker = Join-Path $appDir 'data/sidecar-owner'
   try {
+    # --- Part 1: kill the shell, the server must die with it (Job Object) ---
     $ownerP = Start-Process -FilePath $exe -WorkingDirectory $workDir `
               -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $DiagDir 'desktop-a3-owner.out.txt') `
               -RedirectStandardError (Join-Path $DiagDir 'desktop-a3-owner.err.txt')
@@ -328,115 +325,57 @@ try {
     $ownerListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if (-not $ownerListener) { throw 'A3: owner shell has no sidecar listener' }
     $a3SidecarPid = $ownerListener[0].OwningProcess
-    if (-not (Test-Path $ownerMarker -PathType Leaf)) { throw 'A3: owner marker missing after spawn' }
-    $markerOwnerPid = [int]((Get-Content $ownerMarker -TotalCount 1).Trim())
-    if ($markerOwnerPid -ne $ownerP.Id) {
-      throw "A3: owner marker records PID $markerOwnerPid, expected owner shell $($ownerP.Id)"
-    }
     Write-Host "A3 OWNER OK: shell $($ownerP.Id) owns sidecar PID $a3SidecarPid"
 
-    # Kill the owner forcibly: no graceful shutdown, so the sidecar survives
-    # with a marker that still names the dead owner shell.
+    # Kill the shell forcibly. The Job Object must take the server with it.
     Stop-Process -Id $ownerP.Id -Force -ErrorAction SilentlyContinue
     $ownerP | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-    $survivor = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if (-not $survivor -or $survivor[0].OwningProcess -ne $a3SidecarPid) {
-      throw 'A3: sidecar did not survive the owner shell being killed'
-    }
-    Write-Host "A3 SURVIVOR OK: sidecar PID $a3SidecarPid still owns $Port after owner shell died"
+    Start-Sleep -Seconds 3
+    $survivor = Get-Process -Id $a3SidecarPid -ErrorAction SilentlyContinue
+    if ($survivor) { throw "A3: sidecar PID $a3SidecarPid survived the shell being killed (Job Object failed)" }
+    $listenerAfter = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($listenerAfter) { throw 'A3: port still has a listener after the shell was killed' }
+    Write-Host "A3 JOB OBJECT OK: sidecar PID $a3SidecarPid died with the shell; no orphan"
 
-    # Second shell attaches to the still-live sidecar. Record the handshake
-    # count first: the shell log is shared across launches, so a NEW
-    # close_dialog_ready entry proves this shell's frontend has mounted and
-    # armed the listener before we send WM_CLOSE below.
-    $shellLog = Join-Path $appDir 'logs/rtwiki-shell.log'
-    $handshakeBefore = @(Select-String -Path $shellLog -SimpleMatch 'close_dialog_ready invoked' -ErrorAction SilentlyContinue).Count
-    $attachP = Start-Process -FilePath $exe -WorkingDirectory $workDir `
-               -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $DiagDir 'desktop-a3-attach.out.txt') `
-               -RedirectStandardError (Join-Path $DiagDir 'desktop-a3-attach.err.txt')
-    $attachReady = $false
-    for ($i = 0; $i -lt 60; $i++) {
+    # --- Part 2: a borrowed server is used but never stopped ---
+    $standaloneP = Start-Process -FilePath $sidecar -WorkingDirectory $appDir `
+                   -ArgumentList '--no-open','--port',"$Port" -PassThru `
+                   -RedirectStandardOutput (Join-Path $DiagDir 'desktop-a3-standalone.out.txt') `
+                   -RedirectStandardError (Join-Path $DiagDir 'desktop-a3-standalone.err.txt')
+    $borrowReady = $false
+    for ($i = 0; $i -lt 30; $i++) {
       try {
         $r = Invoke-WebRequest "$Base/health" -UseBasicParsing -TimeoutSec 2
-        if ($r.StatusCode -eq 200) { $attachReady = $true; break }
+        if ($r.StatusCode -eq 200) { $borrowReady = $true; break }
       } catch { }
       Start-Sleep -Seconds 1
     }
-    if (-not $attachReady) { throw 'A3: attaching shell did not become ready' }
-    $attachListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if (-not $attachListener -or $attachListener[0].OwningProcess -ne $a3SidecarPid) {
-      throw 'A3: attaching shell spawned a second sidecar instead of attaching to the existing one'
+    if (-not $borrowReady) { throw 'A3: standalone server did not become ready' }
+    $borrowShellP = Start-Process -FilePath $exe -WorkingDirectory $workDir `
+                    -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $DiagDir 'desktop-a3-borrow.out.txt') `
+                    -RedirectStandardError (Join-Path $DiagDir 'desktop-a3-borrow.err.txt')
+    Start-Sleep -Seconds 6
+    $borrowListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $borrowListener -or $borrowListener[0].OwningProcess -ne $standaloneP.Id) {
+      throw 'A3: shell replaced the borrowed server instead of using it'
     }
-    $adoptedOwnerPid = $null
-    for ($i = 0; $i -lt 20; $i++) {
-      if (Test-Path $ownerMarker -PathType Leaf) {
-        $adoptedOwnerPid = [int]((Get-Content $ownerMarker -TotalCount 1).Trim())
-        if ($adoptedOwnerPid -eq $attachP.Id) { break }
-      }
-      Start-Sleep -Milliseconds 500
-    }
-    if ($adoptedOwnerPid -ne $attachP.Id) {
-      throw "A3: attaching shell did not adopt the owner marker (records $adoptedOwnerPid, expected $($attachP.Id))"
-    }
-    Write-Host "A3 ATTACH OK: shell $($attachP.Id) attached to sidecar PID $a3SidecarPid and adopted the marker"
+    Write-Host "A3 BORROW OK: shell uses standalone server PID $($standaloneP.Id) without replacing it"
 
-    # Wait for the attaching shell's frontend to arm the close-dialog handshake.
-    # Without this, WM_CLOSE can arrive before the WebView mounts: the shell
-    # falls back to "ask", finds no listener, and hides to tray without exiting
-    # or showing a dialog — which looks like a hang to this test.
-    $handshakeDeadline = (Get-Date).AddSeconds(30)
-    $attachArmed = $false
-    while ((Get-Date) -lt $handshakeDeadline) {
-      $count = @(Select-String -Path $shellLog -SimpleMatch 'close_dialog_ready invoked' -ErrorAction SilentlyContinue).Count
-      if ($count -gt $handshakeBefore) { $attachArmed = $true; break }
-      Start-Sleep -Milliseconds 250
-    }
-    if (-not $attachArmed) { throw 'A3: attaching shell frontend never armed the close dialog' }
-    Write-Host 'A3 HANDSHAKE OK: attaching shell frontend armed the close dialog'
-
-    # Quit the attaching shell. It adopted the marker, so it must stop the
-    # sidecar it now owns rather than leaving an orphan behind.
+    # Close the borrowing shell. The borrowed server must survive.
     $setBody = '{"closeBehavior":"quit","rememberCloseChoice":false}'
     Invoke-WebRequest "$Base/api/settings/desktop" -Method PUT -Body $setBody `
       -Headers @{ 'Content-Type' = 'application/json' } -UseBasicParsing | Out-Null
-    $attachP.Refresh()
-    if (-not $attachP.CloseMainWindow()) { throw 'A3: could not send WM_CLOSE to the attaching shell' }
-    # The shell reads closeBehavior from SQLite at close time. Under transient
-    # DB contention it can fall back to the remembered "ask" and show the dialog
-    # instead of quitting directly. Accept either path: wait for exit, and if
-    # the dialog appears, dismiss it with Exit RTWiki. The assertion is that the
-    # owning shell stops its sidecar, not which close path was taken.
-    $exitDeadline = (Get-Date).AddSeconds(25)
-    $exitClicked = $false
-    while ((Get-Date) -lt $exitDeadline) {
-      $attachP.Refresh()
-      if ($attachP.HasExited) { break }
-      if (-not $exitClicked) {
-        $dlg = $uiRoot.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $dialogCondition)
-        if ($dlg) {
-          $exitCondition = New-Object System.Windows.Automation.PropertyCondition(
-            [System.Windows.Automation.AutomationElement]::NameProperty, 'Exit RTWiki')
-          $exitButton = $dlg.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $exitCondition)
-          if ($exitButton) {
-            $invoke = $exitButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
-            $invoke.Invoke()
-            $exitClicked = $true
-          }
-        }
-      }
-      Start-Sleep -Milliseconds 500
-    }
-    $attachP.Refresh()
-    if (-not $attachP.HasExited) { throw 'A3: attaching shell did not exit after window close' }
+    $borrowShellP.Refresh()
+    if (-not $borrowShellP.CloseMainWindow()) { throw 'A3: could not send WM_CLOSE to the borrowing shell' }
+    $borrowShellP | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+    $borrowShellP.Refresh()
+    if (-not $borrowShellP.HasExited) { throw 'A3: borrowing shell did not exit' }
     Start-Sleep -Seconds 2
-    $orphans = @(Get-Process -Name 'RTWikiServer' -ErrorAction SilentlyContinue)
-    if ($orphans.Count -gt 0) {
-      throw "A3: orphaned RTWikiServer process(es) after quit: $($orphans.Id -join ',')"
-    }
-    Write-Host 'A3 ORPHAN OK: no RTWikiServer.exe remains after the attaching shell quit'
+    $standaloneAlive = Get-Process -Id $standaloneP.Id -ErrorAction SilentlyContinue
+    if (-not $standaloneAlive) { throw 'A3: shell stopped a server it did not start' }
+    Write-Host 'A3 BORROW SURVIVES OK: borrowed server still running after the shell closed'
   } finally {
-    foreach ($proc in @($ownerP, $attachP)) {
+    foreach ($proc in @($ownerP, $borrowShellP, $standaloneP)) {
       if ($null -ne $proc) {
         $proc.Refresh()
         if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }

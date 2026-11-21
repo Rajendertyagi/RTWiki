@@ -649,11 +649,12 @@ reported with the `--port` override, never auto-picked), starts the server and
 waits for health before opening the window. Graceful shutdown runs on window
 close, quit menu, restart and system shutdown: best-effort geometry, bounded
 stop of new work, a full save into the main database file with a short limit,
-clean database close, flag-file cleanup, and stopping the server only when no
-other copy owns it. The folder is **normally safe to copy after a clean close**.
-A clean-exit marker records an unclean previous run; an owner marker with PID
-identity verification prevents a stale marker from killing an unrelated process.
-See [ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
+clean database close, and stopping the server only when this shell owns it. The
+folder is **normally safe to copy after a clean close**. A clean-exit marker
+records an unclean previous run. Server ownership is a Windows Job Object with
+`KILL_ON_JOB_CLOSE`: the server dies with the shell, so no orphan remains and no
+marker files are needed. A borrowed server is never stopped. See
+[ADR-011](adr/ADR-011-tauri-desktop-wrapper.md).
 
 ## 7. Cross-References
 

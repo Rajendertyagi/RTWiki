@@ -13,13 +13,12 @@
 //! any failure (missing DB, mid-restore swap, busy, corrupt value). Window
 //! geometry is the one setting the shell writes, best-effort.
 //!
-//! Restart handshake: the frontend records `data/restart-requested` before
-//! shutting the server down; the shell's watch thread consumes the flag and
-//! respawns the sidecar (crash recovery uses the same path). The server's
-//! same-origin check accepts these requests through its CLI/automation path
-//! (no Origin/Referer headers are sent), and the shutdown token is fetched
-//! per launch from `GET /api/shutdown/token` — it is held in memory only and
-//! never logged.
+//! Ownership is a process relationship, not a file: the shell puts the sidecar
+//! in a Windows Job Object with KILL_ON_JOB_CLOSE (see `job.rs`), so the OS
+//! terminates the server when the shell exits. There are no owner markers or
+//! handshake flags. Restart is a direct shell command that stops its own child
+//! and spawns a new one. The shutdown token is fetched per launch from
+//! `GET /api/shutdown/token` — it is held in memory only and never logged.
 
 use rusqlite::{Connection, OpenFlags};
 use std::io::{Read, Write};
@@ -28,69 +27,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-/// Win32 process identity lookup. Used to verify that a PID recorded in a stale
-/// owner marker still belongs to the RTWiki server before it is ever killed.
-#[cfg(windows)]
-mod win_process {
-  use std::ffi::OsString;
-  use std::os::windows::ffi::OsStringExt;
-
-  #[link(name = "kernel32")]
-  extern "system" {
-    fn OpenProcess(
-      desired_access: u32,
-      inherit_handle: i32,
-      process_id: u32,
-    ) -> *mut std::ffi::c_void;
-    fn QueryFullProcessImageNameW(
-      process: *mut std::ffi::c_void,
-      flags: u32,
-      name: *mut u16,
-      size: *mut u32,
-    ) -> i32;
-    fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
-  }
-
-  const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
-
-  pub fn image_path(pid: u32) -> Option<String> {
-    unsafe {
-      let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-      if handle.is_null() {
-        return None;
-      }
-      let mut buffer = [0u16; 32_768];
-      let mut length = buffer.len() as u32;
-      let ok = QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length);
-      CloseHandle(handle);
-      if ok == 0 || length == 0 || length as usize > buffer.len() {
-        return None;
-      }
-      OsString::from_wide(&buffer[..length as usize])
-        .to_str()
-        .map(str::to_owned)
-    }
-  }
-}
-
-/// True when `pid` still belongs to the expected executable. A stale owner
-/// marker whose PID was reused by an unrelated process after a crash must never
-/// cause that process to be killed.
-pub fn process_identity_matches(pid: u32, expected_path: &Path) -> bool {
-  #[cfg(windows)]
-  {
-    match win_process::image_path(pid) {
-      Some(actual) => actual.eq_ignore_ascii_case(&expected_path.to_string_lossy()),
-      None => false,
-    }
-  }
-  #[cfg(not(windows))]
-  {
-    let _ = (pid, expected_path);
-    false
-  }
-}
-
 /// Fallback when the settings table is missing or corrupt. Must match
 /// DEFAULT_PORT in src/shared/constants/index.ts.
 pub const DEFAULT_PORT: u16 = 8080;
@@ -98,17 +34,27 @@ pub const DEFAULT_PORT: u16 = 8080;
 pub const SIDECAR_FILENAME: &str = "RTWikiServer.exe";
 /// Database filename inside data/. Must match DATABASE_FILENAME in shared constants.
 pub const DATABASE_FILENAME: &str = "rtwiki.sqlite";
-/// Owner marker written by the shell that spawns the sidecar.
-pub const SIDECAR_OWNER_FILENAME: &str = "sidecar-owner";
-
 // Setting keys. Must match SETTINGS_KEY_* in src/shared/constants/index.ts.
 pub const SETTINGS_KEY_SERVER_PORT: &str = "server.port";
 pub const SETTINGS_KEY_CLOSE_BEHAVIOR: &str = "desktop.closeBehavior";
 pub const SETTINGS_KEY_WINDOW_GEOMETRY: &str = "window.geometry";
 
-const POLL_INTERVAL: Duration = Duration::from_millis(250);
+/// Fast initial poll for the first 2 seconds, then back off to save power if
+/// something is genuinely slow. The server normally exits/becomes healthy in
+/// tens of milliseconds, so a fixed 250ms wait added ~220ms to every close.
+const FAST_POLL: Duration = Duration::from_millis(10);
+const SLOW_POLL: Duration = Duration::from_millis(100);
+const FAST_POLL_WINDOW: Duration = Duration::from_secs(2);
 const BOOT_TIMEOUT: Duration = Duration::from_secs(30);
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
+/// Short connect timeout for health probes. A dead loopback port can stall a
+/// connect for ~2s on Windows; the server, once started, answers in <10ms, so a
+/// 150ms bound is ample and removes that stall from the startup path.
+pub const HEALTH_CONNECT_TIMEOUT: Duration = Duration::from_millis(150);
+/// Reply timeout for a health probe — deliberately much longer than the connect
+/// timeout so a slow-but-live server is not misread as absent.
+#[cfg(test)]
+pub const IO_TIMEOUT_FOR_TEST: Duration = IO_TIMEOUT;
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(8);
 /// Short timeout for the shell's settings reads/writes. A busy DB must never
 /// make the close button feel slow — the remembered value is used instead.
@@ -208,111 +154,22 @@ pub fn close_behavior(exe_dir: &Path, remembered: CloseBehavior) -> CloseBehavio
   }
 }
 
-fn restart_flag_path(exe_dir: &Path) -> PathBuf {
-  exe_dir.join("data").join("restart-requested")
-}
-
-fn shutdown_flag_path(exe_dir: &Path) -> PathBuf {
-  exe_dir.join("data").join("shutdown-requested")
-}
-
-/// Drops a stale restart flag at boot (e.g. left by a crash mid-restart).
-pub fn clear_restart_request(exe_dir: &Path) {
-  let _ = std::fs::remove_file(restart_flag_path(exe_dir));
-}
-
-/// Returns true once per recorded restart request; deletes the flag.
-pub fn consume_restart_request(exe_dir: &Path) -> bool {
-  std::fs::remove_file(restart_flag_path(exe_dir)).is_ok()
-}
-
-/// Drops a stale shutdown flag at boot (e.g. left by a crash mid-shutdown).
-pub fn clear_shutdown_request(exe_dir: &Path) {
-  let _ = std::fs::remove_file(shutdown_flag_path(exe_dir));
-}
-
-/// Returns true when the server recorded an authorized shutdown before it
-/// exited. The watch thread uses this to tell an intentional exit from a crash:
-/// without it every clean shutdown is immediately undone by a respawn.
-pub fn consume_shutdown_request(exe_dir: &Path) -> bool {
-  std::fs::remove_file(shutdown_flag_path(exe_dir)).is_ok()
-}
-
-/// Owner marker: the shell that spawned the sidecar records its own PID, the
-/// sidecar PID and the sidecar path. Quit uses it to stop only the server this
-/// copy actually owns, and only after verifying the process identity (S2).
-#[derive(Debug, Clone)]
-pub struct SidecarOwner {
-  pub shell_pid: u32,
-  pub sidecar_pid: u32,
-  pub sidecar_path: PathBuf,
-}
-
-fn sidecar_owner_path(exe_dir: &Path) -> PathBuf {
-  exe_dir.join("data").join(SIDECAR_OWNER_FILENAME)
-}
-
-/// Writes the owner marker after a successful sidecar spawn.
-pub fn write_sidecar_owner(exe_dir: &Path, shell_pid: u32, child: &Child, sidecar_path: &Path) {
-  write_sidecar_owner_for_pid(exe_dir, shell_pid, child.id(), sidecar_path);
-}
-
-/// Writes the owner marker from a known sidecar PID. Used when a shell adopts a
-/// sidecar started by an earlier shell that is no longer running.
-pub fn write_sidecar_owner_for_pid(
-  exe_dir: &Path,
-  shell_pid: u32,
-  sidecar_pid: u32,
-  sidecar_path: &Path,
-) {
-  let body = format!(
-    "{}\n{}\n{}\n",
-    shell_pid,
-    sidecar_pid,
-    sidecar_path.display()
-  );
-  let _ = std::fs::write(sidecar_owner_path(exe_dir), body);
-}
-
-/// Reads the owner marker, or None when absent or malformed.
-pub fn read_sidecar_owner(exe_dir: &Path) -> Option<SidecarOwner> {
-  let body = std::fs::read_to_string(sidecar_owner_path(exe_dir)).ok()?;
-  let mut lines = body.lines();
-  let shell_pid = lines.next()?.trim().parse().ok()?;
-  let sidecar_pid = lines.next()?.trim().parse().ok()?;
-  let sidecar_path = PathBuf::from(lines.next()?.trim());
-  Some(SidecarOwner {
-    shell_pid,
-    sidecar_pid,
-    sidecar_path,
-  })
-}
-
-/// Removes the owner marker after the shell has acted on it.
-pub fn clear_sidecar_owner(exe_dir: &Path) {
-  let _ = std::fs::remove_file(sidecar_owner_path(exe_dir));
-}
-
-/// Deletes leftover IPC flags from a crashed run. Called at startup only AFTER
-/// the running-copy check has passed, so a second copy never clears the first
-/// copy's live flags. The server's clean-exit marker is deliberately not here:
-/// the server reads and clears it itself on the next start.
-pub fn clear_stale_flags(exe_dir: &Path) {
-  clear_restart_request(exe_dir);
-  clear_shutdown_request(exe_dir);
-  clear_sidecar_owner(exe_dir);
-}
-
 /// Minimal blocking HTTP exchange over loopback. Returns the full response
-/// (headers + body) on success.
-fn http_exchange(port: u16, request: &str) -> Option<String> {
-  let mut stream = TcpStream::connect_timeout(&server_addr(port), IO_TIMEOUT).ok()?;
+/// (headers + body) on success. `connect_timeout` bounds the connect; on Windows
+/// a connect to a dead loopback port can otherwise stall for ~2s, so callers
+/// that probe for a not-yet-started server pass a short timeout.
+fn http_exchange_with_timeout(port: u16, request: &str, connect: Duration) -> Option<String> {
+  let mut stream = TcpStream::connect_timeout(&server_addr(port), connect).ok()?;
   stream.set_read_timeout(Some(IO_TIMEOUT)).ok()?;
   stream.set_write_timeout(Some(IO_TIMEOUT)).ok()?;
   stream.write_all(request.as_bytes()).ok()?;
   let mut raw = Vec::new();
   stream.read_to_end(&mut raw).ok()?;
   String::from_utf8(raw).ok()
+}
+
+fn http_exchange(port: u16, request: &str) -> Option<String> {
+  http_exchange_with_timeout(port, request, IO_TIMEOUT)
 }
 
 fn status_ok(response: &str) -> bool {
@@ -325,17 +182,25 @@ fn status_ok(response: &str) -> bool {
 /// True when the server answers `GET /health` with 200.
 pub fn health_ok(port: u16) -> bool {
   let request = format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
-  http_exchange(port, &request).is_some_and(|res| status_ok(&res))
+  http_exchange_with_timeout(port, &request, HEALTH_CONNECT_TIMEOUT).is_some_and(|res| status_ok(&res))
+}
+
+/// Sleeps fast at first (10ms) then backs off (100ms) after a short window, so
+/// the common fast path is snappy without burning CPU if something is slow.
+fn adaptive_sleep(started: Instant) {
+  let sleep = if started.elapsed() < FAST_POLL_WINDOW { FAST_POLL } else { SLOW_POLL };
+  std::thread::sleep(sleep);
 }
 
 /// Blocks until the server is healthy or the boot timeout elapses.
 pub fn wait_for_healthy(port: u16, timeout: Duration) -> bool {
-  let deadline = Instant::now() + timeout;
+  let started = Instant::now();
+  let deadline = started + timeout;
   while Instant::now() < deadline {
     if health_ok(port) {
       return true;
     }
-    std::thread::sleep(POLL_INTERVAL);
+    adaptive_sleep(started);
   }
   health_ok(port)
 }
@@ -391,47 +256,34 @@ fn fetch_shutdown_token(port: u16) -> Option<String> {
   (!token.is_empty()).then(|| token.to_string())
 }
 
-/// Asks the server to shut itself down, then waits for the child to exit
-/// and the final log event to appear on disk. Returns true when no server
-/// process remains afterwards.
-///
-/// After `try_wait()` confirms the process exited, Windows may not have
-/// flushed the last `appendFileSync` to disk yet. We poll the log file for
-/// `shutdown_complete` so the smoke test can always read it before cleanup.
-pub fn shutdown_sidecar(child: &mut Child, port: u16, exe_dir: &Path) -> bool {
+/// Asks the server to shut itself down, then waits for the child to exit within
+/// ONE total budget. The server's own internal limits (2s drain + 3s full save)
+/// stay inside it; 8s leaves margin. The child's exit is the proof of completion
+/// — there is no log-string polling. If the budget expires the child is force
+/// killed and a warning is logged. Returns true when the child exited on its own.
+pub fn shutdown_sidecar(child: &mut Child, port: u16) -> bool {
   if let Some(token) = fetch_shutdown_token(port) {
     let request = format!(
-      "POST /api/shutdown/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\
+      "POST /api/shutdown HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\
        x-rtwiki-shutdown-token: {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
     );
     let _ = http_exchange(port, &request);
   }
-  let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
-  while Instant::now() < deadline {
-    match child.try_wait() {
-      Ok(Some(_)) => break,
-      Ok(None) => std::thread::sleep(POLL_INTERVAL),
-      Err(_) => break,
-    }
-  }
-  // Fallback: the server did not exit on request — kill it. A single try_wait
-  // avoids the race between two consecutive calls.
-  if !matches!(child.try_wait(), Ok(Some(_))) {
-    let _ = child.kill();
-  }
-  // Wait for the final shutdown log event to be visible on disk.
-  let log_path = exe_dir.join("logs").join("rtwiki.log");
-  let log_deadline = Instant::now() + Duration::from_secs(5);
+  let started = Instant::now();
+  let deadline = started + SHUTDOWN_TIMEOUT;
   loop {
-    if let Ok(contents) = std::fs::read_to_string(&log_path) {
-      if contents.contains("shutdown_complete") {
-        return true;
+    match child.try_wait() {
+      Ok(Some(_)) => return true,
+      Ok(None) => {
+        if Instant::now() >= deadline {
+          log::warn!("Server did not exit within the {SHUTDOWN_TIMEOUT:?} budget; force-stopping it");
+          let _ = child.kill();
+          return false;
+        }
+        adaptive_sleep(started);
       }
+      Err(_) => return false,
     }
-    if Instant::now() >= log_deadline {
-      return true;
-    }
-    std::thread::sleep(POLL_INTERVAL);
   }
 }
 
@@ -631,86 +483,4 @@ mod tests {
     assert_eq!(configured_port(&db.dir, DEFAULT_PORT), 8219);
   }
 
-  #[test]
-  fn owner_marker_round_trip() {
-    let dir = std::env::temp_dir().join(format!(
-      "rtwiki-owner-marker-{}-{}",
-      std::process::id(),
-      TEST_COUNTER.fetch_add(1, AtomicOrdering::SeqCst)
-    ));
-    fs::create_dir_all(dir.join("data")).unwrap();
-    let marker = SidecarOwner {
-      shell_pid: 4242,
-      sidecar_pid: 4343,
-      sidecar_path: PathBuf::from("C:/RTWiki/RTWikiServer.exe"),
-    };
-    let body = format!(
-      "{}\n{}\n{}\n",
-      marker.shell_pid,
-      marker.sidecar_pid,
-      marker.sidecar_path.display()
-    );
-    fs::write(dir.join("data").join(SIDECAR_OWNER_FILENAME), body).unwrap();
-    let read = read_sidecar_owner(&dir).expect("owner marker must be readable");
-    assert_eq!(read.shell_pid, 4242);
-    assert_eq!(read.sidecar_pid, 4343);
-    assert_eq!(read.sidecar_path, marker.sidecar_path);
-    clear_sidecar_owner(&dir);
-    assert!(read_sidecar_owner(&dir).is_none());
-    let _ = fs::remove_dir_all(&dir);
-  }
-
-  #[test]
-  fn adopting_a_sidecar_updates_the_owner_pid() {
-    let dir = std::env::temp_dir().join(format!(
-      "rtwiki-adopt-marker-{}-{}",
-      std::process::id(),
-      TEST_COUNTER.fetch_add(1, AtomicOrdering::SeqCst)
-    ));
-    fs::create_dir_all(dir.join("data")).unwrap();
-    let path = PathBuf::from("C:/RTWiki/RTWikiServer.exe");
-    write_sidecar_owner_for_pid(&dir, 1111, 2222, &path);
-    // A new shell adopts it by rewriting only the owner PID.
-    write_sidecar_owner_for_pid(&dir, 3333, 2222, &path);
-    let read = read_sidecar_owner(&dir).expect("adopted marker must be readable");
-    assert_eq!(read.shell_pid, 3333);
-    assert_eq!(read.sidecar_pid, 2222);
-    let _ = fs::remove_dir_all(&dir);
-  }
-
-  #[test]
-  fn stale_owner_pid_never_matches_an_unrelated_process() {
-    // A PID that cannot belong to the RTWiki server must never be treated as a
-    // valid owner, so a stale marker after a crash cannot kill a reused PID.
-    assert!(!process_identity_matches(
-      u32::MAX,
-      Path::new("C:/RTWiki/RTWikiServer.exe")
-    ));
-  }
-
-  #[test]
-  fn clear_stale_flags_removes_every_leftover_flag() {
-    let dir = std::env::temp_dir().join(format!(
-      "rtwiki-stale-flags-{}-{}",
-      std::process::id(),
-      TEST_COUNTER.fetch_add(1, AtomicOrdering::SeqCst)
-    ));
-    fs::create_dir_all(dir.join("data")).unwrap();
-    for name in [
-      "restart-requested",
-      "shutdown-requested",
-      SIDECAR_OWNER_FILENAME,
-    ] {
-      fs::write(dir.join("data").join(name), "stale").unwrap();
-    }
-    clear_stale_flags(&dir);
-    for name in [
-      "restart-requested",
-      "shutdown-requested",
-      SIDECAR_OWNER_FILENAME,
-    ] {
-      assert!(!dir.join("data").join(name).exists(), "{name} was not cleared");
-    }
-    let _ = fs::remove_dir_all(&dir);
-  }
 }

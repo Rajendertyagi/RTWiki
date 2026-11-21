@@ -126,10 +126,9 @@ At graceful shutdown the server performs a bounded full save
 (`PRAGMA wal_checkpoint(TRUNCATE)`) into the main file before closing, so the
 folder is **normally safe to copy after a clean close** (a failure is logged and
 the database still closes). The `data/` directory also holds the `clean-exit`
-marker (created once bootstrap checks pass, removed on a clean exit) and the
-`sidecar-owner` marker (owner PID + sidecar PID/path, verified against the live
-process image before the shell stops the server). Neither is user content and
-neither is included in backups.
+marker (created once bootstrap checks pass, removed on a clean exit). It is not
+user content and is not included in backups. Server ownership is a Windows Job
+Object (`KILL_ON_JOB_CLOSE`), not a marker file: the server dies with the shell.
 
 ### Attachments
 

@@ -1,25 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { createShutdownRoutes } from '../src/server/routes/shutdown.js'
-import {
-  clearShutdownRequest,
-  consumeShutdownRequest,
-  requestShutdown
-} from '../src/server/settings/index.js'
 import { ShutdownCoordinator } from '../src/server/shutdown-coordinator.js'
-import { SHUTDOWN_REQUEST_FILENAME, SHUTDOWN_TOKEN_HEADER } from '../src/shared/constants/index.js'
+import { SHUTDOWN_TOKEN_HEADER } from '../src/shared/constants/index.js'
 
 /**
- * Shutdown handshake with the desktop shell (ADR-011 pattern, mirroring the
- * restart handshake).
- *
- * Without it the shell cannot tell an authorized shutdown from a crash: it
- * watches the sidecar, sees the process exit, and respawns it — undoing the
- * shutdown. The server therefore records the intent next to the restart flag,
- * and only for requests that passed the token check.
+ * Shutdown route security. Ownership is now a process relationship (the shell's
+ * Job Object + child handle), so there is no flag file: the route's only job is
+ * to authorize the shutdown and trigger the coordinator. These tests prove the
+ * token and same-origin guards still hold.
  */
 
 function makeCoordinator(): ShutdownCoordinator {
@@ -33,58 +22,11 @@ function makeCoordinator(): ShutdownCoordinator {
   })
 }
 
-describe('shutdown handshake', () => {
-  let dir: string
+describe('shutdown route authorization', () => {
+  const token = randomUUID()
+  const routes = createShutdownRoutes({ coordinator: makeCoordinator(), token })
 
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'rtwiki-shutdown-handshake-'))
-  })
-
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true })
-  })
-
-  it('requestShutdown is consumed exactly once', () => {
-    expect(consumeShutdownRequest(dir)).toBe(false)
-    requestShutdown(dir)
-    expect(consumeShutdownRequest(dir)).toBe(true)
-    expect(consumeShutdownRequest(dir)).toBe(false)
-  })
-
-  it('clearShutdownRequest drops a stale flag', () => {
-    requestShutdown(dir)
-    clearShutdownRequest(dir)
-    expect(consumeShutdownRequest(dir)).toBe(false)
-  })
-
-  it('writes the flag into the data dir under the shared filename', () => {
-    requestShutdown(dir)
-    expect(existsSync(join(dir, SHUTDOWN_REQUEST_FILENAME))).toBe(true)
-  })
-
-  it('is a no-op when no data dir is known (browser-only runs)', () => {
-    expect(() => requestShutdown('')).not.toThrow()
-    expect(consumeShutdownRequest('')).toBe(false)
-    expect(() => clearShutdownRequest('')).not.toThrow()
-  })
-})
-
-describe('shutdown route records the handshake', () => {
-  let dir: string
-  let token: string
-  let routes: ReturnType<typeof createShutdownRoutes>
-
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'rtwiki-shutdown-route-'))
-    token = randomUUID()
-    routes = createShutdownRoutes({ coordinator: makeCoordinator(), token, dataDir: dir })
-  })
-
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true })
-  })
-
-  it('an authorized POST records the shutdown handshake', async () => {
+  it('an authorized POST triggers shutdown and returns 202', async () => {
     const res = await routes.fetch(
       new Request('http://127.0.0.1:8080/', {
         method: 'POST',
@@ -92,10 +34,9 @@ describe('shutdown route records the handshake', () => {
       })
     )
     expect(res.status).toBe(202)
-    expect(consumeShutdownRequest(dir)).toBe(true)
   })
 
-  it('a rejected POST records nothing, so the shell still respawns a crashed sidecar', async () => {
+  it('a wrong token is rejected with 403', async () => {
     const res = await routes.fetch(
       new Request('http://127.0.0.1:8080/', {
         method: 'POST',
@@ -103,6 +44,25 @@ describe('shutdown route records the handshake', () => {
       })
     )
     expect(res.status).toBe(403)
-    expect(existsSync(join(dir, SHUTDOWN_REQUEST_FILENAME))).toBe(false)
+  })
+
+  it('a cross-origin POST is rejected with 403', async () => {
+    const res = await routes.fetch(
+      new Request('http://127.0.0.1:8080/', {
+        method: 'POST',
+        headers: { Origin: 'http://evil.com', [SHUTDOWN_TOKEN_HEADER]: token }
+      })
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it('GET /token returns the token to a same-origin caller', async () => {
+    const res = await routes.fetch(
+      new Request('http://127.0.0.1:8080/token', {
+        headers: { Origin: 'http://127.0.0.1:8080' }
+      })
+    )
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { token: string }).token).toBe(token)
   })
 })

@@ -713,9 +713,10 @@ is detected before files are touched (read-only port probe exception), a busy
 port is reported with the `--port` override rather than auto-picked, and shutdown
 runs on window close, quit menu, restart and system shutdown with a full save
 into the main database file. The folder is **normally safe to copy after a clean
-close**. A clean-exit marker records an unclean previous run and an owner marker
-with PID identity verification prevents a stale marker from killing an unrelated
-process. The compiled server is a GUI-subsystem PE image (`hideConsole: true`);
+close**. A clean-exit marker records an unclean previous run. Server ownership is
+a Windows Job Object with `KILL_ON_JOB_CLOSE`: the server dies with the shell, so
+no orphan remains and no marker files are needed. The compiled server is a
+GUI-subsystem PE image;
 fatal errors still reach the log and a findable `STARTUP-ERROR.txt`.
 
 ### The save status indicator lied about pending work

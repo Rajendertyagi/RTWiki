@@ -759,7 +759,7 @@ export const UI_TEXT = {
   desktopRestartNow: 'Restart now',
   desktopRestarting: 'Restarting… waiting for the server on port {port}.',
   desktopRestartFailed: 'Restart timed out. Quit and relaunch RTWiki manually.',
-  desktopRestartBrowserHint: 'In a browser, relaunch RTWiki to apply the new port.',
+  desktopRestartBrowserHint: 'Close and reopen RTWiki for the new port to apply.',
   // Desktop window close behavior (data/desktop.json; read by the shell).
   desktopCloseBehavior: 'When closing the window',
   desktopCloseAsk: 'Ask every time',

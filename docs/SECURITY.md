@@ -593,10 +593,11 @@ rules keep the web content untrusted even inside the native window:
   every close path including system shutdown; it performs a full save into the
   main database file with a short limit (log-and-continue on failure), so the
   folder is **normally safe to copy after a clean close**. A clean-exit marker
-  records an unclean previous run. The owner marker (`data/sidecar-owner`) is
-  verified against the live process image before the shell stops the server, so
-  a stale marker after a crash can never kill an unrelated process that reused
-  the PID. The compiled server is a GUI-subsystem PE image (`hideConsole: true`);
+  records an unclean previous run. Server ownership is a process relationship:
+  the shell assigns the sidecar to a Windows Job Object with
+  `KILL_ON_JOB_CLOSE`, so the OS stops the server when the shell exits — no
+  marker files and no orphan. A borrowed server (one the shell did not start) is
+  never stopped. The compiled server is a GUI-subsystem PE image;
   fatal errors still reach the log and a findable `STARTUP-ERROR.txt`.
 - Window geometry lives in the `window.geometry` row of the SQLite `settings`
   table and contains only integers and a boolean (`src-tauri/src/geom.rs`). It

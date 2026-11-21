@@ -4,11 +4,9 @@
  * than reaching for a hidden global (DEVELOPMENT_STANDARDS.md §1.2, §14).
  *
  * Each key is validated independently on read: an invalid value resets only
- * that key to its default, leaving all others intact. The flag-file helpers at
- * the bottom are cross-process IPC signals, not settings, and keep `dataDir`.
+ * that key to its default, leaving all others intact.
  */
 
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import {
   BACKUP_DEFAULT_INTERVAL_HOURS,
   BACKUP_SLOTS,
@@ -20,12 +18,10 @@ import {
   MAX_USER_PORT,
   MIN_BACKUP_INTERVAL_HOURS,
   MIN_USER_PORT,
-  RESTART_REQUEST_FILENAME,
   SETTINGS_KEY_BACKUP_SLOTS,
   SETTINGS_KEY_CLOSE_BEHAVIOR,
   SETTINGS_KEY_REMEMBER_CLOSE_CHOICE,
-  SETTINGS_KEY_SERVER_PORT,
-  SHUTDOWN_REQUEST_FILENAME
+  SETTINGS_KEY_SERVER_PORT
 } from '@rtwiki/shared/constants'
 import { dirname, joinPaths } from '../config/index.js'
 import type { Database } from '../database/index.js'
@@ -277,90 +273,4 @@ export function recordBackupRun(
   const settings = readBackupSettings(getDb)
   settings.slots[slot].lastRunAt = at.toISOString()
   return writeBackupSettings(getDb, settings)
-}
-
-// ---------------------------------------------------------------------------
-// Cross-process handshake flags (NOT settings — IPC signals, kept as files)
-// ---------------------------------------------------------------------------
-
-function settingsPath(dataDir: string, filename: string): string {
-  if (!dataDir) throw new Error('Server settings unavailable: data directory is not configured')
-  return joinPaths(dataDir, filename)
-}
-
-/**
- * Restart handshake with the desktop shell (ADR-011): the frontend records
- * the request before shutting the server down; the shell's watch thread
- * consumes the flag and respawns the sidecar with the freshly saved port.
- */
-export function requestRestart(dataDir: string): void {
-  const path = settingsPath(dataDir, RESTART_REQUEST_FILENAME)
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, String(Date.now()), 'utf8')
-}
-
-/** Returns true once per recorded request; deletes the flag. */
-export function consumeRestartRequest(dataDir: string): boolean {
-  if (!dataDir) return false
-  const path = joinPaths(dataDir, RESTART_REQUEST_FILENAME)
-  try {
-    if (!existsSync(path)) return false
-    unlinkSync(path)
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** Drops a stale flag (e.g. left by a crash mid-restart) at boot. */
-export function clearRestartRequest(dataDir: string): void {
-  if (!dataDir) return
-  try {
-    rmIfExists(joinPaths(dataDir, RESTART_REQUEST_FILENAME))
-  } catch {
-    // A stale flag is harmless; the shell only acts on fresh requests.
-  }
-}
-
-/**
- * Shutdown handshake with the desktop shell (ADR-011): the server records an
- * authorized shutdown so the shell's watch thread can tell an intentional exit
- * from a crash. Without this the shell respawns the sidecar, undoing the
- * shutdown, and the sidecar never appears to stop.
- *
- * Written only after the shutdown token check passes, so an unauthorized
- * request can never suppress crash recovery.
- */
-export function requestShutdown(dataDir: string): void {
-  if (!dataDir) return
-  const path = settingsPath(dataDir, SHUTDOWN_REQUEST_FILENAME)
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, String(Date.now()), 'utf8')
-}
-
-/** Returns true once per recorded shutdown; deletes the flag. */
-export function consumeShutdownRequest(dataDir: string): boolean {
-  if (!dataDir) return false
-  const path = joinPaths(dataDir, SHUTDOWN_REQUEST_FILENAME)
-  try {
-    if (!existsSync(path)) return false
-    unlinkSync(path)
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** Drops a stale flag (e.g. left by a crash mid-shutdown) at boot. */
-export function clearShutdownRequest(dataDir: string): void {
-  if (!dataDir) return
-  try {
-    rmIfExists(joinPaths(dataDir, SHUTDOWN_REQUEST_FILENAME))
-  } catch {
-    // A stale flag is harmless; the shell only acts on fresh requests.
-  }
-}
-
-function rmIfExists(path: string): void {
-  if (existsSync(path)) unlinkSync(path)
 }

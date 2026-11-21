@@ -7,7 +7,6 @@ import {
   isValidUserPort,
   readDesktopSettings,
   readServerPort,
-  requestRestart,
   writeDesktopSettings,
   writeServerPort
 } from '../settings/index.js'
@@ -86,17 +85,6 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
     try {
       const saved = writeServerPort(opts.getDb, port)
       return c.json({ port: saved.port, restartRequired: saved.port !== opts.getCurrentPort() })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
-    }
-  })
-
-  routes.post('/server/restart', (c) => {
-    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
-    try {
-      requestRestart(opts.dataDir)
-      return c.json({ status: 'restart_requested' })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)

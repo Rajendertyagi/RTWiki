@@ -6,13 +6,10 @@ import { closeDatabase, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import { createSettingsRoutes } from '../src/server/routes/settings.js'
 import {
-  clearRestartRequest,
-  consumeRestartRequest,
   isCloseBehavior,
   isValidUserPort,
   readDesktopSettings,
   readServerPort,
-  requestRestart,
   writeDesktopSettings,
   writeServerPort
 } from '../src/server/settings/index.js'
@@ -111,19 +108,6 @@ describe('settings file store', () => {
       rememberCloseChoice: true
     })
   })
-
-  it('requestRestart is consumed exactly once', () => {
-    expect(consumeRestartRequest(dir)).toBe(false)
-    requestRestart(dir)
-    expect(consumeRestartRequest(dir)).toBe(true)
-    expect(consumeRestartRequest(dir)).toBe(false)
-  })
-
-  it('clearRestartRequest drops a stale flag', () => {
-    requestRestart(dir)
-    clearRestartRequest(dir)
-    expect(consumeRestartRequest(dir)).toBe(false)
-  })
 })
 
 // ---------- routes ----------
@@ -191,12 +175,11 @@ describe('settings routes', () => {
     expect(readServerPort(getDb)).toBe(DEFAULT_PORT)
   })
 
-  it('POST /server/restart records a restart request', async () => {
+  it('POST /server/restart is no longer an endpoint (restart is a shell command)', async () => {
     const res = await routes.fetch(
       new Request('http://127.0.0.1:8080/server/restart', { method: 'POST' })
     )
-    expect(res.status).toBe(200)
-    expect(consumeRestartRequest(dir)).toBe(true)
+    expect(res.status).toBe(404)
   })
 
   it('GET /desktop reports the default close behavior', async () => {

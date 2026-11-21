@@ -96,8 +96,9 @@ written (AC-058).
 | Browser mode | Tray "Open in Browser" and `RTWiki.exe --browser` open the default browser |
 | Managed port | Settings persists `server.port` in the SQLite `settings` table; shell and server both honor it |
 | Close behavior | Settings persists `desktop.closeBehavior` (ask / minimize / quit) in the SQLite `settings` table; shell reads it fresh on every close with a remembered-value fallback |
-| Restart handshake | Frontend records `data/restart-requested`, shuts down, shell respawns the sidecar |
-| Shutdown handshake | Server records `data/shutdown-requested` on an authorized shutdown, so the shell does not respawn the sidecar it was told to stop |
+| Server ownership | Shell puts the sidecar in a Windows Job Object (`KILL_ON_JOB_CLOSE`); the OS stops the server when the shell exits. No marker files. |
+| Restart | Frontend calls the `restart_server` Tauri command; the shell stops its own server and spawns a new one on the new port. A borrowed server is never restarted. |
+| Borrowed server | If a server is already answering at startup (e.g. browser mode), the shell uses it but never stops or restarts it. |
 
 ### Dual mode
 
@@ -109,7 +110,7 @@ The native app is the default. Browser mode is preserved:
 - The browser-first artifact (a single `RTWiki.exe` server plus `web/`) continues
   to be built and published unchanged.
 
-### Managed port and restart handshake
+### Managed port and restart
 
 The loopback port is Settings-managed, not hardcoded:
 
@@ -122,33 +123,49 @@ The loopback port is Settings-managed, not hardcoded:
   the remembered value on any failure (missing DB, mid-restore swap, busy),
   spawns the sidecar with that port, and bakes it into the window URL — no
   navigation fix-up is ever needed.
-- Changing the port takes effect on restart. The frontend flow is: save the
-  port (`PUT /api/settings/server`), record a restart request
-  (`POST /api/settings/server/restart`, creating `data/restart-requested`),
-  shut the server down through the token-protected endpoint, then poll the
-  new port's `/health` and reload the window onto the new URL.
-- The shell's watch thread consumes the flag and respawns the sidecar with
-  the freshly saved port. The same path recovers from unexpected sidecar
-  exits (bounded: 3 crash respawns per minute, then an error dialog instead
-  of a loop). A stale flag is cleared at boot.
-- In browser mode there is no respawner: saving the port works, but the user
-  relaunches manually. The Restart button is therefore desktop-only.
+- **Startup order:** the server is started in a background thread at the same
+  time the WebView2 window is being created, so the two overlap. Previously the
+  server was only launched after the window engine finished, serialising ~2.6s
+  of work. The borrowed-server check (is a server already answering?) still runs
+  first, before any new server is spawned. Health probes use a short 150ms TCP
+  **connect** timeout (a dead loopback port otherwise stalls ~2s on Windows) but
+  a 3s **reply** timeout, so a slow-but-live server is still detected and
+  borrowed rather than duplicated. If a spawned server exits because the port is
+  taken, the shell falls back to borrowing the existing server or shows a clear
+  error — it never hangs hidden. Poll intervals are adaptive (10ms then 100ms)
+  so the common fast path is snappy without wasting power.
+- Changing the port takes effect on restart. The frontend saves the port
+  (`PUT /api/settings/server`) then calls the `restart_server` Tauri command.
+  The shell validates the port, stops the server it owns through the
+  token-protected `/api/shutdown` endpoint, spawns a replacement on the new
+  port, re-establishes the Job Object, and polls `/health` before returning.
+  There are no flag files. The command refuses to restart a borrowed server
+  with a clear message.
+- In browser mode there is no shell to restart the server. Saving the port
+  works, but the Settings page tells the user to close and reopen RTWiki. The
+  Restart button is therefore desktop-only.
 
-### Shutdown handshake
+### Server ownership and shutdown
 
-The watch thread treats every sidecar exit as a crash and respawns. That is
-correct for crashes, but it would silently undo an authorized shutdown: the
-sidecar would stop and immediately reappear, so the shutdown would look like it
-never took effect. The server therefore records the intent before it exits:
+Ownership is a process relationship, not a file. The shell creates a Windows
+Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and assigns the sidecar to
+it. The job handle is held for the shell's lifetime; when the shell exits —
+normally or by being killed in Task Manager — Windows terminates the server.
+This is the OS guarantee that no server is ever left behind, and it replaces
+the old owner-marker / PID-verification / watch-thread design.
 
-- `POST /api/shutdown` writes `data/shutdown-requested` **after** the shutdown
-  token check passes, then starts the graceful stop. A rejected request writes
-  nothing, so an unauthorized caller can never suppress crash recovery.
-- The shell's watch thread consumes the flag when it observes the exit and
-  leaves the sidecar down. The tray stays resident, exactly as after a crash.
-- Both handshake flags are cleared at boot. A flag left behind by a crash is
-  never state to resume.
-- Browser mode has no watcher, so the flag is simply unused there.
+- If a server is already answering at startup (e.g. one started by browser
+  mode), the shell **uses** it but never owns, stops, or restarts it. This is
+  the borrowed-server rule, covered by a real-folder smoke test.
+- Graceful shutdown is one bounded path: the shell POSTs the shutdown token to
+  `/api/shutdown`, then waits up to one 8-second budget for the child to exit.
+  The server's own internal limits (2s drain + 3s full save) sit inside that
+  budget with margin. If the budget expires the child is force-stopped and a
+  warning is logged. The child's exit is the proof of completion — there is no
+  log-string polling.
+- A minimal watcher detects an owned server exiting unexpectedly and emits a
+  `sidecar:crashed` event so the UI can offer a Restart button. It does not
+  respawn automatically and uses no flags.
 
 ### Close behavior
 
@@ -209,14 +226,11 @@ It is idempotent and ordered:
    limit; on failure log it and still close. The folder is **normally safe to
    copy after a clean close**.
 4. Close the database cleanly.
-5. Remove the flag files: the server writes the signal just before it exits, and
-   the shell deletes it after acting on it. Leftover flags from a crashed run are
-   deleted at startup before use, so an old one cannot trigger a fake restart.
-6. Stop the server process only when no other copy is using it. The shell that
-   spawns the sidecar writes an owner marker (`data/sidecar-owner`) with its PID
-   and the sidecar PID/path; before stopping, the shell verifies the recorded PID
-   still belongs to the server program so a stale marker after a crash can never
-   kill an unrelated process that reused the number.
+5. Remove the clean-exit marker (the only marker that remains, and it is a
+   diagnostic, not ownership state).
+6. Stop the server process only if this shell owns it (it spawned it and holds
+   the child handle). A borrowed server is left running. The Job Object is the
+   backstop if this step never runs.
 7. Exit with a normal exit code.
 
 The compiled server is a GUI-subsystem PE image (`hideConsole: true` in

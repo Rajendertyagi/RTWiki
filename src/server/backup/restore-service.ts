@@ -11,10 +11,9 @@
  *    spell out and it is not optional -- see `PRE_RESTORE_SIDECARS`.
  *  - The backup file is copied, not consumed, so restoring a slot leaves that
  *    slot intact and a second restore of the same file is still possible.
- *  - There is no relaunch. Nothing respawns this process
- *    (`consumeRestartRequest` has no production call site and `launcher.ts`
- *    opens a browser, not the server), so the user is told plainly to close and
- *    reopen RTWiki.
+ *  - There is no relaunch. Nothing respawns this process (the shell owns the
+ *    server through a Job Object and `launcher.ts` opens a browser, not the
+ *    server), so the user is told plainly to close and reopen RTWiki.
  */
 
 import { copyFileSync, existsSync, renameSync, rmSync } from 'node:fs'

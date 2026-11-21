@@ -245,10 +245,12 @@ artifact. It supplements, and does not replace, the MVP criteria above.
 - AC-SHUT-3: Pending database changes are fully saved into the main file with a
   short limit; a failure is logged and the database still closes. The folder is
   **normally safe to copy after a clean close** (asserted by a test).
-- AC-SHUT-4: Flag files are written by the server just before exit and deleted
-  by the shell after acting; leftovers from a crashed run are cleared at startup.
-- AC-SHUT-5: The server is stopped only when no other copy owns it; a stale
-  owner marker with a reused PID never kills an unrelated process.
+- AC-SHUT-4: The clean-exit marker is removed on a clean exit and its absence on
+  the next start reports an unclean previous run. No restart/shutdown flag files
+  exist.
+- AC-SHUT-5: The server is stopped only when this shell owns it (it spawned it).
+  Ownership is a Windows Job Object with `KILL_ON_JOB_CLOSE`: killing the shell
+  kills the server, so no orphan remains. A borrowed server is never stopped.
 - AC-CRASH-1: After a crash the next start recovers with no data loss and the
   first log line says the previous run did not close cleanly; a second copy does
   not mistake the first copy's marker for a crash.

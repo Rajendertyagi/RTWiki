@@ -301,9 +301,7 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
     '/api/shutdown',
     createShutdownRoutes({
       coordinator: deps.coordinator,
-      token: deps.token,
-      // Lets the shell distinguish an authorized shutdown from a crash.
-      dataDir: deps.dataDir ?? ''
+      token: deps.token
     })
   )
   app.route(

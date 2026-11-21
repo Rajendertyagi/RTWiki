@@ -2,18 +2,18 @@
  * Client for the server-managed settings API (/api/settings) plus the
  * desktop restart flow (ADR-011).
  *
- * The listening port and the shell close behavior live in data/server.json
- * and data/desktop.json so the workspace stays portable. Changing the port
- * takes effect on restart: in the desktop app the shell respawns the sidecar
- * (restart handshake via POST /api/settings/server/restart followed by the
- * token-protected shutdown); in a browser the user relaunches manually.
+ * The listening port and the shell close behavior live in the SQLite settings
+ * table so the workspace stays portable. Changing the port takes effect on
+ * restart: in the desktop app the shell restarts the server it owns directly
+ * through the `restart_server` Tauri command; in a browser there is no shell,
+ * so the user is told to close and reopen RTWiki.
  */
 
 import type { CloseBehavior } from '@rtwiki/shared/constants'
-import { SHUTDOWN_TOKEN_HEADER } from '@rtwiki/shared/constants'
+import { invoke } from '@tauri-apps/api/core'
+import { isNativeMode } from './native-bridge.js'
 
 const SETTINGS_BASE = '/api/settings'
-const SHUTDOWN_BASE = '/api/shutdown'
 
 export interface ServerPortSettings {
   port: number
@@ -102,26 +102,19 @@ async function healthOk(port: number): Promise<boolean> {
 /**
  * Restarts the server onto a new port (desktop app only).
  *
- * Records the restart request for the shell, shuts the server down through
- * the token-protected endpoint, then waits for the respawned sidecar to
- * answer on the new port. Returns true when the new server is healthy.
- * Throws with a human-readable message on failure.
+ * The shell owns the server through a Job Object and restarts it directly via
+ * the `restart_server` command. The command validates the port, rejects calls
+ * from outside the app window, and refuses to restart a borrowed server.
+ * Returns true when the new server is healthy. Throws a human-readable message
+ * on failure (including the borrowed-server case).
  */
 export async function restartServerOnPort(port: number, timeoutMs = 30_000): Promise<boolean> {
-  const flag = await fetch(`${SETTINGS_BASE}/server/restart`, { method: 'POST' })
-  if (!flag.ok) throw new Error(await readError(flag, 'Could not request restart'))
-
-  const tokenRes = await fetch(`${SHUTDOWN_BASE}/token`)
-  if (!tokenRes.ok) throw new Error(await readError(tokenRes, 'Could not start restart'))
-  const { token } = (await tokenRes.json()) as { token: string }
-  if (!token) throw new Error('Could not start restart (empty token)')
-
-  const shutdown = await fetch(`${SHUTDOWN_BASE}`, {
-    method: 'POST',
-    headers: { [SHUTDOWN_TOKEN_HEADER]: token }
-  })
-  if (shutdown.status !== 202) throw new Error(await readError(shutdown, 'Server refused restart'))
-
+  if (!isNativeMode()) {
+    // Browser mode has no shell to restart the server. The UI shows the
+    // relaunch message instead; this is a defensive no-op.
+    return false
+  }
+  await invoke('restart_server', { port })
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (await healthOk(port)) return true
