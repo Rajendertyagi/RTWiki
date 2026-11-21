@@ -341,7 +341,12 @@ try {
     }
     Write-Host "A3 SURVIVOR OK: sidecar PID $a3SidecarPid still owns $Port after owner shell died"
 
-    # Second shell attaches to the still-live sidecar.
+    # Second shell attaches to the still-live sidecar. Record the handshake
+    # count first: the shell log is shared across launches, so a NEW
+    # close_dialog_ready entry proves this shell's frontend has mounted and
+    # armed the listener before we send WM_CLOSE below.
+    $shellLog = Join-Path $appDir 'logs/rtwiki-shell.log'
+    $handshakeBefore = @(Select-String -Path $shellLog -SimpleMatch 'close_dialog_ready invoked' -ErrorAction SilentlyContinue).Count
     $attachP = Start-Process -FilePath $exe -WorkingDirectory $workDir `
                -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $DiagDir 'desktop-a3-attach.out.txt') `
                -RedirectStandardError (Join-Path $DiagDir 'desktop-a3-attach.err.txt')
@@ -370,6 +375,20 @@ try {
       throw "A3: attaching shell did not adopt the owner marker (records $adoptedOwnerPid, expected $($attachP.Id))"
     }
     Write-Host "A3 ATTACH OK: shell $($attachP.Id) attached to sidecar PID $a3SidecarPid and adopted the marker"
+
+    # Wait for the attaching shell's frontend to arm the close-dialog handshake.
+    # Without this, WM_CLOSE can arrive before the WebView mounts: the shell
+    # falls back to "ask", finds no listener, and hides to tray without exiting
+    # or showing a dialog — which looks like a hang to this test.
+    $handshakeDeadline = (Get-Date).AddSeconds(30)
+    $attachArmed = $false
+    while ((Get-Date) -lt $handshakeDeadline) {
+      $count = @(Select-String -Path $shellLog -SimpleMatch 'close_dialog_ready invoked' -ErrorAction SilentlyContinue).Count
+      if ($count -gt $handshakeBefore) { $attachArmed = $true; break }
+      Start-Sleep -Milliseconds 250
+    }
+    if (-not $attachArmed) { throw 'A3: attaching shell frontend never armed the close dialog' }
+    Write-Host 'A3 HANDSHAKE OK: attaching shell frontend armed the close dialog'
 
     # Quit the attaching shell. It adopted the marker, so it must stop the
     # sidecar it now owns rather than leaving an orphan behind.

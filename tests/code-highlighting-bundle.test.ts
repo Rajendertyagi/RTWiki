@@ -130,7 +130,9 @@ function eagerGraph(entryName: string, read: (name: string) => string | null): S
 }
 
 describe.skipIf(!chunksPresent())('syntax highlighting is lazy in the built bundle', () => {
-  const names = readdirSync(ASSETS)
+  // The describe callback runs at collection time even when skipIf is true, so
+  // guard the read: build/web/assets may not exist when tests run before a build.
+  const names = existsSync(ASSETS) ? readdirSync(ASSETS) : []
   const read = (name: string): string | null => {
     const file = names.includes(name) ? name : names.find((n) => n === name)
     return file ? readFileSync(join(ASSETS, file), 'utf8') : null
