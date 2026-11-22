@@ -61,7 +61,15 @@ function makeRng(seed: number) {
 }
 const SEED = SEED_ARG !== undefined ? Number(SEED_ARG) >>> 0 : (Math.random() * 0xffffffff) >>> 0
 const rng = makeRng(SEED)
-const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rng() * arr.length)]!
+
+/** Fails loudly if an "impossible" index or lookup is ever wrong. */
+function must<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new Error(`Invariant violated: ${what}`)
+  return value
+}
+
+const pick = <T>(arr: readonly T[]): T =>
+  must(arr[Math.floor(rng() * arr.length)], 'pick from non-empty array')
 const randInt = (min: number, max: number) => min + Math.floor(rng() * (max - min + 1))
 
 // ---------------------------------------------------------------------------
@@ -98,7 +106,7 @@ const MARKER_PREFIX = 'MARKER'
 
 function randomWord(): string {
   const lang = pick(Object.keys(WORDS))
-  return pick(WORDS[lang]!)
+  return pick(must(WORDS[lang], `word list for ${lang}`))
 }
 
 function randomText(targetChars: number, markers: string[]): string {
@@ -141,7 +149,7 @@ const CRC_TABLE = (() => {
 })()
 function crc32(bytes: Uint8Array): number {
   let c = 0xffffffff
-  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8)
+  for (const b of bytes) c = must(CRC_TABLE[(c ^ b) & 0xff], 'CRC table entry') ^ (c >>> 8)
   return (c ^ 0xffffffff) >>> 0
 }
 function zip(files: Array<[string, string]>): Uint8Array {
@@ -285,8 +293,8 @@ function repackageVariant(base: Uint8Array, ext: string): Uint8Array {
     : isPpt
       ? '/ppt/presentation.xml'
       : '/xl/workbook.xml'
-  const variantMime = OOXML_CONTENT_TYPES[ext]!
-  const original = entries[idx]![1]
+  const variantMime = must(OOXML_CONTENT_TYPES[ext], `OOXML content type for ${ext}`)
+  const original = must(entries[idx], `ZIP entry ${idx}`)[1]
   const replaced = original.replace(
     new RegExp(`(<Override PartName="${mainPart}" ContentType=")[^"]*(")`),
     `$1${variantMime}$2`
@@ -364,7 +372,7 @@ const ODF_MIMES: Record<string, string> = {
 }
 
 function ooxmlZip(ext: string, text: string): Uint8Array {
-  const ct = OOXML_CONTENT_TYPES[ext]!
+  const ct = must(OOXML_CONTENT_TYPES[ext], `OOXML content type for ${ext}`)
   const isWord = ['docx', 'docm', 'dotx', 'dotm'].includes(ext)
   const isPpt = ['pptx', 'pptm', 'potx', 'potm', 'ppsx', 'ppsm'].includes(ext)
   const mainName = isWord ? 'word/document.xml' : isPpt ? 'ppt/presentation.xml' : 'xl/workbook.xml'
@@ -412,7 +420,7 @@ function ooxmlZip(ext: string, text: string): Uint8Array {
   return zip(parts)
 }
 function odfZip(ext: string, text: string): Uint8Array {
-  const mime = ODF_MIMES[ext]!
+  const mime = must(ODF_MIMES[ext], `ODF MIME for ${ext}`)
   const ns =
     'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ' +
     'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" ' +
@@ -1072,8 +1080,11 @@ function printTable(results: Result[]) {
     String(r.seed),
     r.note
   ])
-  const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length)))
-  const line = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i]!)).join(' | ')
+  const widths = header.map((h, i) =>
+    Math.max(h.length, ...rows.map((r) => must(r[i], `table cell ${i}`).length))
+  )
+  const line = (cells: string[]) =>
+    cells.map((c, i) => c.padEnd(must(widths[i], `column width ${i}`))).join(' | ')
   const out = [line(header), widths.map((w) => '-'.repeat(w)).join('-+-'), ...rows.map(line)].join(
     '\n'
   )
