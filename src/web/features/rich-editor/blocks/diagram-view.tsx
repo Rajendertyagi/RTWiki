@@ -1,4 +1,5 @@
 import { ActionIcon, Tooltip } from '@mantine/core'
+import { useMergedRef, useResizeObserver, useWindowEvent } from '@mantine/hooks'
 import {
   type JSX,
   type ReactNode,
@@ -178,14 +179,10 @@ export function DiagramView({ children, testIdPrefix }: DiagramViewProps): JSX.E
   viewRef.current = view
 
   // Escape closes full screen, because that is what a full screen anything should do.
-  useEffect(() => {
-    if (!fullscreen) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setFullscreen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [fullscreen])
+  // useWindowEvent owns the listener lifecycle; the guard keeps it inert otherwise.
+  useWindowEvent('keydown', (event) => {
+    if (fullscreen && event.key === 'Escape') setFullscreen(false)
+  })
 
   /**
    * Moves the one layer node in and out of the full-screen overlay.
@@ -355,18 +352,18 @@ export function DiagramView({ children, testIdPrefix }: DiagramViewProps): JSX.E
     )
   }, [])
 
-  // Refit whenever full screen opens, and whenever the window changes size while it
-  // is open. The observer is only attached while it is, so a page full of diagrams
-  // is not watching the viewport for nothing.
+  // Refit whenever full screen opens, and whenever the overlay changes size while
+  // it is open. useResizeObserver only watches the overlay while it is mounted
+  // (full screen), so a page full of diagrams is not watching for nothing.
+  const [overlayResizeRef, overlayRect] = useResizeObserver<HTMLDivElement>()
+  const mergedOverlayRef = useMergedRef(overlayRef, overlayResizeRef)
   useEffect(() => {
     if (!fullscreen) return
     fitToScreen()
-    const overlay = overlayRef.current
-    if (overlay === null) return
-    const observer = new ResizeObserver(fitToScreen)
-    observer.observe(overlay)
-    return () => observer.disconnect()
   }, [fullscreen, fitToScreen])
+  useEffect(() => {
+    if (fullscreen && (overlayRect.width > 0 || overlayRect.height > 0)) fitToScreen()
+  }, [fullscreen, overlayRect.width, overlayRect.height, fitToScreen])
 
   const layer = (
     <div
@@ -465,7 +462,7 @@ export function DiagramView({ children, testIdPrefix }: DiagramViewProps): JSX.E
       {fullscreen ? (
         <div
           className={classes.fullscreen}
-          ref={overlayRef}
+          ref={mergedOverlayRef}
           data-testid={`${testIdPrefix}-full-screen-open`}
         >
           {/* The layer is appended here by the effect above, and put back on close.

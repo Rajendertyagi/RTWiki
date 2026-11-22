@@ -9,6 +9,7 @@ import {
 } from '@codemirror/search'
 import type { EditorView } from '@codemirror/view'
 import { ActionIcon, Box, Button, Checkbox, Group, TextInput, Tooltip } from '@mantine/core'
+import { getHotkeyHandler } from '@mantine/hooks'
 import { IconArrowDown, IconArrowUp, IconX } from '@tabler/icons-react'
 import type { JSX } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -123,16 +124,11 @@ export function SourceFindDialog({ getView, mode, onClose }: SourceFindDialogPro
           placeholder={UI_TEXT.findDialogSearchPlaceholder}
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              if (e.shiftKey) handlePrev()
-              else handleNext()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              handleClose()
-            }
-          }}
+          onKeyDown={getHotkeyHandler([
+            ['Enter', () => handleNext()],
+            ['shift+Enter', () => handlePrev()],
+            ['Escape', () => handleClose()]
+          ])}
           aria-label={UI_TEXT.findDialogFindTitle}
           data-testid="find-query"
           rightSection={
@@ -160,12 +156,7 @@ export function SourceFindDialog({ getView, mode, onClose }: SourceFindDialogPro
           placeholder={UI_TEXT.findDialogReplacePlaceholder}
           value={replaceText}
           onChange={(e) => setReplaceText(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              handleReplace()
-            }
-          }}
+          onKeyDown={getHotkeyHandler([['Enter', () => handleReplace()]])}
           aria-label={UI_TEXT.findDialogReplaceTitle}
           data-testid="find-replace"
         />

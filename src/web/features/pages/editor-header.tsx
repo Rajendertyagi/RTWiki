@@ -1,4 +1,5 @@
 import { ActionIcon, Menu, TextInput, Tooltip } from '@mantine/core'
+import { getHotkeyHandler } from '@mantine/hooks'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconArrowLeft, IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
@@ -48,16 +49,19 @@ export function EditorHeader({
     await onRename(trimmed)
   }
 
-  const handleKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>): Promise<void> => {
-    if (event.key === 'Enter') {
-      ;(event.target as HTMLInputElement).blur()
-    }
-    if (event.key === 'Escape') {
-      setTitle(page.title)
-      setEditing(false)
-      ;(event.target as HTMLInputElement).blur()
-    }
-  }
+  // Enter commits via blur (handleBlur performs the rename); Escape restores
+  // the original title before blurring so handleBlur sees no change to save.
+  const handleKeyDown = getHotkeyHandler([
+    ['Enter', (event) => (event.target as HTMLInputElement).blur()],
+    [
+      'Escape',
+      (event) => {
+        setTitle(page.title)
+        setEditing(false)
+        ;(event.target as HTMLInputElement).blur()
+      }
+    ]
+  ])
 
   return (
     <div className={classes.header}>
@@ -87,12 +91,10 @@ export function EditorHeader({
             type="button"
             className={classes.titleDisplay}
             onDoubleClick={() => setEditing(true)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === 'F2') {
-                event.preventDefault()
-                setEditing(true)
-              }
-            }}
+            onKeyDown={getHotkeyHandler([
+              ['Enter', () => setEditing(true)],
+              ['F2', () => setEditing(true)]
+            ])}
             title={UI_TEXT.renameHint}
             aria-label={UI_TEXT.titleLabel}
             data-testid="editor-title"
