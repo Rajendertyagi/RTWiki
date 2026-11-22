@@ -95,10 +95,10 @@ export function Sidebar({
     setImportError(null)
     void onImportFile(file)
       .then((created) => {
-        if (!created) setImportError(UI_TEXT.markdownImportErrorCreateFailed)
+        if (!created) setImportError(UI_TEXT.importErrorCreateFailed)
       })
       .catch((err: unknown) => {
-        setImportError(err instanceof Error ? err.message : UI_TEXT.markdownImportErrorCreateFailed)
+        setImportError(err instanceof Error ? err.message : UI_TEXT.importErrorCreateFailed)
       })
   }
 
@@ -185,7 +185,7 @@ export function Sidebar({
         <Alert
           color="red"
           variant="light"
-          title="Import failed"
+          title={UI_TEXT.importErrorTitle}
           onClose={() => setImportError(null)}
           withCloseButton
           className={classes.importError}

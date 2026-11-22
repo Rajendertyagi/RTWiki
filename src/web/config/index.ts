@@ -1,4 +1,7 @@
-import { DEFAULT_IMPORTED_PAGE_TITLE } from '@rtwiki/shared/constants'
+import {
+  DEFAULT_IMPORTED_PAGE_TITLE,
+  PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES
+} from '@rtwiki/shared/constants'
 
 /**
  * Shell layout dimensions. Single source of truth so the AppShell navbar
@@ -343,7 +346,12 @@ export const UI_TEXT = {
   exportSubmenu: 'Export',
   importSubmenu: 'Import',
   importFileLabel: 'File…',
-  importErrorTooLarge: 'That file is too large. The limit is 100 MB.',
+  importErrorTitle: 'Import failed',
+  // Derived from the same constant the server's bodyLimit uses, so the number
+  // shown to the user can never drift from the limit actually enforced.
+  importErrorTooLarge: `That file is too large. The limit is ${PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024)} MB.`,
+  importErrorCreateFailed:
+    'That file could not be imported. Nothing was created — try again, or import it as a file attachment instead.',
   exportUnavailable: 'No export available for this page type.',
   backLabel: '‹ Back',
   htmlSourceBackToPreview: 'Return to preview',
