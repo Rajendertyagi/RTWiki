@@ -1,4 +1,5 @@
 import { Box, Group, Stack, Switch, Text, Tooltip } from '@mantine/core'
+import { useDebouncedValue } from '@mantine/hooks'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import {
   createEmptyHtmlContent,
@@ -95,7 +96,13 @@ export default function HtmlEditorWorkspace({
   const [content, setContent] = useState<HtmlPageContentV2>(() =>
     parseResult.ok ? normalizeHtmlContent(parseResult.content) : createEmptyHtmlContent()
   )
-  const [previewContent, setPreviewContent] = useState<HtmlPageContentV2>(content)
+  // The preview follows the draft after a short debounce. Mantine's hook owns
+  // the timer; `flush` commits the newest draft synchronously on the two
+  // explicit paths (return-to-preview, manual refresh) that must not wait.
+  const [previewContent, , { flush: flushPreviewDebounce }] = useDebouncedValue(
+    content,
+    PREVIEW_REBUILD_DEBOUNCE_MS
+  )
 
   // Monotonic draft generation: bumped by every local mutation. Debug Mode
   // correlates transactions and renders against it; no server snapshot can
@@ -185,18 +192,16 @@ export default function HtmlEditorWorkspace({
     if (returningToPreview) {
       // Commit the newest draft into the preview SYNCHRONOUSLY: the rendered
       // parent must reflect exactly what the user just typed, without waiting
-      // for the debounce or for autosave to finish in the background.
-      if (previewTimerRef.current !== null) {
-        window.clearTimeout(previewTimerRef.current)
-        previewTimerRef.current = null
-      }
-      setPreviewContent(contentRef.current)
+      // for the debounce or for autosave to finish in the background. `flush`
+      // applies the latest draft immediately when a debounce is pending.
+      flushPreviewDebounce()
     }
     debugLog('editor', 'editor_source_switch_completed', {
       pageId,
       field: sourceField ?? 'preview'
     })
-  }, [sourceField, pageId])
+    // flushPreviewDebounce is a stable handler from useDebouncedValue.
+  }, [sourceField, pageId, flushPreviewDebounce])
 
   // Debug Mode: throttled transaction observation (latest keystroke stats at
   // most once per second; length, safe hash and draft generation only).
@@ -228,28 +233,18 @@ export default function HtmlEditorWorkspace({
   }, [content, notifyEdit])
 
   // Debounced live-preview rebuild ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â one centralized constant, never per
-  // keystroke. Every rebuild regenerates the channel ID inside PreviewFrame.
-  const previewTimerRef = useRef<number | null>(null)
+  // Debug Mode: log when the debounced preview actually changes. The key guard
+  // keeps the mount/no-op cases from emitting a duplicate render request.
+  const previewLogKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    if (previewTimerRef.current !== null) {
-      window.clearTimeout(previewTimerRef.current)
-    }
-    previewTimerRef.current = window.setTimeout(() => {
-      previewTimerRef.current = null
-      debugLog('preview', 'preview_render_requested', {
-        pageId,
-        len: content.html.length + content.css.length + content.javascript.length,
-        hash: safeHash(content.html + content.css + content.javascript)
-      })
-      setPreviewContent(content)
-    }, PREVIEW_REBUILD_DEBOUNCE_MS)
-    return () => {
-      if (previewTimerRef.current !== null) {
-        window.clearTimeout(previewTimerRef.current)
-        previewTimerRef.current = null
-      }
-    }
-  }, [content, pageId])
+    const len =
+      previewContent.html.length + previewContent.css.length + previewContent.javascript.length
+    const hash = safeHash(previewContent.html + previewContent.css + previewContent.javascript)
+    const key = `${pageId}:${len}:${hash}`
+    if (previewLogKeyRef.current === key) return
+    previewLogKeyRef.current = key
+    debugLog('preview', 'preview_render_requested', { pageId, len, hash })
+  }, [previewContent, pageId])
 
   const updateField = useCallback(
     (field: ContentField, value: string): void => {
@@ -279,7 +274,7 @@ export default function HtmlEditorWorkspace({
   }, [])
   const handleRefreshPreview = useCallback((): void => {
     generationRef.current += 1
-    setPreviewContent(contentRef.current)
+    flushPreviewDebounce()
     setPreviewNonce((n) => n + 1)
     setRefreshing(true)
     if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current)
@@ -287,7 +282,8 @@ export default function HtmlEditorWorkspace({
     // after a bounded fallback so the status can never stick.
     refreshTimerRef.current = window.setTimeout(() => setRefreshing(false), 2000)
     debugLog('preview', 'preview_manual_refresh', { pageId, gen: generationRef.current })
-  }, [pageId])
+    // flushPreviewDebounce is a stable handler from useDebouncedValue.
+  }, [pageId, flushPreviewDebounce])
   const handleFrameReady = useCallback((): void => {
     if (refreshTimerRef.current !== null) {
       window.clearTimeout(refreshTimerRef.current)
