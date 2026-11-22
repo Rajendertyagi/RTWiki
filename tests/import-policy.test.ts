@@ -7,6 +7,7 @@ import { MAX_MARKDOWN_SOURCE_CHARS } from '../src/shared/constants/index.js'
 import {
   acceptedFormatForExtension,
   classifyMarkdownImport,
+  IMPORT_ACCEPT_ATTRIBUTE,
   isMarkdownFile,
   isSignaturelessDocumentMime,
   MARKDOWN_IMPORT_ACCEPT_ATTRIBUTE,
@@ -100,6 +101,19 @@ describe('the import policy classifies a chosen file', () => {
     for (const ext of MARKDOWN_IMPORT_EXTENSIONS) {
       expect(acceptedFormatForExtension(ext)?.mime).toBe('text/markdown')
     }
+  })
+
+  it('offers every accepted document format in the general import picker', () => {
+    // Derived from the same allowlist the server uses, so the picker cannot
+    // offer a format the ingest core would refuse.
+    for (const format of ACCEPTED_DOCUMENT_FORMATS) {
+      expect(IMPORT_ACCEPT_ATTRIBUTE).toContain(`.${format.ext}`)
+    }
+    expect(IMPORT_ACCEPT_ATTRIBUTE).toContain('.md')
+    expect(IMPORT_ACCEPT_ATTRIBUTE).toContain('.docx')
+    expect(IMPORT_ACCEPT_ATTRIBUTE).toContain('.pdf')
+    // Images cannot become pages, so they are not offered.
+    expect(IMPORT_ACCEPT_ATTRIBUTE).not.toContain('.png')
   })
 })
 

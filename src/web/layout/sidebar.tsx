@@ -1,36 +1,13 @@
 import { Alert, Loader, NavLink, Stack, Text } from '@mantine/core'
+import { PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES } from '@rtwiki/shared/constants'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
-import {
-  classifyMarkdownImport,
-  MARKDOWN_IMPORT_ACCEPT_ATTRIBUTE,
-  type MarkdownImportRejection
-} from '@rtwiki/shared/import/policy'
+import { IMPORT_ACCEPT_ATTRIBUTE } from '@rtwiki/shared/import/policy'
 import { IconAlertCircle, IconHome } from '@tabler/icons-react'
 import { useRef, useState } from 'react'
 import { SearchInput } from '../components/search-input.js'
 import { UI_TEXT } from '../config/index.js'
 import { PageTree } from '../features/sidebar/page-tree.js'
 import classes from './sidebar.module.css'
-
-/**
- * One message per refusal reason, each naming the actual limit where there is one.
- *
- * The previous single "that file is too large" message covered two different problems —
- * a file too big to read, and a note too long to store — and named neither number. The
- * user could not tell which they had hit, or what to do about it.
- */
-function markdownImportErrorText(reason: MarkdownImportRejection): string {
-  switch (reason) {
-    case 'not_markdown':
-      return UI_TEXT.markdownImportErrorType
-    case 'too_large_to_read':
-      return UI_TEXT.markdownImportErrorTooLarge
-    case 'too_long':
-      return UI_TEXT.markdownImportErrorTooLong
-    case 'read_failed':
-      return UI_TEXT.markdownImportErrorRead
-  }
-}
 
 interface SidebarProps {
   pages: Page[]
@@ -64,13 +41,13 @@ interface SidebarProps {
   /** Expansion observation for session persistence. */
   onExpandedChange?: (ids: ReadonlySet<string>) => void
   /**
-   * Imports a local Markdown file as a new Markdown Page (filename → title).
+   * Imports a local file as a new page through the server's one ingest pipeline.
    *
    * Returns whether the page was created. The picker shows a failure, so a rejected
-   * import has to be reportable here rather than vanishing; see `handleImportMarkdown`
+   * import has to be reportable here rather than vanishing; see `handleImportFile`
    * in `App.tsx`.
    */
-  onImportMarkdown: (file: File) => Promise<boolean>
+  onImportFile: (file: File) => Promise<boolean>
   /** Exports the given page (context-menu action). */
   onExportPage: (pageId: string) => void
 }
@@ -98,7 +75,7 @@ export function Sidebar({
   onOpenHtmlSource,
   seedExpandedIds,
   onExpandedChange,
-  onImportMarkdown,
+  onImportFile,
   onExportPage
 }: SidebarProps): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -108,18 +85,15 @@ export function Sidebar({
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    // Cheap rejections first (name, type and transport size), before any bytes
-    // are sent. The authoritative character-limit check now lives on the server,
-    // in the one ingest path, so the browser never reads the file itself.
-    const preRead = classifyMarkdownImport(file)
-    if (preRead !== null) {
-      setImportError(markdownImportErrorText(preRead))
+    // One cheap transport-size check before any bytes are sent. Everything else
+    // — format detection, character limits, conversion — is the server's job in
+    // the one ingest path, and its refusal carries the actionable message.
+    if (file.size > PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES) {
+      setImportError(UI_TEXT.importErrorTooLarge)
       return
     }
     setImportError(null)
-    // The import can still be refused by the server; report that too rather than
-    // leaving the user with a file that silently did not become a note.
-    void onImportMarkdown(file)
+    void onImportFile(file)
       .then((created) => {
         if (!created) setImportError(UI_TEXT.markdownImportErrorCreateFailed)
       })
@@ -222,7 +196,7 @@ export function Sidebar({
       <input
         ref={fileInputRef}
         type="file"
-        accept={MARKDOWN_IMPORT_ACCEPT_ATTRIBUTE}
+        accept={IMPORT_ACCEPT_ATTRIBUTE}
         onChange={handleFileChosen}
         className={classes.hiddenFileInput}
         tabIndex={-1}

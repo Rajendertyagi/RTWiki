@@ -264,7 +264,7 @@ export function PageTree({
     if (menu.kind === 'root') {
       const rootType = typeFromAction(action)
       if (rootType) onCreateRoot?.(rootType)
-      if (action === 'importMarkdown') hooks.onRequestImport?.()
+      if (action === 'importFile') hooks.onRequestImport?.()
       return
     }
     const id = menu.pageId

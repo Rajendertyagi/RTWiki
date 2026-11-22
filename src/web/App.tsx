@@ -531,7 +531,7 @@ export function App(): JSX.Element {
    * user pressed, and rethrows the server's own message when there is one, because the
    * server is the authority on *why* a create was refused.
    */
-  const handleImportMarkdown = useCallback(
+  const handleImportFile = useCallback(
     async (file: File): Promise<boolean> => {
       /*
        * One path for Markdown: the file goes to the server's single ingest
@@ -1019,7 +1019,7 @@ export function App(): JSX.Element {
             onOpenHtmlSource={(pageId, field) => void handleOpenHtmlSource(pageId, field)}
             seedExpandedIds={seedExpandedIds}
             onExpandedChange={handleExpandedChange}
-            onImportMarkdown={handleImportMarkdown}
+            onImportFile={handleImportFile}
             onExportPage={handleExportPage}
           />
         }

@@ -119,6 +119,17 @@ export const MARKDOWN_IMPORT_EXTENSIONS: readonly string[] = Object.keys(EXTENSI
 export const MARKDOWN_IMPORT_ACCEPT_ATTRIBUTE = [...MARKDOWN_IMPORT_EXTENSIONS].join(',')
 
 /**
+ * The `accept` attribute for the general "Import file" picker.
+ *
+ * Derived from the same allowlist the server uses, so the picker can never
+ * offer a format the ingest core would refuse. Includes every accepted
+ * document format — Markdown and other text formats, PDF, Office, OpenDocument,
+ * EPUB, RTF and LaTeX. Images are excluded: they cannot become a page on their
+ * own (the ingest core rejects them with `conversion_failed`).
+ */
+export const IMPORT_ACCEPT_ATTRIBUTE = ACCEPTED_DOCUMENT_FORMATS.map((f) => `.${f.ext}`).join(',')
+
+/**
  * The title a Markdown note takes from the name of the file it came from.
  *
  * Lives in the DOM-free policy module rather than in the conversion adapter so

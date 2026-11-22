@@ -78,10 +78,10 @@ const CHILD_ITEMS: ReadonlyArray<TypeItem> = [
   { action: 'childDiagram', label: UI_TEXT.newDiagramPage, icon: IconChartArea }
 ]
 
-// Import sources. Today only Markdown; kept as a submenu so tomorrow other
-// importers (HTML, OPML, etc.) slot in without touching the menu layout.
+// One general import entry: the file picker accepts every format the server's
+// ingest pipeline supports, so no per-format menu items are needed.
 const IMPORT_ITEMS: ReadonlyArray<TypeItem> = [
-  { action: 'importMarkdown', label: UI_TEXT.importMarkdownLabel, icon: IconMarkdown }
+  { action: 'importFile', label: UI_TEXT.importFileLabel, icon: IconFileImport }
 ]
 
 /**
@@ -144,7 +144,7 @@ export function TreeContextMenu({
     </>
   )
 
-  // Import is a submenu (Markdown today; other sources slot in later).
+  // Import is a submenu so future sources can slot in without changing the layout.
   const renderImportSubmenu = (): JSX.Element => (
     <Menu.Sub openDelay={80} closeDelay={120} safeAreaPolygon>
       <Menu.Sub.Target>
