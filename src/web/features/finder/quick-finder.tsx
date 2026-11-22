@@ -1,4 +1,4 @@
-import { Modal, ScrollArea, Text, TextInput } from '@mantine/core'
+import { Combobox, Modal, ScrollArea, Text, TextInput, useCombobox } from '@mantine/core'
 import type { Page } from '@rtwiki/shared/contracts/pages'
 import { IconSearch } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -17,9 +17,11 @@ import classes from './quick-finder.module.css'
  * Groups results as Recent / Title matches / Content matches with
  * deduplication across groups. Title matching is immediate over the loaded
  * page collection; content matching reuses the existing search endpoint,
- * debounced so typing never blocks title results. Keyboard-first: Up/Down
- * navigate a flat highlight order, Enter opens through the controller flow,
- * Escape closes and leaves no overlay behind (Mantine unmounts on close).
+ * debounced so typing never blocks title results. Keyboard navigation is
+ * Mantine's Combobox store (Up/Down/Enter over the option list); Escape closes
+ * the Modal through an explicit handler, because Combobox's own Escape only
+ * closes its dropdown and this finder has no dropdown — the list is always
+ * visible inside the Modal.
  *
  * Ctrl+K conflict rule: the installed CodeMirror keymaps (default, history,
  * search, fold, close-brackets) bind no Mod-K combination, so the finder is
@@ -43,23 +45,28 @@ const MAX_PER_GROUP = 6
 
 export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderProps): JSX.Element {
   const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(0)
   const [contentMatches, setContentMatches] = useState<Page[]>([])
   const [recents, setRecents] = useState<RecentPageEntry[]>([])
   const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // The list is always visible, so the Combobox store treats it as permanently
+  // open. That makes its Arrow/Enter navigation active from the first keystroke.
+  const combobox = useCombobox({ defaultOpened: true })
 
   // Fresh recents + reset state each time the finder opens.
   useEffect(() => {
     if (opened) {
       setRecents(loadRecentPages())
       setQuery('')
-      setActiveIndex(0)
       setContentMatches([])
+      combobox.resetSelectedOption()
     }
-  }, [opened])
+    // resetSelectedOption is a stable handler from useCombobox.
+  }, [opened, combobox.resetSelectedOption])
 
   // Debounced content search against the existing endpoint; never blocks
-  // title results (those render synchronously from `pages`).
+  // title results (those render synchronously from `pages`). The cancelled
+  // flag guards against a stale response overwriting a newer query.
   useEffect(() => {
     if (!opened) return
     const q = query.trim()
@@ -119,23 +126,30 @@ export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderP
     return out
   }, [pages, recents, query, contentMatches])
 
+  // Keep the Combobox selection index valid as the option list changes. When
+  // nothing is selected yet, select the first option so Enter opens the first
+  // result immediately — the original finder highlighted row 0 on open. The
+  // signature is read inside the effect so the dependency is genuine.
+  const rowsSignature = rows.map((row) => row.page.id).join('|')
+  useEffect(() => {
+    void rowsSignature
+    if (combobox.getSelectedOptionIndex() === -1 && rows.length > 0) {
+      combobox.selectFirstOption()
+    } else {
+      combobox.updateSelectedOptionIndex()
+    }
+  }, [
+    rowsSignature,
+    rows.length,
+    combobox.getSelectedOptionIndex,
+    combobox.selectFirstOption,
+    combobox.updateSelectedOptionIndex
+  ])
+
   const openRow = (row: FinderRow | undefined): void => {
     if (!row) return
     onClose()
     onOpenPage(row.page.id)
-  }
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActiveIndex((i) => Math.min(i + 1, rows.length - 1))
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex((i) => Math.max(i - 1, 0))
-    } else if (event.key === 'Enter') {
-      event.preventDefault()
-      openRow(rows[activeIndex])
-    }
   }
 
   const groupLabel = (group: FinderRow['group']): string =>
@@ -146,7 +160,6 @@ export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderP
         : UI_TEXT.quickFinderContentGroup
 
   let lastGroup: FinderRow['group'] | null = null
-  let renderIndex = -1
 
   return (
     <Modal
@@ -160,82 +173,88 @@ export function QuickFinder({ opened, onClose, pages, onOpenPage }: QuickFinderP
       // Unmount content on close so no overlay or focus trap can linger.
       keepMounted={false}
     >
-      <TextInput
-        ref={inputRef}
-        leftSection={<IconSearch size={14} />}
-        placeholder={UI_TEXT.quickFinderSearchPlaceholder}
-        value={query}
-        onChange={(event) => setQuery(event.currentTarget.value)}
-        onKeyDown={handleKeyDown}
-        data-testid="quick-finder-input"
-        aria-label={UI_TEXT.quickFinderSearchPlaceholder}
-        // BOTH are required, and `autoFocus` alone is not sufficient.
-        //
-        // Mantine's `Modal` wraps its content in a focus trap
-        // (`useFocusTrap`, node_modules/@mantine/hooks) that picks an initial
-        // target on a `setTimeout(0)`, i.e. one macrotask AFTER React has
-        // already applied `autoFocus`. Its selection is: an element carrying
-        // `data-autofocus`, else the first tabbable descendant. This Modal
-        // renders a title, so `withCloseButton` defaults to true and the close
-        // button precedes the body in DOM order - it was therefore first
-        // tabbable, and the trap moved focus onto the CLOSE BUTTON.
-        //
-        // That is not cosmetic. The search box then never received keystrokes,
-        // a Space in a search term activated the focused close button (a
-        // `<button>` is activated by Space), which called `onClose` and
-        // unmounted the finder mid-word; the rest of the word was typed into
-        // the document behind it and autosaved. `data-autofocus` is Mantine's
-        // documented way to state the intended target, and it makes the trap
-        // agree with `autoFocus` instead of overriding it. `autoFocus` stays as
-        // the fallback for the (unused) no-trap case.
-        data-autofocus
-        autoFocus
-      />
-      <ScrollArea.Autosize mah={LAYOUT.panelMaxHeight} type="always" scrollbars="y">
-        <div
-          className={classes.results}
-          role="listbox"
-          aria-label={UI_TEXT.quickFinderTitle}
-          data-testid="quick-finder-results"
-        >
-          {rows.length === 0 ? (
-            <Text size="sm" c="dimmed" p="sm" role="status">
-              {UI_TEXT.quickFinderEmptyLabel}
-            </Text>
-          ) : (
-            rows.map((row) => {
-              renderIndex += 1
-              const index = renderIndex
-              const showGroup = row.group !== lastGroup
-              lastGroup = row.group
-              return (
-                <div key={row.page.id}>
-                  {showGroup ? (
-                    <Text size="xs" fw={600} c="dimmed" className={classes.groupLabel}>
-                      {groupLabel(row.group)}
-                    </Text>
-                  ) : null}
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={index === activeIndex}
-                    className={
-                      index === activeIndex
-                        ? `${classes.resultItem} ${classes.resultItemActive}`
-                        : classes.resultItem
-                    }
-                    data-testid={`quick-finder-option-${row.page.id}`}
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => openRow(row)}
-                  >
-                    {row.page.title || UI_TEXT.untitledPage}
-                  </button>
-                </div>
-              )
-            })
-          )}
-        </div>
-      </ScrollArea.Autosize>
+      <Combobox
+        store={combobox}
+        onOptionSubmit={(value) => {
+          openRow(rows.find((row) => row.page.id === value))
+        }}
+      >
+        <Combobox.EventsTarget>
+          <TextInput
+            ref={inputRef}
+            leftSection={<IconSearch size={14} />}
+            placeholder={UI_TEXT.quickFinderSearchPlaceholder}
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Combobox's Escape only closes its (always-open) dropdown; the
+              // finder must close the Modal itself.
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                onClose()
+              }
+            }}
+            data-testid="quick-finder-input"
+            aria-label={UI_TEXT.quickFinderSearchPlaceholder}
+            // BOTH are required, and `autoFocus` alone is not sufficient.
+            //
+            // Mantine's `Modal` wraps its content in a focus trap
+            // (`useFocusTrap`, node_modules/@mantine/hooks) that picks an initial
+            // target on a `setTimeout(0)`, i.e. one macrotask AFTER React has
+            // already applied `autoFocus`. Its selection is: an element carrying
+            // `data-autofocus`, else the first tabbable descendant. This Modal
+            // renders a title, so `withCloseButton` defaults to true and the close
+            // button precedes the body in DOM order - it was therefore first
+            // tabbable, and the trap moved focus onto the CLOSE BUTTON.
+            //
+            // That is not cosmetic. The search box then never received keystrokes,
+            // a Space in a search term activated the focused close button (a
+            // `<button>` is activated by Space), which called `onClose` and
+            // unmounted the finder mid-word; the rest of the word was typed into
+            // the document behind it and autosaved. `data-autofocus` is Mantine's
+            // documented way to state the intended target, and it makes the trap
+            // agree with `autoFocus` instead of overriding it. `autoFocus` stays as
+            // the fallback for the (unused) no-trap case.
+            data-autofocus
+            autoFocus
+          />
+        </Combobox.EventsTarget>
+        <ScrollArea.Autosize mah={LAYOUT.panelMaxHeight} type="always" scrollbars="y">
+          <Combobox.Options
+            className={classes.results}
+            aria-label={UI_TEXT.quickFinderTitle}
+            data-testid="quick-finder-results"
+          >
+            {rows.length === 0 ? (
+              <Text size="sm" c="dimmed" p="sm" role="status">
+                {UI_TEXT.quickFinderEmptyLabel}
+              </Text>
+            ) : (
+              rows.map((row) => {
+                const showGroup = row.group !== lastGroup
+                lastGroup = row.group
+                return (
+                  <div key={row.page.id}>
+                    {showGroup ? (
+                      <Text size="xs" fw={600} c="dimmed" className={classes.groupLabel}>
+                        {groupLabel(row.group)}
+                      </Text>
+                    ) : null}
+                    <Combobox.Option
+                      value={row.page.id}
+                      className={classes.resultItem}
+                      data-testid={`quick-finder-option-${row.page.id}`}
+                      onMouseEnter={() => combobox.selectOption(rows.indexOf(row))}
+                    >
+                      {row.page.title || UI_TEXT.untitledPage}
+                    </Combobox.Option>
+                  </div>
+                )
+              })
+            )}
+          </Combobox.Options>
+        </ScrollArea.Autosize>
+      </Combobox>
     </Modal>
   )
 }
