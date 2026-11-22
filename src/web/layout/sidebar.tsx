@@ -1,9 +1,10 @@
 import { Alert, Loader, NavLink, Stack, Text } from '@mantine/core'
+import { useFileDialog } from '@mantine/hooks'
 import { PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES } from '@rtwiki/shared/constants'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'
 import { IMPORT_ACCEPT_ATTRIBUTE } from '@rtwiki/shared/import/policy'
 import { IconAlertCircle, IconHome } from '@tabler/icons-react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { SearchInput } from '../components/search-input.js'
 import { UI_TEXT } from '../config/index.js'
 import { PageTree } from '../features/sidebar/page-tree.js'
@@ -78,31 +79,37 @@ export function Sidebar({
   onImportFile,
   onExportPage
 }: SidebarProps): JSX.Element {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
 
-  const handleFileChosen = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    // One cheap transport-size check before any bytes are sent. Everything else
-    // — format detection, character limits, conversion — is the server's job in
-    // the one ingest path, and its refusal carries the actionable message.
-    if (file.size > PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES) {
-      setImportError(UI_TEXT.importErrorTooLarge)
-      return
+  // Mantine owns the hidden file input and its lifecycle. The hook lives here in
+  // the Sidebar (not inside the context Menu), so the menu closing cannot unmount
+  // the input before onChange fires — the documented FileButton-in-Menu trap.
+  const fileDialog = useFileDialog({
+    accept: IMPORT_ACCEPT_ATTRIBUTE,
+    multiple: false,
+    resetOnOpen: true,
+    onChange: (files) => {
+      const file = files?.[0]
+      if (!file) return
+      // One cheap transport-size check before any bytes are sent. Everything else
+      // — format detection, character limits, conversion — is the server's job in
+      // the one ingest path, and its refusal carries the actionable message.
+      if (file.size > PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES) {
+        setImportError(UI_TEXT.importErrorTooLarge)
+        return
+      }
+      setImportError(null)
+      void onImportFile(file)
+        .then((created) => {
+          if (!created) setImportError(UI_TEXT.importErrorCreateFailed)
+        })
+        .catch((err: unknown) => {
+          setImportError(err instanceof Error ? err.message : UI_TEXT.importErrorCreateFailed)
+        })
     }
-    setImportError(null)
-    void onImportFile(file)
-      .then((created) => {
-        if (!created) setImportError(UI_TEXT.importErrorCreateFailed)
-      })
-      .catch((err: unknown) => {
-        setImportError(err instanceof Error ? err.message : UI_TEXT.importErrorCreateFailed)
-      })
-  }
+  })
 
-  const requestImport = (): void => fileInputRef.current?.click()
+  const requestImport = (): void => fileDialog.open()
 
   return (
     <div className={classes.sidebarRoot}>
@@ -193,15 +200,6 @@ export function Sidebar({
           {importError}
         </Alert>
       ) : null}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={IMPORT_ACCEPT_ATTRIBUTE}
-        onChange={handleFileChosen}
-        className={classes.hiddenFileInput}
-        tabIndex={-1}
-        aria-hidden="true"
-      />
     </div>
   )
 }
