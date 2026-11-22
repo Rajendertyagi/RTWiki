@@ -162,31 +162,42 @@ export function reindexPagesReferencingAttachment(db: Database, attachmentId: st
   return pageIds.length
 }
 
-export function createPage(db: Database, input: CreatePageInput): Page {
-  const id = crypto.randomUUID()
+/**
+ * Creates a page without owning a transaction. The caller must already hold a
+ * write lock (`BEGIN IMMEDIATE`); the ingest core uses this so the page, its
+ * attachment and its provenance commit as one unit. `id` is supplied by the
+ * caller so provenance can be written against it in the same transaction.
+ */
+export function createPageCore(db: Database, id: string, input: CreatePageInput): Page {
   const content = resolveCreatedContent(input.pageType, input.content)
   const searchContent = searchContentForPage(db, input.pageType, content)
 
-  // Parent validation and position allocation share one write transaction so
-  // concurrent creates serialize into distinct sibling positions.
+  if (input.parentId != null) {
+    const parent = repo.getPage(db, input.parentId)
+    if (!parent) {
+      throw new HierarchyError('Parent page not found', 404)
+    }
+  }
+  const position = repo.nextChildPosition(db, input.parentId ?? null)
+  const page = repo.createPage(db, id, input.title, input.pageType, content, searchContent, {
+    parentId: input.parentId ?? null,
+    position
+  })
+  // Maintain the internal-link index for the new page (rich pages only). The
+  // core variant avoids a nested BEGIN IMMEDIATE when the caller owns the lock.
+  if (input.pageType === 'rich') {
+    repo.replaceOutgoingLinksCore(db, id, extractPageLinks(content))
+  }
+  return page
+}
+
+/** Transactional wrapper preserving the existing behaviour for all callers. */
+export function createPage(db: Database, input: CreatePageInput): Page {
+  const id = crypto.randomUUID()
   db.run('BEGIN IMMEDIATE')
   try {
-    if (input.parentId != null) {
-      const parent = repo.getPage(db, input.parentId)
-      if (!parent) {
-        throw new HierarchyError('Parent page not found', 404)
-      }
-    }
-    const position = repo.nextChildPosition(db, input.parentId ?? null)
-    const page = repo.createPage(db, id, input.title, input.pageType, content, searchContent, {
-      parentId: input.parentId ?? null,
-      position
-    })
+    const page = createPageCore(db, id, input)
     db.run('COMMIT')
-    // Maintain the internal-link index for the new page (rich pages only).
-    if (input.pageType === 'rich') {
-      repo.replaceOutgoingLinks(db, id, extractPageLinks(content))
-    }
     return page
   } catch (err) {
     db.run('ROLLBACK')

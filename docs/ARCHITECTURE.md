@@ -173,6 +173,7 @@ An assertion made against a stale bundle measures the previous code.
   - `GET /api/attachments/:id/view` — serve a document **inline**, so the browser draws it in a new tab. A separate route, so the download above stays the default and inline is opt-in per request. Same `default-src 'none'; sandbox` policy, applied to this response only. Owner-authorised; see [ADR-016](adr/ADR-016-inline-document-viewing.md), which states the residual same-origin risk.
   - `GET /api/attachments/:id/text` — a document's extracted text, as JSON. Never markup, so document contents can never become a rendering surface.
   - `DELETE /api/attachments/:id` — remove an image or document
+  - `POST /api/import` — full ingest: a multipart file upload creates a Markdown page, stores the original bytes as an attachment, and writes a provenance row in one transaction. Returns `{page, attachment, provenance, warnings}` with 201. `source.kind` is `'file'` only; `paste` and `api` are rejected before bytes are read. See [ADR-024](adr/ADR-024-one-ingest-pipeline-and-structured-import.md).
   - `GET /api/pages/:id/attachments` — **not implemented.** Attachments are not yet associated with a page, so there is nothing to list per page.
   - `GET /api/search?q=...` — full-text search
   - `GET /api/backup` — the three fixed slots, the schedule, and which are due
@@ -180,7 +181,7 @@ An assertion made against a stale bundle measures the previous code.
   - `PUT /api/backup/settings` — which periods run, and how often
   - `POST /api/backup/run` — take one period's backup now
   - `POST /api/backup/restore` — replace the database from a backup, then stop. **Requires the per-process shutdown token**, the same one and the same constant-time comparison `/api/shutdown` uses, because it is the one request that can destroy a working wiki. The candidate is fully validated first, the current database is moved aside rather than deleted, and the user is told to close and reopen RTWiki — nothing in this codebase respawns the server. See [SECURITY.md](SECURITY.md) §8 and [BACKUP_PLAN.md](BACKUP_PLAN.md).
-  - `POST /api/v1/import/pages` — localhost-only import of AI-generated pages / note-packages (documented target; see [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) and [AI Content Import](AI_CONTENT_IMPORT.md))
+  - `POST /api/v1/import/pages` — **Planned — not implemented.** Localhost-only import of AI-generated pages / note-packages (documented target; see [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) and [AI Content Import](AI_CONTENT_IMPORT.md))
 - **Constraint:** Every route validates inputs. No raw user input reaches the database.
 
 ### 3.4 Application Services
@@ -190,9 +191,9 @@ An assertion made against a stale bundle measures the previous code.
   - `page-service.ts` — page CRUD, hierarchy, links, and the single search-row computation point
   - `attachment-routes.ts` / `attachment-repository.ts` — upload, validation, storage, and retrieval
   - `backup-service.ts` — archive creation and restoration with integrity checks
-  - `shared/import/conversion.ts` — the conversion boundary between an import source and editable content
+  - `src/server/ingest/` — the one ingest module (`ingest-file.ts`, `detect-upload.ts`, `document-to-markdown.ts`, `provenance-repository.ts`) shared by the attachment and import routes; the structured conversion boundary between an import source and editable content
 
-  **None of the `*Service` class names below are real.** `PageService`, `AttachmentService`, `BackupService`, `ImportService` and `SearchService` do not exist in `src/`: these are modules and exported functions, not classes. `ImportService` in particular must not be read as the pipeline of §3.11 existing — see [ADR-020](adr/ADR-020-search-and-conversion-boundary.md). Search has no service class either: it is a `LIKE` query issued from the pages route over the `search_index` table, composed by `search-extraction.ts` (see §3.6).
+  **None of the `*Service` class names below are real.** `PageService`, `AttachmentService`, `BackupService`, `ImportService` and `SearchService` do not exist in `src/`: these are modules and exported functions, not classes. `ImportService` in particular must not be read as the full pipeline of §3.11 existing — a narrower ingest foundation does exist (see [ADR-024](adr/ADR-024-one-ingest-pipeline-and-structured-import.md)). Search has no service class either: it is a `LIKE` query issued from the pages route over the `search_index` table, composed by `search-extraction.ts` (see §3.6).
 - **Constraint:** Services are instantiated once per request or per module, not as hidden globals.
 
 ### 3.5 Database Access
@@ -251,7 +252,16 @@ An assertion made against a stale bundle measures the previous code.
 
 ### 3.11 Import Pipeline
 
-All content entry paths — **paste, file drop, file import, and the localhost import API** — share one centralized import pipeline. No parallel import implementations are permitted. The pipeline stages are:
+> **Planned — not implemented.** The eight-stage pipeline below is the accepted design
+> ([ADR-006](adr/ADR-006-rich-content-and-import-contract.md)), not shipped code. What is built
+> is a narrower foundation: one server-side ingest module (`src/server/ingest/ingest-file.ts`)
+> with two HTTP consumers (`POST /api/attachments`, `POST /api/import`), structured
+> DOCX→Markdown conversion, and `import_sources` provenance — see
+> [ADR-024](adr/ADR-024-one-ingest-pipeline-and-structured-import.md). Paste and API sources are
+> rejected. Embedded images are localized and stored as attachments; images that cannot be
+> brought across emit an `images_not_imported` warning.
+
+All content entry paths — **paste, file drop, file import, and the localhost import API** — are intended to share one centralized import pipeline. No parallel import implementations are permitted. The pipeline stages are:
 
 ```
 adapter → validation → sanitize → asset localization → convert → preview → canonical JSON → transactional save

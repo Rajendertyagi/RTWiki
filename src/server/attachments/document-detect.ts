@@ -10,8 +10,7 @@ import {
   type AcceptedDocumentFormat,
   acceptedDocumentFormatByExt,
   acceptedDocumentFormatFor,
-  normaliseMimeType,
-  signaturelessDocumentFormatFor
+  normaliseMimeType
 } from '../../shared/attachments/document-formats.js'
 import {
   DOCUMENT_MAX_TABLE_CELLS,
@@ -33,9 +32,10 @@ import {
  * `.txt`, `.md`, `.html` and `.csv` have no signature. `officeparser` refuses
  * them, and no library can do better. For those the reported extension is
  * consulted, and because that is a claim rather than evidence they are marked
- * `signatureless` in the allowlist and are **never served back as a document** —
- * their text is extracted and stored as page content instead. The distinction is
- * the whole reason the two paths are separate.
+ * `signatureless` in the allowlist. Their text is extracted and stored as page
+ * content; since ADR-023 their original bytes are also stored and served back as
+ * a forced download (never rendered inline — `/view` still 404s). The distinction
+ * is the whole reason the two paths are separate.
  *
  * LaTeX is the one format with no signature that is still a *structured document*:
  * its reported type supplies a hint to `officeparser` (which parses it), rather
@@ -77,8 +77,8 @@ export type DocumentRefusalDetail = 'limit_exceeded' | 'malformed' | 'timeout'
  * DOCX is an unsupported file type. Keeping the outcomes apart lets the caller answer
  * each for what it is.
  */
-type ContainerParse =
-  | { outcome: 'parsed'; type: string | null; text: string }
+export type ContainerParse =
+  | { outcome: 'parsed'; type: string | null; text: string; ast: unknown }
   /** The parser did not recognise a document here. See the note on the old `null`. */
   | { outcome: 'not_a_document' }
   /** A real container was recognised and then refused. */
@@ -185,68 +185,27 @@ export async function inspectDocumentUpload(
   reportedType?: string | null,
   limits: Readonly<DocumentResourceLimits> = DOCUMENT_RESOURCE_LIMITS
 ): Promise<DocumentInspection> {
-  if (bytes.length === 0) return { ok: false, reason: 'empty' }
-
-  // OLE/CFB containers are ambiguous: an old .doc/.xls/.ppt needs a save-as, but
-  // a password-protected .docx/.xlsx/.pptx is already a modern format and needs
-  // its password removed. Both are reported as `cfb` by `file-type`, so ask
-  // officeparser which one this is before choosing the user-facing message.
-  const cfbKind = await classifyCfbContainer(bytes, limits)
-  if (cfbKind) return { ok: false, reason: cfbKind }
-
-  // ## Order matters, and the naive order is a vulnerability
-  //
-  // Checking the reported type first would mean a PDF renamed to `.txt` is
-  // accepted as text, and a DOCX renamed to `.html` has its markup read as the
-  // note's text. The declared type must never outrank the bytes.
-  //
-  // So the container is identified first, and the signature-less path is only
-  // reached when the bytes turned out *not* to be a recognisable document. That
-  // inverts the obvious order deliberately, and it is the reason a mislabelled
-  // upload is stored as what it actually is.
-  const parsed = await tryParseContainer(bytes, limits, reportedType)
-
-  if (parsed.outcome === 'parsed') {
-    const format = acceptedDocumentFormatByExt(parsed.type)
-    if (!format || format.signatureless) return { ok: false, reason: 'unsupported_type' }
-    return { ok: true, format, text: parsed.text }
+  // Detection lives in exactly one place — src/server/ingest/detect-upload.ts.
+  // This wrapper preserves the attachment route's existing contract: flattened
+  // text for the search index, and `unsupported_type` for images so the route
+  // falls through to image detection. The dynamic import keeps the two modules
+  // from forming a static cycle (the new module reuses the helpers below).
+  const { detectDocumentUpload } = await import('../ingest/detect-upload.js')
+  const detected = await detectDocumentUpload(bytes, reportedType, limits)
+  if (!detected.ok) {
+    return {
+      ok: false,
+      reason: detected.reason,
+      ...(detected.detail ? { detail: detected.detail } : {})
+    }
   }
-
-  // A container that was recognised and then refused is not "not a document". Falling
-  // through to the signature-less branch would consult the *reported* type for bytes that
-  // are demonstrably a ZIP or a PDF — which is the same error, in a milder form, as the
-  // ordering inversion above: letting a claim outrank evidence. It is refused here
-  // instead, and as `extract_failed` rather than `unsupported_type`, because the user's
-  // file type is supported; it is this file that could not be opened.
-  if (parsed.outcome === 'refused')
-    return { ok: false, reason: 'extract_failed', detail: parsed.detail }
-
-  // ## Why the detail is not surfaced to the user
-  //
-  // Reaching a decompression ceiling and finding a truncated archive are both "this file
-  // could not be opened", and both are refused identically. A separate user-facing reason
-  // would say *why* a limit tripped, which tells a user nothing they can act on about a
-  // file they can only fix by making it smaller. The distinction is not discarded: it
-  // travels on the rejection as `detail`, which is what makes the guard testable — a
-  // refusal asserted without it would not distinguish a tripped ceiling from a parser that
-  // simply did not recognise the bytes.
-
-  // Only now may the reported type be consulted, and only for a format the
-  // allowlist itself marks as having no signature. That is what stops this path
-  // from reaching a *served* format, and what stops a mislabelled container from
-  // being downgraded to text.
-  //
-  // The type is normalised first: a `File` built from text carries a charset, so
-  // the browser reports `text/plain;charset=utf-8`, which would otherwise never
-  // match the allowlist and every text upload would be refused.
-  const signatureless = signaturelessDocumentFormatFor(normaliseMimeType(reportedType))
-  if (!signatureless) return { ok: false, reason: 'unsupported_type' }
-  if (!looksLikeText(bytes)) return { ok: false, reason: 'unsupported_type' }
-
+  if (detected.kind === 'document') {
+    return { ok: true, format: detected.format, text: detected.searchText }
+  }
   return {
     ok: true,
-    format: signatureless,
-    text: decodeText(bytes).replace(/\s+/g, ' ').trim().slice(0, DOCUMENT_TEXT_MAX_CHARS)
+    format: detected.format,
+    text: detected.rawText.replace(/\s+/g, ' ').trim().slice(0, DOCUMENT_TEXT_MAX_CHARS)
   }
 }
 
@@ -264,6 +223,10 @@ function parseOfficeOptions(
 ): Record<string, unknown> {
   return {
     ...(hint ? { fileType: hint } : {}),
+    // Embedded images are extracted so the ingest path can store them as
+    // attachments and rewrite Markdown references to RTWiki URLs (ADR-024 §3).
+    // Without this, `ast.attachments` is empty and images are silently lost.
+    extractAttachments: true,
     // officeparser's default `separateProcess: true` never completes its child-process
     // handshake under Bun, so a PDF parse hangs forever. In-process pdf.js works; the
     // `abortSignal` cancels work that yields to the event loop, though it cannot
@@ -295,7 +258,7 @@ function parseOfficeOptions(
  * expand it into. Both ZIP-backed formats and PDF are affected, and a repeated byte
  * run is the cheap way to cross the gap.
  */
-async function tryParseContainer(
+export async function tryParseContainer(
   bytes: Uint8Array,
   limits: Readonly<DocumentResourceLimits>,
   reportedType?: string | null
@@ -344,7 +307,9 @@ async function tryParseContainer(
   } finally {
     clearTimeout(timeout)
   }
-  return { outcome: 'parsed', type: detectOfficeType(ast), text: await readText(ast) }
+  // The AST used to be discarded here after its text was read. The ingest path
+  // needs it to call `ast.to('md')`, so it is retained on the parsed outcome.
+  return { outcome: 'parsed', type: detectOfficeType(ast), text: await readText(ast), ast }
 }
 
 /**
@@ -416,7 +381,7 @@ const PASSWORD_CODES = new Set(['PASSWORD_REQUIRED', 'PASSWORD_INCORRECT'])
  * legacy binary is refused as an unsupported `cfb` type. Asking it is the
  * authoritative answer and avoids duplicating its container parsing here.
  */
-async function classifyCfbContainer(
+export async function classifyCfbContainer(
   bytes: Uint8Array,
   limits: Readonly<DocumentResourceLimits>
 ): Promise<'password_protected' | 'legacy_office' | null> {

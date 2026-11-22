@@ -119,6 +119,26 @@ export const MARKDOWN_IMPORT_EXTENSIONS: readonly string[] = Object.keys(EXTENSI
 export const MARKDOWN_IMPORT_ACCEPT_ATTRIBUTE = [...MARKDOWN_IMPORT_EXTENSIONS].join(',')
 
 /**
+ * The title a Markdown note takes from the name of the file it came from.
+ *
+ * Lives in the DOM-free policy module rather than in the conversion adapter so
+ * the server's ingest path can derive a page title without importing a module
+ * that also serialises editor content. Built from `MARKDOWN_IMPORT_EXTENSIONS`
+ * rather than written out, so the title can never disagree with the file picker
+ * about which names count as Markdown. Returns `''` when nothing usable remains;
+ * callers apply their own fallback, because the fallback is user-facing text and
+ * this module is shared.
+ */
+export function markdownNoteTitle(fileName: string): string {
+  // Each alternative carries its own leading dot, escaped here, so the pattern is
+  // a single group with no extra `\.` in front of it. Adding one demands *two*
+  // dots and strips nothing from `notes.md` — which is exactly what it did before
+  // this comment existed.
+  const alternatives = MARKDOWN_IMPORT_EXTENSIONS.map((ext) => ext.replace('.', '\\.')).join('|')
+  return fileName.replace(new RegExp(`(${alternatives})$`, 'i'), '').trim()
+}
+
+/**
  * The Markdown page import limit, in characters — the same number the stored-content
  * schema enforces, and therefore the same number the server will enforce.
  */

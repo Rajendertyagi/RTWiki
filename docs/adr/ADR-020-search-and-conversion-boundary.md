@@ -103,7 +103,10 @@ Both statements below were verified against the source rather than inferred from
 
 6. **DOCX editable conversion is not implemented and is not implied.** Documents are
    attachments. Converting one would change what an attachment *is*, which is a product
-   decision for a future phase with its own ADR.
+   decision for a future phase with its own ADR. **Superseded for the ingest path by
+   [ADR-024](ADR-024-one-ingest-pipeline-and-structured-import.md):** a DOCX imported through
+   `POST /api/import` is converted into editable Markdown. This item stands for the
+   attachment-only path.
 
 ## Supersedes
 

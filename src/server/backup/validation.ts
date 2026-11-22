@@ -221,18 +221,18 @@ export function validateBackupFile(path: string): ValidationOutcome {
  *
  * ## Why `bytes_stored` is part of the condition
  *
- * `data IS NULL` on its own stopped meaning "missing bytes" once signature-less
- * documents stopped storing them (migration `011`). A `.txt`, `.md` or `.html`
- * upload is *supposed* to have no bytes: its type can never be established from
- * them, so the serving path refuses them anyway and keeping them only duplicated
- * unreachable content into every backup.
+ * `data IS NULL` on its own stopped meaning "missing bytes" once migration `011`
+ * made the column nullable. Under the old attachment route a `.txt`, `.md` or
+ * `.html` upload was *supposed* to have no bytes, so a deliberate absence had to
+ * be distinguishable from a row whose bytes were never migrated.
  *
- * Counting those rows as mid-migration would have meant **every backup failing for
- * good** the first time anyone attached a plain text file. `bytes_stored` is what
- * separates the two cases in the row itself: `0` is a deliberate absence, `1` with
- * no bytes is the corruption this function exists to catch. The refusal is
- * unchanged for a genuinely incomplete database — only a row that claims to have
- * bytes and does not still trips it.
+ * Files imported through the ingest path (ADR-023/ADR-024) now keep their bytes
+ * even when signature-less, so new rows carry `data` and `bytes_stored = 1` and
+ * are not flagged. Legacy signature-less rows still have `data IS NULL` and
+ * `bytes_stored = 0`, so they are not flagged either. `bytes_stored` is what
+ * separates those two legitimate cases from the corruption this function exists
+ * to catch: `1` with no bytes still means "bytes were never migrated" and still
+ * refuses backup. The refusal is unchanged for a genuinely incomplete database.
  *
  * ## Why a missing column falls back to the old condition
  *

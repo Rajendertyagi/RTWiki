@@ -10,6 +10,7 @@ import {
   looksLikeText,
   refusalDetail
 } from '../src/server/attachments/document-detect.js'
+import { detectDocumentUpload } from '../src/server/ingest/detect-upload.js'
 import {
   ACCEPTED_DOCUMENT_EXTENSIONS,
   ACCEPTED_DOCUMENT_FORMATS,
@@ -390,6 +391,21 @@ describe('document inspection', () => {
     }
   })
 
+  it('returns signature-less raw text unflattened, with its line breaks intact', async () => {
+    // `inspectDocumentUpload` flattens text for the search index. The ingest path
+    // needs the original line breaks to produce Markdown, so the shared detector
+    // returns the decoded text untouched. Asserted here so a future refactor
+    // cannot quietly reintroduce the `.replace(/\s+/g, ' ')` that lost structure.
+    const raw = '# Title\n\nFirst line\n  indented second line\n'
+    const result = await detectDocumentUpload(enc(raw), 'text/plain')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.kind).toBe('text')
+    if (result.kind !== 'text') return
+    expect(result.rawText).toBe(raw)
+    expect(result.truncated).toBe(false)
+  })
+
   it('accepts a reported type that carries a charset', async () => {
     // A `File` built from text reports `text/plain;charset=utf-8`. An exact
     // lookup never matches that, so without trimming every text upload is
@@ -514,7 +530,17 @@ describe('additional accepted document formats', () => {
     // The picker's accept attribute is built from the same allowlist, so adding a
     // format there must make it selectable — detection alone is not enough.
     for (const ext of [
-      'docm', 'dotx', 'dotm', 'xlsm', 'xltx', 'xltm', 'pptm', 'potx', 'potm', 'ppsx', 'ppsm'
+      'docm',
+      'dotx',
+      'dotm',
+      'xlsm',
+      'xltx',
+      'xltm',
+      'pptm',
+      'potx',
+      'potm',
+      'ppsx',
+      'ppsm'
     ]) {
       expect(acceptedDocumentFormatByExt(ext), ext).not.toBeNull()
       expect(DOCUMENT_FILE_ACCEPT_ATTRIBUTE, ext).toContain(`.${ext}`)
@@ -641,7 +667,14 @@ The overall reaction is $6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2$.
     // The CFB signature is enough: file-type reports `cfb`, which is not on the
     // allowlist, and the user gets a save-as message rather than "unsupported".
     const cfb = new Uint8Array([
-      0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+      0xd0,
+      0xcf,
+      0x11,
+      0xe0,
+      0xa1,
+      0xb1,
+      0x1a,
+      0xe1,
       ...new Array(504).fill(0)
     ])
     expect(await inspectDocumentUpload(cfb)).toEqual({ ok: false, reason: 'legacy_office' })
@@ -674,9 +707,7 @@ The overall reaction is $6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2$.
       // A real-world .docx from the oletools test corpus, not one we generated.
       'real-encrypted.docx'
     ]) {
-      const bytes = new Uint8Array(
-        readFileSync(join(import.meta.dir, 'fixtures', name))
-      )
+      const bytes = new Uint8Array(readFileSync(join(import.meta.dir, 'fixtures', name)))
       const result = await inspectDocumentUpload(bytes, 'application/octet-stream')
       expect(result, name).toEqual({ ok: false, reason: 'password_protected' })
     }
@@ -881,7 +912,9 @@ describe('PDF parse configuration and deadline', () => {
     expect(refusalDetail({ name: 'AbortError' })).toBe('timeout')
     expect(refusalDetail(new DOMException('aborted', 'AbortError'))).toBe('timeout')
     // The existing mappings still hold — the abort check must not swallow them.
-    expect(refusalDetail({ officeIssue: { code: 'ZIP_SIZE_LIMIT_EXCEEDED' } })).toBe('limit_exceeded')
+    expect(refusalDetail({ officeIssue: { code: 'ZIP_SIZE_LIMIT_EXCEEDED' } })).toBe(
+      'limit_exceeded'
+    )
     expect(refusalDetail({ officeIssue: { code: 'SOMETHING_ELSE' } })).toBe('malformed')
   })
 

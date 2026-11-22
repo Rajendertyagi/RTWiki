@@ -55,6 +55,17 @@ attachments
   ├── uploaded_at (TEXT, UTC)
   └── deleted_at (TEXT, UTC)
 
+import_sources                 ← import provenance; NO FK to pages (survives deletion)
+  ├── id (PK, UUID)
+  ├── page_id (TEXT)           ← page created by the import; deliberately not a FK
+  ├── attachment_id (TEXT)     ← bytes stored by the import
+  ├── source_kind (TEXT)       ← CHECK IN ('file'); paste/api are rejected
+  ├── original_name (TEXT)
+  ├── byte_size (INTEGER)
+  ├── checksum (TEXT)
+  ├── mime_type (TEXT)
+  └── created_at (TEXT, UTC)
+
 search_index                  ← ordinary table, not FTS5
   ├── page_id (PK, FK → pages.id)
   ├── title (TEXT)
@@ -130,7 +141,7 @@ Both are junction tables that enforce referential integrity at the database leve
 
 Image bytes are stored in the `attachments.data` column, not as files in a directory (see [ADR-014](adr/ADR-014-blob-stored-image-bytes.md)). The row is written as a single statement, so an attachment cannot exist as bytes without metadata or the reverse. Files left behind by a database created before that change are read once by the migration and then left on disk untouched; removing them is a separate retention decision.
 
-**Documents share this table** ([ADR-015](adr/ADR-015-document-attachments.md)). `kind` distinguishes an image from a document, and `extracted_text` holds the readable text a document yielded, which is appended to the **owning page's** `search_index` row so the document can be found by what is inside it. A `.txt`, `.md`, `.html` or `.csv` upload has its text stored and **no bytes at all**, because those formats carry no signature: the application will not serve a file whose type was never established, so keeping the bytes would store content no user could ever retrieve. `bytes_stored` records which case a row is, so a deliberate absence is never mistaken for an unfinished ADR-014 migration.
+**Documents share this table** ([ADR-015](adr/ADR-015-document-attachments.md)). `kind` distinguishes an image from a document, and `extracted_text` holds the readable text a document yielded, which is appended to the **owning page's** `search_index` row so the document can be found by what is inside it. `bytes_stored` distinguishes a deliberate absence from an unfinished ADR-014 migration. **Signature-less bytes (`.txt`, `.md`, `.html`, `.csv`) — D1-A asymmetry:** NEW imports store their original bytes and are downloadable as forced downloads; legacy rows written before migration 011 have `data = NULL`, `bytes_stored = 0` and still 404 on both download and `/view`. Their bytes were discarded at upload and cannot be backfilled. See [ADR-023](adr/ADR-023-signatureless-bytes-and-forced-download.md).
 
 **Addressing:** The browser addresses an attachment by `id`, never by filename. `GET /api/attachments/:id` looks the row up and streams its bytes, so no user-supplied string ever reaches the filesystem — there is no path to reach. See [ADR-013](adr/ADR-013-image-attachments.md).
 
@@ -166,6 +177,10 @@ A simple key-value store for application-level configuration that the user can c
 ### 3.8 Backups
 
 Each backup record points to a ZIP archive on disk. The archive path is relative to the data directory (`data/backups/`). The `rtwiki_version` column records the application version at backup time, enabling the restore path to reject archives from incompatible versions. Backups include the database and attachments but exclude log files.
+
+### 3.9 Import Sources
+
+Created by migration `013_create_import_sources`. One row per full ingest through `POST /api/import`, written in the same transaction as the page and its attachment. It is a **snapshot of the import event**, not a property of the page: there is deliberately **no foreign key to `pages`**, so the row survives deletion, duplication or re-import of the page. `source_kind` is constrained to `'file'`; `paste` and `api` sources are rejected before any bytes are read. See [ADR-024](adr/ADR-024-one-ingest-pipeline-and-structured-import.md).
 
 ## 4. Deletion and Recycle-Bin Behaviour
 

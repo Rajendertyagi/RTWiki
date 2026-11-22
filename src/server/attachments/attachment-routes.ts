@@ -8,17 +8,15 @@ import { bodyLimit } from 'hono/body-limit'
 import { acceptedDocumentFormatFor } from '../../shared/attachments/document-formats.js'
 import { DOCUMENT_CSP_KEY } from '../app.js'
 import type { getDb } from '../database/index.js'
+import { ingestFile } from '../ingest/ingest-file.js'
+import type { IngestRejectionReason, IngestResult } from '../ingest/ingest-types.js'
 import type { Logger } from '../logging/index.js'
 import { reindexPagesReferencingAttachment } from '../services/page-service.js'
 import { isSameOrigin } from '../utils/request-origin.js'
 import {
-  type AttachmentKind,
   type AttachmentRecord,
-  checksumOf,
   deleteAttachment,
   getAttachment,
-  insertAttachment,
-  normaliseOriginalName,
   streamAttachmentBytes
 } from './attachment-repository.js'
 import {
@@ -26,8 +24,6 @@ import {
   DOCUMENT_CONTENT_SECURITY_POLICY,
   DOCUMENT_VIEW_CONTENT_SECURITY_POLICY
 } from './content-disposition.js'
-import { inspectDocumentUpload } from './document-detect.js'
-import { inspectImageUpload, pixelCount } from './image-detect.js'
 
 export interface AttachmentRouteOptions {
   getDb: () => ReturnType<typeof getDb>
@@ -111,14 +107,24 @@ const REJECTION_MESSAGES: Record<RejectionReason, { status: 400 | 413 | 415; err
   }
 }
 
-/** What an accepted upload will be stored as, before the id and name are added. */
-interface AcceptedUpload {
-  mimeType: string
-  kind: AttachmentKind
-  /** Readable text, for the search index. Null for an image. */
-  extractedText: string | null
-  /** False when the file was identified from its reported type, not its bytes. */
-  signatureless: boolean
+/**
+ * The ingest reasons that have a stable attachment-route answer.
+ *
+ * `ingestFile` reports a few reasons this route has never had words for, and uses
+ * different statuses for four of the ones it does (422/413 where this route has
+ * always answered 415). Mapping through `REJECTION_MESSAGES` keeps the response
+ * contract — status, `error` and `code` — exactly as it was before ingest was
+ * centralised. Reasons outside this table cannot occur in attachment-only mode
+ * and are answered with a generic 400 rather than echoed to the client.
+ */
+const INGEST_REJECTION_MAP: Partial<Record<IngestRejectionReason, RejectionReason>> = {
+  empty: 'empty',
+  unsupported_type: 'unsupported_type',
+  svg_not_supported: 'svg_not_supported',
+  too_many_pixels: 'too_many_pixels',
+  extract_failed: 'extract_failed',
+  legacy_office: 'legacy_office',
+  password_protected: 'password_protected'
 }
 
 /**
@@ -207,67 +213,23 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     if (file.size === 0) return reject(c, 'empty', logger)
 
     // The whole file is read because it is stored whole, but every *decision*
-    // about it is made from its own bytes. The declared type is consulted only
-    // where the bytes cannot speak for themselves, and never for the stored type.
+    // about it is made from its own bytes. Detection, byte storage and warnings
+    // all live in the one ingest pipeline (ADR-024 §1); this route only maps the
+    // result onto the response it has always returned.
     const bytes = new Uint8Array(await file.arrayBuffer())
-    const accepted = await acceptUpload(bytes, file.type, logger)
-    if (!accepted.ok) return reject(c, accepted.reason, logger)
-
-    // A large document is still accepted — this is advisory, not a limit. Log it
-    // for the operator and tell the user in the response; the client turns the
-    // code into a non-blocking notification.
-    const oversized =
-      accepted.upload.kind === 'document' && bytes.length > warningBytes
-    if (oversized) {
-      logger.warn('Large document accepted', {
-        event: 'document_size_warning',
-        bytes: bytes.length
-      })
-    }
-
-    const id = crypto.randomUUID()
-    const originalName = normaliseOriginalName(file.name)
-    /*
-     * A signature-less upload keeps its text, not its bytes.
-     *
-     * `.txt`, `.md` and `.html` cannot be identified from their bytes, so
-     * `GET /api/attachments/:id` answers 404 for them by design. Storing the bytes
-     * anyway put unreachable content in the row and copied it into every backup, for
-     * a file no user could ever download back. The text is what the product actually
-     * needs — it is what the document card shows and what search indexes — so that is
-     * what is kept.
-     *
-     * `byteSize` still records what arrived, so the metadata stays truthful about the
-     * upload. `checksum` is likewise still computed: it describes the upload, and it is
-     * the one moment the bytes are in hand to compute it from.
-     */
-    const keepsBytes = !accepted.upload.signatureless
+    const db = getDb()
+    let result: IngestResult
     try {
-      const record = insertAttachment(getDb(), {
-        id,
-        mimeType: accepted.upload.mimeType,
-        byteSize: bytes.length,
-        kind: accepted.upload.kind,
-        extractedText: accepted.upload.extractedText,
-        originalName,
-        // Computed while the bytes are in hand: it is what makes content-addressed
-        // deduplication possible later, and it is free now.
-        checksum: checksumOf(bytes),
-        data: keepsBytes ? bytes : null
-      })
-      return c.json(
+      result = await ingestFile(
+        db,
         {
-          attachment: toResponse(record),
-          ...(oversized
-            ? {
-                warning: {
-                  code: 'document_size_warning',
-                  message: DOCUMENT_SIZE_WARNING_MESSAGE
-                }
-              }
-            : {})
+          sourceKind: 'file',
+          bytes,
+          reportedType: file.type,
+          originalName: file.name,
+          createPage: false
         },
-        201
+        { logger, documentSizeWarningBytes: warningBytes }
       )
     } catch (err) {
       logger?.error('Attachment write failed', {
@@ -276,6 +238,29 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
       })
       return c.json({ error: 'Could not store the file' }, 500)
     }
+    if (!result.ok) return rejectIngest(c, result, logger)
+
+    // A large document is still accepted — this is advisory, not a limit. The
+    // warning is produced by ingest for both the page and attachment paths; keep
+    // the operator log here and surface the first warning in the response, which
+    // has always carried a single `warning` object.
+    if (result.warnings.some((w) => w.code === 'document_size_warning')) {
+      logger.warn('Large document accepted', {
+        event: 'document_size_warning',
+        bytes: bytes.length
+      })
+    }
+
+    const record = getAttachment(db, result.attachmentId)
+    if (!record) return c.json({ error: 'Could not store the file' }, 500)
+    const warning = result.warnings[0]
+    return c.json(
+      {
+        attachment: toResponse(record),
+        ...(warning ? { warning: { code: warning.code, message: warning.message } } : {})
+      },
+      201
+    )
   })
 
   routes.get('/:id', async (c) => {
@@ -284,12 +269,6 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     const id = c.req.param('id')
     const record = getAttachment(db, id)
     if (!record) return c.json({ error: 'Not found' }, 404)
-
-    // A signature-less document has no servable bytes: what was stored is its
-    // text, because those bytes could never be identified as a document.
-    if (record.kind === 'document' && !isServableDocument(record.mimeType)) {
-      return c.json({ error: 'Not found' }, 404)
-    }
 
     // Streamed rather than read whole, so an in-flight response holds one chunk
     // instead of the entire file (ADR-014 §4).
@@ -354,8 +333,10 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     // draws inline from the download route, so this route has nothing to add for
     // one, and refusing it keeps a single answer to "what can be rendered here".
     if (record.kind !== 'document') return c.json({ error: 'Not a document' }, 400)
-    // A signature-less document has no servable bytes: what was stored is its text,
-    // because those bytes could never be identified as a document.
+    // Signature-less bytes are now stored (ADR-023), but they are deliberately
+    // not renderable inline: the type was never established from the bytes, so
+    // this route stays a defence-in-depth refusal even though the download route
+    // serves the same bytes as a forced attachment.
     if (!isServableDocument(record.mimeType)) return c.json({ error: 'Not found' }, 404)
 
     // Streamed, for the same reason and with the same chunking as the download
@@ -426,87 +407,36 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
 }
 
 /**
- * Decides what an upload is, or why it cannot be stored.
+ * Maps an ingest refusal onto the answer this route has always returned.
  *
- * Documents are identified first, and that ordering is deliberate. The document
- * parser recognises a real container; a file it does not recognise is either an
- * image or one of the formats that carry no signature at all. Checking the image
- * list first would mean a document never reached the parser, and checking the
- * reported type first would mean a renamed PDF could be taken for a renamed
- * `.txt`. The parser runs first precisely so the bytes outrank the claim.
- *
- * `logger` is an explicit parameter rather than a module import: the router holds one,
- * and a hidden global here would be the "uncontrolled global state" the standards forbid.
+ * Ingest owns detection and reports a wider set of reasons, with different
+ * statuses for four of them (422/413 where this route has always answered 415).
+ * Only reasons with an established `REJECTION_MESSAGES` entry get their existing
+ * words, status and code. Everything else is either impossible in attachment-only
+ * mode or an internal failure, and is answered with a safe generic 400 rather
+ * than echoing an internal reason to the client.
  */
-async function acceptUpload(
-  bytes: Uint8Array,
-  reportedType: string,
-  logger?: Logger
-): Promise<{ ok: true; upload: AcceptedUpload } | { ok: false; reason: RejectionReason }> {
-  const document = await inspectDocumentUpload(bytes, reportedType)
-  if (!document.ok && document.reason === 'extract_failed') {
-    // Refused here rather than falling through to the image path. The bytes are a
-    // document RTWiki recognised, so trying to interpret them as an image cannot succeed,
-    // and letting it run would replace the real diagnosis with "unsupported type".
-    //
-    // The distinction the detector made — a tripped decompression ceiling against a merely
-    // damaged archive — is logged and never shown. It is the difference between "this user
-    // is uploading bomb-shaped files" and "this user is uploading files their software
-    // saved badly", which are not the same bug.
+function rejectIngest(
+  c: { json: (body: unknown, status?: number) => Response },
+  result: Extract<IngestResult, { ok: false }>,
+  logger: Logger
+): Response {
+  // Keep the operator's container-refusal log. Ingest collapses the detector's
+  // detail into a user-facing message, so the reason is the most precise code
+  // available at this boundary.
+  if (result.reason === 'extract_failed') {
     logger?.warn('Document container refused', {
       event: 'document_refused',
-      code: document.detail ?? 'unknown'
+      code: result.reason
     })
-    return { ok: false, reason: 'extract_failed' }
   }
-  if (!document.ok && document.reason === 'legacy_office') {
-    // An old .doc/.xls/.ppt is a real container RTWiki recognises but cannot read.
-    // Refuse here rather than falling through to the image path, which would replace
-    // the actionable "save as" message with a generic "unsupported type".
-    return { ok: false, reason: 'legacy_office' }
-  }
-  if (!document.ok && document.reason === 'password_protected') {
-    // An encrypted modern Office file needs its own message, not the legacy
-    // save-as one — and must not fall through to the image path either.
-    return { ok: false, reason: 'password_protected' }
-  }
-  if (document.ok) {
-    return {
-      ok: true,
-      upload: {
-        mimeType: document.format.mime,
-        kind: 'document',
-        extractedText: document.text,
-        signatureless: document.format.signatureless
-      }
-    }
-  }
-
-  const image = await inspectImageUpload(bytes)
-  if (!image.ok) {
-    // An SVG is named as such, because "unsupported type" would leave a user who
-    // pasted a diagram with nothing to act on.
-    return { ok: false, reason: image.reason }
-  }
-
-  // The pixel ceiling lives here rather than inside the detector, so that "what
-  // is this" and "is this too big to open" stay separable questions. An unknown
-  // size is allowed through: refusing a file whose header could not be read
-  // would make an accepted format depend on a second parser agreeing.
-  const pixels = pixelCount(image.width, image.height)
-  if (pixels !== null && pixels > PROVISIONAL_MAX_IMAGE_PIXELS) {
-    return { ok: false, reason: 'too_many_pixels' }
-  }
-
-  return {
-    ok: true,
-    upload: {
-      mimeType: image.format.mime,
-      kind: 'image',
-      extractedText: null,
-      signatureless: false
-    }
-  }
+  const mapped = INGEST_REJECTION_MAP[result.reason]
+  if (mapped) return reject(c, mapped, logger)
+  logger?.warn('Attachment ingest rejected', {
+    event: 'attachment_rejected',
+    code: result.reason
+  })
+  return c.json({ error: 'That file could not be added', code: 'invalid_field' }, 400)
 }
 
 /** Whether a document's bytes may be handed back to a browser. */

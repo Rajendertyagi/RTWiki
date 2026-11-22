@@ -126,7 +126,14 @@ const REAL_TEX = enc(
 )
 /** The leading bytes of an OLE/CFB container, as an old .doc/.xls/.ppt begins. */
 const OLD_OFFICE = new Uint8Array([
-  0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+  0xd0,
+  0xcf,
+  0x11,
+  0xe0,
+  0xa1,
+  0xb1,
+  0x1a,
+  0xe1,
   ...new Array(504).fill(0)
 ])
 
@@ -389,11 +396,17 @@ describe('document upload', () => {
     const bytes = new Uint8Array(
       readFileSync(join(import.meta.dir, 'fixtures', 'encrypted-docx.bin'))
     )
-    const response = await upload(bytes, 'locked.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    const response = await upload(
+      bytes,
+      'locked.docx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
     expect(response.status).toBe(415)
     const payload = (await response.json()) as { error: string; code: string }
     expect(payload.code).toBe('password_protected')
-    expect(payload.error).toBe('This file is password-protected. Remove the password and try again.')
+    expect(payload.error).toBe(
+      'This file is password-protected. Remove the password and try again.'
+    )
   })
 
   it('refuses a plain zip with a clear message, not as a document', async () => {
@@ -445,7 +458,10 @@ describe('large document warning', () => {
       })
     )
     const body = new FormData()
-    body.append('file', new File([REAL_PDF as unknown as BlobPart], 'big.pdf', { type: 'application/pdf' }))
+    body.append(
+      'file',
+      new File([REAL_PDF as unknown as BlobPart], 'big.pdf', { type: 'application/pdf' })
+    )
 
     const response = await warned.request('/api/attachments', { method: 'POST', body })
     expect(response.status).toBe(201)
@@ -470,7 +486,10 @@ describe('large document warning', () => {
       })
     )
     const body = new FormData()
-    body.append('file', new File([REAL_PDF as unknown as BlobPart], 'small.pdf', { type: 'application/pdf' }))
+    body.append(
+      'file',
+      new File([REAL_PDF as unknown as BlobPart], 'small.pdf', { type: 'application/pdf' })
+    )
 
     const response = await warned.request('/api/attachments', { method: 'POST', body })
     expect(response.status).toBe(201)
@@ -594,10 +613,12 @@ describe('the inline view route serves a document for the browser to draw', () =
     expect((await app.request(viewUrl(created.attachment.id))).status).toBe(400)
   })
 
-  it('will not render a signature-less upload, whose bytes mean nothing alone', async () => {
+  it('will not render a signature-less upload inline, even though its bytes are stored', async () => {
     const created = (await (await upload(enc('some notes'), 'n.txt', 'text/plain')).json()) as {
       attachment: { id: string }
     }
+    // ADR-023: the bytes now exist and download as a forced attachment, but the
+    // type was never established from them, so inline rendering stays refused.
     expect((await app.request(viewUrl(created.attachment.id))).status).toBe(404)
     // The text is still reachable, which is the point of that policy.
     const text = await app.request(`/api/attachments/${created.attachment.id}/text`)
@@ -723,12 +744,21 @@ describe('document serving is never inline on the download route', () => {
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
   })
 
-  it('will not serve a signature-less upload as a document', async () => {
-    // Its bytes mean nothing on their own, so what was stored is its text.
+  it('serves a signature-less upload as a forced download, never inline', async () => {
+    // ADR-023: the bytes are stored and the download route applies the same
+    // disposition + CSP + nosniff controls as for any other document.
     const created = (await (await upload(enc('some notes'), 'n.txt', 'text/plain')).json()) as {
       attachment: { id: string; url: string }
     }
-    expect((await app.request(created.attachment.url)).status).toBe(404)
+    const download = await app.request(created.attachment.url)
+    expect(download.status).toBe(200)
+    expect(download.headers.get('content-disposition')).toMatch(/^attachment;/)
+    const csp = download.headers.get('content-security-policy') ?? ''
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).toContain('sandbox')
+    expect(download.headers.get('x-content-type-options')).toBe('nosniff')
+    // Inline rendering stays refused as defence in depth.
+    expect((await app.request(viewUrl(created.attachment.id))).status).toBe(404)
     // The text is still reachable, which is what the user actually wants.
     expect((await app.request(`/api/attachments/${created.attachment.id}/text`)).status).toBe(200)
   })

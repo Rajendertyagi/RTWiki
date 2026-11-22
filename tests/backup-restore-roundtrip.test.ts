@@ -100,6 +100,29 @@ describe('the round trip', () => {
     expectSameContent(after, before)
   })
 
+  it('a backup containing 013_create_import_sources restores cleanly', async () => {
+    // Migration 013 is auto-discovered by `requiredMigrationNames`, so a backup
+    // taken from a freshly migrated database must carry it and pass validation.
+    expect(requiredMigrationNames()).toContain('013_create_import_sources')
+    addPage('Provenance', 'body')
+    const backup = await createBackup(tempDir, db, 'daily')
+    expect(backup.ok).toBe(true)
+    if (!backup.ok) return
+    expect(validateBackupFile(backup.path).ok).toBe(true)
+
+    const reader = new Database(backup.path, { readonly: true })
+    const names = (
+      reader.query('SELECT name FROM _migrations').all() as Array<{ name: string }>
+    ).map((r) => r.name)
+    reader.close()
+    expect(names).toContain('013_create_import_sources')
+
+    db.run('DELETE FROM pages')
+    const restored = await performRestore(tempDir, slotFilename('daily'))
+    expect(restored.ok).toBe(true)
+    expect(readPages(liveConnection())).toHaveLength(1)
+  })
+
   it('keeps the backup file, so a second restore of the same slot is possible', async () => {
     addPage('Keep me', 'x')
     await createBackup(tempDir, db, 'daily')

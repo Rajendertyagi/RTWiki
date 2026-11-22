@@ -1,3 +1,5 @@
+import { DEFAULT_IMPORTED_PAGE_TITLE } from '@rtwiki/shared/constants'
+
 /**
  * Shell layout dimensions. Single source of truth so the AppShell navbar
  * width, the rail column and the collapse toggle all agree.
@@ -215,7 +217,7 @@ export const UI_TEXT = {
   saveStatusError: 'Save failed',
   saveStatusRetry: 'Retry',
   pageLocationLabel: 'Page location',
-  untitledPage: 'Untitled',
+  untitledPage: DEFAULT_IMPORTED_PAGE_TITLE,
   renameAction: 'Rename',
   duplicateAction: 'Duplicate',
   deleteAction: 'Delete',
@@ -610,6 +612,8 @@ export const UI_TEXT = {
   markdownExportLabel: 'Export .md',
   markdownImportErrorCreateFailed:
     'That file could not be imported. Nothing was created — try again, or import it as a file attachment instead.',
+  /** Title for advisory warnings returned by a successful import (e.g. skipped images). */
+  importWarningTitle: 'Import note',
 
   /*
    * Markdown toolbar. Grouped here with the Markdown strings rather than near the

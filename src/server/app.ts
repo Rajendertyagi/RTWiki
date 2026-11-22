@@ -13,6 +13,7 @@ import { createConsoleLogger, type Logger } from './logging/index.js'
 import { createBackupRoutes } from './routes/backup.js'
 import { createClientDebugEventRoutes, type DebugEventSink } from './routes/client-debug-events.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
+import { createImportRoutes } from './routes/import.js'
 import { createPageRoutes } from './routes/pages.js'
 import { createScheduleRoutes } from './routes/schedule.js'
 import { createSchedulePresetRoutes } from './routes/schedule-presets.js'
@@ -205,32 +206,14 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
         method: c.req.method,
         host: c.req.header('host') ?? null
       })
-      return c.json({ error: 'Forbidden' }, 403)
+      return c.json({ error: 'Forbidden', code: 'forbidden' }, 403)
     }
     if (isUnsafeMethod(c.req.method) && !isSameOrigin(c.req.raw)) {
-      return c.json({ error: 'Forbidden' }, 403)
+      return c.json({ error: 'Forbidden', code: 'forbidden' }, 403)
     }
     await next()
   })
 
-  // `Cache-Control` for the JSON API, which otherwise set none at all.
-  //
-  // `secureHeaders` sets five headers but not this one, and `AGENTS.md` §9 lists
-  // `Cache-Control` among the mandatory security headers — so the whole API
-  // surface was an uncovered part of a requirement, not a missing feature.
-  //
-  // Scoped to `/api/*` rather than `*` on purpose:
-  //
-  //  - The SPA document and hashed assets set their own policy in `static.ts`
-  //    (`no-store` for the document, `immutable` for assets). Those are correct and
-  //    opposite, so a blanket rule would either break asset caching or be silently
-  //    undone by it.
-  //  - The API has no such per-resource reasoning. Every response is either page
-  //    content, page metadata, or an error derived from page content, and all of it
-  //    is private to one user on one machine. A browser or intermediary cache that
-  //    stored a `GET /api/pages` response could show it after the user deleted the
-  //    note, or after a failed write, and nothing in the app can correct it.
-  //
   app.get(HEALTH_PATH, (c) => {
     const timestamp = new Date().toISOString()
     try {
@@ -270,6 +253,9 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   })
 
   app.route('/api/pages', createPageRoutes(deps.getDb))
+  // Full ingest: page + attachment + provenance in one transaction (ADR-024).
+  // The attachment route below is the other consumer of the same ingest core.
+  app.route('/api/import', createImportRoutes(deps.getDb))
   app.route('/api/schedule', createScheduleRoutes(deps.getDb))
   app.route('/api/schedule/presets', createSchedulePresetRoutes(deps.getDb))
   // Uploaded images. The bytes live in the `attachments` table (ADR-014), so the

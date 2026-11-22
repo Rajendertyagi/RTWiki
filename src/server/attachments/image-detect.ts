@@ -2,8 +2,7 @@ import { fileTypeFromBuffer } from 'file-type'
 import { imageSize } from 'image-size'
 import {
   ACCEPTED_IMAGE_FORMATS,
-  type AcceptedImageFormat,
-  acceptedImageFormatFor
+  type AcceptedImageFormat
 } from '../../shared/attachments/image-formats.js'
 
 /**
@@ -56,15 +55,6 @@ export type ImageInspection =
   | { ok: false; reason: ImageRejectionReason }
 
 /**
- * Types we recognise in order to *explain* a refusal, never to accept one.
- *
- * SVG is called out separately so the user learns the actual reason instead of a
- * generic "unsupported type". Nothing here can widen what is accepted - that is
- * `ACCEPTED_IMAGE_FORMATS`' decision alone.
- */
-const SVG_MIMES: ReadonlySet<string> = new Set(['image/svg+xml', 'image/svg'])
-
-/**
  * How much of the file is examined to recognise an SVG.
  *
  * An SVG is XML text, so it is identified by reading it rather than by a
@@ -83,7 +73,7 @@ const SVG_SNIFF_BYTES = 1024
  * rejected file produces, because an SVG is refused either way. So the test
  * optimises for never missing a real SVG rather than for never misfiring.
  */
-function looksLikeSvg(bytes: Uint8Array): boolean {
+export function looksLikeSvg(bytes: Uint8Array): boolean {
   const head = bytes.subarray(0, SVG_SNIFF_BYTES)
   if (head.length === 0) return false
   let text: string
@@ -108,34 +98,18 @@ const ACCEPTED_MIME_SET: ReadonlySet<string> = new Set(ACCEPTED_IMAGE_FORMATS.ma
  * rather than the whole thing: detection and dimensions both come from headers.
  */
 export async function inspectImageUpload(bytes: Uint8Array): Promise<ImageInspection> {
-  // Checked before detection, and independently of it: detection cannot identify
-  // an SVG reliably (it is XML text, so it reports `application/xml`, or nothing
-  // at all when there is no XML declaration), but the user still deserves to be
-  // told that SVG is the reason.
-  if (looksLikeSvg(bytes)) return { ok: false, reason: 'svg_not_supported' }
-
-  const detected = await detect(bytes)
-  if (!detected) return { ok: false, reason: 'unsupported_type' }
-
-  // Belt and braces: if a future parser does report an SVG type, it is still
-  // refused, and still with the reason that helps the user.
-  if (SVG_MIMES.has(detected.mime)) return { ok: false, reason: 'svg_not_supported' }
-
-  const format = acceptedImageFormatFor(detected.mime)
-  if (!format) return { ok: false, reason: 'unsupported_type' }
-
-  // A recognised, accepted type whose header we cannot read is still a
-  // legitimate upload; it simply has no recorded dimensions. Refusing it would
-  // mean a format RTWiki accepts depends on a second parser agreeing.
-  const { width, height } = readDimensions(bytes, format)
-
-  return { ok: true, format, width, height }
+  // Detection lives in exactly one place — src/server/ingest/detect-upload.ts.
+  // This wrapper preserves the existing contract: no pixel check here (the
+  // attachment route owns that), so "what is this" and "is this too big" stay
+  // separable. The dynamic import avoids a static cycle with the new module.
+  const { detectImageUpload } = await import('../ingest/detect-upload.js')
+  return detectImageUpload(bytes)
 }
 
 /** `file-type` inspects a prefix; the slice is generous enough for every header. */
 const DETECTION_PREFIX_BYTES = 4100
 
-async function detect(bytes: Uint8Array): Promise<{ mime: string } | null> {
+export async function detect(bytes: Uint8Array): Promise<{ mime: string } | null> {
   // file-type throws on input shorter than its own minimum, and on an empty
   // buffer. Neither is an error worth surfacing: both are simply "not accepted".
   const prefix = bytes.subarray(0, DETECTION_PREFIX_BYTES)
@@ -156,7 +130,7 @@ async function detect(bytes: Uint8Array): Promise<{ mime: string } | null> {
  * interpret compressed data an attacker controls. Verified to agree exactly with
  * a full decode on real files.
  */
-function readDimensions(
+export function readDimensions(
   bytes: Uint8Array,
   format: AcceptedImageFormat
 ): { width: number | null; height: number | null } {

@@ -40,6 +40,10 @@ logs/
 data/
 
 # Compiled executables and packaged artifacts
+# `package/` is a local copy of a built portable folder used for smoke tests.
+# Biome reads .gitignore (vcs.useIgnoreFile), so leaving it unignored makes
+# minified Vite assets fail the required format:check gate locally.
+package/
 *.exe
 *.msi
 *.zip
@@ -76,3 +80,7 @@ Thumbs.db
 # 162 lint errors from mockup HTML into a required CI gate.
 docs/plans/
 .agnes/
+
+# Random document fuzz runner: failing files and reports are kept outside the
+# repo by default, but ignore a local copy if one is placed here.
+rtwiki-doc-fuzz-failures/

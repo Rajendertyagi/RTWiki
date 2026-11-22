@@ -276,15 +276,19 @@ export async function runMigrations(
   })
 
   await applyMigration(db, '011_signatureless_attachment_bytes', (db) => {
-    // A signature-less document keeps its text and not its bytes.
+    // Historical decision, later narrowed by ADR-023: this migration made `data`
+    // nullable so the old attachment route could keep a signature-less document's
+    // text without its bytes. `.txt`, `.md` and `.html` could not be identified
+    // from their bytes, and that route refused to serve them, so the bytes were
+    // dead weight copied into every backup. The repository comment already
+    // described that intended behaviour and the code had drifted away from it;
+    // this migration made the schema able to say so.
     //
-    // `.txt`, `.md` and `.html` can never be identified from their bytes, so the
-    // serving path refused them anyway (`GET /api/attachments/:id` answers 404 for a
-    // signature-less MIME). Their bytes were nevertheless being stored: dead weight in
-    // the row, and duplicated into every backup, for content no user could ever get
-    // back. The repository comment already described the intended behaviour — a
-    // signature-less document has "no servable bytes" — and the code had drifted away
-    // from it. This migration makes the schema able to say so.
+    // The ingest path now stores bytes for every file, signature-less ones
+    // included, and serves them as forced downloads (ADR-023). This migration is
+    // unchanged because legacy rows still need the distinction it introduced:
+    // `bytes_stored = 0` marks a deliberate old absence, `1` with NULL data marks
+    // a row whose bytes were never migrated and which backup must refuse.
     //
     // ## Why `data` must be rebuilt rather than altered
     //
@@ -386,6 +390,28 @@ export async function runMigrations(
     for (const [key, value] of defaults) {
       db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, value])
     }
+  })
+
+  await applyMigration(db, '013_create_import_sources', (db) => {
+    // Import provenance is a snapshot of the import event, not a property of the
+    // page. It deliberately has NO foreign key to `pages`: the row survives the
+    // page being deleted, duplicated or re-imported (ADR-024 §4). `source_kind`
+    // is constrained to the one source the foundation accepts, so a future
+    // paste/API source cannot be written here without an explicit migration.
+    db.run(`
+      CREATE TABLE IF NOT EXISTS import_sources (
+        id TEXT PRIMARY KEY,
+        page_id TEXT NOT NULL,
+        attachment_id TEXT NOT NULL,
+        source_kind TEXT NOT NULL CHECK(source_kind IN ('file')),
+        original_name TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        checksum TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      )
+    `)
+    db.run('CREATE INDEX IF NOT EXISTS idx_import_sources_page ON import_sources(page_id)')
   })
 }
 

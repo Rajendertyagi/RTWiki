@@ -20,7 +20,7 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-012](ADR-012-diagram-rendering-and-sanitisation.md) | Diagram Rendering and Sanitisation Contract | **Accepted** |
 | [ADR-013](ADR-013-image-attachments.md) | Image Attachments — Content-Based Validation and Id-Addressed Serving | **Accepted** (§4 storage location superseded by ADR-014) |
 | [ADR-014](ADR-014-blob-stored-image-bytes.md) | Image Bytes Stored in the Database | **Accepted** |
-| [ADR-015](ADR-015-document-attachments.md) | Document Attachments — Forced Download and Extracted Text | **Accepted** (§3 "never served inline" superseded by ADR-016) |
+| [ADR-015](ADR-015-document-attachments.md) | Document Attachments — Forced Download and Extracted Text | **Accepted** (§3 "never served inline" superseded by ADR-016; §7 superseded by ADR-023) |
 | [ADR-016](ADR-016-inline-document-viewing.md) | Inline Document Viewing on a Separate Route | **Accepted** (owner-authorised 2026-09-27) |
 | [ADR-017](ADR-017-markdown-engine-micromark.md) | Markdown Engine — micromark | **Accepted** (replaces `marked`) |
 | [ADR-018](ADR-018-documented-vs-built.md) | Documented vs. Built — the Code Is the Authority | **Accepted** |
@@ -28,6 +28,8 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-020](ADR-020-search-and-conversion-boundary.md) | Search Storage and the Import Conversion Boundary | **Accepted** (supersedes the search and import-adapter findings of ADR-018; ADR-018 itself unchanged) |
 | [ADR-021](ADR-021-shiki-and-code-language-registry.md) | One Shiki Engine and One Code-Language Registry for Both Surfaces | **Accepted** |
 | [ADR-022](ADR-022-capability-driven-document-toolbar.md) | One Document Toolbar, Driven by Editor Capabilities | **Accepted** |
+| [ADR-023](ADR-023-signatureless-bytes-and-forced-download.md) | Signatureless Bytes Are Stored and Served as Forced Downloads | **Accepted** (supersedes ADR-015 §7 only) |
+| [ADR-024](ADR-024-one-ingest-pipeline-and-structured-import.md) | One Ingest Pipeline and Structured Import | **Accepted** (foundation only; full ADR-006 pipeline still unbuilt) |
 
 ## How to Read an ADR
 

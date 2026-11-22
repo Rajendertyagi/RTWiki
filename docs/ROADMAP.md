@@ -147,7 +147,7 @@ Safe `.md` import and export, Markdown templates, preview refinements, and clear
 - `UI_TEXT` additions (templates, labels)
 
 **Dependencies**
-- The Markdown page type already supports edit/preview. The Markdown import goes through the conversion boundary in `src/shared/import/conversion.ts`; the wider shared import pipeline (HTML/Markdown import) of [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) is **not built** - see [ADR-020](adr/ADR-020-search-and-conversion-boundary.md). `.md` round-trip must stay safe (DOMPurify; no HTML/script execution).
+- The Markdown page type already supports edit/preview. File import now goes through the one ingest module (`src/server/ingest/`), which also serves `POST /api/import` and `POST /api/attachments`; the wider eight-stage shared import pipeline of [ADR-006](adr/ADR-006-rich-content-and-import-contract.md) is **not built** - see [ADR-020](adr/ADR-020-search-and-conversion-boundary.md) and [ADR-024](adr/ADR-024-one-ingest-pipeline-and-structured-import.md). `.md` round-trip must stay safe (DOMPurify; no HTML/script execution).
 
 **Storage impact**
 - None new. Templates are code constants; import/export are file operations and are not stored in the database.

@@ -1,0 +1,16 @@
+[
+  { "name": "sample.docx", "ext": "docx", "words": ["photosynthesis", "chloroplast"] },
+  { "name": "sample.xlsx", "ext": "xlsx", "words": ["photosynthesis", "glucose"] },
+  { "name": "sample.pptx", "ext": "pptx", "words": ["photosynthesis", "energy"] },
+  { "name": "sample.odt", "ext": "odt", "words": ["photosynthesis", "chloroplast"] },
+  { "name": "sample.pdf", "ext": "pdf", "words": ["photosynthesis", "glucose"] },
+  { "name": "macro.docm", "ext": "docm", "words": ["harmless test document", "Boring"] },
+  { "name": "macro.xlsm", "ext": "xlsm", "words": ["Long live open source", "DDE-Link"] },
+  { "name": "password.docx", "ext": "docx", "words": [], "expect": "refuse" },
+  { "name": "password.xlsx", "ext": "xlsx", "words": [], "expect": "refuse" },
+  {
+    "name": "multilingual.pdf",
+    "ext": "pdf",
+    "words": ["photosynthesis", "\u5149\u5408\u4f5c\u7528"]
+  }
+]

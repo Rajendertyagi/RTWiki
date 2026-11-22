@@ -48,6 +48,16 @@ export const MAX_SCHEDULE_JSON_BODY_BYTES = 1024 * 1024
 export const MAX_MARKDOWN_SOURCE_CHARS = 100_000
 
 /**
+ * Title given to an imported page when the source file name yields none.
+ *
+ * The server cannot import the web UI text dictionary, so the fallback a
+ * converted import needs lives here as the single source of truth. The web
+ * config's `untitledPage` string points at this same value, so an imported
+ * page and a manually created untitled page can never disagree.
+ */
+export const DEFAULT_IMPORTED_PAGE_TITLE = 'Untitled' as const
+
+/**
  * Largest Markdown file the picker will *read into memory*.
  *
  * A transport concern, distinct from `MAX_MARKDOWN_SOURCE_CHARS` above and deliberately

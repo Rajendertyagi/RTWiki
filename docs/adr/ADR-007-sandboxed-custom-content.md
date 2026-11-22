@@ -7,6 +7,12 @@
 | **Deciders** | Project Owner, Lead Developer |
 | **Supersedes** | — |
 
+> **Built-state note (2026-11-22).** The sandbox itself is built and verified: custom content
+> authored on a page runs in an opaque-origin iframe with its own CSP. The *delivery* routes
+> described below — the `.rtwiki.zip` note-package and the localhost import API — are
+> `Planned — not implemented`; see [ADR-006](ADR-006-rich-content-and-import-contract.md) and
+> [ADR-024](ADR-024-one-ingest-pipeline-and-structured-import.md).
+
 ## Context
 
 Some AI-generated pages and advanced users want custom HTML, CSS, or JavaScript for layouts, interactions, or visual flourishes that the native block set (L1) and the `rt-*` vocabulary (L2) do not cover. RTWiki must permit this without breaking its hard guarantees: offline-only operation, localhost-only binding, no cloud dependency, and no compromise of the user's data or the rest of the application.

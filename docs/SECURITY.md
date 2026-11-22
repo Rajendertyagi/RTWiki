@@ -10,7 +10,7 @@ This table states a mitigation per threat. **Where the mitigation is not impleme
 
 | Threat | Source | Mitigation | Status |
 |--------|--------|------------|--------|
-| Malicious HTML in pasted content | User pastes from a compromised website or AI response | DOMPurify sanitization before conversion to blocks | **Partly — there is no paste handler.** 0 matches for `handlePaste` / `transformPasted` / `clipboard` in `src/`, and no import pipeline exists. Recorded as unbuilt work in §2.3 |
+| Malicious HTML in pasted content | User pastes from a compromised website or AI response | DOMPurify sanitization before conversion to blocks | **Partly — there is no paste handler.** 0 matches for `handlePaste` / `transformPasted` / `clipboard` in `src/`, and the full import pipeline is unbuilt (a narrower ingest foundation exists — §2.3). Recorded as unbuilt work in §2.3 |
 | Malicious JavaScript in Markdown | User renders a Markdown note containing `<script>` tags | The parser escapes raw HTML, then DOMPurify sanitizes; a parser bug is not the only barrier | **Built** — `src/web/features/markdown/markdown-render.ts:1,136` |
 | Malicious script in the raw-HTML page | User authors a page with a `<script>` or an inline `on*` handler | Sandboxed `<iframe>` (`allow-scripts`, opaque origin) + its own CSP meta + HTML normalization that removes `script`, `iframe`, `object`, `embed`, `base`, external stylesheets, `meta[http-equiv]` and inline `on*` | **Built** — `src/web/features/html/preview-document.ts:236`, §2.4 and §5.2 |
 | Malicious Mermaid / diagram SVG | Diagram text carries HTML tags, click callbacks or a `foreignObject` | `securityLevel: 'strict'`, `htmlLabels: false`, `svg-sanitize.ts`, CSP | **Built** — `src/web/features/rich-editor/blocks/mermaid-render.ts:80,90`, [ADR-012](adr/ADR-012-diagram-rendering-and-sanitisation.md) |
@@ -33,7 +33,7 @@ All HTML input must be sanitized before any part of it reaches the editor or the
 | **Raw-HTML page** | Sandboxed `<iframe>` with an opaque origin, its own stricter CSP meta, and HTML normalization that strips `script`, `iframe`, `object`, `embed`, `base`, external stylesheets, `meta[http-equiv]` and inline `on*` attributes | `src/web/features/html/preview-document.ts:236`; §2.4, §5.2 |
 | **Diagram output** | `securityLevel: 'strict'` + `htmlLabels: false`, then `svg-sanitize.ts` strips `foreignObject` and event attributes; Mermaid's internal sanitiser also runs | `src/web/features/rich-editor/blocks/mermaid-render.ts:80,90`; [ADR-012](adr/ADR-012-diagram-rendering-and-sanitisation.md) |
 | **Pasted HTML** | *No control — the path does not exist* | §2.3 |
-| **Imported HTML** | *No control — no import pipeline exists* | §2.3 |
+| **Imported HTML** | *Not DOMPurify-sanitized.* Imported HTML is converted to Markdown and its original bytes are served only as forced downloads under a per-response `default-src 'none'; sandbox` CSP | §2.3, [ADR-023](adr/ADR-023-signatureless-bytes-and-forced-download.md) |
 
 **DOMPurify is imported in exactly one file in `src/`** — `markdown-render.ts:1` — and called once, at `:136`. Any statement elsewhere that DOMPurify covers pasted, imported or raw-HTML input is wrong. The raw-HTML and diagram paths have their own controls, listed above; they are independent of DOMPurify, and one must not be substituted for another.
 
@@ -62,15 +62,15 @@ Mermaid diagrams use the documented default `securityLevel: "strict"`, which enc
 
 This matters because the sentence claimed a defence that does not exist. If someone later assumed arbitrary Mermaid was blocked by the template list, they would not add the controls that actually make it safe.
 
-### 2.3 Import pipeline and paste handling — required, not implemented
+### 2.3 Import pipeline and paste handling — partly built
 
-**This section previously described a conversion pipeline that does not exist.** The requirement stands; the implementation does not.
+**The full eight-stage pipeline described below is still unbuilt.** A narrower ingest foundation now exists: one server-side module (`src/server/ingest/ingest-file.ts`) with two HTTP consumers (`POST /api/attachments`, `POST /api/import`), structured DOCX→Markdown conversion, and `import_sources` provenance — see [ADR-024](adr/ADR-024-one-ingest-pipeline-and-structured-import.md). It does not sanitize HTML with DOMPurify; imported HTML is converted to Markdown and its bytes are served only as forced downloads under a per-response CSP ([ADR-023](adr/ADR-023-signatureless-bytes-and-forced-download.md)).
 
 Measured:
 
 - **No paste handler.** 0 matches for `handlePaste`, `transformPasted`, `transformPastedHTML` or `clipboard` in `src/`. Pasting into the Rich Note is handled by BlockNote's own default behaviour, which RTWiki does not intercept.
-- **No import pipeline.** No import, adapter or sanitise module exists. `src/shared/schemas/html-content.ts` and `markdown-content.ts` are page-content *schemas*, not import adapters.
-- **No localhost import API.** 0 matches for `/api/v1/import` or `import/pages`; §2.5 describes an endpoint that is not mounted.
+- **No full import pipeline.** The eight-stage pipeline below does not exist. `src/shared/schemas/html-content.ts` and `markdown-content.ts` are page-content *schemas*, not import adapters. The ingest foundation is not that pipeline.
+- **No note-package import API.** 0 matches for `/api/v1/import` or `import/pages`; §2.5 describes an endpoint that is not mounted. `POST /api/import` is a separate, narrower file-ingest route.
 
 So the documented pipeline
 
@@ -85,7 +85,7 @@ has no corresponding code. Unbuilt security work, to be built before any import 
 3. The loopback-only import API of §2.5, with CORS disabled, request and package size limits applied **before** parsing (ZIP-bomb protection), manifest validation, and entry-name path-traversal checks.
 4. Warnings surfaced rather than silent content loss; unknown blocks preserved by `containUnknownBlocks()`, which rewrites each into a `codeBlock` holding its exact JSON behind `UNSUPPORTED_BLOCK_MARKER` (`src/web/features/rich-editor/document.ts:273`, `src/shared/constants/index.ts:76`).
 
-**Interim risk, stated plainly:** until this exists, any HTML that enters the application by a path other than the Markdown renderer, the raw-HTML page sandbox or the diagram pipeline is unsanitized by RTWiki. Today no such path is exposed, so this is latent rather than live — but it is the reason the requirement must not be treated as satisfied.
+**Interim risk, stated plainly:** until the full pipeline exists, any HTML that enters the application by a path other than the Markdown renderer, the raw-HTML page sandbox or the diagram pipeline is unsanitized by RTWiki. The file-import path is now exposed, but it converts HTML to Markdown rather than rendering it, and serves the original bytes only as forced downloads under a per-response CSP — it does not execute imported HTML in RTWiki's origin. Paste and note-package paths remain unexposed. The requirement must not be treated as satisfied.
 
 ### 2.4 Custom Content Sandbox
 
@@ -100,7 +100,7 @@ When a page supplies optional custom HTML/CSS/JS (L3), it is rendered only insid
 
 ### 2.5 AI Import API
 
-**Not implemented.** 0 matches for `/api/v1/import` or `import/pages` in `src/`. The requirements below are the specification for unbuilt work, and every one of them is **unmet** today. They are recorded here so that building the endpoint cannot silently skip them.
+**Not implemented.** 0 matches for `/api/v1/import` or `import/pages` in `src/`. The requirements below are the specification for unbuilt work, and every one of them is **unmet** today. They are recorded here so that building the endpoint cannot silently skip them. The separate `POST /api/import` file-ingest route is a narrower foundation, not this note-package endpoint.
 
 The localhost import API (`POST /api/v1/import/pages`) must be bound to the loopback interface only:
 

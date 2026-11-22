@@ -6,7 +6,7 @@ A lightweight, offline-first personal knowledge workspace for a family user. RTW
 
 **MVP foundation implemented — rich-content features planned**
 
-The application foundation and portable Windows build are implemented. Rich-content features (AI-generated note import, native rich blocks, sandboxed custom content) are planned and documented in the `docs/` folder. All architecture decisions are recorded in the Architecture Decision Records.
+The application foundation and portable Windows build are implemented. A file-ingest foundation exists (`POST /api/import`, `POST /api/attachments`): DOCX and text files become editable Markdown pages with provenance. The full AI note-package import, native rich blocks and sandboxed custom content remain planned and are documented in the `docs/` folder. All architecture decisions are recorded in the Architecture Decision Records.
 
 ## Key Requirements
 

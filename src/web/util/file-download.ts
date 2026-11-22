@@ -5,7 +5,7 @@
  * content is ever executed: import only reads text, export only writes text.
  */
 
-import { markdownNoteTitle } from '@rtwiki/shared/import/conversion'
+import { markdownNoteTitle } from '@rtwiki/shared/import/policy'
 
 /**
  * Predictable, filesystem-safe filename from an arbitrary page title. Strips the

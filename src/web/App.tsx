@@ -1,6 +1,7 @@
 import { Alert, Stack, Text } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
-import { convertImportedDocument, markdownNoteTitle } from '@rtwiki/shared/import/conversion'
+import { markdownNoteTitle } from '@rtwiki/shared/import/policy'
 import { parseMarkdownPageContent } from '@rtwiki/shared/schemas/markdown-content.js'
 import { IconAlertCircle, IconCheck } from '@tabler/icons-react'
 import { invoke } from '@tauri-apps/api/core'
@@ -69,6 +70,7 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
+import { importFile } from './services/import-api.js'
 import { isNativeMode } from './services/native-bridge.js'
 import { downloadTextFile, sanitizeFileName } from './util/file-download.js'
 import { pagePreviewText } from './util/page-preview-text.js'
@@ -530,41 +532,34 @@ export function App(): JSX.Element {
    * server is the authority on *why* a create was refused.
    */
   const handleImportMarkdown = useCallback(
-    async (fileName: string, source: string): Promise<boolean> => {
+    async (file: File): Promise<boolean> => {
       /*
-       * The conversion, in one call. This used to be a filename regex plus an envelope
-       * call written inline here, and the same regex appeared a second time in
-       * `handleExportPage` ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â two copies of the same answer to "what is this file called",
-       * none of them shared with the picker that decided the file was Markdown at all.
+       * One path for Markdown: the file goes to the server's single ingest
+       * pipeline, which detects, converts, stores the bytes and writes the page
+       * and its provenance in one transaction. The browser no longer reads the
+       * file or derives a title — the server owns both, so the picker and the
+       * page can never disagree about what was imported.
        *
-       * A refusal now becomes the caller's message. The picker has already refused an
-       * over-length file before it gets here, so `source_refused` means something changed
-       * between the two, and the server remains the authority on why a *create* was
-       * refused: that error is still caught below and preferred.
+       * A refusal arrives as an Error carrying the server's own message; the
+       * picker reports it next to the control the user pressed.
        */
-      const converted = convertImportedDocument('md', { text: source, fileName })
-      if (!converted.ok) throw new Error(converted.message)
-
-      let page = null
-      try {
-        page = await controller.createPage(
-          converted.value.title || UI_TEXT.untitledPage,
-          converted.value.pageType,
-          converted.value.storedContent
-        )
-      } catch (err) {
-        // `createPage` surfaces the server's 400 message. Prefer it over a generic
-        // string: it names the limit, and the server now names the limit correctly.
-        throw err instanceof Error ? err : new Error(UI_TEXT.markdownImportErrorCreateFailed)
-      }
-      if (!page) {
-        throw new Error(UI_TEXT.markdownImportErrorCreateFailed)
+      const result = await importFile(file)
+      // The server's advisory warnings are part of the import result. Surface
+      // every one of them: a skipped image or a lossy conversion must never be
+      // silently dropped between the API and the user (AGENTS.md §4).
+      for (const warning of result.warnings) {
+        notifications.show({
+          title: UI_TEXT.importWarningTitle,
+          message: warning.message,
+          color: 'yellow',
+          autoClose: 8000
+        })
       }
       if (flushRef.current) await flushRef.current()
-      void handleSelectPage(page.id)
+      void handleSelectPage(result.page.id)
       return true
     },
-    [controller, handleSelectPage]
+    [handleSelectPage]
   )
 
   const handleExportPage = useCallback(

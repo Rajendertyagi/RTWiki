@@ -605,16 +605,25 @@ export interface PageLinkRef {
  * successful Rich Note content save; targets may reference deleted pages
  * (broken links), so no existence check and no FK constraint apply.
  */
+export function replaceOutgoingLinksCore(
+  db: Database,
+  sourceId: string,
+  targetIds: string[]
+): void {
+  db.run('DELETE FROM page_links WHERE source_id = ?', [sourceId])
+  for (const targetId of targetIds) {
+    db.run('INSERT OR IGNORE INTO page_links (source_id, target_id) VALUES (?, ?)', [
+      sourceId,
+      targetId
+    ])
+  }
+}
+
+/** Transactional wrapper for callers that do not already hold a write lock. */
 export function replaceOutgoingLinks(db: Database, sourceId: string, targetIds: string[]): void {
   db.run('BEGIN IMMEDIATE')
   try {
-    db.run('DELETE FROM page_links WHERE source_id = ?', [sourceId])
-    for (const targetId of targetIds) {
-      db.run('INSERT OR IGNORE INTO page_links (source_id, target_id) VALUES (?, ?)', [
-        sourceId,
-        targetId
-      ])
-    }
+    replaceOutgoingLinksCore(db, sourceId, targetIds)
     db.run('COMMIT')
   } catch (err) {
     db.run('ROLLBACK')

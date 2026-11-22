@@ -89,6 +89,8 @@ A filename *sanitiser* is the wrong tool here, and was measured: `sanitize-filen
 
 ### 7. A signature-less upload is stored as text, and is not served back
 
+> **Superseded by [ADR-023](ADR-023-signatureless-bytes-and-forced-download.md) — signatureless bytes are now stored and served as forced downloads.** This section is kept as the historical decision record; it no longer describes newly imported files.
+
 `.txt`, `.md`, `.html` and `.csv` are accepted: their text is extracted and stored in `extracted_text`, and appended to the owning page's `search_index` row so the file is findable by what is inside it. CSV takes this path through RTWiki's own text reader, not through `officeparser` — it is a text file with no magic bytes, and the parser cannot establish a type for it. Their bytes are neither offered for download nor kept: a `GET` of such an attachment answers 404, because there is nothing meaningful to serve and serving it would mean serving bytes whose type was never established. Storing bytes nothing can retrieve only duplicated unreachable content into every backup, so the row records their absence explicitly (`bytes_stored = 0`).
 
 This matches the reference implementation, which converts text to HTML on import and never stores it as a servable file. The `signatureless` flag in the allowlist makes the distinction explicit rather than implicit, and a test asserts no signature-less type is ever in the served set.

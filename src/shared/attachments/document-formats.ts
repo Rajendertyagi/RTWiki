@@ -22,12 +22,15 @@
  *
  * - A `.txt`/`.md`/`.html` upload is identified by the extension the *user's
  *   browser* reports, read **once**, and its text is extracted and stored as the
- *   page's own content. The original file is never served back as a document.
+ *   page's own content. Since ADR-023 its original bytes are also stored and
+ *   served back as a forced download (never rendered inline); legacy rows written
+ *   before that change still have no bytes and 404.
  * - Everything with a real container (PDF, DOCX, ODT, XLSX, PPTX, RTF, EPUB) is
  *   identified from its bytes, and the bytes decide.
  *
- * This is the same approach the reference implementation takes: text is converted
- * on import and never stored as a servable file.
+ * The reported extension is therefore a naming hint for signature-less files,
+ * never the authority on what the bytes are — a PDF renamed `.txt` is still
+ * detected and stored as a PDF.
  */
 
 /** A document format RTWiki accepts. */
@@ -45,9 +48,11 @@ export interface AcceptedDocumentFormat {
    * True when the bytes cannot identify this format, so the reported extension
    * is the only signal available.
    *
-   * Such a format is never *served* as a document; its text is extracted on
-   * import instead. The flag exists so the detection module and the tests can
-   * state that plainly rather than leaving it to be inferred.
+   * Such a format has no self-describing bytes, so the reported extension is the
+   * only naming hint. Its text is extracted on import, and since ADR-023 its
+   * original bytes are stored and served as a forced download. The flag exists so
+   * the detection module and the tests can state that plainly rather than leaving
+   * it to be inferred.
    */
   readonly signatureless: boolean
 }
@@ -63,8 +68,8 @@ export interface AcceptedDocumentFormat {
  * lecture slides and readings rather than spreadsheets.
  *
  * The signature-less trio is deliberately included with `signatureless: true`.
- * They are accepted, their text is extracted, and they are never re-served as a
- * document — see the module comment.
+ * They are accepted, their text is extracted, and since ADR-023 their original
+ * bytes are stored and served as forced downloads — see the module comment.
  */
 export const ACCEPTED_DOCUMENT_FORMATS: readonly AcceptedDocumentFormat[] = [
   { mime: 'application/pdf', ext: 'pdf', signatureless: false },
@@ -159,8 +164,9 @@ export const ACCEPTED_DOCUMENT_FORMATS: readonly AcceptedDocumentFormat[] = [
   // it is still `signatureless: false` because the result is a served document.
   { mime: 'application/x-tex', ext: 'tex', signatureless: false },
   // No signature: identified by the reported extension, converted on import,
-  // and never served back as a document. CSV is a text file, so it takes this
-  // path (RTWiki's own decoder) rather than going through officeparser.
+  // and — since ADR-023 — stored and served back as a forced download. CSV is a
+  // text file, so it takes this path (RTWiki's own decoder) rather than going
+  // through officeparser.
   { mime: 'text/plain', ext: 'txt', signatureless: true },
   { mime: 'text/markdown', ext: 'md', signatureless: true },
   { mime: 'text/html', ext: 'html', signatureless: true },
@@ -176,10 +182,7 @@ export const ACCEPTED_DOCUMENT_FORMATS: readonly AcceptedDocumentFormat[] = [
  * never match them.
  */
 const ACCEPTED_BY_MIME: ReadonlyMap<string, AcceptedDocumentFormat> = new Map(
-  ACCEPTED_DOCUMENT_FORMATS.map((format) => [
-    normaliseMimeType(format.mime) ?? format.mime,
-    format
-  ])
+  ACCEPTED_DOCUMENT_FORMATS.map((format) => [normaliseMimeType(format.mime) ?? format.mime, format])
 )
 
 /**

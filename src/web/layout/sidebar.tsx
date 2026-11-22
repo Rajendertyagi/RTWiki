@@ -70,7 +70,7 @@ interface SidebarProps {
    * import has to be reportable here rather than vanishing; see `handleImportMarkdown`
    * in `App.tsx`.
    */
-  onImportMarkdown: (fileName: string, source: string) => Promise<boolean>
+  onImportMarkdown: (file: File) => Promise<boolean>
   /** Exports the given page (context-menu action). */
   onExportPage: (pageId: string) => void
 }
@@ -108,38 +108,24 @@ export function Sidebar({
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    // Cheap rejections first, so a 40 MB file is never handed to FileReader.
+    // Cheap rejections first (name, type and transport size), before any bytes
+    // are sent. The authoritative character-limit check now lives on the server,
+    // in the one ingest path, so the browser never reads the file itself.
     const preRead = classifyMarkdownImport(file)
     if (preRead !== null) {
       setImportError(markdownImportErrorText(preRead))
       return
     }
-    const reader = new FileReader()
-    reader.onerror = () => setImportError(markdownImportErrorText('read_failed'))
-    reader.onload = () => {
-      const text = typeof reader.result === 'string' ? reader.result : ''
-      // The authoritative check, against the same character limit the server will
-      // apply. Previously only the byte size was checked here, which is why a 150 KB
-      // file could be read, posted, and refused.
-      const rejection = classifyMarkdownImport(file, text)
-      if (rejection !== null) {
-        setImportError(markdownImportErrorText(rejection))
-        return
-      }
-      setImportError(null)
-      // The create can still be refused by the server; report that too rather than
-      // leaving the user with a file that silently did not become a note.
-      void onImportMarkdown(file.name, text)
-        .then((created) => {
-          if (!created) setImportError(UI_TEXT.markdownImportErrorCreateFailed)
-        })
-        .catch((err: unknown) => {
-          setImportError(
-            err instanceof Error ? err.message : UI_TEXT.markdownImportErrorCreateFailed
-          )
-        })
-    }
-    reader.readAsText(file)
+    setImportError(null)
+    // The import can still be refused by the server; report that too rather than
+    // leaving the user with a file that silently did not become a note.
+    void onImportMarkdown(file)
+      .then((created) => {
+        if (!created) setImportError(UI_TEXT.markdownImportErrorCreateFailed)
+      })
+      .catch((err: unknown) => {
+        setImportError(err instanceof Error ? err.message : UI_TEXT.markdownImportErrorCreateFailed)
+      })
   }
 
   const requestImport = (): void => fileInputRef.current?.click()

@@ -12,27 +12,24 @@ import type { Logger } from '../src/server/logging/index.js'
 import { isSignaturelessDocumentMime } from '../src/shared/import/policy.js'
 
 /**
- * A signature-less document keeps its text and not its bytes.
+ * A signature-less document keeps its bytes and serves them as a forced download.
  *
- * ## What this was
+ * ## What changed
  *
- * `.txt`, `.md` and `.html` are the three accepted formats RTWiki cannot identify from
- * their bytes. The serving path has always refused them — `GET /api/attachments/:id`
- * answers 404 for a signature-less MIME, deliberately, because serving a file whose type
- * cannot be established from its content is how an uploaded HTML page becomes something
- * the browser renders.
+ * `.txt`, `.md` and `.html` are formats RTWiki cannot identify from their bytes. The
+ * old attachment route kept their extracted text and discarded the bytes, and both
+ * serving routes answered 404 for them. ADR-023 reversed that for files imported
+ * through the ingest path: the bytes are stored, `GET /api/attachments/:id` serves
+ * them under the same forced-download controls as every other document, and only
+ * `GET /api/attachments/:id/view` still refuses them (defence in depth — the type
+ * was never established, so they must never render inline).
  *
- * The bytes were stored anyway. The repository's own comment claimed they were not
- * ("a signature-less document, whose text is stored but whose bytes are never served"),
- * the route always passed `bytes`, and the final schema was `data BLOB NOT NULL` — so
- * unreachable content sat in every row and was copied into every backup.
+ * ## The hazard this still guards
  *
- * ## The hazard this had to avoid
- *
- * Backup refuses to run when any attachment has `data IS NULL`, because that used to
- * mean one thing: a row still holding its bytes on disk. Introducing deliberate NULLs
- * without disambiguating would have made **every backup fail for good** the first time
- * anyone attached a plain text file. `bytes_stored` is the disambiguation.
+ * Backup refuses to run when a row has `data IS NULL AND bytes_stored = 1`, which
+ * means "bytes were never migrated". New signature-less rows carry bytes and set
+ * `bytes_stored = 1`, so they are not flagged; legacy rows have `bytes_stored = 0`
+ * and are not flagged either. The mid-migration guard must stay intact.
  */
 
 const silent: Logger = {
@@ -108,21 +105,17 @@ function makePdf(body: string): Uint8Array {
 
 const PDF_BYTES = makePdf('A lecture on cell biology')
 
-describe('a signature-less document stores its text and not its bytes', () => {
-  it('keeps no BLOB for a .txt, while keeping its text and metadata', async () => {
+describe('a signature-less document stores its bytes and serves them as a download', () => {
+  it('keeps the BLOB for a .txt, along with its text and metadata', async () => {
     const db = freshDb()
     await runMigrations(db)
-    const { status, body } = await upload(
-      db,
-      'notes.txt',
-      'text/plain',
-      new TextEncoder().encode('the quick brown fox jumps')
-    )
+    const bytes = new TextEncoder().encode('the quick brown fox jumps')
+    const { status, body } = await upload(db, 'notes.txt', 'text/plain', bytes)
     expect(status).toBe(201)
     const id = attachmentIdFrom(body)
 
-    // The invariant under test: no bytes.
-    expect(getAttachmentByteSize(db, id)).toBeNull()
+    // The invariant under test: the original bytes are stored (D1-A).
+    expect(getAttachmentByteSize(db, id)).toBe(bytes.byteLength)
     const row = db
       .query(
         'SELECT data, bytes_stored, extracted_text, byte_size, original_name FROM attachments WHERE id = ?'
@@ -134,14 +127,37 @@ describe('a signature-less document stores its text and not its bytes', () => {
       byte_size: number
       original_name: string | null
     }
-    expect(row.data).toBeNull()
-    // ...and the row says so, rather than the fact being inferred from a MIME type.
-    expect(row.bytes_stored).toBe(0)
-    // The text is what the product actually needs, and it is kept.
+    expect(row.data).not.toBeNull()
+    expect(new Uint8Array(row.data!)).toEqual(bytes)
+    // The row claims its bytes, so backup does not mistake it for a mid-migration row.
+    expect(row.bytes_stored).toBe(1)
+    // The text is still extracted for the card and the search index.
     expect(row.extracted_text).toContain('quick brown fox')
-    // Metadata stays truthful about what arrived, even though the bytes were not kept.
-    expect(row.byte_size).toBeGreaterThan(0)
+    expect(row.byte_size).toBe(bytes.byteLength)
     expect(row.original_name).toBe('notes.txt')
+  })
+
+  it('serves a .txt as a forced download but never inline', async () => {
+    const db = freshDb()
+    await runMigrations(db)
+    const bytes = new TextEncoder().encode('the quick brown fox jumps')
+    const { status, body } = await upload(db, 'notes.txt', 'text/plain', bytes)
+    expect(status).toBe(201)
+    const id = attachmentIdFrom(body)
+    const routes = createAttachmentRoutes({ getDb: () => db, logger: silent, available: true })
+    const app = new Hono().route('/api/attachments', routes)
+
+    const download = await app.request(`/api/attachments/${id}`)
+    expect(download.status).toBe(200)
+    expect(download.headers.get('content-disposition')).toMatch(/^attachment;/)
+    const csp = download.headers.get('content-security-policy') ?? ''
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).toContain('sandbox')
+    expect(download.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(bytes)
+
+    // Defence in depth: the bytes exist, but inline rendering stays refused.
+    expect((await app.request(`/api/attachments/${id}/view`)).status).toBe(404)
   })
 
   it('still keeps the bytes for a real container, with the flag set', async () => {
@@ -159,9 +175,10 @@ describe('a signature-less document stores its text and not its bytes', () => {
     expect(getAttachmentByteSize(db, id)).toBe(PDF_BYTES.byteLength)
   })
 
-  it('does not trip the backup mid-migration guard for a deliberate absence', async () => {
-    // The hazard, exercised. A `.txt` with no bytes is correct; if this counted, backups
-    // would be permanently refused.
+  it('does not trip the backup mid-migration guard for signature-less uploads', async () => {
+    // New `.txt` rows carry bytes and `bytes_stored = 1`, so they are not the
+    // mid-migration corruption the guard exists to catch. Legacy rows with
+    // `bytes_stored = 0` are not flagged either.
     const db = freshDb()
     await runMigrations(db)
     await upload(db, 'a.txt', 'text/plain', new TextEncoder().encode('alpha'))
@@ -170,13 +187,16 @@ describe('a signature-less document stores its text and not its bytes', () => {
   })
 
   it('still trips the guard for a row that claims bytes and does not have them', async () => {
-    // The reason the flag exists. Forcing `bytes_stored = 1` with no data is precisely
-    // the corruption backup is there to refuse, and it must not be confused with the
-    // deliberate absence above.
+    // The reason the flag exists. New rows carry bytes, so the mid-migration
+    // corruption has to be simulated explicitly: NULL data with `bytes_stored = 1`
+    // is precisely what backup is there to refuse, and it must not be confused
+    // with a legitimate signature-less row.
     const db = freshDb()
     await runMigrations(db)
     const { body } = await upload(db, 'c.txt', 'text/plain', new TextEncoder().encode('gamma'))
-    db.query('UPDATE attachments SET bytes_stored = 1 WHERE id = ?').run(attachmentIdFrom(body))
+    db.query('UPDATE attachments SET data = NULL, bytes_stored = 1 WHERE id = ?').run(
+      attachmentIdFrom(body)
+    )
     expect(countAttachmentsAwaitingBytes(db)).toBe(1)
   })
 })

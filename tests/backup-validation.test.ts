@@ -62,6 +62,18 @@ describe('a valid backup', () => {
     expect(outcome.candidate.byteSize).toBeGreaterThan(0)
     expect(Number.isNaN(Date.parse(outcome.candidate.modifiedAt))).toBe(false)
   })
+
+  it('carries the auto-discovered 013_create_import_sources migration', () => {
+    // The schema check derives its required set from the migration calls, so a
+    // freshly migrated database must record 013 and a backup of it must validate.
+    const reader = new Database(goodBackup, { readonly: true })
+    const names = (
+      reader.query('SELECT name FROM _migrations').all() as Array<{ name: string }>
+    ).map((r) => r.name)
+    reader.close()
+    expect(names).toContain('013_create_import_sources')
+    expect(validateBackupFile(goodBackup).ok).toBe(true)
+  })
 })
 
 describe('step 1 and 2: not a file, not a database', () => {
