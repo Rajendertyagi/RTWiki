@@ -10,6 +10,7 @@
  */
 
 import { Button, Checkbox, Group, Modal, Stack, Text } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import { CLOSE_REQUEST_EVENT } from '@rtwiki/shared/constants'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -21,7 +22,7 @@ import { getDesktopSettings, updateCloseBehavior } from '../services/server-sett
 type CloseChoice = 'minimize' | 'quit'
 
 export function CloseDialog(): React.ReactElement | null {
-  const [opened, setOpened] = useState(false)
+  const [opened, { open, close }] = useDisclosure(false)
   const [remember, setRemember] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +51,7 @@ export function CloseDialog(): React.ReactElement | null {
           if (!disposed) setRemember(false)
         })
       setError(null)
-      setOpened(true)
+      open()
     }).then((fn) => {
       if (disposed) {
         fn()
@@ -69,7 +70,9 @@ export function CloseDialog(): React.ReactElement | null {
       disposed = true
       unlisten?.()
     }
-  }, [])
+    // `open` from useDisclosure is a stable handler; including it satisfies the
+    // dependency rule without re-running the listener setup.
+  }, [open])
 
   if (!isNativeMode()) return null
 
@@ -80,7 +83,7 @@ export function CloseDialog(): React.ReactElement | null {
   }
 
   const cancel = (): void => {
-    setOpened(false)
+    close()
     resolve('cancel')
   }
 
@@ -91,7 +94,7 @@ export function CloseDialog(): React.ReactElement | null {
       if (remember) await updateCloseBehavior(behavior)
       // Rust releases the prompt flag and performs hide/quit in one command.
       await invoke('resolve_close_request', { action: behavior })
-      setOpened(false)
+      close()
     }
     void apply().catch((err: unknown) => {
       console.error('[close-dialog] failed to apply close choice:', err)

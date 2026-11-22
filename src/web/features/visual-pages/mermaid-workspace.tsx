@@ -21,6 +21,7 @@ import {
   Tooltip,
   useComputedColorScheme
 } from '@mantine/core'
+import { useDebouncedValue } from '@mantine/hooks'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import type { PageType } from '@rtwiki/shared/contracts/pages'
 import {
@@ -176,7 +177,7 @@ export default function MermaidPageWorkspace({
   // while the page can hold many.
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
-  const [debouncedDraft, setDebouncedDraft] = useState('')
+  const [debouncedDraft] = useDebouncedValue(draft, PREVIEW_REBUILD_DEBOUNCE_MS)
   const [liveSvg, setLiveSvg] = useState<string | null>(null)
   const [liveError, setLiveError] = useState<RenderErrorCode | null>(null)
   // Bumped by the page-level Refresh. It reaches every block, so one press
@@ -250,12 +251,6 @@ export default function MermaidPageWorkspace({
       onFlushRef?.(null)
     }
   }, [flush, onFlushRef])
-
-  // Debounced live draft for edit mode.
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedDraft(draft), PREVIEW_REBUILD_DEBOUNCE_MS)
-    return () => clearTimeout(timer)
-  }, [draft])
 
   // Live render (edit mode).
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderSeq is the manual Refresh trigger and is intentionally not read inside the effect

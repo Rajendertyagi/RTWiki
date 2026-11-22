@@ -9,6 +9,7 @@ import {
   Tooltip,
   useComputedColorScheme
 } from '@mantine/core'
+import { useDebouncedValue } from '@mantine/hooks'
 import { PREVIEW_REBUILD_DEBOUNCE_MS } from '@rtwiki/shared/constants'
 import { IconAspectRatio, IconPencil, IconPlayerPlay, IconRefresh } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
@@ -93,7 +94,7 @@ export function MermaidBlockView({
   const [renderSeq, setRenderSeq] = useState(0)
   const [liveSvg, setLiveSvg] = useState<string | null>(null)
   const [liveError, setLiveError] = useState<RenderErrorCode | null>(null)
-  const [debouncedDraft, setDebouncedDraft] = useState(source)
+  const [debouncedDraft] = useDebouncedValue(draft, PREVIEW_REBUILD_DEBOUNCE_MS)
   const [fit, setFit] = useState(true)
 
   // Generation tokens: an older async render can never overwrite a newer
@@ -129,12 +130,6 @@ export function MermaidBlockView({
     })
     return () => ac.abort()
   }, [source, colorScheme, renderSeq, blockId, blockType, render])
-
-  // Debounce the live draft so typing never re-renders per keystroke.
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedDraft(draft), PREVIEW_REBUILD_DEBOUNCE_MS)
-    return () => clearTimeout(timer)
-  }, [draft])
 
   // Live preview (edit view) — re-renders on debounced draft/theme/retry.
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderSeq is the manual Retry trigger and is intentionally not read inside the effect
