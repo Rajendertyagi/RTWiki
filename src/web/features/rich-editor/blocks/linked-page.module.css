@@ -36,7 +36,7 @@
 
 .cardPreview {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: var(--rtwiki-code-compact-font-size);
   color: var(--mantine-color-dimmed);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -58,7 +58,7 @@
 }
 
 .brokenText {
-  font-size: 13px;
+  font-size: var(--rtwiki-code-compact-font-size);
   color: var(--mantine-color-orange-7);
 }
 

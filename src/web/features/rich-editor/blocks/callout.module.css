@@ -6,6 +6,9 @@
  */
 
 .callout {
+  /* Icon/action alignment and the resting action opacity. */
+  --callout-icon-offset: 2px;
+  --callout-action-rest-opacity: 0.5;
   display: flex;
   gap: var(--mantine-spacing-xs);
   align-items: flex-start;
@@ -17,7 +20,7 @@
 
 .icon {
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: var(--callout-icon-offset);
 }
 
 .content {
@@ -72,8 +75,8 @@
 
 .variantButton {
   flex-shrink: 0;
-  margin-top: 2px;
-  opacity: 0.5;
+  margin-top: var(--callout-icon-offset);
+  opacity: var(--callout-action-rest-opacity);
 }
 
 .callout:hover .variantButton,

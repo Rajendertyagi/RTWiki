@@ -1,4 +1,10 @@
 .editorRoot {
+  /* Local geometry for the sidebar expand control and the wiki-link picker. */
+  --editor-sidebar-expand-gap: 8px;
+  --editor-sidebar-expand-pad: 6px;
+  --editor-wiki-picker-width: 280px;
+  --editor-wiki-item-pad-block: 6px;
+  --editor-wiki-item-pad-inline: 10px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -136,12 +142,12 @@
 
 .sidebarExpand {
   align-self: flex-start;
-  margin-top: 8px;
+  margin-top: var(--editor-sidebar-expand-gap);
   border: 1px solid var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-sm);
   background: var(--mantine-color-body);
   cursor: pointer;
-  padding: 6px;
+  padding: var(--editor-sidebar-expand-pad);
 }
 
 .richColumn {
@@ -168,7 +174,7 @@
  * the class is the change that cannot alter where a keystroke scrolls.
  */
 .wikiLinkPicker {
-  width: 280px;
+  width: var(--editor-wiki-picker-width);
   max-height: var(--rtwiki-panel-max-height);
   overflow-y: auto;
 }
@@ -182,7 +188,7 @@
 .wikiLinkItem {
   display: block;
   width: 100%;
-  padding: 6px 10px;
+  padding: var(--editor-wiki-item-pad-block) var(--editor-wiki-item-pad-inline);
   border: none;
   border-radius: var(--mantine-radius-xs);
   background: transparent;
@@ -215,7 +221,7 @@
 .blockNoteWrapper :global(.rtwiki-spellcheck-misspelling) {
   text-decoration-line: underline;
   text-decoration-style: wavy;
-  text-decoration-color: var(--rtwiki-spellcheck-underline, #d9534f);
+  text-decoration-color: var(--rtwiki-spellcheck-underline);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
   text-decoration-skip-ink: none;

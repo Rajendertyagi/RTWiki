@@ -27,6 +27,10 @@
  * of experimental side grips in half.
  */
 .previewPane {
+  /* Local stacking: the toolbar/caption sit above the view controls, which in
+     turn sit above the size presets and resize grip. */
+  --mermaid-z-raised: 5;
+  --mermaid-z-controls: 3;
   position: relative;
   width: 100%;
   padding: var(--mantine-spacing-xs);
@@ -55,7 +59,7 @@
    * on top of the edit button, which is why clicking "edit" timed out and the pad looked
    * painted under the top of the block.
    */
-  z-index: 5;
+  z-index: var(--mermaid-z-raised);
   padding: 2px 4px;
   border-radius: var(--mantine-radius-sm);
   background: color-mix(in srgb, var(--rtwiki-pane, var(--mantine-color-body)) 88%, transparent);
@@ -75,7 +79,7 @@
   position: absolute;
   top: 6px;
   left: 8px;
-  z-index: 5;
+  z-index: var(--mermaid-z-raised);
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   pointer-events: none;
 }
@@ -181,7 +185,7 @@
   position: absolute;
   bottom: 4px;
   left: 4px;
-  z-index: 3;
+  z-index: var(--mermaid-z-controls);
   display: flex;
   gap: 2px;
   padding: 1px 3px;
@@ -198,7 +202,7 @@
    */
   background: var(--rtwiki-elevated, var(--mantine-color-body));
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.1);
+  box-shadow: var(--rtwiki-shadow-chip);
   opacity: 0;
 }
 
@@ -220,7 +224,7 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  z-index: 3;
+  z-index: var(--mermaid-z-controls);
   display: flex;
   align-items: center;
   justify-content: center;

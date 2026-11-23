@@ -44,7 +44,7 @@
 
 .textBody {
   font-family: var(--mantine-font-family-monospace);
-  font-size: 13px;
+  font-size: var(--rtwiki-code-compact-font-size);
   line-height: 1.5;
 }
 

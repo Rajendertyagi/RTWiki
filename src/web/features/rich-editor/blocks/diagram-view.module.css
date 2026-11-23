@@ -21,6 +21,16 @@
  * collapsed to nothing.
  */
 .host {
+  /* Local control geometry: bottom-right cluster, buttons and fullscreen close. */
+  --diagram-control-right: 6px;
+  --diagram-control-bottom: 22px;
+  --diagram-control-gap: 3px;
+  --diagram-control-z: 3;
+  --diagram-control-size: 26px;
+  --diagram-control-icon-size: 15px;
+  --diagram-fullscreen-close-inset: 12px;
+  --diagram-fullscreen-close-size: 32px;
+  --diagram-fullscreen-close-icon-size: 18px;
   position: relative;
   display: flex;
   width: 100%;
@@ -235,17 +245,17 @@
  * it never sits on a diagram that is being read. */
 .controls {
   position: absolute;
-  right: 6px;
+  right: var(--diagram-control-right);
   /* Clears the block's corner resize handle, which is 18px tall and anchored at
    * `bottom: 0`. At 24px the cluster's bottom row sat on top of it. */
-  bottom: 22px;
-  z-index: 3;
+  bottom: var(--diagram-control-bottom);
+  z-index: var(--diagram-control-z);
   display: grid;
   grid-template-columns: repeat(3, auto);
-  gap: 3px;
+  gap: var(--diagram-control-gap);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease;
+  transition: opacity var(--rtwiki-motion-fast) ease;
 }
 
 .host:hover .controls,
@@ -257,8 +267,8 @@
 .button {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: var(--diagram-control-size);
+  height: var(--diagram-control-size);
   padding: 0;
   background: color-mix(in srgb, var(--rtwiki-elevated) 92%, transparent);
   border: 1px solid var(--rtwiki-border);
@@ -269,12 +279,12 @@
 
 .button:hover {
   background: var(--rtwiki-hover);
-  border-color: var(--rtwiki-color-blue-6, var(--rtwiki-selected));
+  border-color: var(--rtwiki-selected);
 }
 
 .button svg {
-  width: 15px;
-  height: 15px;
+  width: var(--diagram-control-icon-size);
+  height: var(--diagram-control-icon-size);
   display: block;
 }
 
@@ -319,7 +329,7 @@
 .fullscreen {
   position: fixed;
   inset: 0;
-  z-index: var(--rtwiki-overlay-z-index, 200);
+  z-index: var(--rtwiki-overlay-z-index);
   display: flex;
   /*
    * Deliberately NOT `align-items: safe center` / `justify-content: safe center`.
@@ -376,12 +386,12 @@
 
 .fullscreenClose {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: var(--diagram-fullscreen-close-inset);
+  right: var(--diagram-fullscreen-close-inset);
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: var(--diagram-fullscreen-close-size);
+  height: var(--diagram-fullscreen-close-size);
   padding: 0;
   background: var(--rtwiki-pane);
   border: 1px solid var(--rtwiki-border);
@@ -391,6 +401,6 @@
 }
 
 .fullscreenClose svg {
-  width: 18px;
-  height: 18px;
+  width: var(--diagram-fullscreen-close-icon-size);
+  height: var(--diagram-fullscreen-close-icon-size);
 }

@@ -65,6 +65,21 @@
   --rtwiki-tree-subfile-pad-left: 6px;
   --rtwiki-tree-menu-pad-inline: 14px;
   --rtwiki-tree-menu-section-gap: 10px;
+  /* Rich editor semantic colours. These were previously undefined tokens whose
+     CSS fallbacks carried the rendering; defining them at their current values
+     makes the fallback explicit and theme-controllable without a visual change. */
+  --rtwiki-spellcheck-underline: #d9534f;
+  /* Diagram template family palette. Same six colours the fallbacks used. */
+  --rtwiki-tpl-flow: #4c8dff;
+  --rtwiki-tpl-structures: #9d7bff;
+  --rtwiki-tpl-timing: #2fb87a;
+  --rtwiki-tpl-thinking: #d9a13a;
+  --rtwiki-tpl-analysis: #e0648c;
+  --rtwiki-tpl-data: #35b8c4;
+  /* Small elevation for control chips, and the compact monospace text size
+     shared by document and linked-page previews. */
+  --rtwiki-shadow-chip: 0 1px 3px oklch(0 0 0 / 0.1);
+  --rtwiki-code-compact-font-size: 13px;
 }
 
 /*

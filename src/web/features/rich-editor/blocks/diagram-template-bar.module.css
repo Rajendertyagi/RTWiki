@@ -7,9 +7,16 @@
    Note. See ADR-012. */
 
 .templateBar {
+  /* Local bar geometry: control gap, separator, and variant mark. */
+  --tpl-bar-gap: 2px;
+  --tpl-sep-width: 1px;
+  --tpl-sep-height: 24px;
+  --tpl-sep-margin: 6px;
+  --tpl-variant-mark-width: 1.2em;
+  --tpl-variant-mark-opacity: 0.8;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--tpl-bar-gap);
   /* `flex: 1 1 auto`, and this is the fix for a bar that would never grow again.
    *
    * `useToolbarOverflow` decides how many controls fit by reading this element's
@@ -43,10 +50,10 @@
 }
 
 .templateSep {
-  width: 1px;
-  height: 24px;
+  width: var(--tpl-sep-width);
+  height: var(--tpl-sep-height);
   background: var(--mantine-color-default-border);
-  margin: 0 6px;
+  margin: 0 var(--tpl-sep-margin);
   flex: 0 0 auto;
 }
 
@@ -67,27 +74,27 @@
  * `rgb(0, 0, 0)`. A control that looks different in the place it moved to is
  * harder to recognise, which defeats the reason the bar is coloured at all.
  */ .familyIcon[data-family="flow"] {
-  color: var(--rtwiki-tpl-flow, #4c8dff);
+  color: var(--rtwiki-tpl-flow);
 }
 
 .familyIcon[data-family="structures"] {
-  color: var(--rtwiki-tpl-structures, #9d7bff);
+  color: var(--rtwiki-tpl-structures);
 }
 
 .familyIcon[data-family="timing"] {
-  color: var(--rtwiki-tpl-timing, #2fb87a);
+  color: var(--rtwiki-tpl-timing);
 }
 
 .familyIcon[data-family="thinking"] {
-  color: var(--rtwiki-tpl-thinking, #d9a13a);
+  color: var(--rtwiki-tpl-thinking);
 }
 
 .familyIcon[data-family="analysis"] {
-  color: var(--rtwiki-tpl-analysis, #e0648c);
+  color: var(--rtwiki-tpl-analysis);
 }
 
 .familyIcon[data-family="data"] {
-  color: var(--rtwiki-tpl-data, #35b8c4);
+  color: var(--rtwiki-tpl-data);
 }
 
 .templateButton:hover,
@@ -119,7 +126,7 @@
    version. Fixed width so the labels that follow line up. */
 .variantMark {
   display: inline-block;
-  width: 1.2em;
+  width: var(--tpl-variant-mark-width);
   text-align: center;
-  opacity: 0.8;
+  opacity: var(--tpl-variant-mark-opacity);
 }
