@@ -7,7 +7,7 @@
      horizontal padding is what centres them: (48 - 34) / 2 = 7px on each side.
      The flex default would otherwise left-align a fixed-width button and leave
      11px of dead space on the right, which reads as an off-centre icon. */
-  padding: var(--mantine-spacing-xs) 7px;
+  padding: var(--mantine-spacing-xs) var(--rtwiki-rail-padding-inline);
   border-right: none;
   background: var(--rtwiki-rail, var(--rtwiki-elevated, var(--mantine-color-default)));
   /* No shadow. The rail is a structural column, not a surface floating above
@@ -20,9 +20,9 @@
 /* Debug-active status dot. Static presentational rule extracted from TSX
  * (inventory #24); values preserved exactly. */
 .statusDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--rtwiki-status-dot-size);
+  height: var(--rtwiki-status-dot-size);
+  border-radius: var(--rtwiki-radius-pill);
   background: var(--mantine-color-teal-filled);
 }
 

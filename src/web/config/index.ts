@@ -61,6 +61,13 @@ export const LAYOUT = {
   dividerHitWidth: 6,
   /** Divider keyboard-resize step. */
   dividerStepWidth: 20,
+  /** Focus ring geometry shared by shell chrome controls. */
+  focusRingWidth: 2,
+  focusRingOffset: -2,
+  /** Utility rail horizontal padding: (railWidth - iconSize) / 2. */
+  railPaddingInline: 7,
+  /** Debug-active status dot diameter. */
+  statusDotSize: 8,
   /**
    * Shared overlay z-index. Every floating layer (menus, popovers, portals,
    * full-screen workspaces) must sit above the AppShell navbar so a
@@ -71,6 +78,34 @@ export const LAYOUT = {
   overlayZIndex: 1000,
   /** Global application status-bar height (footer). Matches Trilium StatusBar 28px. */
   statusBarHeight: 28,
+  /** Tab strip geometry. */
+  tabGap: 2,
+  tabDragSpacerWidth: 40,
+  tabMaxWidth: 220,
+  tabMinWidth: 120,
+  tabActiveInset: 4,
+  tabPadInlineStart: 12,
+  tabPadInlineEnd: 4,
+  tabSeparatorInset: 8,
+  tabCloseSize: 24,
+  /** Status bar compact geometry. */
+  statusBarPadInline: '0.25em',
+  statusBarFontSize: '0.85em',
+  statusBarActionsPad: '0.1em',
+  statusBarActionsGap: '0.1em',
+  statusBarBreadcrumbGap: 2,
+  statusBarCrumbPadBlock: 1,
+  statusBarCrumbPadInline: 4,
+  statusBarActionGap: 3,
+  statusBarActionHeight: 22,
+  statusBarActionPadInline: '0.4em',
+  statusBarActionTextFontSize: '0.95em',
+  statusBarBacklinksMinWidth: 240,
+  statusBarBacklinksMaxWidth: 360,
+  statusBarDropdownHeaderMarginBottom: 4,
+  statusBarBacklinkItemPadBlock: 4,
+  statusBarBacklinkItemPadInline: 6,
+  statusBarInfoMinWidth: 260,
   /**
    * Scrollbar geometry, as the single source for both scrollbar mechanisms.
    *
@@ -164,6 +199,28 @@ export const LAYOUT = {
  * Defined once so the attribute and the selector that reads it cannot drift.
  */
 export const OVERLAY_OWNER_ATTR = 'data-keep-menu-open'
+
+/**
+ * Motion durations (ms). Single source for transition timing in the shell chrome.
+ * Published as `--rtwiki-motion-*` by the theme resolver.
+ */
+export const MOTION = {
+  /** Fast feedback: hover, focus, small state changes. */
+  fast: 120,
+  /** Tab state transitions. */
+  tab: 150
+} as const
+
+/**
+ * Local z-index scale for the tab strip. Published as `--rtwiki-z-tab-*`.
+ * Values preserve the existing stacking order exactly.
+ */
+export const Z_INDEX = {
+  tabHandle: 1,
+  tabClose: 2,
+  tabActive: 3,
+  tabDrag: 100
+} as const
 
 /** Visual-block container size presets (width px, height px; 0 = auto). */
 export const BLOCK_SIZE_PRESETS = {

@@ -105,7 +105,9 @@ export const REQUIRED_INTERACTION_TOKENS = [
   'floatingShadow',
   'activeFill',
   'treeSelected',
-  'treeSelectedHover'
+  'treeSelectedHover',
+  'tabDragShadow',
+  'tabCloseHoverBg'
 ] as const
 
 export type RequiredInteractionToken = (typeof REQUIRED_INTERACTION_TOKENS)[number]
@@ -143,7 +145,9 @@ export const VARIANT_TOKEN_NAMES: Record<RequiredVariantToken | RequiredInteract
     floatingShadow: 'floating-shadow',
     activeFill: 'active-fill',
     treeSelected: 'tree-selected',
-    treeSelectedHover: 'tree-selected-hover'
+    treeSelectedHover: 'tree-selected-hover',
+    tabDragShadow: 'tab-drag-shadow',
+    tabCloseHoverBg: 'tab-close-hover-bg'
   }
 
 export function buildVariantVariables(variant: ThemeVariant): Record<string, string> {
@@ -260,7 +264,9 @@ const defaultTheme: AppTheme = {
         'inset 0 1px 0 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.36), 0 1px 1px -0.5px rgb(0 0 0 / 0.22), 0 3px 3px -1.5px rgb(0 0 0 / 0.2), 0 6px 6px -3px rgb(0 0 0 / 0.16)',
       activeFill: 'color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)',
       treeSelected: 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)',
-      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)'
+      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)',
+      tabDragShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+      tabCloseHoverBg: 'rgba(255, 255, 255, 0.1)'
     },
     light: {
       // Same idea in the other direction: the canvas is the brightest surface
@@ -279,7 +285,9 @@ const defaultTheme: AppTheme = {
         'inset 0 1px 0 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px -0.5px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 12px 20px -4px rgb(0 0 0 / 0.08)',
       activeFill: 'color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)',
       treeSelected: 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)',
-      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)'
+      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)',
+      tabDragShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+      tabCloseHoverBg: 'rgba(255, 255, 255, 0.1)'
     }
   }
 }

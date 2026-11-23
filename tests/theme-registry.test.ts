@@ -97,7 +97,13 @@ describe('theme registry', () => {
 })
 
 describe('interaction tokens', () => {
-  const schemeIndependent = ['activeFill', 'treeSelected', 'treeSelectedHover'] as const
+  const schemeIndependent = [
+    'activeFill',
+    'treeSelected',
+    'treeSelectedHover',
+    'tabDragShadow',
+    'tabCloseHoverBg'
+  ] as const
   const schemeSpecific = ['chromeHairline', 'floatingShadow'] as const
 
   it.each(Object.keys(APP_THEMES))('%s declares every interaction token in both variants', (id) => {
@@ -138,10 +144,14 @@ describe('interaction tokens', () => {
     const treeSelected = 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)'
     const treeSelectedHover =
       'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)'
+    const tabDragShadow = '0 8px 24px rgba(0, 0, 0, 0.45)'
+    const tabCloseHoverBg = 'rgba(255, 255, 255, 0.1)'
     for (const variantName of ['light', 'dark'] as const) {
       expect(variants[variantName].activeFill).toBe(activeFill)
       expect(variants[variantName].treeSelected).toBe(treeSelected)
       expect(variants[variantName].treeSelectedHover).toBe(treeSelectedHover)
+      expect(variants[variantName].tabDragShadow).toBe(tabDragShadow)
+      expect(variants[variantName].tabCloseHoverBg).toBe(tabCloseHoverBg)
     }
   })
 })

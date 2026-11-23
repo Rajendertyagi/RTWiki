@@ -7,7 +7,7 @@
   /* From LAYOUT.statusBarHeight, published by the theme resolver. The fallback
      is a guard for the brief moment before the resolver's variables land. */
   min-height: var(--rtwiki-status-bar-height, 28px);
-  padding: 0 0.25em;
+  padding: 0 var(--rtwiki-status-bar-pad-inline);
   border-top: 1px solid var(--rtwiki-chrome-border);
   background: var(--rtwiki-chrome-bg);
   /* One compact line; scroll horizontally on narrow widths instead of wrapping.
@@ -16,7 +16,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
-  font-size: 0.85em;
+  font-size: var(--rtwiki-status-bar-font-size);
 }
 
 .left {
@@ -31,8 +31,8 @@
    buttons that highlight on hover/focus, exactly like Trilium's .actions-row. */
 .actions {
   flex-shrink: 0;
-  padding: 0.1em;
-  gap: 0.1em;
+  padding: var(--rtwiki-status-bar-actions-pad);
+  gap: var(--rtwiki-status-bar-actions-gap);
 }
 
 .right {
@@ -48,7 +48,7 @@
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--rtwiki-status-bar-breadcrumb-gap);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -64,10 +64,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 1px 4px;
+  padding: var(--rtwiki-status-bar-crumb-pad-block) var(--rtwiki-status-bar-crumb-pad-inline);
   border-radius: var(--mantine-radius-sm);
   color: var(--mantine-color-dimmed);
-  font-size: 0.85em;
+  font-size: var(--rtwiki-status-bar-font-size);
 }
 
 .crumb:hover {
@@ -83,7 +83,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--mantine-color-text);
-  font-size: 0.85em;
+  font-size: var(--rtwiki-status-bar-font-size);
 }
 
 .crumbSep {
@@ -102,9 +102,9 @@
 .actionButton {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  height: 22px;
-  padding: 0 0.4em;
+  gap: var(--rtwiki-status-bar-action-gap);
+  height: var(--rtwiki-status-bar-action-height);
+  padding: 0 var(--rtwiki-status-bar-action-pad-inline);
   border: 0;
   border-radius: var(--mantine-radius-sm);
   color: var(--mantine-color-dimmed);
@@ -119,7 +119,7 @@
 
 .actionText {
   white-space: nowrap;
-  font-size: 0.95em;
+  font-size: var(--rtwiki-status-bar-action-text-font-size);
 }
 
 .saveState {
@@ -128,13 +128,13 @@
 
 /* Backlinks dropdown content. */
 .backlinksDropdown {
-  min-width: 240px;
-  max-width: 360px;
+  min-width: var(--rtwiki-status-bar-backlinks-min-width);
+  max-width: var(--rtwiki-status-bar-backlinks-max-width);
 }
 
 .dropdownHeader {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: var(--rtwiki-status-bar-dropdown-header-margin-bottom);
 }
 
 /* The backlinks dropdown's list. A floating list, so it shares the dropdown
@@ -148,7 +148,8 @@
   display: block;
   width: 100%;
   text-align: left;
-  padding: 4px 6px;
+  padding: var(--rtwiki-status-bar-backlink-item-pad-block)
+    var(--rtwiki-status-bar-backlink-item-pad-inline);
   border-radius: var(--mantine-radius-sm);
   color: var(--mantine-color-text);
   overflow: hidden;
@@ -162,7 +163,7 @@
 
 /* Note-info detail popover. */
 .infoDropdown {
-  min-width: 260px;
+  min-width: var(--rtwiki-status-bar-info-min-width);
 }
 
 .infoRow {

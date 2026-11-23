@@ -1,5 +1,5 @@
 import type { CSSVariablesResolver } from '@mantine/core'
-import { LAYOUT } from '../config/index.js'
+import { LAYOUT, MOTION, Z_INDEX } from '../config/index.js'
 import { type AppTheme, buildVariantVariables, DEFAULT_THEME_ID, getTheme } from './registry.js'
 
 export type {
@@ -89,7 +89,49 @@ export function createThemeCssVariablesResolver(theme: AppTheme): CSSVariablesRe
       // border. A separate token because the Diagram page card really does need more
       // room, and one shared floor under-floored it — measured 6px of the control pad
       // and 28px of canvas clipped off a 140px block. See LAYOUT.
-      '--rtwiki-visual-page-block-min-height': `${LAYOUT.visualPageBlockMinHeight}px`
+      '--rtwiki-visual-page-block-min-height': `${LAYOUT.visualPageBlockMinHeight}px`,
+      // Focus ring geometry shared by shell chrome controls.
+      '--rtwiki-focus-ring-width': `${LAYOUT.focusRingWidth}px`,
+      '--rtwiki-focus-ring-offset': `${LAYOUT.focusRingOffset}px`,
+      // Utility rail geometry.
+      '--rtwiki-rail-padding-inline': `${LAYOUT.railPaddingInline}px`,
+      '--rtwiki-status-dot-size': `${LAYOUT.statusDotSize}px`,
+      // Tab strip geometry.
+      '--rtwiki-tab-gap': `${LAYOUT.tabGap}px`,
+      '--rtwiki-tab-drag-spacer-width': `${LAYOUT.tabDragSpacerWidth}px`,
+      '--rtwiki-tab-max-width': `${LAYOUT.tabMaxWidth}px`,
+      '--rtwiki-tab-min-width': `${LAYOUT.tabMinWidth}px`,
+      '--rtwiki-tab-active-inset': `${LAYOUT.tabActiveInset}px`,
+      '--rtwiki-tab-pad-inline-start': `${LAYOUT.tabPadInlineStart}px`,
+      '--rtwiki-tab-pad-inline-end': `${LAYOUT.tabPadInlineEnd}px`,
+      '--rtwiki-tab-separator-inset': `${LAYOUT.tabSeparatorInset}px`,
+      '--rtwiki-tab-close-size': `${LAYOUT.tabCloseSize}px`,
+      // Status bar compact geometry.
+      '--rtwiki-status-bar-pad-inline': LAYOUT.statusBarPadInline,
+      '--rtwiki-status-bar-font-size': LAYOUT.statusBarFontSize,
+      '--rtwiki-status-bar-actions-pad': LAYOUT.statusBarActionsPad,
+      '--rtwiki-status-bar-actions-gap': LAYOUT.statusBarActionsGap,
+      '--rtwiki-status-bar-breadcrumb-gap': `${LAYOUT.statusBarBreadcrumbGap}px`,
+      '--rtwiki-status-bar-crumb-pad-block': `${LAYOUT.statusBarCrumbPadBlock}px`,
+      '--rtwiki-status-bar-crumb-pad-inline': `${LAYOUT.statusBarCrumbPadInline}px`,
+      '--rtwiki-status-bar-action-gap': `${LAYOUT.statusBarActionGap}px`,
+      '--rtwiki-status-bar-action-height': `${LAYOUT.statusBarActionHeight}px`,
+      '--rtwiki-status-bar-action-pad-inline': LAYOUT.statusBarActionPadInline,
+      '--rtwiki-status-bar-action-text-font-size': LAYOUT.statusBarActionTextFontSize,
+      '--rtwiki-status-bar-backlinks-min-width': `${LAYOUT.statusBarBacklinksMinWidth}px`,
+      '--rtwiki-status-bar-backlinks-max-width': `${LAYOUT.statusBarBacklinksMaxWidth}px`,
+      '--rtwiki-status-bar-dropdown-header-margin-bottom': `${LAYOUT.statusBarDropdownHeaderMarginBottom}px`,
+      '--rtwiki-status-bar-backlink-item-pad-block': `${LAYOUT.statusBarBacklinkItemPadBlock}px`,
+      '--rtwiki-status-bar-backlink-item-pad-inline': `${LAYOUT.statusBarBacklinkItemPadInline}px`,
+      '--rtwiki-status-bar-info-min-width': `${LAYOUT.statusBarInfoMinWidth}px`,
+      // Motion durations.
+      '--rtwiki-motion-fast': `${MOTION.fast}ms`,
+      '--rtwiki-motion-tab': `${MOTION.tab}ms`,
+      // Tab strip z-index scale.
+      '--rtwiki-z-tab-handle': String(Z_INDEX.tabHandle),
+      '--rtwiki-z-tab-close': String(Z_INDEX.tabClose),
+      '--rtwiki-z-tab-active': String(Z_INDEX.tabActive),
+      '--rtwiki-z-tab-drag': String(Z_INDEX.tabDrag)
     },
     light: buildVariantVariables(theme.variants.light),
     dark: buildVariantVariables(theme.variants.dark)

@@ -18,14 +18,14 @@
   outline: none;
   /* Pointer hit-area, from the published layout token. Owned here rather than
      passed as an inline style. */
-  width: var(--rtwiki-divider-hit-width, 6px);
+  width: var(--rtwiki-divider-hit-width);
 }
 
 .line {
   width: 1px;
   height: 100%;
   background: transparent;
-  transition: background-color 120ms ease;
+  transition: background-color var(--rtwiki-motion-fast) ease;
 }
 
 .divider:hover .line,
@@ -38,8 +38,8 @@
 }
 
 .divider:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-outline);
-  outline-offset: -2px;
+  outline: var(--rtwiki-focus-ring-width) solid var(--mantine-color-blue-outline);
+  outline-offset: var(--rtwiki-focus-ring-offset);
 }
 
 @media (max-width: 47.99em) {

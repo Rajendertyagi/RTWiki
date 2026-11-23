@@ -45,7 +45,7 @@
 .tabScroller {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--rtwiki-tab-gap);
   flex: 1;
   min-width: 0;
   min-height: var(--rtwiki-tab-height);
@@ -65,8 +65,8 @@
 /* Guaranteed window-drag surface at the tail of the strip. Floored at 40px so
    even a packed tab row leaves a grabbable gap (Codeg's tab-bar pattern). */
 .dragSpacer {
-  flex: 0 0 40px;
-  min-width: 40px;
+  flex: 0 0 var(--rtwiki-tab-drag-spacer-width);
+  min-width: var(--rtwiki-tab-drag-spacer-width);
   height: 100%;
 }
 
@@ -74,12 +74,12 @@
   display: inline-flex;
   align-items: center;
   gap: var(--mantine-spacing-xs);
-  max-width: 220px;
-  min-width: 120px;
-  height: calc(var(--rtwiki-tab-height) - 4px);
+  max-width: var(--rtwiki-tab-max-width);
+  min-width: var(--rtwiki-tab-min-width);
+  height: calc(var(--rtwiki-tab-height) - var(--rtwiki-tab-active-inset));
   align-self: flex-end;
   /* Generous padding with space for the larger, right-aligned close button */
-  padding: 0 4px 0 12px;
+  padding: 0 var(--rtwiki-tab-pad-inline-end) 0 var(--rtwiki-tab-pad-inline-start);
   border-radius: var(--mantine-radius-md) var(--mantine-radius-md) 0 0;
   /* No top or bottom border lines */
   border: none;
@@ -87,8 +87,8 @@
   user-select: none;
   position: relative;
   transition:
-    background-color 150ms ease,
-    color 150ms ease;
+    background-color var(--rtwiki-motion-tab) ease,
+    color var(--rtwiki-motion-tab) ease;
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   background: transparent;
 }
@@ -98,11 +98,11 @@
   content: "";
   position: absolute;
   right: 0;
-  top: 8px;
-  bottom: 8px;
+  top: var(--rtwiki-tab-separator-inset);
+  bottom: var(--rtwiki-tab-separator-inset);
   width: 1px;
-  background: var(--rtwiki-chrome-border, rgba(255, 255, 255, 0.08));
-  transition: opacity 150ms ease;
+  background: var(--rtwiki-chrome-border);
+  transition: opacity var(--rtwiki-motion-tab) ease;
 }
 
 .tab:hover::after {
@@ -117,7 +117,7 @@
 .tabDragHandle {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: var(--rtwiki-z-tab-handle);
   cursor: grab;
 }
 
@@ -132,10 +132,10 @@
 .tabDragging {
   opacity: 0.95;
   cursor: grabbing !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--rtwiki-tab-drag-shadow);
   background: var(--rtwiki-elevated, var(--mantine-color-default-hover)) !important;
   border-radius: var(--mantine-radius-md) var(--mantine-radius-md) 0 0 !important;
-  z-index: 100 !important;
+  z-index: var(--rtwiki-z-tab-drag) !important;
   transition: none !important;
 }
 
@@ -156,7 +156,7 @@
   align-self: flex-end;
   border: none;
   border-bottom: none;
-  z-index: 3;
+  z-index: var(--rtwiki-z-tab-active);
 }
 
 .tabActive::after {
@@ -164,8 +164,8 @@
 }
 
 .tab:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-outline);
-  outline-offset: -2px;
+  outline: var(--rtwiki-focus-ring-width) solid var(--mantine-color-blue-outline);
+  outline-offset: var(--rtwiki-focus-ring-offset);
 }
 
 .tabTitle {
@@ -184,16 +184,16 @@
 .tabClose {
   flex: 0 0 auto;
   position: relative;
-  z-index: 2;
+  z-index: var(--rtwiki-z-tab-close);
   margin-left: auto;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
+  width: var(--rtwiki-tab-close-size);
+  height: var(--rtwiki-tab-close-size);
+  min-width: var(--rtwiki-tab-close-size);
+  min-height: var(--rtwiki-tab-close-size);
   border-radius: var(--mantine-radius-sm);
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
-  opacity: 0.7;
-  transition: all 120ms ease;
+  opacity: var(--rtwiki-tab-close-opacity);
+  transition: all var(--rtwiki-motion-fast) ease;
 }
 
 .tab:hover .tabClose {
@@ -202,7 +202,7 @@
 }
 
 .tabClose:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--rtwiki-tab-close-hover-bg);
   color: var(--mantine-color-text);
 }
 
