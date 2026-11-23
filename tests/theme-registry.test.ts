@@ -340,7 +340,94 @@ describe('inline style objects', () => {
       if (!file.endsWith('.tsx')) continue
       count += collectStyleObjects(readFileSync(file, 'utf8')).length
     }
-    // Currently 4: two Mermaid zoom hosts and two right-sidebar values.
+    // This count scans `style={{` object literals only. There are currently 2
+    // such occurrences, both in `right-sidebar.tsx:92,138`. The `<= 6` bound is
+    // deliberate headroom, not a current count. Other custom-property-only
+    // styles use the `style={expr}` form and are covered by the allowlist test
+    // below.
     expect(count).toBeLessThanOrEqual(6)
+  })
+
+  /**
+   * The `style={{` checks above only see object-literal forms. This test closes
+   * the blind spot by enumerating EVERY `style={` in `src/web/** /*.tsx` (both
+   * `style={{ ... }}` and `style={expr}`) and requiring each occurrence to be
+   * either (a) a custom-properties-only object literal, or (b) an explicitly
+   * allowlisted runtime exception with a documented reason.
+   *
+   * A future literal like `style={cond ? { height: '100%' } : undefined}` must
+   * fail here unless it is added to the allowlist with justification.
+   */
+  it('every style={...} is custom-property-only or an allowlisted runtime exception', () => {
+    const webRoot = join(import.meta.dir, '..', 'src', 'web')
+
+    // Runtime exceptions: genuine values that cannot be expressed as static
+    // CSS/custom properties alone. Each entry is keyed by "relative/path:line"
+    // and carries a reason so the allowlist is auditable.
+    const ALLOWED_RUNTIME_STYLES: Record<string, string> = {
+      'src/web/features/visual-pages/diagram-block-card.tsx:109':
+        'dnd-kit sortable transform/transition/zIndex plus runtime block width/height custom properties (definition at :95-101)',
+      'src/web/features/tabs/tab-strip.tsx:164':
+        'dnd-kit sortable transform/transition/zIndex (definition at :147-151)',
+      'src/web/features/sidebar/tree-context-menu.tsx:307':
+        'context-menu anchor positioned at runtime pointer coordinates (definition at :117-123)'
+    }
+
+    /** Every `style={...}` JSX expression, brace-matched from the outer `{`. */
+    function collectAllStyleExpressions(source: string): Array<{ expr: string; index: number }> {
+      const found: Array<{ expr: string; index: number }> = []
+      for (const match of source.matchAll(/style=\{/g)) {
+        let depth = 0
+        let i = match.index + 'style='.length
+        for (; i < source.length; i += 1) {
+          if (source[i] === '{') depth += 1
+          else if (source[i] === '}') {
+            depth -= 1
+            if (depth === 0) {
+              found.push({ expr: source.slice(match.index, i + 1), index: match.index })
+              break
+            }
+          }
+        }
+      }
+      return found
+    }
+
+    /**
+     * True when the expression is a `style={{ ... }}` object literal whose
+     * every top-level key is a CSS custom property (`--*`). Allows a trailing
+     * TypeScript type assertion (`as CSSVars`, `as React.CSSProperties`, etc.).
+     */
+    function isCustomPropertyOnlyObjectLiteral(expr: string): boolean {
+      // Strip outer `style={` ... `}`.
+      if (!expr.startsWith('style={') || !expr.endsWith('}')) return false
+      let inner = expr.slice('style={'.length, -1).trim()
+      // Strip trailing type assertion.
+      inner = inner.replace(/\s+as\s+[A-Za-z][\w.]*(?:<[^>]*>)?$/, '').trim()
+      // Must be an object literal.
+      if (!inner.startsWith('{') || !inner.endsWith('}')) return false
+      const keys = [...inner.matchAll(/(?:^|[{,])\s*'?((?:--)?[A-Za-z][\w-]*)'?\s*:/g)].map(
+        (m) => m[1]
+      )
+      return keys.length > 0 && keys.every((k) => k.startsWith('--'))
+    }
+
+    const offenders: string[] = []
+    for (const file of collectSourceFiles(webRoot)) {
+      if (!file.endsWith('.tsx')) continue
+      const contents = readFileSync(file, 'utf8')
+      const rel = file.replace(/\\/g, '/').replace(/^.*\/src\/web\//, 'src/web/')
+      for (const { expr, index } of collectAllStyleExpressions(contents)) {
+        const line = contents.slice(0, index).split('\n').length
+        const key = `${rel}:${line}`
+        if (isCustomPropertyOnlyObjectLiteral(expr)) continue
+        if (ALLOWED_RUNTIME_STYLES[key]) continue
+        offenders.push(
+          `${key} — not custom-property-only and not allowlisted: ${expr.replace(/\s+/g, ' ').slice(0, 120)}`
+        )
+      }
+    }
+
+    expect(offenders).toEqual([])
   })
 })

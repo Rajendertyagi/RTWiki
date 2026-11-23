@@ -356,10 +356,7 @@ export function MermaidBlockView({
           onCommit={onCommitSize ?? (() => undefined)}
           testIdPrefix={blockType}
         >
-          <div
-            className={`${classes.previewScroll} ${RTWIKI_SCROLL}`}
-            style={height !== '' ? { height: '100%' } : undefined}
-          >
+          <div className={`${classes.previewScroll} ${RTWIKI_SCROLL}`}>
             {/* The diagram's own view — zoom, pan, reset, full screen — is the same
              * component the Diagram page uses, so the two surfaces cannot drift apart
              * again. It is separate from the block's size: these move the picture,
