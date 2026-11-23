@@ -61,25 +61,12 @@ export {
  * so validation and behaviour are identical.
  */
 const themeFiles: Record<string, unknown> =
-  typeof import.meta.glob === 'function'
+  import.meta.env !== undefined && 'DEV' in import.meta.env
     ? (import.meta.glob('../themes/*.json', {
         eager: true,
         import: 'default'
       }) as Record<string, unknown>)
-    : await (async () => {
-        // biome-ignore lint/correctness/noNodejsModules: Bun-only test fallback; Vite replaces this branch and never bundles it.
-        const { readdirSync, readFileSync } = await import('node:fs')
-        // biome-ignore lint/correctness/noNodejsModules: Bun-only test fallback; Vite replaces this branch and never bundles it.
-        const { join } = await import('node:path')
-        const dir = join(import.meta.dir, '..', 'themes')
-        const files: Record<string, unknown> = {}
-        for (const name of readdirSync(dir)
-          .filter((n) => n.endsWith('.json'))
-          .sort()) {
-          files[`../themes/${name}`] = JSON.parse(readFileSync(join(dir, name), 'utf8')) as unknown
-        }
-        return files
-      })()
+    : ((await import('./theme-files-bun.js')).readThemeFilesFromDisk() as Record<string, unknown>)
 
 function idFromPath(path: string): string {
   const name = path.split('/').pop() ?? path
