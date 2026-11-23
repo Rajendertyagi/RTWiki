@@ -2,14 +2,25 @@ import { describe, expect, it } from 'bun:test'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  APP_THEMES,
   buildVariantVariables,
   DEFAULT_THEME_ID,
-  getTheme,
   REQUIRED_INTERACTION_TOKENS,
   REQUIRED_VARIANT_TOKENS,
   VARIANT_TOKEN_NAMES
-} from '../src/web/theme/registry.js'
+} from '../src/web/theme/tokens.js'
+import { loadThemesFromDisk } from './helpers/theme-files.js'
+
+/**
+ * The web app discovers themes with Vite's import.meta.glob, which Bun cannot
+ * execute. These tests read the same files from disk through the shared factory;
+ * tests/theme-discovery.test.ts guards that both methods see the same files.
+ */
+const APP_THEMES = loadThemesFromDisk()
+const DEFAULT_THEME_ID_VALUE = DEFAULT_THEME_ID
+
+function getTheme(id: string) {
+  return APP_THEMES[id] ?? APP_THEMES[DEFAULT_THEME_ID_VALUE]
+}
 
 /**
  * These tests guard the theme registry, which is the single source of truth for

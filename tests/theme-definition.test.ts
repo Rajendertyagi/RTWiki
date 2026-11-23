@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-import {
-  getTheme,
-  REQUIRED_INTERACTION_TOKENS,
-  REQUIRED_VARIANT_TOKENS
-} from '../src/web/theme/registry.js'
 import { parseThemeDefinition } from '../src/web/theme/theme-definition.js'
+import { REQUIRED_INTERACTION_TOKENS, REQUIRED_VARIANT_TOKENS } from '../src/web/theme/tokens.js'
+import { loadThemesFromDisk } from './helpers/theme-files.js'
+
+const themesFromDisk = loadThemesFromDisk()
+const getTheme = (id: string) => themesFromDisk[id]
+
 import defaultThemeJson from '../src/web/themes/default.json'
 
 /**
