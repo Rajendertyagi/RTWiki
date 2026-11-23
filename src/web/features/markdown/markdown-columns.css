@@ -38,6 +38,16 @@
  * between "the name is in the source" and "a rule for it ships".
  */
 
+/* Local geometry for the unknown-directive notice. The shared notice tokens
+ * (padding, border width, font size) live in customization.css. */
+:root {
+  --cols-directive-pad-block: 6px;
+  --cols-directive-pad-inline: 10px;
+  --cols-directive-border-width: 1px;
+  --cols-directive-name-font-size: 0.85em;
+  --cols-directive-inline-pad: 4px;
+}
+
 /* The row. `align-items: stretch` so a short pane still lines up with a tall one;
  * the divider is `align-self: stretch` for the same reason. */
 .rt-cols {
@@ -113,7 +123,7 @@
   border: none;
   padding: 0;
   outline: none;
-  width: var(--rtwiki-divider-hit-width, 6px);
+  width: var(--rtwiki-divider-hit-width);
   /*
    * The visible line is a pseudo-element rather than a child: the emitted HTML
    * has no child here, and adding one would mean the render string and this
@@ -127,10 +137,10 @@
   position: absolute;
   inset-block: 0;
   inset-inline-start: 50%;
-  width: 1px;
+  width: var(--rtwiki-prose-divider-width);
   transform: translateX(-50%);
   background: transparent;
-  transition: background-color 120ms ease;
+  transition: background-color var(--rtwiki-motion-fast) ease;
 }
 
 .rt-cols__divider:hover::after,
@@ -143,8 +153,8 @@
 }
 
 .rt-cols__divider:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-outline);
-  outline-offset: -2px;
+  outline: var(--rtwiki-focus-ring-width) solid var(--mantine-color-blue-outline);
+  outline-offset: var(--rtwiki-focus-ring-offset);
 }
 
 /*
@@ -154,11 +164,11 @@
  */
 .rt-cols__notice {
   margin: 0 0 0.5em;
-  padding: 4px 8px;
-  border-left: 3px solid var(--mantine-color-yellow-filled);
+  padding: var(--rtwiki-prose-notice-pad-block) var(--rtwiki-prose-notice-pad-inline);
+  border-left: var(--rtwiki-prose-notice-border-width) solid var(--mantine-color-yellow-filled);
   background: var(--mantine-color-yellow-light);
   color: var(--mantine-color-yellow-text);
-  font-size: 0.9em;
+  font-size: var(--rtwiki-prose-notice-font-size);
 }
 
 /*
@@ -172,8 +182,8 @@
  */
 .rt-unknown-directive {
   margin: 0 0 0.75em;
-  padding: 6px 10px;
-  border: 1px dashed var(--mantine-color-default-border);
+  padding: var(--cols-directive-pad-block) var(--cols-directive-pad-inline);
+  border: var(--cols-directive-border-width) dashed var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-sm);
   background: var(--mantine-color-default-hover);
 }
@@ -182,7 +192,7 @@
   margin: 0 0 0.35em;
   color: var(--mantine-color-dimmed);
   font-family: var(--mantine-font-family-monospace);
-  font-size: 0.85em;
+  font-size: var(--cols-directive-name-font-size);
   word-break: break-all;
 }
 
@@ -190,7 +200,7 @@
 span.rt-unknown-directive {
   display: inline;
   margin: 0;
-  padding: 0 4px;
+  padding: 0 var(--cols-directive-inline-pad);
   border-radius: var(--mantine-radius-xs);
 }
 

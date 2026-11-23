@@ -39,6 +39,19 @@
 }
 
 .previewPane {
+  /* Documented prose scale for the legacy workspace renderer. Kept local so it
+     cannot silently drift into the app UI control scale. */
+  --prose-heading-gap-start: 0.6em;
+  --prose-heading-gap-end: 0.3em;
+  --prose-block-gap: 0.75em;
+  --prose-list-indent: 1.5em;
+  --prose-cell-pad-block: 4px;
+  --prose-cell-pad-inline: 8px;
+  --prose-code-pad-block: 1px;
+  --prose-code-pad-inline: 4px;
+  --prose-code-font-size: 0.9em;
+  --prose-quote-border-width: 3px;
+  --prose-checkbox-gap: 6px;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -56,36 +69,36 @@
 .previewPane :global(h1),
 .previewPane :global(h2),
 .previewPane :global(h3) {
-  margin: 0.6em 0 0.3em;
+  margin: var(--prose-heading-gap-start) 0 var(--prose-heading-gap-end);
   line-height: 1.25;
 }
 
 .previewPane :global(p) {
-  margin: 0 0 0.75em;
+  margin: 0 0 var(--prose-block-gap);
 }
 
 .previewPane :global(ul),
 .previewPane :global(ol) {
-  margin: 0 0 0.75em;
-  padding-left: 1.5em;
+  margin: 0 0 var(--prose-block-gap);
+  padding-left: var(--prose-list-indent);
 }
 
 .previewPane :global(table) {
   border-collapse: collapse;
-  margin: 0 0 0.75em;
+  margin: 0 0 var(--prose-block-gap);
 }
 
 .previewPane :global(th),
 .previewPane :global(td) {
   border: 1px solid var(--mantine-color-default-border);
-  padding: 4px 8px;
+  padding: var(--prose-cell-pad-block) var(--prose-cell-pad-inline);
 }
 
 .previewPane :global(code) {
   background: var(--mantine-color-default-hover);
   border-radius: var(--mantine-radius-xs);
-  padding: 1px 4px;
-  font-size: 0.9em;
+  padding: var(--prose-code-pad-block) var(--prose-code-pad-inline);
+  font-size: var(--prose-code-font-size);
 }
 
 .previewPane :global(pre) {
@@ -101,9 +114,9 @@
 }
 
 .previewPane :global(blockquote) {
-  margin: 0 0 0.75em;
+  margin: 0 0 var(--prose-block-gap);
   padding-left: var(--mantine-spacing-md);
-  border-left: 3px solid var(--mantine-color-default-border);
+  border-left: var(--prose-quote-border-width) solid var(--mantine-color-default-border);
   color: var(--mantine-color-dimmed);
 }
 
@@ -131,7 +144,7 @@
 }
 
 .previewPane :global(input[type="checkbox"]) {
-  margin-right: 6px;
+  margin-right: var(--prose-checkbox-gap);
   vertical-align: middle;
 }
 

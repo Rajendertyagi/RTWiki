@@ -1,4 +1,7 @@
 .root {
+  /* Local geometry for the transient refresh status line. */
+  --html-preview-status-pad-block: 6px;
+  --html-preview-status-pad-inline: 12px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -8,7 +11,7 @@
 }
 
 .previewPane {
-  min-height: 320px;
+  min-height: var(--rtwiki-editor-min-height);
   min-width: 0;
   overflow: hidden;
 }
@@ -18,7 +21,7 @@
  * took; it belongs with the preview it describes. */
 .previewStatus {
   flex: 0 0 auto;
-  padding: 6px 12px;
+  padding: var(--html-preview-status-pad-block) var(--html-preview-status-pad-inline);
 }
 
 .previewPaneFull {
@@ -48,7 +51,7 @@
 .sourceFullscreen {
   position: fixed;
   inset: 0;
-  z-index: var(--rtwiki-overlay-z-index, 1000);
+  z-index: var(--rtwiki-overlay-z-index);
   background: var(--rtwiki-canvas, var(--mantine-color-body));
   padding: var(--mantine-spacing-md);
 }

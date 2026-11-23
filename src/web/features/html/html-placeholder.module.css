@@ -1,7 +1,8 @@
 .placeholder {
-  border: 1px dashed var(--mantine-color-default-border);
+  --placeholder-border-width: 1px;
+  border: var(--placeholder-border-width) dashed var(--mantine-color-default-border);
   background: var(--mantine-color-gray-light);
-  min-height: 300px;
+  min-height: var(--rtwiki-html-placeholder-min-height);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -7,6 +7,11 @@
  * scaling to their box, with nothing failing. The affected rules are marked in place.
  */
 .root {
+  /* Local geometry for the diagram card, action bar and drag handle. */
+  --visual-page-border-width: 1px;
+  --visual-page-bar-pad-block: 4px;
+  --visual-page-drag-handle-size: 18px;
+  --visual-page-focus-ring-offset: 1px;
   display: flex;
   flex-direction: column;
   gap: var(--mantine-spacing-xs);
@@ -19,7 +24,7 @@
 .fullscreen {
   position: fixed;
   inset: 0;
-  z-index: var(--rtwiki-overlay-z-index, 1000);
+  z-index: var(--rtwiki-overlay-z-index);
   background: var(--rtwiki-canvas, var(--mantine-color-body));
   padding: var(--mantine-spacing-md);
   overflow: auto;
@@ -176,8 +181,9 @@
    * `min-height` on a border-box element is measured on the border box, which is why the
    * constant includes the card's own 1px top and bottom border.
    */
-  min-height: var(--rtwiki-visual-page-block-min-height, 169px);
-  border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  min-height: var(--rtwiki-visual-page-block-min-height);
+  border: var(--visual-page-border-width) solid
+    var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   background: var(--rtwiki-pane, var(--mantine-color-body));
   overflow: hidden;
@@ -188,8 +194,9 @@
  * which is also what stops it collapsing when a block is dragged very small. */
 .blockBar {
   flex-shrink: 0;
-  padding: 4px var(--mantine-spacing-xs);
-  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+  padding: var(--visual-page-bar-pad-block) var(--mantine-spacing-xs);
+  border-bottom: var(--visual-page-border-width) solid
+    var(--rtwiki-border, var(--mantine-color-default-border));
 }
 
 /* The drag grip and the block's label, grouped at the left of the action row. */
@@ -214,8 +221,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: var(--visual-page-drag-handle-size);
+  height: var(--visual-page-drag-handle-size);
   padding: 0;
   border: none;
   border-radius: var(--mantine-radius-xs);
@@ -231,8 +238,8 @@
 }
 
 .blockDragHandle:focus-visible {
-  outline: 2px solid var(--mantine-primary-color-filled);
-  outline-offset: 1px;
+  outline: var(--rtwiki-focus-ring-width) solid var(--mantine-primary-color-filled);
+  outline-offset: var(--visual-page-focus-ring-offset);
 }
 
 .blockDragHandle:active {

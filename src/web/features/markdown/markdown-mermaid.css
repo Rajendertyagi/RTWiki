@@ -64,10 +64,10 @@
  */
 .rt-mermaid__error {
   margin: 0 0 0.35em;
-  padding: 4px 8px;
-  border-left: 3px solid var(--mantine-color-red-filled);
+  padding: var(--rtwiki-prose-notice-pad-block) var(--rtwiki-prose-notice-pad-inline);
+  border-left: var(--rtwiki-prose-notice-border-width) solid var(--mantine-color-red-filled);
   background: var(--mantine-color-red-light);
   color: var(--mantine-color-red-text);
-  font-size: 0.9em;
+  font-size: var(--rtwiki-prose-notice-font-size);
   text-align: start;
 }

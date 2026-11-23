@@ -80,6 +80,16 @@
      shared by document and linked-page previews. */
   --rtwiki-shadow-chip: 0 1px 3px oklch(0 0 0 / 0.1);
   --rtwiki-code-compact-font-size: 13px;
+  /* Editor and placeholder minimum heights. */
+  --rtwiki-editor-min-height: 320px;
+  --rtwiki-html-placeholder-min-height: 300px;
+  /* Prose/content tokens shared by the Markdown notice and Mermaid error blocks. */
+  --rtwiki-prose-mark-radius: 3px;
+  --rtwiki-prose-notice-pad-block: 4px;
+  --rtwiki-prose-notice-pad-inline: 8px;
+  --rtwiki-prose-notice-border-width: 3px;
+  --rtwiki-prose-notice-font-size: 0.9em;
+  --rtwiki-prose-divider-width: 1px;
 }
 
 /*

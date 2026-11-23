@@ -581,7 +581,7 @@
 [data-rt-markdown-preview] mark {
   background: color-mix(in srgb, var(--mantine-color-yellow-filled) 30%, transparent);
   color: inherit;
-  border-radius: 3px;
+  border-radius: var(--rtwiki-prose-mark-radius);
   padding: 0.05em 0.2em;
 }
 
