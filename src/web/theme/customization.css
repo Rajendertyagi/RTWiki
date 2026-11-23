@@ -46,6 +46,25 @@
   --rtwiki-radius-pill: 50%;
   /* Tab close button resting opacity. */
   --rtwiki-tab-close-opacity: 0.7;
+  /* Tree row radius, shared by the Home row and Wunderbaum page rows so the
+     two line up. The 1px content inset matches the tree's own content edge. */
+  --rtwiki-tree-row-radius: 6px;
+  --rtwiki-tree-content-inset: 1px;
+  /* Accent bar width for selected rows and drop indicators. */
+  --rtwiki-selection-accent-width: 3px;
+  /* Tree motion. Hover/row transitions and the quick expander feedback. */
+  --rtwiki-motion-tree-hover: 150ms;
+  --rtwiki-motion-tree-quick: 80ms;
+  /* Tree interaction geometry: title floor, row action chip, subfile rows and
+     the scoped context menu. */
+  --rtwiki-tree-min-title-width: 72px;
+  --rtwiki-tree-action-offset: 4px;
+  --rtwiki-tree-action-icon-size: 22px;
+  --rtwiki-tree-action-font-size: 14px;
+  --rtwiki-tree-subfile-font-size: 12.5px;
+  --rtwiki-tree-subfile-pad-left: 6px;
+  --rtwiki-tree-menu-pad-inline: 14px;
+  --rtwiki-tree-menu-section-gap: 10px;
 }
 
 /*

@@ -66,15 +66,15 @@
      added here - a second one made the Home row's selected fill wider than a
      page row's. The 1px on the left matches the tree's own content inset,
      which is where its expander cell starts. */
-  padding: 0 0 0 1px;
+  padding: 0 0 0 var(--rtwiki-tree-content-inset);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--rtwiki-tree-row-radius);
   background: transparent;
   color: var(--rtwiki-text, var(--mantine-color-text));
   font-size: var(--rtwiki-tree-title-size);
   text-align: left;
   cursor: pointer;
-  transition: background-color 150ms ease-out;
+  transition: background-color var(--rtwiki-motion-tree-hover) ease-out;
 }
 
 /* Occupies the same cell a tree row's expander does, so the Home icon starts
@@ -115,7 +115,7 @@
 .navItem[data-active="true"] {
   background: var(--rtwiki-tree-selected);
   color: var(--rtwiki-text, var(--mantine-color-text));
-  box-shadow: inset 3px 0 0 var(--mantine-color-blue-filled);
+  box-shadow: inset var(--rtwiki-selection-accent-width) 0 0 var(--mantine-color-blue-filled);
 }
 
 .navItem[data-active="true"]:hover {
@@ -127,8 +127,8 @@
 }
 
 .navItem:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-filled);
-  outline-offset: -2px;
+  outline: var(--rtwiki-focus-ring-width) solid var(--mantine-color-blue-filled);
+  outline-offset: var(--rtwiki-focus-ring-offset);
 }
 
 .listEmpty {

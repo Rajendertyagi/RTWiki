@@ -197,7 +197,7 @@
      row's accent bar *is* an inset shadow, and at this specificity a blanket
      reset would silently erase it. */
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--rtwiki-tree-row-radius);
   margin-inline: 0;
   box-sizing: border-box;
   line-height: normal;
@@ -205,7 +205,7 @@
   /* The pane already insets the row, so a second right padding would make the
      selected fill narrower than the Home row's. */
   padding-right: 0;
-  transition: background-color 150ms ease-out;
+  transition: background-color var(--rtwiki-motion-tree-hover) ease-out;
 }
 
 /* The library renders ONE span per row carrying both `wb-node` and `wb-col`, so
@@ -252,7 +252,7 @@
   color: var(--rtwiki-text, var(--mantine-color-text));
   border-color: transparent !important;
   background: var(--rtwiki-tree-selected);
-  box-shadow: inset 3px 0 0 var(--mantine-color-blue-filled);
+  box-shadow: inset var(--rtwiki-selection-accent-width) 0 0 var(--mantine-color-blue-filled);
 }
 
 /* Selected + hovered: a stronger version of the same accent, never the neutral
@@ -269,15 +269,15 @@
    specificity focus rule. */
 :global(div.wb-row.wb-focus) {
   border-color: transparent !important;
-  box-shadow: inset 0 0 0 2px var(--mantine-color-blue-filled) !important;
+  box-shadow: inset 0 0 0 var(--rtwiki-focus-ring-width) var(--mantine-color-blue-filled) !important;
 }
 
 :global(div.wb-row.wb-selected.wb-focus),
 :global(div.wb-row.wb-active.wb-focus) {
   border-color: transparent !important;
   box-shadow:
-    inset 3px 0 0 var(--mantine-color-blue-filled),
-    inset 0 0 0 2px var(--mantine-color-blue-filled) !important;
+    inset var(--rtwiki-selection-accent-width) 0 0 var(--mantine-color-blue-filled),
+    inset 0 0 0 var(--rtwiki-focus-ring-width) var(--mantine-color-blue-filled) !important;
 }
 
 /* Distinct drag/drop states (Feature 1 contract). */
@@ -286,15 +286,18 @@
 }
 
 :global(div.wb-row.wb-drop-target.wb-drop-before) {
-  box-shadow: inset 0 3px 0 0 var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
+  box-shadow: inset 0 var(--rtwiki-selection-accent-width) 0 0
+    var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
 }
 
 :global(div.wb-row.wb-drop-target.wb-drop-after) {
-  box-shadow: inset 0 -3px 0 0 var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
+  box-shadow: inset 0 calc(-1 * var(--rtwiki-selection-accent-width)) 0 0
+    var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
 }
 
 :global(div.wb-row.wb-drop-target.wb-drop-over) {
-  box-shadow: inset 0 0 0 2px var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
+  box-shadow: inset 0 0 0 var(--rtwiki-focus-ring-width)
+    var(--rtwiki-drop-target-border, var(--mantine-color-blue-6));
   background: color-mix(in srgb, var(--mantine-color-blue-filled) 14%, transparent);
 }
 
@@ -321,9 +324,9 @@
   cursor: default;
   pointer-events: none;
   transition:
-    background-color 80ms ease,
-    opacity 150ms ease-in,
-    transform 120ms ease;
+    background-color var(--rtwiki-motion-tree-quick) ease,
+    opacity var(--rtwiki-motion-tree-hover) ease-in,
+    transform var(--rtwiki-motion-fast) ease;
 }
 
 :global(i.wb-expander::before) {
@@ -437,7 +440,7 @@
      one character of name and no way to read it. The floor guarantees the
      ellipsis has something to show; the title attribute still carries the full
      name on hover. */
-  min-width: 72px;
+  min-width: var(--rtwiki-tree-min-title-width);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -454,22 +457,22 @@
 :global(button.rtw-row-action) {
   display: none;
   position: absolute;
-  right: 4px;
+  right: var(--rtwiki-tree-action-offset);
   top: 50%;
   transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
+  width: var(--rtwiki-tree-action-icon-size);
+  height: var(--rtwiki-tree-action-icon-size);
   border: none;
-  border-radius: 50%;
+  border-radius: var(--rtwiki-radius-pill);
   background: transparent;
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--rtwiki-tree-action-font-size);
   line-height: 1;
   padding: 0;
   transition:
-    background-color 150ms ease-out,
-    color 150ms ease-out;
+    background-color var(--rtwiki-motion-tree-hover) ease-out,
+    color var(--rtwiki-motion-tree-hover) ease-out;
 }
 
 :global(button.rtw-row-action::before) {
@@ -503,7 +506,7 @@
 }
 
 :global(.rtw-type-subfile span.wb-title) {
-  font-size: 12.5px;
+  font-size: var(--rtwiki-tree-subfile-font-size);
   font-style: normal;
   color: color-mix(in srgb, var(--rtwiki-text, var(--mantine-color-text)) 72%, transparent);
 }
@@ -513,7 +516,7 @@
    block beneath the parent note (audit UI-006). */
 :global(div.wb-row.rtw-type-subfile span.wb-node) {
   border-left: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
-  padding-left: 6px;
+  padding-left: var(--rtwiki-tree-subfile-pad-left);
   margin-left: calc(-1 * var(--rtwiki-tree-indent-step) + 2px);
 }
 
@@ -524,10 +527,10 @@
  * gap between each icon and its label.
  */
 .treeMenu .treeMenuItem {
-  padding-left: 14px;
-  padding-right: 14px;
+  padding-left: var(--rtwiki-tree-menu-pad-inline);
+  padding-right: var(--rtwiki-tree-menu-pad-inline);
 }
 
 .treeMenu .treeMenuItemSection {
-  margin-right: 10px;
+  margin-right: var(--rtwiki-tree-menu-section-gap);
 }
