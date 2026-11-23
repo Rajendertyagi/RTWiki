@@ -6,6 +6,7 @@ import {
   buildVariantVariables,
   DEFAULT_THEME_ID,
   getTheme,
+  REQUIRED_INTERACTION_TOKENS,
   REQUIRED_VARIANT_TOKENS,
   VARIANT_TOKEN_NAMES
 } from '../src/web/theme/registry.js'
@@ -81,12 +82,67 @@ describe('theme registry', () => {
     for (const token of REQUIRED_VARIANT_TOKENS) {
       expect(variables[`--rtwiki-${VARIANT_TOKEN_NAMES[token]}`]).toBe(variants.light[token])
     }
-    // No stray custom properties beyond the declared token set.
-    expect(Object.keys(variables).length).toBe(REQUIRED_VARIANT_TOKENS.length)
+    for (const token of REQUIRED_INTERACTION_TOKENS) {
+      expect(variables[`--rtwiki-${VARIANT_TOKEN_NAMES[token]}`]).toBe(variants.light[token])
+    }
+    // No stray custom properties beyond the declared token sets.
+    expect(Object.keys(variables).length).toBe(
+      REQUIRED_VARIANT_TOKENS.length + REQUIRED_INTERACTION_TOKENS.length
+    )
   })
 
   it('falls back to the default theme for an unknown id', () => {
     expect(getTheme('no-such-theme').id).toBe(DEFAULT_THEME_ID)
+  })
+})
+
+describe('interaction tokens', () => {
+  const schemeIndependent = ['activeFill', 'treeSelected', 'treeSelectedHover'] as const
+  const schemeSpecific = ['chromeHairline', 'floatingShadow'] as const
+
+  it.each(Object.keys(APP_THEMES))('%s declares every interaction token in both variants', (id) => {
+    const { variants } = getTheme(id)
+    for (const variantName of ['light', 'dark'] as const) {
+      for (const token of REQUIRED_INTERACTION_TOKENS) {
+        const value = variants[variantName][token]
+        expect(typeof value).toBe('string')
+        expect(value).not.toBe('')
+      }
+    }
+  })
+
+  it.each(Object.keys(APP_THEMES))(
+    '%s keeps scheme-specific interaction tokens different and scheme-independent ones equal',
+    (id) => {
+      const { variants } = getTheme(id)
+      for (const token of schemeSpecific) {
+        expect(variants.light[token]).not.toBe(variants.dark[token])
+      }
+      for (const token of schemeIndependent) {
+        expect(variants.light[token]).toBe(variants.dark[token])
+      }
+    }
+  )
+
+  it('declares the exact default interaction token values', () => {
+    const { variants } = getTheme(DEFAULT_THEME_ID)
+    expect(variants.light.chromeHairline).toBe('rgba(0, 0, 0, 0.09)')
+    expect(variants.dark.chromeHairline).toBe('rgba(255, 255, 255, 0.09)')
+    expect(variants.light.floatingShadow).toBe(
+      'inset 0 1px 0 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px -0.5px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 12px 20px -4px rgb(0 0 0 / 0.08)'
+    )
+    expect(variants.dark.floatingShadow).toBe(
+      'inset 0 1px 0 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.36), 0 1px 1px -0.5px rgb(0 0 0 / 0.22), 0 3px 3px -1.5px rgb(0 0 0 / 0.2), 0 6px 6px -3px rgb(0 0 0 / 0.16)'
+    )
+    const activeFill = 'color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)'
+    const treeSelected = 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)'
+    const treeSelectedHover =
+      'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)'
+    for (const variantName of ['light', 'dark'] as const) {
+      expect(variants[variantName].activeFill).toBe(activeFill)
+      expect(variants[variantName].treeSelected).toBe(treeSelected)
+      expect(variants[variantName].treeSelectedHover).toBe(treeSelectedHover)
+    }
   })
 })
 

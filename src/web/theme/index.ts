@@ -4,6 +4,7 @@ import { type AppTheme, buildVariantVariables, DEFAULT_THEME_ID, getTheme } from
 
 export type {
   AppTheme,
+  RequiredInteractionToken,
   RequiredVariantToken,
   ThemeVariant,
   ThemeVariants
@@ -13,6 +14,7 @@ export {
   buildVariantVariables,
   DEFAULT_THEME_ID,
   getTheme,
+  REQUIRED_INTERACTION_TOKENS,
   REQUIRED_VARIANT_TOKENS,
   VARIANT_TOKEN_NAMES
 } from './registry.js'

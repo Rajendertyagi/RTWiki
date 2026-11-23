@@ -55,13 +55,6 @@
   /* Surfaces and separators. */
   --rtwiki-chrome-bg: var(--rtwiki-canvas, var(--mantine-color-body));
   --rtwiki-chrome-surface: var(--rtwiki-pane, var(--mantine-color-body));
-  /* Chrome hairlines are deliberately fainter than the general border token.
-     The chrome stacks several full-width rows against each other, so a
-     full-strength separator turns the top of the window into a set of stacked
-     bands. At this strength the line reads as a seam rather than a rule, which
-     is what keeps the chrome light. Scheme-aware: a translucent black is
-     invisible on a dark surface, so the dark value is a translucent white. */
-  --rtwiki-chrome-hairline: rgba(0, 0, 0, 0.09);
   --rtwiki-chrome-border: var(--rtwiki-chrome-hairline);
   /* Shared horizontal chrome padding (left/right of each row). */
   --rtwiki-chrome-pad-x: var(--mantine-spacing-sm);
@@ -121,61 +114,9 @@
      reads the config rather than repeating it. */
   /* Compact divider between toolbar groups. */
   --rtwiki-chrome-divider: var(--mantine-color-default-border);
-  /* Shared selected/active row fill — tree rows and the Home/root nav entry
-     read this so their selection colour is identical. Opaque enough to keep
-     light text legible on a dark theme (the 16% tint was too faint there). */
-  --rtwiki-active-fill: color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent);
-  /* Tree selection. Deliberately NOT --rtwiki-selected: that token is white in
-     the light scheme, so a selected row became indistinguishable from an
-     unselected one and from the hover fill. Selection is an accent tint, and
-     hover is a neutral fill, so the two can never be confused. */
-  --rtwiki-tree-selected: color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent);
-  --rtwiki-tree-selected-hover: color-mix(
-    in srgb,
-    var(--mantine-color-blue-filled) 26%,
-    transparent
-  );
+
   --rtwiki-tree-hover: var(--rtwiki-hover, var(--mantine-color-default-hover));
   --rtwiki-active-accent: var(--mantine-color-blue-filled);
-}
-
-/*
- * Dark-scheme overrides. In dark mode a shadow is almost invisible, so depth is
- * carried by a faint light edge and by the surface stepping lighter rather than
- * darker. The hairlines follow the same idea: a translucent white at low
- * opacity, never a translucent black.
- */
-[data-mantine-color-scheme="dark"] {
-  --rtwiki-chrome-hairline: rgba(255, 255, 255, 0.09);
-}
-
-/*
- * Floating layers: one recipe for everything that genuinely floats above the
- * page - menus, popovers, dialogs, tooltips and the toast.
- *
- * The layers are the point. A single blur says "there is a box here"; a
- * highlight along the top edge, a hairline inner rim, a solid outer ring that
- * separates the surface from whatever is behind it, and then three
- * progressively larger and softer drops, says "this is lifted off the page".
- * The ring is what keeps the edge readable when the drop is too soft to do it
- * alone.
- *
- * In dark mode the top highlight and inner rim are a translucent white. A drop
- * shadow is almost invisible on a near-black surface, so a light edge does the
- * work the shadow cannot.
- */
-:root {
-  --rtwiki-floating-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(0 0 0 / 0.04),
-    0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px -0.5px rgb(0 0 0 / 0.08),
-    0 4px 8px -2px rgb(0 0 0 / 0.08), 0 12px 20px -4px rgb(0 0 0 / 0.08);
-}
-
-[data-mantine-color-scheme="dark"] {
-  --rtwiki-floating-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    0 0 0 1px rgb(0 0 0 / 0.36), 0 1px 1px -0.5px rgb(0 0 0 / 0.22),
-    0 3px 3px -1.5px rgb(0 0 0 / 0.2), 0 6px 6px -3px rgb(0 0 0 / 0.16);
 }
 
 /*

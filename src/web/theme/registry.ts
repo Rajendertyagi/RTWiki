@@ -67,7 +67,51 @@ export const REQUIRED_VARIANT_TOKENS = [
 
 export type RequiredVariantToken = (typeof REQUIRED_VARIANT_TOKENS)[number]
 
-export type ThemeVariant = Record<RequiredVariantToken, string>
+/**
+ * Interaction and chrome tokens that every variant must declare. These are not
+ * oklch region colours — they carry shadows, hairlines and accent fills — so
+ * they live in their own set rather than in REQUIRED_VARIANT_TOKENS. The
+ * oklch-only invariant and the ladder assertions apply to the region set alone;
+ * this set has its own presence and exact-value assertions.
+ *
+ * chromeHairline: chrome hairlines are deliberately fainter than the general
+ * border token. The chrome stacks several full-width rows against each other, so
+ * a full-strength separator turns the top of the window into a set of stacked
+ * bands. At this strength the line reads as a seam rather than a rule, which is
+ * what keeps the chrome light. Scheme-aware: a translucent black is invisible on
+ * a dark surface, so the dark value is a translucent white.
+ *
+ * floatingShadow: the floating-layer recipe. A single blur says "there is a box
+ * here"; a highlight along the top edge, a hairline inner rim, a solid outer
+ * ring that separates the surface from whatever is behind it, and then three
+ * progressively larger and softer drops, says "this is lifted off the page". The
+ * ring is what keeps the edge readable when the drop is too soft to do it alone.
+ * In dark mode the top highlight and inner rim are a translucent white. A drop
+ * shadow is almost invisible on a near-black surface, so a light edge does the
+ * work the shadow cannot.
+ *
+ * activeFill: shared selected/active row fill — tree rows and the Home/root nav
+ * entry read this so their selection colour is identical. Opaque enough to keep
+ * light text legible on a dark theme (the 16% tint was too faint there).
+ *
+ * treeSelected / treeSelectedHover: tree selection. Deliberately NOT
+ * --rtwiki-selected: that token is white in the light scheme, so a selected row
+ * became indistinguishable from an unselected one and from the hover fill.
+ * Selection is an accent tint, and hover is a neutral fill, so the two can never
+ * be confused.
+ */
+export const REQUIRED_INTERACTION_TOKENS = [
+  'chromeHairline',
+  'floatingShadow',
+  'activeFill',
+  'treeSelected',
+  'treeSelectedHover'
+] as const
+
+export type RequiredInteractionToken = (typeof REQUIRED_INTERACTION_TOKENS)[number]
+
+export type ThemeVariant = Record<RequiredVariantToken, string> &
+  Record<RequiredInteractionToken, string>
 
 export interface ThemeVariants {
   light: ThemeVariant
@@ -84,21 +128,30 @@ export interface AppTheme {
  * Maps a variant key to its CSS custom property name. Declared once so the
  * registry, the resolver and the stylesheets cannot disagree about spelling.
  */
-export const VARIANT_TOKEN_NAMES: Record<RequiredVariantToken, string> = {
-  canvas: 'canvas',
-  pane: 'pane',
-  rail: 'rail',
-  elevated: 'elevated',
-  border: 'border',
-  text: 'text',
-  textMuted: 'text-muted',
-  hover: 'hover',
-  selected: 'selected'
-}
+export const VARIANT_TOKEN_NAMES: Record<RequiredVariantToken | RequiredInteractionToken, string> =
+  {
+    canvas: 'canvas',
+    pane: 'pane',
+    rail: 'rail',
+    elevated: 'elevated',
+    border: 'border',
+    text: 'text',
+    textMuted: 'text-muted',
+    hover: 'hover',
+    selected: 'selected',
+    chromeHairline: 'chrome-hairline',
+    floatingShadow: 'floating-shadow',
+    activeFill: 'active-fill',
+    treeSelected: 'tree-selected',
+    treeSelectedHover: 'tree-selected-hover'
+  }
 
 export function buildVariantVariables(variant: ThemeVariant): Record<string, string> {
   const variables: Record<string, string> = {}
   for (const token of REQUIRED_VARIANT_TOKENS) {
+    variables[`--rtwiki-${VARIANT_TOKEN_NAMES[token]}`] = variant[token]
+  }
+  for (const token of REQUIRED_INTERACTION_TOKENS) {
     variables[`--rtwiki-${VARIANT_TOKEN_NAMES[token]}`] = variant[token]
   }
   return variables
@@ -201,7 +254,13 @@ const defaultTheme: AppTheme = {
       text: 'oklch(0.85 0.005 255)',
       textMuted: 'oklch(0.75 0.005 255)',
       hover: 'oklch(1 0 0 / 0.05)',
-      selected: 'oklch(1 0 0 / 0.14)'
+      selected: 'oklch(1 0 0 / 0.14)',
+      chromeHairline: 'rgba(255, 255, 255, 0.09)',
+      floatingShadow:
+        'inset 0 1px 0 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.36), 0 1px 1px -0.5px rgb(0 0 0 / 0.22), 0 3px 3px -1.5px rgb(0 0 0 / 0.2), 0 6px 6px -3px rgb(0 0 0 / 0.16)',
+      activeFill: 'color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)',
+      treeSelected: 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)',
+      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)'
     },
     light: {
       // Same idea in the other direction: the canvas is the brightest surface
@@ -214,7 +273,13 @@ const defaultTheme: AppTheme = {
       text: 'oklch(0.38 0.01 255)',
       textMuted: 'oklch(0.55 0.01 255)',
       hover: 'oklch(0 0 0 / 0.032)',
-      selected: 'oklch(1 0 0)'
+      selected: 'oklch(1 0 0)',
+      chromeHairline: 'rgba(0, 0, 0, 0.09)',
+      floatingShadow:
+        'inset 0 1px 0 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px -0.5px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 12px 20px -4px rgb(0 0 0 / 0.08)',
+      activeFill: 'color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)',
+      treeSelected: 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)',
+      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)'
     }
   }
 }
