@@ -27,6 +27,37 @@ export interface DesktopSettings {
   rememberCloseChoice: boolean
 }
 
+export interface AppearanceSettings {
+  themeId: string
+  colorScheme: 'auto' | 'light' | 'dark'
+  themes: Array<{ id: string; name: string }>
+}
+
+export async function getAppearanceSettings(signal?: AbortSignal): Promise<AppearanceSettings> {
+  const res = await fetch(`${SETTINGS_BASE}/appearance`, { signal })
+  if (!res.ok) throw new Error(await readError(res, 'Could not load appearance settings'))
+  return (await res.json()) as AppearanceSettings
+}
+
+export async function updateAppearance(input: {
+  themeId?: string
+  colorScheme?: 'auto' | 'light' | 'dark'
+}): Promise<AppearanceSettings> {
+  const res = await fetch(`${SETTINGS_BASE}/appearance`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  })
+  if (!res.ok) throw new Error(await readError(res, 'Could not save appearance settings'))
+  return (await res.json()) as AppearanceSettings
+}
+
+export async function updateColorScheme(
+  colorScheme: 'auto' | 'light' | 'dark'
+): Promise<AppearanceSettings> {
+  return updateAppearance({ colorScheme })
+}
+
 async function readError(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string }

@@ -1,12 +1,17 @@
+import { readdirSync } from 'node:fs'
 import { DEFAULT_PORT } from '@rtwiki/shared/constants'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { Database } from '../database/index.js'
 import {
   isCloseBehavior,
+  isValidColorScheme,
+  isValidThemeId,
   isValidUserPort,
+  readAppearanceSettings,
   readDesktopSettings,
   readServerPort,
+  writeAppearanceSettings,
   writeDesktopSettings,
   writeServerPort
 } from '../settings/index.js'
@@ -22,6 +27,8 @@ export interface SettingsRouteOptions {
   dataDir: string
   /** Running port; compared against the saved port for restartRequired. */
   getCurrentPort: () => number
+  /** Directory containing theme JSON files, for the appearance picker. */
+  themesDir: string
 }
 
 /**
@@ -126,6 +133,70 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
         writeDesktopSettings(opts.getDb, {
           closeBehavior: closeBehavior ?? current.closeBehavior,
           rememberCloseChoice: rememberCloseChoice ?? current.rememberCloseChoice
+        })
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  /** Available themes are the JSON files in the resolved themes directory. */
+  function listThemes(): Array<{ id: string; name: string }> {
+    try {
+      return readdirSync(opts.themesDir)
+        .filter((name) => name.endsWith('.json'))
+        .map((name) => {
+          const id = name.replace(/\.json$/, '')
+          return {
+            id,
+            name: id.replace(/(^|-)(\w)/g, (_, dash: string, letter: string) =>
+              dash ? ` ${letter.toUpperCase()}` : letter.toUpperCase()
+            )
+          }
+        })
+        .sort((a, b) => a.id.localeCompare(b.id))
+    } catch {
+      return []
+    }
+  }
+
+  routes.get('/appearance', (c) => {
+    try {
+      return c.json({ ...readAppearanceSettings(opts.getDb), themes: listThemes() })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  routes.put('/appearance', async (c) => {
+    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
+    const body = (await readBody(c)) as
+      | Record<string, unknown>
+      | { tooLarge: boolean }
+      | { invalid: boolean }
+    if ('tooLarge' in body) return c.json({ error: 'Request body too large' }, 413)
+    if ('invalid' in body || typeof body !== 'object' || body === null) {
+      return c.json({ error: 'Invalid JSON' }, 400)
+    }
+    const input = body as Record<string, unknown>
+    if (input.themeId !== undefined && !isValidThemeId(input.themeId)) {
+      return c.json({ error: 'Invalid theme id' }, 400)
+    }
+    if (input.colorScheme !== undefined && !isValidColorScheme(input.colorScheme)) {
+      return c.json({ error: 'colorScheme must be one of: auto, light, dark' }, 400)
+    }
+    if (input.themeId !== undefined && !listThemes().some((t) => t.id === input.themeId)) {
+      return c.json({ error: 'Unknown theme' }, 400)
+    }
+    try {
+      const current = readAppearanceSettings(opts.getDb)
+      return c.json(
+        writeAppearanceSettings(opts.getDb, {
+          themeId: (input.themeId as string | undefined) ?? current.themeId,
+          colorScheme:
+            (input.colorScheme as 'auto' | 'light' | 'dark' | undefined) ?? current.colorScheme
         })
       )
     } catch (err) {

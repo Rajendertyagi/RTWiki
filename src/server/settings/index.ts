@@ -13,6 +13,8 @@ import {
   type BackupSlot,
   CLOSE_BEHAVIORS,
   type CloseBehavior,
+  COLOR_SCHEMES,
+  type ColorScheme,
   DEFAULT_PORT,
   MAX_BACKUP_INTERVAL_HOURS,
   MAX_USER_PORT,
@@ -20,10 +22,11 @@ import {
   MIN_USER_PORT,
   SETTINGS_KEY_BACKUP_SLOTS,
   SETTINGS_KEY_CLOSE_BEHAVIOR,
+  SETTINGS_KEY_COLOR_SCHEME,
   SETTINGS_KEY_REMEMBER_CLOSE_CHOICE,
-  SETTINGS_KEY_SERVER_PORT
+  SETTINGS_KEY_SERVER_PORT,
+  SETTINGS_KEY_THEME_ID
 } from '@rtwiki/shared/constants'
-import { dirname, joinPaths } from '../config/index.js'
 import type { Database } from '../database/index.js'
 
 type GetDb = () => Database
@@ -36,6 +39,23 @@ export interface DesktopSettings {
   closeBehavior: CloseBehavior
   /** Pre-check "Remember my choice" in the in-app close dialog. */
   rememberCloseChoice: boolean
+}
+
+/** Appearance preferences. Both values are persisted in the SQLite settings table. */
+export interface AppearanceSettings {
+  themeId: string
+  colorScheme: ColorScheme
+}
+
+/** Theme ids are filenames, so restrict them to a safe, portable character set. */
+export const THEME_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/
+
+export function isValidThemeId(value: unknown): value is string {
+  return typeof value === 'string' && THEME_ID_PATTERN.test(value)
+}
+
+export function isValidColorScheme(value: unknown): value is ColorScheme {
+  return typeof value === 'string' && (COLOR_SCHEMES as readonly string[]).includes(value)
 }
 
 /** True for an integer in the unprivileged TCP range. */
@@ -113,6 +133,7 @@ export function writeServerPort(getDb: GetDb, port: number): ServerSettings {
 export interface SettingsReadResult {
   port: number
   desktop: DesktopSettings
+  appearance: AppearanceSettings
   backup: BackupSettings
   resetKeys: string[]
 }
@@ -134,6 +155,15 @@ export function readAllSettings(getDb: GetDb): SettingsReadResult {
   const rememberRaw = parseJson(readRaw(getDb, SETTINGS_KEY_REMEMBER_CLOSE_CHOICE))
   if (typeof rememberRaw !== 'boolean') resetKeys.push(SETTINGS_KEY_REMEMBER_CLOSE_CHOICE)
 
+  const themeStored = readRaw(getDb, SETTINGS_KEY_THEME_ID)
+  if (themeStored !== null && !isValidThemeId(parseJson(themeStored))) {
+    resetKeys.push(SETTINGS_KEY_THEME_ID)
+  }
+  const schemeStored = readRaw(getDb, SETTINGS_KEY_COLOR_SCHEME)
+  if (schemeStored !== null && !isValidColorScheme(parseJson(schemeStored))) {
+    resetKeys.push(SETTINGS_KEY_COLOR_SCHEME)
+  }
+
   const backupRaw = parseJson(readRaw(getDb, SETTINGS_KEY_BACKUP_SLOTS))
   if (!isRecord(backupRaw) || !isRecord(backupRaw.slots)) {
     resetKeys.push(SETTINGS_KEY_BACKUP_SLOTS)
@@ -142,6 +172,7 @@ export function readAllSettings(getDb: GetDb): SettingsReadResult {
   return {
     port: readServerPort(getDb),
     desktop: readDesktopSettings(getDb),
+    appearance: readAppearanceSettings(getDb),
     backup: readBackupSettings(getDb),
     resetKeys
   }
@@ -172,6 +203,39 @@ export function writeDesktopSettings(getDb: GetDb, settings: DesktopSettings): D
   }
   writeRaw(getDb, SETTINGS_KEY_CLOSE_BEHAVIOR, JSON.stringify(settings.closeBehavior))
   writeRaw(getDb, SETTINGS_KEY_REMEMBER_CLOSE_CHOICE, JSON.stringify(settings.rememberCloseChoice))
+  return { ...settings }
+}
+
+// ---------------------------------------------------------------------------
+// Appearance (theme + color scheme)
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_THEME_ID = 'default'
+export const DEFAULT_COLOR_SCHEME: ColorScheme = 'auto'
+
+/** Appearance preferences; each field falls back independently. */
+export function readAppearanceSettings(getDb: GetDb): AppearanceSettings {
+  const themeRaw = parseJson(readRaw(getDb, SETTINGS_KEY_THEME_ID))
+  const schemeRaw = parseJson(readRaw(getDb, SETTINGS_KEY_COLOR_SCHEME))
+  return {
+    themeId: isValidThemeId(themeRaw) ? themeRaw : DEFAULT_THEME_ID,
+    colorScheme: isValidColorScheme(schemeRaw) ? schemeRaw : DEFAULT_COLOR_SCHEME
+  }
+}
+
+/** Persists appearance preferences. Throws on invalid values. */
+export function writeAppearanceSettings(
+  getDb: GetDb,
+  settings: AppearanceSettings
+): AppearanceSettings {
+  if (!isValidThemeId(settings.themeId)) {
+    throw new Error(`themeId must match ${THEME_ID_PATTERN}`)
+  }
+  if (!isValidColorScheme(settings.colorScheme)) {
+    throw new Error(`colorScheme must be one of: ${COLOR_SCHEMES.join(', ')}`)
+  }
+  writeRaw(getDb, SETTINGS_KEY_THEME_ID, JSON.stringify(settings.themeId))
+  writeRaw(getDb, SETTINGS_KEY_COLOR_SCHEME, JSON.stringify(settings.colorScheme))
   return { ...settings }
 }
 

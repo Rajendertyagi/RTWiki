@@ -117,7 +117,17 @@ beforeAll(async () => {
       return desktopRead.ok
         ? Promise.resolve(desktopRead.value)
         : Promise.reject(new Error(desktopRead.message))
-    }
+    },
+    getAppearanceSettings: (): Promise<{
+      themeId: string
+      colorScheme: 'auto' | 'light' | 'dark'
+      themes: Array<{ id: string; name: string }>
+    }> =>
+      Promise.resolve({
+        themeId: 'default',
+        colorScheme: 'auto',
+        themes: [{ id: 'default', name: 'Default' }]
+      })
   }))
 
   workspaceModule = await import('../src/web/features/settings/settings-workspace.js')

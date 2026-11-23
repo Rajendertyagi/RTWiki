@@ -570,6 +570,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
     getDb: () => db,
     logger,
     frontendDistDir: paths.frontendDistDir,
+    themesDir: joinPaths(paths.frontendDistDir, 'themes'),
     dataDir,
     getCurrentPort: () => boundPort,
     debugEventSink,

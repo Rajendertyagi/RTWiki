@@ -1,5 +1,4 @@
 import '@blocknote/core/fonts/inter.css'
-import { MantineProvider } from '@mantine/core'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import '@blocknote/mantine/style.css'
@@ -49,7 +48,9 @@ import { App } from './App.js'
 import { AppErrorBoundary } from './diagnostics/app-error-boundary.js'
 import { configureDebugLoggingFromStorage } from './diagnostics/debug-log.js'
 import { installGlobalErrorReporting } from './diagnostics/error-reporter.js'
-import { createThemeCssVariablesResolver, resolveActiveTheme } from './theme/index.js'
+import { createDbColorSchemeManager } from './theme/color-scheme-manager.js'
+import { migrateLocalStorageToDatabase } from './theme/migrate-local-storage.js'
+import { ThemeProvider } from './theme/theme-provider.js'
 // Centralized customization entry: loaded last so hierarchy/layout variables
 // can override defaults without touching component CSS modules.
 import './theme/customization.css'
@@ -68,28 +69,17 @@ if (!rootElement) {
   throw new Error('RTWiki: root element #root not found in index.html')
 }
 
-// The active theme supplies both the Mantine override and the region-named
-// surface variables. The light/dark variant is selected by Mantine's own
-// `data-mantine-color-scheme` attribute.
-const activeTheme = resolveActiveTheme()
+// Migrate the two legacy localStorage preferences into the database before
+// render. The pre-paint bootstrap has already applied the correct palette, so
+// awaiting this cannot cause a flash.
+await migrateLocalStorageToDatabase()
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <MantineProvider
-      theme={activeTheme.mantine}
-      cssVariablesResolver={createThemeCssVariablesResolver(activeTheme)}
-      // Follow the operating system until the user says otherwise.
-      //
-      // Without this, MantineProvider defaults to 'light' and the app rendered a
-      // light interface on a machine set to dark, however the OS was configured.
-      // 'auto' is only the *initial* value: once the user picks Light or Dark in
-      // Settings, Mantine persists that choice and it wins from then on, which
-      // is why no separate stored-preference lookup is needed here.
-      defaultColorScheme="auto"
-    >
+    <ThemeProvider colorSchemeManager={createDbColorSchemeManager()}>
       <AppErrorBoundary>
         <App />
       </AppErrorBoundary>
-    </MantineProvider>
+    </ThemeProvider>
   </React.StrictMode>
 )

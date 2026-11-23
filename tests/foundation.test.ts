@@ -217,7 +217,14 @@ describe('static serving', () => {
 
   function staticApp(): Hono {
     const srv = new Hono()
-    srv.use('/*', serveStatic({ root: dir }))
+    srv.use(
+      '/*',
+      serveStatic({
+        root: dir,
+        themesDir: join(dir, 'themes'),
+        getAppearance: () => ({ themeId: 'default', colorScheme: 'auto' })
+      })
+    )
     return srv
   }
 
@@ -358,7 +365,14 @@ describe('static serving', () => {
     writeFileSync(join(fwdRoot, 'assets', 'app-BPzxOpvP.js'), 'console.log("hi")')
 
     const srv = new Hono()
-    srv.use('/*', serveStatic({ root: fwdRoot }))
+    srv.use(
+      '/*',
+      serveStatic({
+        root: fwdRoot,
+        themesDir: join(fwdRoot, 'themes'),
+        getAppearance: () => ({ themeId: 'default', colorScheme: 'auto' })
+      })
+    )
 
     const res = await srv.request('/')
     expect(res.status).toBe(200)

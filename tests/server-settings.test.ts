@@ -122,7 +122,12 @@ describe('settings routes', () => {
     const db = initDatabase(dir)
     await runMigrations(db)
     getDb = () => db
-    routes = createSettingsRoutes({ getDb, dataDir: dir, getCurrentPort: () => 8080 })
+    routes = createSettingsRoutes({
+      getDb,
+      dataDir: dir,
+      getCurrentPort: () => 8080,
+      themesDir: join(dir, 'themes')
+    })
   })
 
   afterEach(async () => {

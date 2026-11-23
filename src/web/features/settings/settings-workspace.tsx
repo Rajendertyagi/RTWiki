@@ -7,6 +7,7 @@ import {
   Radio,
   ScrollArea,
   SegmentedControl,
+  Select,
   Stack,
   Switch,
   Text,
@@ -48,16 +49,20 @@ import {
 } from '../../services/native-bridge.js'
 import { scheduleNotifier } from '../../services/schedule-notifier.js'
 import {
+  type AppearanceSettings,
   type DesktopSettings,
+  getAppearanceSettings,
   getDesktopSettings,
   getServerSettings,
   restartServerOnPort,
   type ServerPortSettings,
   serverBaseUrl,
+  updateAppearance,
   updateCloseBehavior,
   updateRememberCloseChoice,
   updateServerPort
 } from '../../services/server-settings-api.js'
+import { requestThemeChange } from '../../theme/theme-provider.js'
 import { setWordWrap, useEditorPreferences } from '../workspace/editor-preferences.js'
 import type { LayoutPreferences } from '../workspace/layout-preferences.js'
 import {
@@ -162,6 +167,8 @@ export function SettingsWorkspace({
   const [autostart, setAutostart] = useState<AutostartState>({ available: false, enabled: false })
   const [serverSettings, setServerSettings] = useState<ServerPortSettings | null>(null)
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null)
+  const [appearance, setAppearance] = useState<AppearanceSettings | null>(null)
+  const [appearanceError, setAppearanceError] = useState<string | null>(null)
   const [portField, setPortField] = useState<string>('')
   const [portMessage, setPortMessage] = useState<string | null>(null)
   const [restarting, setRestarting] = useState<boolean>(false)
@@ -199,9 +206,10 @@ export function SettingsWorkspace({
    * shown.
    */
   const loadSettings = useCallback(async (): Promise<void> => {
-    const [serverResult, desktopResult] = await Promise.allSettled([
+    const [serverResult, desktopResult, appearanceResult] = await Promise.allSettled([
       getServerSettings(),
-      getDesktopSettings()
+      getDesktopSettings(),
+      getAppearanceSettings()
     ])
     if (!settingsMounted.current) return
 
@@ -221,6 +229,16 @@ export function SettingsWorkspace({
       debugLog('error', 'error_api_failure', { code: 'get_desktop_settings' })
       setDesktopLoadError(
         desktopResult.reason instanceof Error ? desktopResult.reason.message : null
+      )
+    }
+
+    if (appearanceResult.status === 'fulfilled') {
+      setAppearance(appearanceResult.value)
+      setAppearanceError(null)
+    } else {
+      debugLog('error', 'error_api_failure', { code: 'get_appearance_settings' })
+      setAppearanceError(
+        appearanceResult.reason instanceof Error ? appearanceResult.reason.message : null
       )
     }
   }, [])
@@ -460,6 +478,41 @@ export function SettingsWorkspace({
               <Text size="sm" c="dimmed">
                 {UI_TEXT.appearanceThemeHint}
               </Text>
+              <Group gap="xs">
+                <Text size="sm" w={500}>
+                  {UI_TEXT.appearanceThemeNameLabel}
+                </Text>
+                <Select
+                  value={appearance?.themeId ?? null}
+                  data={(appearance?.themes ?? []).map((theme) => ({
+                    value: theme.id,
+                    label: theme.name
+                  }))}
+                  placeholder={UI_TEXT.appearanceThemePlaceholder}
+                  allowDeselect={false}
+                  disabled={appearance === null}
+                  onChange={async (value) => {
+                    if (!value || value === appearance?.themeId) return
+                    try {
+                      await updateAppearance({ themeId: value })
+                      setAppearance((current) =>
+                        current ? { ...current, themeId: value } : current
+                      )
+                      requestThemeChange(value)
+                      setAppearanceError(null)
+                    } catch (error) {
+                      setAppearanceError(
+                        error instanceof Error ? error.message : UI_TEXT.appearanceSaveError
+                      )
+                    }
+                  }}
+                />
+              </Group>
+              {appearanceError ? (
+                <Text size="sm" c="red">
+                  {appearanceError}
+                </Text>
+              ) : null}
               <Group gap="xs">
                 <Text size="sm" w={500}>
                   {UI_TEXT.appearanceThemeLabel}

@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import {
   APP_NAME,
   APP_VERSION,
@@ -19,6 +20,7 @@ import { createScheduleRoutes } from './routes/schedule.js'
 import { createSchedulePresetRoutes } from './routes/schedule-presets.js'
 import { createSettingsRoutes } from './routes/settings.js'
 import { createShutdownRoutes } from './routes/shutdown.js'
+import { readAppearanceSettings } from './settings/index.js'
 import type { ShutdownCoordinator } from './shutdown-coordinator.js'
 import { serveStatic } from './static.js'
 import { isAllowedHost, isUnsafeMethod } from './utils/request-host.js'
@@ -91,6 +93,8 @@ export interface AppDependencies {
   getDb: () => ReturnType<typeof getDb>
   logger: Logger
   frontendDistDir: string
+  /** Directory containing theme JSON files, resolved from the web root. */
+  themesDir?: string
   /**
    * Runtime data directory backing /api/settings (data/server.json,
    * data/desktop.json). Empty in the default test instance, where mutations
@@ -295,7 +299,8 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
     createSettingsRoutes({
       getDb: deps.getDb,
       dataDir: deps.dataDir ?? '',
-      getCurrentPort: deps.getCurrentPort ?? (() => DEFAULT_PORT)
+      getCurrentPort: deps.getCurrentPort ?? (() => DEFAULT_PORT),
+      themesDir: deps.themesDir ?? join(deps.frontendDistDir, 'themes')
     })
   )
   // Sanitized frontend-error reports. The shutdown token is scrubbed from any
@@ -311,7 +316,15 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
     createClientDebugEventRoutes({ sink: deps.debugEventSink, scrubValues: [deps.token] })
   )
 
-  app.use('/*', serveStatic({ root: deps.frontendDistDir, logger: deps.logger }))
+  app.use(
+    '/*',
+    serveStatic({
+      root: deps.frontendDistDir,
+      logger: deps.logger,
+      themesDir: deps.themesDir ?? join(deps.frontendDistDir, 'themes'),
+      getAppearance: () => readAppearanceSettings(deps.getDb)
+    })
+  )
 
   app.onError((err, c) => {
     deps.logger.error('Unhandled error', { event: 'http_error', error: err.message })

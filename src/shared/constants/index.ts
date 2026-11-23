@@ -283,6 +283,12 @@ export const SETTINGS_KEY_CLOSE_BEHAVIOR = 'desktop.closeBehavior' as const
 export const SETTINGS_KEY_REMEMBER_CLOSE_CHOICE = 'desktop.rememberCloseChoice' as const
 export const SETTINGS_KEY_BACKUP_SLOTS = 'backup.slots' as const
 export const SETTINGS_KEY_WINDOW_GEOMETRY = 'window.geometry' as const
+export const SETTINGS_KEY_THEME_ID = 'appearance.themeId' as const
+export const SETTINGS_KEY_COLOR_SCHEME = 'appearance.colorScheme' as const
+
+/** Valid color-scheme choices. `auto` follows the operating system. */
+export const COLOR_SCHEMES = ['auto', 'light', 'dark'] as const
+export type ColorScheme = (typeof COLOR_SCHEMES)[number]
 
 // ---------------------------------------------------------------------------
 // Backup and restore (docs/BACKUP_PLAN.md)

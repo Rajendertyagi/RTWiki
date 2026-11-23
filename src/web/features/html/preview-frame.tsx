@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
 import { debugLog, safeHash } from '../../diagnostics/debug-log.js'
 import { reportClientError } from '../../diagnostics/error-reporter.js'
-import { resolveActiveTheme } from '../../theme/index.js'
+import { getTheme } from '../../theme/registry.js'
 import classes from './html-preview.module.css'
 import { normalizePreviewHtml } from './normalize-html.js'
 import { buildPreviewDocument, generateChannelId } from './preview-document.js'
@@ -69,7 +69,8 @@ export function PreviewFrame({
   // the generated document. Reading it from the registry rather than measuring
   // the DOM keeps one source of truth for every surface colour.
   const colorScheme = useComputedColorScheme('light')
-  const activeVariant = resolveActiveTheme().variants[colorScheme]
+  const themeId = document.documentElement.getAttribute('data-rtwiki-theme') ?? 'default'
+  const activeVariant = getTheme(themeId).variants[colorScheme]
   const canvasColor = activeVariant.canvas
   const textColor = activeVariant.text
   // Builds (or rebuilds) the srcdoc document. Every call regenerates the

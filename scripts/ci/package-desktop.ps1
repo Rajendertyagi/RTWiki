@@ -37,12 +37,14 @@ $ErrorActionPreference = 'Stop'
 
 $indexSrc  = Join-Path $WebDir 'index.html'
 $assetsSrc = Join-Path $WebDir 'assets'
+$themesSrc = Join-Path $WebDir 'themes'
 
 foreach ($f in @($ShellExe, $ServerExe, $indexSrc)) {
   if (-not (Test-Path $f -PathType Leaf)) { throw "Missing build artifact: $f" }
   if ((Get-Item $f).Length -eq 0) { throw "Empty build artifact: $f" }
 }
 if (-not (Test-Path $assetsSrc -PathType Container)) { throw "Missing build asset directory: $assetsSrc" }
+if (-not (Test-Path $themesSrc -PathType Container)) { throw "Missing build theme directory: $themesSrc" }
 
 # Fresh staging tree.
 if (Test-Path $DestDir) { Remove-Item -Recurse -Force $DestDir }
@@ -55,12 +57,14 @@ Copy-Item $ShellExe  -Destination (Join-Path $DestDir 'RTWiki.exe')       -Force
 Copy-Item $ServerExe -Destination (Join-Path $DestDir 'RTWikiServer.exe') -Force
 Copy-Item $indexSrc  -Destination (Join-Path $webDest 'index.html')       -Force
 Copy-Item $assetsSrc -Destination (Join-Path $webDest 'assets') -Recurse -Force
+Copy-Item $themesSrc -Destination (Join-Path $webDest 'themes') -Recurse -Force
 
 # Validate staged essentials.
 $shellDest   = Join-Path $DestDir 'RTWiki.exe'
 $sidecarDest = Join-Path $DestDir 'RTWikiServer.exe'
 $indexDest   = Join-Path $webDest 'index.html'
 $assetsDest  = Join-Path $webDest 'assets'
+$themesDest  = Join-Path $webDest 'themes'
 foreach ($f in @($shellDest, $sidecarDest, $indexDest)) {
   if (-not (Test-Path $f -PathType Leaf)) { throw "Staging failed: $f missing" }
   if ((Get-Item $f).Length -eq 0) { throw "Staging failed: $f empty" }
@@ -71,6 +75,7 @@ $jsAssets  = @($assetFiles | Where-Object Name -like '*.js')
 $cssAssets = @($assetFiles | Where-Object Name -like '*.css')
 if ($jsAssets.Count -lt 1) { throw 'Staging failed: no JS asset under web/assets' }
 if ($cssAssets.Count -lt 1) { throw 'Staging failed: no CSS asset under web/assets' }
+if (@(Get-ChildItem $themesDest -Filter '*.json' -File).Count -lt 1) { throw 'Staging failed: no theme JSON under web/themes' }
 foreach ($a in ($jsAssets + $cssAssets)) {
   if ($a.Length -le 0) { throw "Staging failed: empty asset $($a.Name)" }
 }
@@ -92,3 +97,4 @@ Write-Host "  RTWiki.exe        $shellSize bytes"
 Write-Host "  RTWikiServer.exe  $sidecarSize bytes"
 Write-Host "  web/index.html    $((Get-Item $indexDest).Length) bytes"
 Write-Host "  web/assets        $($assetFiles.Count) files ($([Math]::Round($totalBytes / 1MB, 1)) MB total package)"
+Write-Host "  web/themes        $(@(Get-ChildItem $themesDest -Filter '*.json' -File).Count) theme files"

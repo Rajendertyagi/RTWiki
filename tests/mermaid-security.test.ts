@@ -89,9 +89,13 @@ describe('mermaid security configuration', () => {
     // Two places must agree, and this is what holds them together. The value is
     // written out in MERMAID_CONFIG because Mermaid cannot be handed a live CSS
     // custom property; the theme is the source of truth it mirrors.
-    const registry = readFileSync(new URL('../src/web/theme/registry.ts', import.meta.url), 'utf8')
+    const themeJson = readFileSync(
+      new URL('../src/web/themes/default.json', import.meta.url),
+      'utf8'
+    )
+    // The JSON escapes quotes; compare against the same escaped form.
     expect(
-      registry,
+      themeJson.replace(/\\"/g, '"'),
       "the theme's font stack and the Mermaid font stack must not drift apart"
     ).toContain(MERMAID_CONFIG.fontFamily)
   })

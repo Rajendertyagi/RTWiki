@@ -3,6 +3,8 @@ import { join, relative } from 'node:path'
 import { HEALTH_PATH } from '@rtwiki/shared/constants'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { Logger } from './logging/index.js'
+import type { AppearanceSettings } from './settings/index.js'
+import { buildThemeBootstrap } from './theme/bootstrap.js'
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -84,7 +86,8 @@ async function htmlResponse(
   c: Context,
   path: string,
   logger: Logger | undefined,
-  pathname: string
+  pathname: string,
+  options: StaticOptions
 ): Promise<Response> {
   const file = Bun.file(path)
   let html = await file.text()
@@ -105,6 +108,31 @@ async function htmlResponse(
       pathname
     })
   }
+
+  // Pre-paint theme bootstrap. The script carries the request nonce (CSP
+  // scriptSrc requires it); styleSrc already allows inline styles, so the
+  // style tag needs no nonce. Both are inserted before </head> so the correct
+  // palette is present before React mounts.
+  try {
+    const appearance = options.getAppearance()
+    const bootstrap = buildThemeBootstrap({
+      themesDir: options.themesDir,
+      themeId: appearance.themeId,
+      colorScheme: appearance.colorScheme,
+      warn: (message, error) => logger?.warn(message, { event: 'theme_bootstrap_fallback', error })
+    })
+    const nonceAttr = nonce ? ` nonce="${escapeHtmlAttribute(nonce)}"` : ''
+    const tags = `<script${nonceAttr}>${bootstrap.script}</script><style>${bootstrap.style}</style>`
+    if (html.includes('</head>')) {
+      html = html.replace('</head>', `${tags}</head>`)
+    }
+  } catch (error) {
+    logger?.error('Theme bootstrap failed; serving unmodified document', {
+      event: 'theme_bootstrap_failed',
+      error: error instanceof Error ? error.message : String(error)
+    })
+  }
+
   return new Response(html, {
     headers: {
       'content-type': CONTENT_TYPES['.html'],
@@ -118,6 +146,10 @@ async function htmlResponse(
 export interface StaticOptions {
   root: string
   logger?: Logger
+  /** Directory containing the theme JSON files (resolved from the web root). */
+  themesDir: string
+  /** Reads the saved appearance preferences from the SQLite settings table. */
+  getAppearance: () => AppearanceSettings
 }
 
 /**
@@ -196,7 +228,7 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
         const ext = resolvedNoQuery.slice(resolvedNoQuery.lastIndexOf('.'))
         const contentType = CONTENT_TYPES[ext] ?? file.type ?? 'application/octet-stream'
         if (ext === '.html') {
-          return await htmlResponse(c, resolvedNoQuery, logger, pathname)
+          return await htmlResponse(c, resolvedNoQuery, logger, pathname, options)
         }
         return new Response(file, {
           headers: {
@@ -233,7 +265,7 @@ export function serveStatic(options: StaticOptions): MiddlewareHandler {
 
     const indexFile = join(root, 'index.html')
     if (existsSync(indexFile)) {
-      return await htmlResponse(c, indexFile, logger, pathname)
+      return await htmlResponse(c, indexFile, logger, pathname, options)
     }
 
     // No index.html — fall through to Hono router's notFound.
