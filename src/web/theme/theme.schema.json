@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rtwiki.local/schemas/theme.schema.json",
+  "title": "RTWiki theme definition",
+  "description": "Editor schema for src/web/themes/*.json. Runtime validation is performed by src/web/theme/theme-definition.ts (Zod), which is authoritative.",
+  "type": "object",
+  "required": ["id", "name", "version", "tokens", "mantine"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "const": 1 },
+    "tokens": {
+      "type": "object",
+      "required": ["primitives", "semantic"],
+      "additionalProperties": false,
+      "properties": {
+        "primitives": {
+          "type": "object",
+          "required": ["color"],
+          "additionalProperties": false,
+          "properties": {
+            "color": {
+              "type": "object",
+              "required": ["neutral", "accent"],
+              "additionalProperties": false,
+              "properties": {
+                "neutral": {
+                  "type": "object",
+                  "required": ["light", "dark"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "light": { "$ref": "#/$defs/tokenGroup" },
+                    "dark": { "$ref": "#/$defs/tokenGroup" }
+                  }
+                },
+                "accent": {
+                  "type": "object",
+                  "additionalProperties": { "$ref": "#/$defs/tokenGroup" }
+                }
+              }
+            }
+          }
+        },
+        "semantic": {
+          "type": "object",
+          "required": ["light", "dark"],
+          "additionalProperties": false,
+          "properties": {
+            "light": { "$ref": "#/$defs/tokenGroup" },
+            "dark": { "$ref": "#/$defs/tokenGroup" }
+          }
+        }
+      }
+    },
+    "mantine": {
+      "type": "object",
+      "required": [
+        "primaryColor",
+        "primaryShade",
+        "colors",
+        "fontFamily",
+        "defaultRadius",
+        "radius",
+        "spacing",
+        "fontSizes",
+        "shadows",
+        "focusRing"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "primaryColor": { "type": "string", "minLength": 1 },
+        "primaryShade": {
+          "type": "object",
+          "required": ["light", "dark"],
+          "additionalProperties": false,
+          "properties": {
+            "light": { "$ref": "#/$defs/shade" },
+            "dark": { "$ref": "#/$defs/shade" }
+          }
+        },
+        "colors": { "type": "object", "additionalProperties": { "type": "string" } },
+        "fontFamily": { "type": "string", "minLength": 1 },
+        "defaultRadius": { "type": "string", "minLength": 1 },
+        "radius": { "type": "object", "additionalProperties": { "type": "string" } },
+        "spacing": { "type": "object", "additionalProperties": { "type": "string" } },
+        "fontSizes": { "type": "object", "additionalProperties": { "type": "string" } },
+        "shadows": { "type": "object", "additionalProperties": { "type": "string" } },
+        "focusRing": { "enum": ["auto", "always", "never"] }
+      }
+    }
+  },
+  "$defs": {
+    "shade": { "type": "integer", "minimum": 0, "maximum": 9 },
+    "colorValue": {
+      "type": "object",
+      "required": ["colorSpace", "components"],
+      "additionalProperties": false,
+      "properties": {
+        "colorSpace": { "enum": ["oklch", "srgb"] },
+        "components": { "type": "array", "items": { "type": "number" } },
+        "alpha": { "type": "number", "minimum": 0, "maximum": 1 },
+        "hex": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+      }
+    },
+    "token": {
+      "type": "object",
+      "required": ["$type", "$value"],
+      "additionalProperties": false,
+      "properties": {
+        "$type": { "enum": ["color", "css"] },
+        "$value": {
+          "oneOf": [{ "$ref": "#/$defs/colorValue" }, { "type": "string" }]
+        }
+      }
+    },
+    "tokenGroup": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/token" }
+    }
+  }
+}

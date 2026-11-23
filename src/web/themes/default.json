@@ -1,0 +1,239 @@
+{
+  "$schema": "../theme/theme.schema.json",
+  "id": "default",
+  "name": "Default",
+  "version": 1,
+  "tokens": {
+    "primitives": {
+      "color": {
+        "neutral": {
+          "light": {
+            "canvas": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [1, 0, 0] }
+            },
+            "pane": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.955, 0.004, 255] }
+            },
+            "rail": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.91, 0.005, 255] }
+            },
+            "elevated": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [1, 0, 0] }
+            },
+            "border": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.86, 0.008, 255] }
+            },
+            "text": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.38, 0.01, 255] }
+            },
+            "textMuted": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.55, 0.01, 255] }
+            }
+          },
+          "dark": {
+            "canvas": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.27, 0.005, 255] }
+            },
+            "pane": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.22, 0.005, 255] }
+            },
+            "rail": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.17, 0.005, 255] }
+            },
+            "elevated": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.32, 0.006, 255] }
+            },
+            "border": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.4, 0.008, 255] }
+            },
+            "text": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.85, 0.005, 255] }
+            },
+            "textMuted": {
+              "$type": "color",
+              "$value": { "colorSpace": "oklch", "components": [0.75, 0.005, 255] }
+            }
+          }
+        },
+        "accent": {
+          "blue": {
+            "0": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "srgb",
+                "components": [0.9176, 0.9569, 1],
+                "hex": "#eaf4ff"
+              }
+            },
+            "1": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "srgb",
+                "components": [0.8157, 0.8941, 1],
+                "hex": "#d0e4ff"
+              }
+            },
+            "2": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "srgb",
+                "components": [0.6471, 0.7961, 1],
+                "hex": "#a5cbff"
+              }
+            },
+            "3": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "srgb",
+                "components": [0.4588, 0.6863, 1],
+                "hex": "#75afff"
+              }
+            },
+            "4": {
+              "$type": "color",
+              "$value": { "colorSpace": "srgb", "components": [0.298, 0.5882, 1], "hex": "#4c96ff" }
+            },
+            "5": {
+              "$type": "color",
+              "$value": { "colorSpace": "srgb", "components": [0.1843, 0.502, 1], "hex": "#2f80ff" }
+            },
+            "6": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "srgb",
+                "components": [0.1098, 0.4392, 1],
+                "hex": "#1c70ff"
+              }
+            },
+            "7": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "srgb",
+                "components": [0.051, 0.3882, 0.9843],
+                "hex": "#0d63fb"
+              }
+            },
+            "8": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "srgb",
+                "components": [0, 0.3451, 0.9216],
+                "hex": "#0058eb"
+              }
+            },
+            "9": {
+              "$type": "color",
+              "$value": { "colorSpace": "srgb", "components": [0, 0.3098, 0.851], "hex": "#004fd9" }
+            }
+          }
+        }
+      }
+    },
+    "semantic": {
+      "light": {
+        "canvas": { "$type": "color", "$value": "{primitives.color.neutral.light.canvas}" },
+        "pane": { "$type": "color", "$value": "{primitives.color.neutral.light.pane}" },
+        "rail": { "$type": "color", "$value": "{primitives.color.neutral.light.rail}" },
+        "elevated": { "$type": "color", "$value": "{primitives.color.neutral.light.elevated}" },
+        "border": { "$type": "color", "$value": "{primitives.color.neutral.light.border}" },
+        "text": { "$type": "color", "$value": "{primitives.color.neutral.light.text}" },
+        "textMuted": { "$type": "color", "$value": "{primitives.color.neutral.light.textMuted}" },
+        "hover": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0, 0, 0], "alpha": 0.032 }
+        },
+        "selected": { "$type": "color", "$value": "{primitives.color.neutral.light.canvas}" },
+        "chromeHairline": { "$type": "css", "$value": "rgba(0, 0, 0, 0.09)" },
+        "floatingShadow": {
+          "$type": "css",
+          "$value": "inset 0 1px 0 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px -0.5px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 12px 20px -4px rgb(0 0 0 / 0.08)"
+        },
+        "activeFill": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)"
+        },
+        "treeSelected": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)"
+        },
+        "treeSelectedHover": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)"
+        },
+        "tabDragShadow": { "$type": "css", "$value": "0 8px 24px rgba(0, 0, 0, 0.45)" },
+        "tabCloseHoverBg": { "$type": "css", "$value": "rgba(255, 255, 255, 0.1)" }
+      },
+      "dark": {
+        "canvas": { "$type": "color", "$value": "{primitives.color.neutral.dark.canvas}" },
+        "pane": { "$type": "color", "$value": "{primitives.color.neutral.dark.pane}" },
+        "rail": { "$type": "color", "$value": "{primitives.color.neutral.dark.rail}" },
+        "elevated": { "$type": "color", "$value": "{primitives.color.neutral.dark.elevated}" },
+        "border": { "$type": "color", "$value": "{primitives.color.neutral.dark.border}" },
+        "text": { "$type": "color", "$value": "{primitives.color.neutral.dark.text}" },
+        "textMuted": { "$type": "color", "$value": "{primitives.color.neutral.dark.textMuted}" },
+        "hover": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [1, 0, 0], "alpha": 0.05 }
+        },
+        "selected": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [1, 0, 0], "alpha": 0.14 }
+        },
+        "chromeHairline": { "$type": "css", "$value": "rgba(255, 255, 255, 0.09)" },
+        "floatingShadow": {
+          "$type": "css",
+          "$value": "inset 0 1px 0 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.36), 0 1px 1px -0.5px rgb(0 0 0 / 0.22), 0 3px 3px -1.5px rgb(0 0 0 / 0.2), 0 6px 6px -3px rgb(0 0 0 / 0.16)"
+        },
+        "activeFill": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)"
+        },
+        "treeSelected": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)"
+        },
+        "treeSelectedHover": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)"
+        },
+        "tabDragShadow": { "$type": "css", "$value": "0 8px 24px rgba(0, 0, 0, 0.45)" },
+        "tabCloseHoverBg": { "$type": "css", "$value": "rgba(255, 255, 255, 0.1)" }
+      }
+    }
+  },
+  "mantine": {
+    "primaryColor": "blue",
+    "primaryShade": { "light": 6, "dark": 8 },
+    "colors": { "blue": "primitives.color.accent.blue" },
+    "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+    "defaultRadius": "md",
+    "radius": { "xs": "4px", "sm": "6px", "md": "8px", "lg": "12px", "xl": "16px" },
+    "spacing": { "xs": "8px", "sm": "12px", "md": "16px", "lg": "20px", "xl": "24px" },
+    "fontSizes": {
+      "xs": "0.75rem",
+      "sm": "0.8125rem",
+      "md": "0.875rem",
+      "lg": "1rem",
+      "xl": "1.125rem"
+    },
+    "shadows": {
+      "xs": "0 1px 2px rgba(0,0,0,0.05)",
+      "sm": "0 2px 8px rgba(0,0,0,0.08)",
+      "md": "0 4px 16px rgba(0,0,0,0.12)"
+    },
+    "focusRing": "auto"
+  }
+}

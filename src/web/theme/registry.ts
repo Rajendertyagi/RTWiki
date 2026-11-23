@@ -2,6 +2,8 @@ import type { MantineThemeOverride } from '@mantine/core'
 import { createTheme, Menu, Modal, Popover, ScrollArea, Tooltip } from '@mantine/core'
 
 import { LAYOUT } from '../config/index.js'
+import defaultThemeJson from '../themes/default.json'
+import { parseThemeDefinition } from './theme-definition.js'
 
 /**
  * The one class every floating surface carries. Defined in customization.css,
@@ -162,55 +164,34 @@ export function buildVariantVariables(variant: ThemeVariant): Record<string, str
 }
 
 /**
- * The Default theme. Values are transcribed from TriliumNext's token palette;
- * see docs/trilium-uiux-reference.md.
+ * The Default theme. All colour and Mantine scale values now live in
+ * `src/web/themes/default.json` as DTCG-shaped tokens; the loader validates
+ * them and resolves aliases into the exact CSS strings the app expects. The
+ * losslessness test in `tests/theme-definition.test.ts` proves the JSON
+ * reproduces the previous inline values byte for byte.
+ *
+ * What stays here is code-owned: the component defaults below wire code
+ * constants (FLOATING, LAYOUT.scrollbar.size) and cannot be expressed as data.
+ *
+ * The oklch surface ladder is defined by its lightness channel alone, so the
+ * steps are exact by construction rather than hand-picked. The canvas is
+ * declared rather than inherited from the rich editor, which paints its own
+ * background from a binary light/dark scheme and knows nothing about the
+ * active theme. Both invariants are asserted in tests/theme-registry.test.ts.
  *
  * This is the only registered theme in the first slice. Catppuccin and Nord are
  * deliberately absent: they must be sourced from their official palettes in a
  * later change rather than invented here.
  */
+const parsedDefault = parseThemeDefinition(defaultThemeJson, {
+  variantTokens: REQUIRED_VARIANT_TOKENS,
+  interactionTokens: REQUIRED_INTERACTION_TOKENS
+})
+
 const defaultTheme: AppTheme = {
-  id: 'default',
+  id: parsedDefault.id,
   mantine: createTheme({
-    primaryColor: 'blue',
-    colors: {
-      blue: [
-        '#eaf4ff',
-        '#d0e4ff',
-        '#a5cbff',
-        '#75afff',
-        '#4c96ff',
-        '#2f80ff',
-        '#1c70ff',
-        '#0d63fb',
-        '#0058eb',
-        '#004fd9'
-      ]
-    },
-    primaryShade: { light: 6, dark: 8 },
-    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    defaultRadius: 'md',
-    radius: { xs: '4px', sm: '6px', md: '8px', lg: '12px', xl: '16px' },
-    shadows: {
-      xs: '0 1px 2px rgba(0,0,0,0.05)',
-      sm: '0 2px 8px rgba(0,0,0,0.08)',
-      md: '0 4px 16px rgba(0,0,0,0.12)'
-    },
-    focusRing: 'auto',
-    spacing: {
-      xs: '8px',
-      sm: '12px',
-      md: '16px',
-      lg: '20px',
-      xl: '24px'
-    },
-    fontSizes: {
-      xs: '0.75rem',
-      sm: '0.8125rem',
-      md: '0.875rem',
-      lg: '1rem',
-      xl: '1.125rem'
-    },
+    ...parsedDefault.mantine,
     components: {
       // Menu, Popover, Dialog, tooltip: the four things that genuinely float.
       Menu: Menu.extend({ classNames: { dropdown: FLOATING } }),
@@ -237,59 +218,7 @@ const defaultTheme: AppTheme = {
       })
     }
   }),
-  variants: {
-    dark: {
-      // Oklch, not hex. The surface ladder is defined by its lightness channel
-      // alone, so the steps are exact by construction rather than hand-picked:
-      // 0.17 -> 0.22 -> 0.27 -> 0.32, a uniform 0.05 apart. A hex ladder can
-      // only be *measured* into evenness; here it simply is even. The test
-      // asserts the L channel directly.
-      //
-      // The canvas is deliberately declared rather than inherited from the rich
-      // editor, which paints its own background from a binary light/dark scheme
-      // and knows nothing about the active theme. The editor surface is forced
-      // to follow this token instead.
-      rail: 'oklch(0.17 0.005 255)',
-      pane: 'oklch(0.22 0.005 255)',
-      canvas: 'oklch(0.27 0.005 255)',
-      elevated: 'oklch(0.32 0.006 255)',
-      // Sits one clear step above every surface, so an edge always reads.
-      border: 'oklch(0.4 0.008 255)',
-      text: 'oklch(0.85 0.005 255)',
-      textMuted: 'oklch(0.75 0.005 255)',
-      hover: 'oklch(1 0 0 / 0.05)',
-      selected: 'oklch(1 0 0 / 0.14)',
-      chromeHairline: 'rgba(255, 255, 255, 0.09)',
-      floatingShadow:
-        'inset 0 1px 0 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.36), 0 1px 1px -0.5px rgb(0 0 0 / 0.22), 0 3px 3px -1.5px rgb(0 0 0 / 0.2), 0 6px 6px -3px rgb(0 0 0 / 0.16)',
-      activeFill: 'color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)',
-      treeSelected: 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)',
-      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)',
-      tabDragShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
-      tabCloseHoverBg: 'rgba(255, 255, 255, 0.1)'
-    },
-    light: {
-      // Same idea in the other direction: the canvas is the brightest surface
-      // and each panel steps away from it by an even 0.045.
-      canvas: 'oklch(1 0 0)',
-      pane: 'oklch(0.955 0.004 255)',
-      rail: 'oklch(0.91 0.005 255)',
-      elevated: 'oklch(1 0 0)',
-      border: 'oklch(0.86 0.008 255)',
-      text: 'oklch(0.38 0.01 255)',
-      textMuted: 'oklch(0.55 0.01 255)',
-      hover: 'oklch(0 0 0 / 0.032)',
-      selected: 'oklch(1 0 0)',
-      chromeHairline: 'rgba(0, 0, 0, 0.09)',
-      floatingShadow:
-        'inset 0 1px 0 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px -0.5px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 12px 20px -4px rgb(0 0 0 / 0.08)',
-      activeFill: 'color-mix(in srgb, var(--mantine-color-blue-filled) 22%, transparent)',
-      treeSelected: 'color-mix(in srgb, var(--mantine-color-blue-filled) 18%, transparent)',
-      treeSelectedHover: 'color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)',
-      tabDragShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
-      tabCloseHoverBg: 'rgba(255, 255, 255, 0.1)'
-    }
-  }
+  variants: parsedDefault.variants
 }
 
 export const APP_THEMES: Readonly<Record<string, AppTheme>> = {
