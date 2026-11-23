@@ -1,4 +1,16 @@
 .root {
+  --debug-log-category-max-width: 220px;
+  --debug-log-region-min-height: 220px;
+  --debug-log-row-gap: 6px;
+  --debug-log-row-pad-block: 4px;
+  --debug-log-row-pad-inline: 2px;
+  --debug-log-meta-pad-top: 4px;
+  --debug-log-meta-pad-right: 4px;
+  --debug-log-meta-pad-bottom: 8px;
+  --debug-log-meta-pad-left: 22px;
+  --debug-log-meta-gap: 2px;
+  --debug-log-meta-row-gap: 8px;
+  --debug-log-meta-key-width: 90px;
   display: flex;
   flex-direction: column;
   gap: var(--mantine-spacing-xs);
@@ -10,7 +22,7 @@
 }
 
 .categorySelect {
-  max-width: 220px;
+  max-width: var(--debug-log-category-max-width);
 }
 
 /*
@@ -28,7 +40,7 @@
  */
 .logRegion {
   flex: 1;
-  min-height: 220px;
+  min-height: var(--debug-log-region-min-height);
   max-height: 100%;
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-sm);
@@ -58,9 +70,9 @@
 .rowHeader {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--debug-log-row-gap);
   width: 100%;
-  padding: 4px 2px;
+  padding: var(--debug-log-row-pad-block) var(--debug-log-row-pad-inline);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -75,7 +87,7 @@
 
 .rowChevron {
   flex: 0 0 auto;
-  transition: transform 120ms ease;
+  transition: transform var(--rtwiki-motion-fast) ease;
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
 }
 
@@ -140,20 +152,21 @@
 }
 
 .meta {
-  padding: 4px 4px 8px 22px;
+  padding: var(--debug-log-meta-pad-top) var(--debug-log-meta-pad-right)
+    var(--debug-log-meta-pad-bottom) var(--debug-log-meta-pad-left);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--debug-log-meta-gap);
 }
 
 .metaRow {
   display: flex;
-  gap: 8px;
+  gap: var(--debug-log-meta-row-gap);
   font-size: var(--mantine-font-size-xs);
 }
 
 .metaKey {
-  flex: 0 0 90px;
+  flex: 0 0 var(--debug-log-meta-key-width);
   color: var(--rtwiki-text-muted, var(--mantine-color-dimmed));
 }
 

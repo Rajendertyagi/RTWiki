@@ -1,9 +1,11 @@
 /* Section label: small, spaced, quiet. The letter-spacing was an inline style. */
 .categoryLabel {
-  letter-spacing: 0.5px;
+  --shortcut-category-letter-spacing: 0.5px;
+  letter-spacing: var(--shortcut-category-letter-spacing);
 }
 
 /* Shortcut column gets a fixed share so the description column aligns. */
 .shortcutCell {
-  width: 40%;
+  --shortcut-key-column-width: 40%;
+  width: var(--shortcut-key-column-width);
 }

@@ -1,4 +1,5 @@
 .root {
+  --calendar-side-panel-width: 220px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -7,6 +8,8 @@
 
 .toolbar {
   padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  /* Pixel-equivalence: keep Mantine gray-3 (study flagged as GAP), because
+     --rtwiki-border resolves to a different oklch value in both schemes. */
   border-bottom: 1px solid var(--mantine-color-gray-3);
   flex-shrink: 0;
 }
@@ -28,14 +31,14 @@
 }
 
 .palette {
-  width: 220px;
+  width: var(--calendar-side-panel-width);
   flex-shrink: 0;
   align-self: flex-start;
   padding: var(--mantine-spacing-sm);
 }
 
 .paletteBox {
-  padding: 8px 12px;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
   border-radius: var(--mantine-radius-md);
   cursor: grab;
   user-select: none;
@@ -57,7 +60,7 @@
 
 .todayBar {
   flex-shrink: 0;
-  max-height: 220px;
+  max-height: var(--calendar-side-panel-width);
   display: flex;
   flex-direction: column;
   min-height: 0;
