@@ -17,7 +17,7 @@
      every page row must start and end on the same line; they previously used
      three different widths (265px, 281px and 276px inside a 281px pane), so the
      selected fill changed width depending on what was selected. */
-  --rtwiki-tree-pane-inset: 8px;
+  --rtwiki-tree-pane-inset: var(--mantine-spacing-xs);
   /* Nesting step. MUST stay equal to the library's internal ICON_WIDTH (20px):
      it is what --wb-icon-outer-width renders, and the library lays out one cell
      per level at that width. Pinned here so the value has one home; the tree
@@ -34,7 +34,7 @@
   --rtwiki-tree-subfile-icon-size: 14px;
   /* Horizontal rhythm: chevron -> icon 2px (tight), icon -> title 5px. */
   --rtwiki-tree-expander-icon-gap: 2px;
-  --rtwiki-tree-icon-title-gap: 5px;
+  --rtwiki-tree-icon-title-gap: var(--mantine-spacing-xxs2);
   /* Row outer padding - zero so the root column starts at the indent step
      (the expander cell IS the indent step), keeping the root
      lead equal to the per-level indent instead of larger. */
@@ -52,19 +52,21 @@
   --rtwiki-tree-content-inset: 1px;
   /* Accent bar width for selected rows and drop indicators. */
   --rtwiki-selection-accent-width: 3px;
-  /* Tree motion. Hover/row transitions and the quick expander feedback. */
-  --rtwiki-motion-tree-hover: 150ms;
+  /* Tree motion. The hover duration is owned by MOTION.treeHover in
+     config/index.ts and emitted by the theme bridge as
+     --rtwiki-motion-tree-hover; only the tree-specific quick expander feedback
+     is defined here (single use, no evidence to move ownership). */
   --rtwiki-motion-tree-quick: 80ms;
   /* Tree interaction geometry: title floor, row action chip, subfile rows and
      the scoped context menu. */
   --rtwiki-tree-min-title-width: 72px;
-  --rtwiki-tree-action-offset: 4px;
+  --rtwiki-tree-action-offset: var(--mantine-spacing-xxs);
   --rtwiki-tree-action-icon-size: 22px;
   --rtwiki-tree-action-font-size: 14px;
   --rtwiki-tree-subfile-font-size: 12.5px;
-  --rtwiki-tree-subfile-pad-left: 6px;
+  --rtwiki-tree-subfile-pad-left: var(--mantine-spacing-xxs2);
   --rtwiki-tree-menu-pad-inline: 14px;
-  --rtwiki-tree-menu-section-gap: 10px;
+  --rtwiki-tree-menu-section-gap: var(--mantine-spacing-sm);
   /* Rich editor semantic colours. These were previously undefined tokens whose
      CSS fallbacks carried the rendering; defining them at their current values
      makes the fallback explicit and theme-controllable without a visual change. */
@@ -85,8 +87,8 @@
   --rtwiki-html-placeholder-min-height: 300px;
   /* Prose/content tokens shared by the Markdown notice and Mermaid error blocks. */
   --rtwiki-prose-mark-radius: 3px;
-  --rtwiki-prose-notice-pad-block: 4px;
-  --rtwiki-prose-notice-pad-inline: 8px;
+  --rtwiki-prose-notice-pad-block: var(--mantine-spacing-xxs);
+  --rtwiki-prose-notice-pad-inline: var(--mantine-spacing-xs);
   --rtwiki-prose-notice-border-width: 3px;
   --rtwiki-prose-notice-font-size: 0.9em;
   --rtwiki-prose-divider-width: 1px;
@@ -173,7 +175,13 @@
  */
 .rtwiki-floating {
   box-shadow: var(--rtwiki-floating-shadow);
+  background: var(--rtwiki-floating-bg);
 }
+
+/* Interface adjustments (Contrast / Glass opacity) are applied by the theme
+ * resolver and by inline styles on <html>, not here. Mantine injects its
+ * resolver style tag after this stylesheet, so a rule here would be
+ * overridden. See src/web/theme/adjustments.ts. */
 
 /*
  * The toast's auto-close countdown.
@@ -299,4 +307,26 @@ body,
   .rtwiki-scroll::-webkit-scrollbar-corner {
     background: var(--rtwiki-scrollbar-track);
   }
+}
+
+/*
+ * BlockNote editor text must follow the active RTWiki theme, not BlockNote's
+ * own fixed light/dark palette.
+ *
+ * Cascade reasoning (measured, not assumed): BlockNote declares
+ * `--bn-colors-editor-text: #3f3f3f` on `.bn-root` and `#cfcfcf` on
+ * `.bn-root[data-color-scheme="dark"]` (in `@blocknote/mantine/style.css`,
+ * bundled into `diagram-template-bar-*.css`, linked before this file's
+ * `index-*.css`). `.bn-editor` then paints `color: var(--bn-colors-editor-text)`.
+ *
+ * Declaring the variable on `.bn-editor` itself wins over the value inherited
+ * from `.bn-root` regardless of the ancestor rule's higher specificity: a
+ * custom property's computed value is decided by the cascade on the element
+ * itself, and inheritance only applies when the element has no declaration.
+ * This file also loads after BlockNote's stylesheet, so no `!important` is
+ * needed. Scoping to `.bn-editor` keeps menus, tooltips and other BlockNote UI
+ * on their own variables.
+ */
+.bn-editor {
+  --bn-colors-editor-text: var(--rtwiki-text);
 }

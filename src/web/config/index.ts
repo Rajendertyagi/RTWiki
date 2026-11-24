@@ -201,14 +201,23 @@ export const LAYOUT = {
 export const OVERLAY_OWNER_ATTR = 'data-keep-menu-open'
 
 /**
- * Motion durations (ms). Single source for transition timing in the shell chrome.
+ * Motion durations (ms). Authoritative home for shared application motion.
  * Published as `--rtwiki-motion-*` by the theme resolver.
+ *
+ * Each entry is a distinct interaction decision with its own easing and feel.
+ * Values are deliberately kept separate even where durations coincide: do not
+ * collapse two entries just because their numbers match (tab uses `ease`,
+ * tree hover uses `ease-out`, card hover uses `ease`).
  */
 export const MOTION = {
   /** Fast feedback: hover, focus, small state changes. */
   fast: 120,
-  /** Tab state transitions. */
-  tab: 150
+  /** Tab state transitions (`ease`). */
+  tab: 150,
+  /** Tree row hover feedback (`ease-out`) — a different surface and feel from tabs. */
+  treeHover: 150,
+  /** Dashboard page-card hover feedback (`ease`) — its own surface, not the tab token. */
+  cardHover: 150
 } as const
 
 /**
@@ -725,6 +734,11 @@ export const UI_TEXT = {
   appearanceThemeLight: 'Light',
   appearanceThemeDark: 'Dark',
   appearanceThemeHint: 'Choose how RTWiki looks on this device.',
+  appearanceContrastLabel: 'Contrast',
+  appearanceContrastHint: 'Adjust the contrast of colors and borders across the interface.',
+  appearanceGlassLabel: 'Glass opacity',
+  appearanceGlassHint: 'Higher values make menus, dialogs, and panels more solid.',
+  appearanceReset: 'Reset to default',
   layoutResetLabel: 'Reset layout',
   layoutResetHint: 'Restore default pane sizes and collapsed panels.',
   layoutResetDoneLabel: 'Layout preferences reset',

@@ -1,10 +1,10 @@
 .editorRoot {
   /* Local geometry for the sidebar expand control and the wiki-link picker. */
-  --editor-sidebar-expand-gap: 8px;
-  --editor-sidebar-expand-pad: 6px;
+  --editor-sidebar-expand-gap: var(--mantine-spacing-xs);
+  --editor-sidebar-expand-pad: var(--mantine-spacing-xxs2);
   --editor-wiki-picker-width: 280px;
-  --editor-wiki-item-pad-block: 6px;
-  --editor-wiki-item-pad-inline: 10px;
+  --editor-wiki-item-pad-block: var(--mantine-spacing-xxs2);
+  --editor-wiki-item-pad-inline: var(--mantine-spacing-xs);
   display: flex;
   flex-direction: column;
   min-height: 0;

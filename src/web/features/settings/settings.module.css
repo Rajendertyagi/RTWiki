@@ -2,7 +2,7 @@
   --settings-nav-width: 200px;
   --settings-nav-gap: 2px;
   --settings-nav-item-min-height: 30px;
-  --settings-nav-compact-gap: 6px;
+  --settings-nav-compact-gap: var(--mantine-spacing-xxs2);
   --settings-active-accent-width: 3px;
   --settings-content-max-width: 640px;
   display: flex;

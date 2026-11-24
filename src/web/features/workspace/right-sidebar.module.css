@@ -19,7 +19,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
+  padding: var(--mantine-spacing-xxs2) var(--mantine-spacing-xs);
   /* Within one surface there is no colour step to read, so a hairline is the
    * honest separator. Faint, because this is a header edge and not a rule the
    * eye should land on. */
@@ -32,13 +32,13 @@
 .scrollArea {
   flex: 1;
   min-height: 0;
-  padding: 8px;
+  padding: var(--mantine-spacing-xs);
 }
 
 .sectionTitle {
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 4px;
+  margin-bottom: var(--mantine-spacing-xxs);
 }
 
 .emptyOutline {
@@ -49,7 +49,7 @@
   display: block;
   width: 100%;
   text-align: left;
-  padding: 4px 8px;
+  padding: var(--mantine-spacing-xxs) var(--mantine-spacing-xs);
   /* Indent is driven by a level count rather than a computed pixel value, so
      the rhythm lives here and the component only supplies the depth. */
   padding-left: calc(8px + (var(--rtwiki-indent-level, 1) - 1) * 12px);
@@ -78,10 +78,10 @@
    module's private class. */
 .expandButton {
   align-self: flex-start;
-  margin-top: 8px;
+  margin-top: var(--mantine-spacing-xs);
   border: 1px solid var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-sm);
   background: var(--mantine-color-body);
   cursor: pointer;
-  padding: 6px;
+  padding: var(--mantine-spacing-xxs2);
 }

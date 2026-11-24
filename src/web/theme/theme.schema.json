@@ -56,18 +56,7 @@
     },
     "mantine": {
       "type": "object",
-      "required": [
-        "primaryColor",
-        "primaryShade",
-        "colors",
-        "fontFamily",
-        "defaultRadius",
-        "radius",
-        "spacing",
-        "fontSizes",
-        "shadows",
-        "focusRing"
-      ],
+      "required": ["primaryColor", "primaryShade", "colors"],
       "additionalProperties": false,
       "properties": {
         "primaryColor": { "type": "string", "minLength": 1 },
@@ -80,14 +69,7 @@
             "dark": { "$ref": "#/$defs/shade" }
           }
         },
-        "colors": { "type": "object", "additionalProperties": { "type": "string" } },
-        "fontFamily": { "type": "string", "minLength": 1 },
-        "defaultRadius": { "type": "string", "minLength": 1 },
-        "radius": { "type": "object", "additionalProperties": { "type": "string" } },
-        "spacing": { "type": "object", "additionalProperties": { "type": "string" } },
-        "fontSizes": { "type": "object", "additionalProperties": { "type": "string" } },
-        "shadows": { "type": "object", "additionalProperties": { "type": "string" } },
-        "focusRing": { "enum": ["auto", "always", "never"] }
+        "colors": { "type": "object", "additionalProperties": { "type": "string" } }
       }
     }
   },

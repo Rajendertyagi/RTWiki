@@ -42,12 +42,66 @@ describe('appearance settings storage', () => {
       const db = initDatabase(dir)
       await runMigrations(db)
       const getDb = () => db
-      expect(readAppearanceSettings(getDb)).toEqual({ themeId: 'default', colorScheme: 'auto' })
-      writeAppearanceSettings(getDb, { themeId: 'high-contrast', colorScheme: 'dark' })
+      expect(readAppearanceSettings(getDb)).toEqual({
+        themeId: 'default',
+        colorScheme: 'auto',
+        contrast: 100,
+        glassOpacity: 100
+      })
+      writeAppearanceSettings(getDb, {
+        themeId: 'high-contrast',
+        colorScheme: 'dark',
+        contrast: 100,
+        glassOpacity: 100
+      })
       expect(readAppearanceSettings(getDb)).toEqual({
         themeId: 'high-contrast',
-        colorScheme: 'dark'
+        colorScheme: 'dark',
+        contrast: 100,
+        glassOpacity: 100
       })
+    } finally {
+      await closeDatabase()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('clamps out-of-range interface values on read and write', async () => {
+    const dir = tempDir()
+    try {
+      const db = initDatabase(dir)
+      await runMigrations(db)
+      const getDb = () => db
+      writeAppearanceSettings(getDb, {
+        themeId: 'default',
+        colorScheme: 'auto',
+        contrast: 9999,
+        glassOpacity: -50
+      })
+      const read = readAppearanceSettings(getDb)
+      expect(read.contrast).toBe(150)
+      expect(read.glassOpacity).toBe(30)
+    } finally {
+      await closeDatabase()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('normalises a saved theme id whose file was removed', async () => {
+    const dir = tempDir()
+    try {
+      const db = initDatabase(dir)
+      await runMigrations(db)
+      const getDb = () => db
+      writeAppearanceSettings(getDb, {
+        themeId: 'high-contrast',
+        colorScheme: 'dark',
+        contrast: 100,
+        glassOpacity: 100
+      })
+      const available = new Set(['default', 'pastel-dreams', 'catppuccin', 'vercel'])
+      expect(readAppearanceSettings(getDb, available).themeId).toBe('default')
+      expect(readAppearanceSettings(getDb).themeId).toBe('high-contrast')
     } finally {
       await closeDatabase()
       rmSync(dir, { recursive: true, force: true })
@@ -60,7 +114,9 @@ describe('pre-paint bootstrap', () => {
     const result = buildThemeBootstrap({
       themesDir: THEMES_DIR,
       themeId: 'default',
-      colorScheme: 'auto'
+      colorScheme: 'auto',
+      contrast: 100,
+      glassOpacity: 100
     })
     expect(result.style).toContain(':root,:host{')
     expect(result.style).toContain(
@@ -77,7 +133,9 @@ describe('pre-paint bootstrap', () => {
     const result = buildThemeBootstrap({
       themesDir: THEMES_DIR,
       themeId: 'default',
-      colorScheme: 'auto'
+      colorScheme: 'auto',
+      contrast: 100,
+      glassOpacity: 100
     })
     expect(result.script).toContain('matchMedia')
     expect(result.script).toContain('dataset.mantineColorScheme')
@@ -91,6 +149,8 @@ describe('pre-paint bootstrap', () => {
       themesDir: THEMES_DIR,
       themeId: 'does-not-exist',
       colorScheme: 'light',
+      contrast: 100,
+      glassOpacity: 100,
       warn: (message) => warnings.push(message)
     })
     expect(result.themeId).toBe('default')
@@ -112,6 +172,8 @@ describe('pre-paint bootstrap', () => {
         themesDir: dir,
         themeId: 'bad',
         colorScheme: 'light',
+        contrast: 100,
+        glassOpacity: 100,
         warn: (message) => warnings.push(message)
       })
       expect(result.themeId).toBe('default')

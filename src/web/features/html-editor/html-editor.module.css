@@ -1,7 +1,7 @@
 .root {
   /* Local geometry for the transient refresh status line. */
-  --html-preview-status-pad-block: 6px;
-  --html-preview-status-pad-inline: 12px;
+  --html-preview-status-pad-block: var(--mantine-spacing-xxs2);
+  --html-preview-status-pad-inline: var(--mantine-spacing-sm);
   position: relative;
   display: flex;
   flex-direction: column;

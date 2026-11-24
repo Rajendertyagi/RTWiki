@@ -1,12 +1,12 @@
 .card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-sm);
   border: 1px solid var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-md);
   background: var(--mantine-color-default-subtle);
-  margin: 6px 0;
+  margin: var(--mantine-spacing-xxs2) 0;
 }
 
 .icon {
@@ -38,7 +38,7 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--mantine-spacing-xxs);
   flex-wrap: wrap;
 }
 

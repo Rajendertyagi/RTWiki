@@ -1,15 +1,15 @@
 .root {
   --debug-log-category-max-width: 220px;
   --debug-log-region-min-height: 220px;
-  --debug-log-row-gap: 6px;
-  --debug-log-row-pad-block: 4px;
+  --debug-log-row-gap: var(--mantine-spacing-xxs2);
+  --debug-log-row-pad-block: var(--mantine-spacing-xxs);
   --debug-log-row-pad-inline: 2px;
-  --debug-log-meta-pad-top: 4px;
-  --debug-log-meta-pad-right: 4px;
-  --debug-log-meta-pad-bottom: 8px;
+  --debug-log-meta-pad-top: var(--mantine-spacing-xxs);
+  --debug-log-meta-pad-right: var(--mantine-spacing-xxs);
+  --debug-log-meta-pad-bottom: var(--mantine-spacing-xs);
   --debug-log-meta-pad-left: 22px;
   --debug-log-meta-gap: 2px;
-  --debug-log-meta-row-gap: 8px;
+  --debug-log-meta-row-gap: var(--mantine-spacing-xs);
   --debug-log-meta-key-width: 90px;
   display: flex;
   flex-direction: column;

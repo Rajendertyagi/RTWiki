@@ -222,7 +222,12 @@ describe('static serving', () => {
       serveStatic({
         root: dir,
         themesDir: join(dir, 'themes'),
-        getAppearance: () => ({ themeId: 'default', colorScheme: 'auto' })
+        getAppearance: () => ({
+          themeId: 'default',
+          colorScheme: 'auto',
+          contrast: 100,
+          glassOpacity: 100
+        })
       })
     )
     return srv
@@ -370,7 +375,12 @@ describe('static serving', () => {
       serveStatic({
         root: fwdRoot,
         themesDir: join(fwdRoot, 'themes'),
-        getAppearance: () => ({ themeId: 'default', colorScheme: 'auto' })
+        getAppearance: () => ({
+          themeId: 'default',
+          colorScheme: 'auto',
+          contrast: 100,
+          glassOpacity: 100
+        })
       })
     )
 

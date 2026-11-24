@@ -14,8 +14,15 @@ import {
   CLOSE_BEHAVIORS,
   type CloseBehavior,
   COLOR_SCHEMES,
+  CONTRAST_DEFAULT,
+  CONTRAST_MAX,
+  CONTRAST_MIN,
   type ColorScheme,
+  clampSetting,
   DEFAULT_PORT,
+  GLASS_OPACITY_DEFAULT,
+  GLASS_OPACITY_MAX,
+  GLASS_OPACITY_MIN,
   MAX_BACKUP_INTERVAL_HOURS,
   MAX_USER_PORT,
   MIN_BACKUP_INTERVAL_HOURS,
@@ -23,6 +30,8 @@ import {
   SETTINGS_KEY_BACKUP_SLOTS,
   SETTINGS_KEY_CLOSE_BEHAVIOR,
   SETTINGS_KEY_COLOR_SCHEME,
+  SETTINGS_KEY_CONTRAST,
+  SETTINGS_KEY_GLASS_OPACITY,
   SETTINGS_KEY_REMEMBER_CLOSE_CHOICE,
   SETTINGS_KEY_SERVER_PORT,
   SETTINGS_KEY_THEME_ID
@@ -41,10 +50,12 @@ export interface DesktopSettings {
   rememberCloseChoice: boolean
 }
 
-/** Appearance preferences. Both values are persisted in the SQLite settings table. */
+/** Appearance preferences. All values are persisted in the SQLite settings table. */
 export interface AppearanceSettings {
   themeId: string
   colorScheme: ColorScheme
+  contrast: number
+  glassOpacity: number
 }
 
 /** Theme ids are filenames, so restrict them to a safe, portable character set. */
@@ -163,6 +174,28 @@ export function readAllSettings(getDb: GetDb): SettingsReadResult {
   if (schemeStored !== null && !isValidColorScheme(parseJson(schemeStored))) {
     resetKeys.push(SETTINGS_KEY_COLOR_SCHEME)
   }
+  const contrastRaw = readRaw(getDb, SETTINGS_KEY_CONTRAST)
+  if (contrastRaw !== null) {
+    const contrastStored = parseJson(contrastRaw)
+    if (
+      typeof contrastStored !== 'number' ||
+      contrastStored < CONTRAST_MIN ||
+      contrastStored > CONTRAST_MAX
+    ) {
+      resetKeys.push(SETTINGS_KEY_CONTRAST)
+    }
+  }
+  const glassRaw = readRaw(getDb, SETTINGS_KEY_GLASS_OPACITY)
+  if (glassRaw !== null) {
+    const glassStored = parseJson(glassRaw)
+    if (
+      typeof glassStored !== 'number' ||
+      glassStored < GLASS_OPACITY_MIN ||
+      glassStored > GLASS_OPACITY_MAX
+    ) {
+      resetKeys.push(SETTINGS_KEY_GLASS_OPACITY)
+    }
+  }
 
   const backupRaw = parseJson(readRaw(getDb, SETTINGS_KEY_BACKUP_SLOTS))
   if (!isRecord(backupRaw) || !isRecord(backupRaw.slots)) {
@@ -214,12 +247,34 @@ export const DEFAULT_THEME_ID = 'default'
 export const DEFAULT_COLOR_SCHEME: ColorScheme = 'auto'
 
 /** Appearance preferences; each field falls back independently. */
-export function readAppearanceSettings(getDb: GetDb): AppearanceSettings {
+export function readAppearanceSettings(
+  getDb: GetDb,
+  availableThemeIds?: ReadonlySet<string>
+): AppearanceSettings {
   const themeRaw = parseJson(readRaw(getDb, SETTINGS_KEY_THEME_ID))
   const schemeRaw = parseJson(readRaw(getDb, SETTINGS_KEY_COLOR_SCHEME))
+  const validId = isValidThemeId(themeRaw) ? themeRaw : DEFAULT_THEME_ID
+  // A saved theme whose file was removed must quietly fall back to default.
+  const themeId = availableThemeIds && !availableThemeIds.has(validId) ? DEFAULT_THEME_ID : validId
+  const contrastRaw = parseJson(readRaw(getDb, SETTINGS_KEY_CONTRAST))
+  const glassRaw = parseJson(readRaw(getDb, SETTINGS_KEY_GLASS_OPACITY))
   return {
-    themeId: isValidThemeId(themeRaw) ? themeRaw : DEFAULT_THEME_ID,
-    colorScheme: isValidColorScheme(schemeRaw) ? schemeRaw : DEFAULT_COLOR_SCHEME
+    themeId,
+    colorScheme: isValidColorScheme(schemeRaw) ? schemeRaw : DEFAULT_COLOR_SCHEME,
+    // Clamp on read: a corrupt or out-of-range DB value can never reach the
+    // first-screen style, even if it was written by an older build.
+    contrast: clampSetting(
+      typeof contrastRaw === 'number' ? contrastRaw : Number.NaN,
+      CONTRAST_MIN,
+      CONTRAST_MAX,
+      CONTRAST_DEFAULT
+    ),
+    glassOpacity: clampSetting(
+      typeof glassRaw === 'number' ? glassRaw : Number.NaN,
+      GLASS_OPACITY_MIN,
+      GLASS_OPACITY_MAX,
+      GLASS_OPACITY_DEFAULT
+    )
   }
 }
 
@@ -234,9 +289,18 @@ export function writeAppearanceSettings(
   if (!isValidColorScheme(settings.colorScheme)) {
     throw new Error(`colorScheme must be one of: ${COLOR_SCHEMES.join(', ')}`)
   }
+  const contrast = clampSetting(settings.contrast, CONTRAST_MIN, CONTRAST_MAX, CONTRAST_DEFAULT)
+  const glassOpacity = clampSetting(
+    settings.glassOpacity,
+    GLASS_OPACITY_MIN,
+    GLASS_OPACITY_MAX,
+    GLASS_OPACITY_DEFAULT
+  )
   writeRaw(getDb, SETTINGS_KEY_THEME_ID, JSON.stringify(settings.themeId))
   writeRaw(getDb, SETTINGS_KEY_COLOR_SCHEME, JSON.stringify(settings.colorScheme))
-  return { ...settings }
+  writeRaw(getDb, SETTINGS_KEY_CONTRAST, JSON.stringify(contrast))
+  writeRaw(getDb, SETTINGS_KEY_GLASS_OPACITY, JSON.stringify(glassOpacity))
+  return { ...settings, contrast, glassOpacity }
 }
 
 // ---------------------------------------------------------------------------

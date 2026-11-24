@@ -1,5 +1,6 @@
 import type { CSSVariablesResolver } from '@mantine/core'
-import { buildThemeCssVariables } from './css-variables.js'
+import type { Adjustments } from './adjustments.js'
+import { buildThemeCssVariables, formatFallbackMessage } from './css-variables.js'
 import type { AppTheme } from './registry.js'
 
 export { buildThemeCssVariables } from './css-variables.js'
@@ -28,6 +29,12 @@ export {
  * The values come from the same server-safe module the pre-paint bootstrap
  * uses, so the first screen and the final screen cannot disagree.
  */
-export function createThemeCssVariablesResolver(theme: AppTheme): CSSVariablesResolver {
-  return () => buildThemeCssVariables(theme)
+export function createThemeCssVariablesResolver(
+  theme: AppTheme,
+  adjustments?: Adjustments
+): CSSVariablesResolver {
+  return () =>
+    buildThemeCssVariables(theme, adjustments, (fallback) => {
+      console.warn(formatFallbackMessage(fallback))
+    })
 }

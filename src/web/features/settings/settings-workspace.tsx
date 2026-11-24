@@ -3,11 +3,13 @@ import {
   Box,
   Button,
   Checkbox,
+  Divider,
   Group,
   Radio,
   ScrollArea,
   SegmentedControl,
   Select,
+  Slider,
   Stack,
   Switch,
   Text,
@@ -16,7 +18,16 @@ import {
   useMantineColorScheme
 } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
-import { MAX_USER_PORT, MIN_USER_PORT } from '@rtwiki/shared/constants'
+import {
+  CONTRAST_DEFAULT,
+  CONTRAST_MAX,
+  CONTRAST_MIN,
+  GLASS_OPACITY_DEFAULT,
+  GLASS_OPACITY_MAX,
+  GLASS_OPACITY_MIN,
+  MAX_USER_PORT,
+  MIN_USER_PORT
+} from '@rtwiki/shared/constants'
 import {
   IconAlertCircle,
   IconAppWindow,
@@ -62,7 +73,7 @@ import {
   updateRememberCloseChoice,
   updateServerPort
 } from '../../services/server-settings-api.js'
-import { requestThemeChange } from '../../theme/theme-provider.js'
+import { requestAdjustments, requestThemeChange } from '../../theme/theme-provider.js'
 import { setWordWrap, useEditorPreferences } from '../workspace/editor-preferences.js'
 import type { LayoutPreferences } from '../workspace/layout-preferences.js'
 import {
@@ -250,6 +261,27 @@ export function SettingsWorkspace({
       settingsMounted.current = false
     }
   }, [loadSettings])
+
+  /** Persist an interface adjustment; on failure restore the previous value. */
+  const persistAdjustment = useCallback(
+    async (input: { contrast?: number; glassOpacity?: number }): Promise<void> => {
+      const previous = appearance
+      try {
+        const saved = await updateAppearance(input)
+        setAppearance(saved)
+        requestAdjustments(saved.contrast, saved.glassOpacity)
+        setAppearanceError(null)
+      } catch (error) {
+        if (previous) setAppearance(previous)
+        requestAdjustments(
+          previous?.contrast ?? CONTRAST_DEFAULT,
+          previous?.glassOpacity ?? GLASS_OPACITY_DEFAULT
+        )
+        setAppearanceError(error instanceof Error ? error.message : UI_TEXT.appearanceSaveError)
+      }
+    },
+    [appearance]
+  )
 
   /**
    * A failed read is not a dismissed notice, so the way out is to try again
@@ -528,6 +560,79 @@ export function SettingsWorkspace({
                   ]}
                 />
               </Group>
+              <Divider />
+              <Box>
+                <Group justify="space-between" mb={4}>
+                  <Text size="sm" w={500}>
+                    {UI_TEXT.appearanceContrastLabel}
+                  </Text>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    disabled={appearance?.contrast === CONTRAST_DEFAULT}
+                    onClick={() => void persistAdjustment({ contrast: CONTRAST_DEFAULT })}
+                  >
+                    {UI_TEXT.appearanceReset}
+                  </Button>
+                </Group>
+                <Text size="xs" c="dimmed" mb="xs">
+                  {UI_TEXT.appearanceContrastHint}
+                </Text>
+                <Slider
+                  value={appearance?.contrast ?? CONTRAST_DEFAULT}
+                  min={CONTRAST_MIN}
+                  max={CONTRAST_MAX}
+                  step={5}
+                  label={(v) => `${v}%`}
+                  labelAlwaysOn
+                  thumbLabel={UI_TEXT.appearanceContrastLabel}
+                  thumbValueText={(v) => `${v}%`}
+                  disabled={appearance === null}
+                  onChange={(value) => {
+                    setAppearance((current) =>
+                      current ? { ...current, contrast: value } : current
+                    )
+                    requestAdjustments(value, appearance?.glassOpacity ?? GLASS_OPACITY_DEFAULT)
+                  }}
+                  onChangeEnd={(value) => void persistAdjustment({ contrast: value })}
+                />
+              </Box>
+              <Box>
+                <Group justify="space-between" mb={4}>
+                  <Text size="sm" w={500}>
+                    {UI_TEXT.appearanceGlassLabel}
+                  </Text>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    disabled={appearance?.glassOpacity === GLASS_OPACITY_DEFAULT}
+                    onClick={() => void persistAdjustment({ glassOpacity: GLASS_OPACITY_DEFAULT })}
+                  >
+                    {UI_TEXT.appearanceReset}
+                  </Button>
+                </Group>
+                <Text size="xs" c="dimmed" mb="xs">
+                  {UI_TEXT.appearanceGlassHint}
+                </Text>
+                <Slider
+                  value={appearance?.glassOpacity ?? GLASS_OPACITY_DEFAULT}
+                  min={GLASS_OPACITY_MIN}
+                  max={GLASS_OPACITY_MAX}
+                  step={5}
+                  label={(v) => `${v}%`}
+                  labelAlwaysOn
+                  thumbLabel={UI_TEXT.appearanceGlassLabel}
+                  thumbValueText={(v) => `${v}%`}
+                  disabled={appearance === null}
+                  onChange={(value) => {
+                    setAppearance((current) =>
+                      current ? { ...current, glassOpacity: value } : current
+                    )
+                    requestAdjustments(appearance?.contrast ?? CONTRAST_DEFAULT, value)
+                  }}
+                  onChangeEnd={(value) => void persistAdjustment({ glassOpacity: value })}
+                />
+              </Box>
             </Stack>
           ) : null}
 

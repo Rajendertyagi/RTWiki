@@ -119,6 +119,8 @@ async function htmlResponse(
       themesDir: options.themesDir,
       themeId: appearance.themeId,
       colorScheme: appearance.colorScheme,
+      contrast: appearance.contrast,
+      glassOpacity: appearance.glassOpacity,
       warn: (message, error) => logger?.warn(message, { event: 'theme_bootstrap_fallback', error })
     })
     const nonceAttr = nonce ? ` nonce="${escapeHtmlAttribute(nonce)}"` : ''

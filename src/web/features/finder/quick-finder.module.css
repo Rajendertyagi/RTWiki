@@ -14,7 +14,7 @@
 .resultItem {
   display: block;
   width: 100%;
-  padding: 6px 10px;
+  padding: var(--mantine-spacing-xxs2) var(--mantine-spacing-xs);
   border: none;
   border-radius: var(--mantine-radius-xs);
   background: transparent;

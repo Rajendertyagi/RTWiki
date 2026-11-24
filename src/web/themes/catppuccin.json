@@ -1,0 +1,350 @@
+{
+  "$schema": "../theme/theme.schema.json",
+  "id": "catppuccin",
+  "name": "Catppuccin",
+  "version": 1,
+  "tokens": {
+    "primitives": {
+      "color": {
+        "neutral": {
+          "light": {
+            "canvas": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [1, 0, 0]
+              }
+            },
+            "pane": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.9578, 0.0058, 264.5321]
+              }
+            },
+            "rail": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.9278, 0.0087, 264.5206]
+              }
+            },
+            "elevated": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [1, 0, 0]
+              }
+            },
+            "border": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.8083, 0.0174, 271.1982]
+              }
+            },
+            "text": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.4355, 0.043, 279.325]
+              }
+            },
+            "textMuted": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.5471, 0.0343, 279.0837]
+              }
+            }
+          },
+          "dark": {
+            "canvas": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.2429, 0.0304, 283.911]
+              }
+            },
+            "pane": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.2129, 0.0254, 284.0647]
+              }
+            },
+            "rail": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.1828, 0.0204, 284.2039]
+              }
+            },
+            "elevated": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.2629, 0.0304, 283.911]
+              }
+            },
+            "border": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.324, 0.0319, 281.9784]
+              }
+            },
+            "text": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.8787, 0.0426, 272.2767]
+              }
+            },
+            "textMuted": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.751, 0.0396, 273.932]
+              }
+            }
+          }
+        },
+        "accent": {
+          "catppuccin": {
+            "0": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.9147, 0.2503, 297.0156]
+              }
+            },
+            "1": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.8347, 0.2503, 297.0156]
+              }
+            },
+            "2": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.7547, 0.2503, 297.0156]
+              }
+            },
+            "3": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.6747, 0.2503, 297.0156]
+              }
+            },
+            "4": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.5947, 0.2503, 297.0156]
+              }
+            },
+            "5": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.5147, 0.2503, 297.0156]
+              }
+            },
+            "6": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.4347, 0.2503, 297.0156]
+              }
+            },
+            "7": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.3547, 0.2503, 297.0156]
+              }
+            },
+            "8": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.2747, 0.2503, 297.0156]
+              }
+            },
+            "9": {
+              "$type": "color",
+              "$value": {
+                "colorSpace": "oklch",
+                "components": [0.1947, 0.2503, 297.0156]
+              }
+            }
+          }
+        }
+      }
+    },
+    "semantic": {
+      "light": {
+        "canvas": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.light.canvas}"
+        },
+        "pane": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.light.pane}"
+        },
+        "rail": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.light.rail}"
+        },
+        "elevated": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.light.elevated}"
+        },
+        "border": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.light.border}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.light.text}"
+        },
+        "textMuted": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.light.textMuted}"
+        },
+        "hover": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "oklch",
+            "components": [0, 0, 0],
+            "alpha": 0.04
+          }
+        },
+        "selected": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "oklch",
+            "components": [0, 0, 0],
+            "alpha": 0.1
+          }
+        },
+        "chromeHairline": {
+          "$type": "css",
+          "$value": "oklch(0.8083 0.0174 271.1982 / 0.12)"
+        },
+        "floatingShadow": {
+          "$type": "css",
+          "$value": "inset 0 1px 0 0 rgb(255 255 255 / 0.85), inset 0 0 0 1px rgb(0 0 0 / 0.06), 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 2px -0.5px rgb(0 0 0 / 0.1), 0 4px 8px -2px rgb(0 0 0 / 0.1), 0 12px 20px -4px rgb(0 0 0 / 0.1)"
+        },
+        "activeFill": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 24%, transparent)"
+        },
+        "treeSelected": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 20%, transparent)"
+        },
+        "treeSelectedHover": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 28%, transparent)"
+        },
+        "tabDragShadow": {
+          "$type": "css",
+          "$value": "0 8px 24px rgba(0, 0, 0, 0.45)"
+        },
+        "tabCloseHoverBg": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 10%, transparent)"
+        }
+      },
+      "dark": {
+        "canvas": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.dark.canvas}"
+        },
+        "pane": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.dark.pane}"
+        },
+        "rail": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.dark.rail}"
+        },
+        "elevated": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.dark.elevated}"
+        },
+        "border": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.dark.border}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.dark.text}"
+        },
+        "textMuted": {
+          "$type": "color",
+          "$value": "{primitives.color.neutral.dark.textMuted}"
+        },
+        "hover": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "oklch",
+            "components": [1, 0, 0],
+            "alpha": 0.06
+          }
+        },
+        "selected": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "oklch",
+            "components": [1, 0, 0],
+            "alpha": 0.16
+          }
+        },
+        "chromeHairline": {
+          "$type": "css",
+          "$value": "oklch(0.324 0.0319 281.9784 / 0.12)"
+        },
+        "floatingShadow": {
+          "$type": "css",
+          "$value": "inset 0 1px 0 0 rgb(255 255 255 / 0.14), inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 0 0 1px rgb(0 0 0 / 0.42), 0 2px 2px -0.5px rgb(0 0 0 / 0.28), 0 6px 6px -1.5px rgb(0 0 0 / 0.24), 0 12px 12px -3px rgb(0 0 0 / 0.2)"
+        },
+        "activeFill": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 24%, transparent)"
+        },
+        "treeSelected": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 20%, transparent)"
+        },
+        "treeSelectedHover": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 28%, transparent)"
+        },
+        "tabDragShadow": {
+          "$type": "css",
+          "$value": "0 8px 24px rgba(0, 0, 0, 0.45)"
+        },
+        "tabCloseHoverBg": {
+          "$type": "css",
+          "$value": "color-mix(in srgb, var(--mantine-primary-color-filled) 10%, transparent)"
+        }
+      }
+    }
+  },
+  "mantine": {
+    "primaryColor": "catppuccin",
+    "primaryShade": {
+      "light": 6,
+      "dark": 8
+    },
+    "colors": {
+      "catppuccin": "primitives.color.accent.catppuccin"
+    }
+  }
+}

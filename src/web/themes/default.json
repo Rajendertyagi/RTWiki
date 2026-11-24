@@ -217,23 +217,6 @@
   "mantine": {
     "primaryColor": "blue",
     "primaryShade": { "light": 6, "dark": 8 },
-    "colors": { "blue": "primitives.color.accent.blue" },
-    "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
-    "defaultRadius": "md",
-    "radius": { "xs": "4px", "sm": "6px", "md": "8px", "lg": "12px", "xl": "16px" },
-    "spacing": { "xs": "8px", "sm": "12px", "md": "16px", "lg": "20px", "xl": "24px" },
-    "fontSizes": {
-      "xs": "0.75rem",
-      "sm": "0.8125rem",
-      "md": "0.875rem",
-      "lg": "1rem",
-      "xl": "1.125rem"
-    },
-    "shadows": {
-      "xs": "0 1px 2px rgba(0,0,0,0.05)",
-      "sm": "0 2px 8px rgba(0,0,0,0.08)",
-      "md": "0 4px 16px rgba(0,0,0,0.12)"
-    },
-    "focusRing": "auto"
+    "colors": { "blue": "primitives.color.accent.blue" }
   }
 }

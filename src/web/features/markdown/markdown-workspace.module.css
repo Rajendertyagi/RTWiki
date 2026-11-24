@@ -45,13 +45,13 @@
   --prose-heading-gap-end: 0.3em;
   --prose-block-gap: 0.75em;
   --prose-list-indent: 1.5em;
-  --prose-cell-pad-block: 4px;
-  --prose-cell-pad-inline: 8px;
+  --prose-cell-pad-block: var(--mantine-spacing-xxs);
+  --prose-cell-pad-inline: var(--mantine-spacing-xs);
   --prose-code-pad-block: 1px;
-  --prose-code-pad-inline: 4px;
+  --prose-code-pad-inline: var(--mantine-spacing-xxs);
   --prose-code-font-size: 0.9em;
   --prose-quote-border-width: 3px;
-  --prose-checkbox-gap: 6px;
+  --prose-checkbox-gap: var(--mantine-spacing-xxs2);
   flex: 1;
   min-height: 0;
   overflow: auto;

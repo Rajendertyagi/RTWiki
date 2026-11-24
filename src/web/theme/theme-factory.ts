@@ -2,6 +2,7 @@ import { createTheme, Menu, Modal, Popover, ScrollArea, Tooltip } from '@mantine
 
 import { LAYOUT } from '../config/index.js'
 import { FLOATING } from './constants.js'
+import { FIXED_MANTINE_BASE } from './mantine-base.js'
 import { parseThemeDefinition } from './theme-definition.js'
 import { type AppTheme, REQUIRED_INTERACTION_TOKENS, REQUIRED_VARIANT_TOKENS } from './tokens.js'
 
@@ -21,6 +22,7 @@ export function toAppTheme(json: unknown): AppTheme {
   return {
     id: parsed.id,
     mantine: createTheme({
+      ...FIXED_MANTINE_BASE,
       ...parsed.mantine,
       components: {
         // Menu, Popover, Dialog, tooltip: the four things that genuinely float.

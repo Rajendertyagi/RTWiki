@@ -60,7 +60,7 @@
    * painted under the top of the block.
    */
   z-index: var(--mermaid-z-raised);
-  padding: 2px 4px;
+  padding: 2px var(--mantine-spacing-xxs);
   border-radius: var(--mantine-radius-sm);
   background: color-mix(in srgb, var(--rtwiki-pane, var(--mantine-color-body)) 88%, transparent);
 }
@@ -188,7 +188,7 @@
   z-index: var(--mermaid-z-controls);
   display: flex;
   gap: 2px;
-  padding: 1px 3px;
+  padding: 1px var(--mantine-spacing-xxs);
   border-radius: var(--mantine-radius-sm);
   /*
    * A real surface, opaque, with an edge and a shadow.

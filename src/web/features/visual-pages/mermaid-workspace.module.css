@@ -9,7 +9,7 @@
 .root {
   /* Local geometry for the diagram card, action bar and drag handle. */
   --visual-page-border-width: 1px;
-  --visual-page-bar-pad-block: 4px;
+  --visual-page-bar-pad-block: var(--mantine-spacing-xxs);
   --visual-page-drag-handle-size: 18px;
   --visual-page-focus-ring-offset: 1px;
   display: flex;

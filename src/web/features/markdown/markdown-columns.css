@@ -41,11 +41,11 @@
 /* Local geometry for the unknown-directive notice. The shared notice tokens
  * (padding, border width, font size) live in customization.css. */
 :root {
-  --cols-directive-pad-block: 6px;
-  --cols-directive-pad-inline: 10px;
+  --cols-directive-pad-block: var(--mantine-spacing-xxs2);
+  --cols-directive-pad-inline: var(--mantine-spacing-xs);
   --cols-directive-border-width: 1px;
   --cols-directive-name-font-size: 0.85em;
-  --cols-directive-inline-pad: 4px;
+  --cols-directive-inline-pad: var(--mantine-spacing-xxs);
 }
 
 /* The row. `align-items: stretch` so a short pane still lines up with a tall one;

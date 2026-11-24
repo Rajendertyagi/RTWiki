@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { FIXED_MANTINE_BASE } from '../src/web/theme/mantine-base.js'
 import { parseThemeDefinition } from '../src/web/theme/theme-definition.js'
 import { REQUIRED_INTERACTION_TOKENS, REQUIRED_VARIANT_TOKENS } from '../src/web/theme/tokens.js'
 import { loadThemesFromDisk } from './helpers/theme-files.js'
@@ -32,29 +33,28 @@ describe('default theme JSON', () => {
     }
   })
 
-  it('reproduces the Mantine theme data exactly', () => {
+  it('reproduces the colour-only Mantine theme data exactly', () => {
     const mantine = getTheme('default').mantine as unknown as {
       primaryColor: string
       primaryShade: { light: number; dark: number }
       colors: Record<string, string[]>
-      fontFamily: string
-      defaultRadius: string
-      radius: Record<string, string>
-      spacing: Record<string, string>
-      fontSizes: Record<string, string>
-      shadows: Record<string, string>
-      focusRing: 'auto' | 'always' | 'never'
     }
     expect(parsed.mantine.primaryColor).toBe(mantine.primaryColor)
     expect(parsed.mantine.primaryShade as unknown).toEqual(mantine.primaryShade)
     expect(parsed.mantine.colors.blue as unknown).toEqual(mantine.colors.blue)
-    expect(parsed.mantine.fontFamily).toBe(mantine.fontFamily)
-    expect(parsed.mantine.defaultRadius).toBe(mantine.defaultRadius)
-    expect(parsed.mantine.radius).toEqual(mantine.radius)
-    expect(parsed.mantine.spacing).toEqual(mantine.spacing)
-    expect(parsed.mantine.fontSizes).toEqual(mantine.fontSizes)
-    expect(parsed.mantine.shadows).toEqual(mantine.shadows)
-    expect(parsed.mantine.focusRing).toBe(mantine.focusRing)
+  })
+
+  it('supplies the fixed non-colour Mantine values unchanged', () => {
+    const mantine = getTheme('default').mantine as unknown as Record<string, unknown>
+    expect(mantine.fontFamily).toBe(FIXED_MANTINE_BASE.fontFamily)
+    expect(mantine.fontFamilyMonospace).toBe(FIXED_MANTINE_BASE.fontFamilyMonospace)
+    expect(mantine.respectReducedMotion).toBe(FIXED_MANTINE_BASE.respectReducedMotion)
+    expect(mantine.defaultRadius).toBe(FIXED_MANTINE_BASE.defaultRadius)
+    expect(mantine.radius).toEqual(FIXED_MANTINE_BASE.radius)
+    expect(mantine.spacing).toEqual(FIXED_MANTINE_BASE.spacing)
+    expect(mantine.fontSizes).toEqual(FIXED_MANTINE_BASE.fontSizes)
+    expect(mantine.shadows).toEqual(FIXED_MANTINE_BASE.shadows)
+    expect(mantine.focusRing).toBe(FIXED_MANTINE_BASE.focusRing)
   })
 })
 

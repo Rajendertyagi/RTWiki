@@ -285,10 +285,29 @@ export const SETTINGS_KEY_BACKUP_SLOTS = 'backup.slots' as const
 export const SETTINGS_KEY_WINDOW_GEOMETRY = 'window.geometry' as const
 export const SETTINGS_KEY_THEME_ID = 'appearance.themeId' as const
 export const SETTINGS_KEY_COLOR_SCHEME = 'appearance.colorScheme' as const
+export const SETTINGS_KEY_CONTRAST = 'appearance.contrast' as const
+export const SETTINGS_KEY_GLASS_OPACITY = 'appearance.glassOpacity' as const
 
 /** Valid color-scheme choices. `auto` follows the operating system. */
 export const COLOR_SCHEMES = ['auto', 'light', 'dark'] as const
 export type ColorScheme = (typeof COLOR_SCHEMES)[number]
+
+/**
+ * Interface adjustment limits. Defaults are the neutral point (100 = no
+ * change). Glass has a 30% floor so panels never become unreadable; contrast
+ * is capped at 150% so text cannot be pushed out of the oklch L range.
+ */
+export const CONTRAST_DEFAULT = 100
+export const CONTRAST_MIN = 50
+export const CONTRAST_MAX = 150
+export const GLASS_OPACITY_DEFAULT = 100
+export const GLASS_OPACITY_MIN = 30
+export const GLASS_OPACITY_MAX = 100
+
+/** Clamps a saved interface value into its allowed range. */
+export function clampSetting(value: number, min: number, max: number, fallback: number): number {
+  return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
+}
 
 // ---------------------------------------------------------------------------
 // Backup and restore (docs/BACKUP_PLAN.md)

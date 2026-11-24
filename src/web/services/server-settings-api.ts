@@ -30,6 +30,8 @@ export interface DesktopSettings {
 export interface AppearanceSettings {
   themeId: string
   colorScheme: 'auto' | 'light' | 'dark'
+  contrast: number
+  glassOpacity: number
   themes: Array<{ id: string; name: string }>
 }
 
@@ -42,6 +44,8 @@ export async function getAppearanceSettings(signal?: AbortSignal): Promise<Appea
 export async function updateAppearance(input: {
   themeId?: string
   colorScheme?: 'auto' | 'light' | 'dark'
+  contrast?: number
+  glassOpacity?: number
 }): Promise<AppearanceSettings> {
   const res = await fetch(`${SETTINGS_BASE}/appearance`, {
     method: 'PUT',

@@ -24,11 +24,11 @@
   /* Local control geometry: bottom-right cluster, buttons and fullscreen close. */
   --diagram-control-right: 6px;
   --diagram-control-bottom: 22px;
-  --diagram-control-gap: 3px;
+  --diagram-control-gap: var(--mantine-spacing-xxs);
   --diagram-control-z: 3;
   --diagram-control-size: 26px;
   --diagram-control-icon-size: 15px;
-  --diagram-fullscreen-close-inset: 12px;
+  --diagram-fullscreen-close-inset: var(--mantine-spacing-sm);
   --diagram-fullscreen-close-size: 32px;
   --diagram-fullscreen-close-icon-size: 18px;
   position: relative;

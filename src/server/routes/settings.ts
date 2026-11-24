@@ -1,5 +1,11 @@
 import { readdirSync } from 'node:fs'
-import { DEFAULT_PORT } from '@rtwiki/shared/constants'
+import {
+  CONTRAST_MAX,
+  CONTRAST_MIN,
+  DEFAULT_PORT,
+  GLASS_OPACITY_MAX,
+  GLASS_OPACITY_MIN
+} from '@rtwiki/shared/constants'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { Database } from '../database/index.js'
@@ -163,7 +169,11 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
 
   routes.get('/appearance', (c) => {
     try {
-      return c.json({ ...readAppearanceSettings(opts.getDb), themes: listThemes() })
+      const themes = listThemes()
+      return c.json({
+        ...readAppearanceSettings(opts.getDb, new Set(themes.map((t) => t.id))),
+        themes
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
@@ -190,13 +200,24 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
     if (input.themeId !== undefined && !listThemes().some((t) => t.id === input.themeId)) {
       return c.json({ error: 'Unknown theme' }, 400)
     }
+    for (const [key, min, max] of [
+      ['contrast', CONTRAST_MIN, CONTRAST_MAX],
+      ['glassOpacity', GLASS_OPACITY_MIN, GLASS_OPACITY_MAX]
+    ] as const) {
+      const value = input[key]
+      if (value !== undefined && (typeof value !== 'number' || value < min || value > max)) {
+        return c.json({ error: `${key} must be between ${min} and ${max}` }, 400)
+      }
+    }
     try {
       const current = readAppearanceSettings(opts.getDb)
       return c.json(
         writeAppearanceSettings(opts.getDb, {
           themeId: (input.themeId as string | undefined) ?? current.themeId,
           colorScheme:
-            (input.colorScheme as 'auto' | 'light' | 'dark' | undefined) ?? current.colorScheme
+            (input.colorScheme as 'auto' | 'light' | 'dark' | undefined) ?? current.colorScheme,
+          contrast: (input.contrast as number | undefined) ?? current.contrast,
+          glassOpacity: (input.glassOpacity as number | undefined) ?? current.glassOpacity
         })
       )
     } catch (err) {

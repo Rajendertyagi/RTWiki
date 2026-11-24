@@ -52,14 +52,7 @@ export const themeDefinitionSchema = z.object({
       light: z.number().int().min(0).max(9),
       dark: z.number().int().min(0).max(9)
     }),
-    colors: z.record(z.string(), z.string()),
-    fontFamily: z.string().min(1),
-    defaultRadius: z.string().min(1),
-    radius: z.record(z.string(), z.string()),
-    spacing: z.record(z.string(), z.string()),
-    fontSizes: z.record(z.string(), z.string()),
-    shadows: z.record(z.string(), z.string()),
-    focusRing: z.enum(['auto', 'always', 'never'])
+    colors: z.record(z.string(), z.string())
   })
 })
 
@@ -83,17 +76,11 @@ type Palette = [
 ]
 type Shade = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 
+/** Only colour data is theme-specific; shape/type/motion live in FIXED_MANTINE_BASE. */
 export interface ParsedMantineData {
   primaryColor: string
   primaryShade: { light: Shade; dark: Shade }
   colors: Record<string, Palette>
-  fontFamily: string
-  defaultRadius: string
-  radius: Record<string, string>
-  spacing: Record<string, string>
-  fontSizes: Record<string, string>
-  shadows: Record<string, string>
-  focusRing: 'auto' | 'always' | 'never'
 }
 
 export interface ParsedTheme<TName extends string = string> {
@@ -209,14 +196,7 @@ export function parseThemeDefinition<TName extends string>(
     mantine: {
       primaryColor: definition.mantine.primaryColor,
       primaryShade: definition.mantine.primaryShade as { light: Shade; dark: Shade },
-      colors,
-      fontFamily: definition.mantine.fontFamily,
-      defaultRadius: definition.mantine.defaultRadius,
-      radius: definition.mantine.radius,
-      spacing: definition.mantine.spacing,
-      fontSizes: definition.mantine.fontSizes,
-      shadows: definition.mantine.shadows,
-      focusRing: definition.mantine.focusRing
+      colors
     }
   }
 }

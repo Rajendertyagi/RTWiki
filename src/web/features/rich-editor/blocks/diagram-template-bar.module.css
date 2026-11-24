@@ -11,7 +11,7 @@
   --tpl-bar-gap: 2px;
   --tpl-sep-width: 1px;
   --tpl-sep-height: 24px;
-  --tpl-sep-margin: 6px;
+  --tpl-sep-margin: var(--mantine-spacing-xxs2);
   --tpl-variant-mark-width: 1.2em;
   --tpl-variant-mark-opacity: 0.8;
   display: flex;

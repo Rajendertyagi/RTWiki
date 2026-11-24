@@ -4,18 +4,18 @@
   --page-card-title-row-size: 22px;
   --page-card-title-pad-right: 28px;
   --page-card-preview-line-height: 1.5;
-  --page-card-meta-gap: 6px;
+  --page-card-meta-gap: var(--mantine-spacing-xxs2);
   --page-card-type-pad-block: 1px;
   --page-card-type-pad-inline: 7px;
-  --page-card-menu-offset: 12px;
+  --page-card-menu-offset: var(--mantine-spacing-sm);
   --page-card-menu-z-index: 2;
   background: var(--rtwiki-pane, var(--mantine-color-body));
   border: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
   transition:
-    box-shadow 150ms ease,
-    border-color 150ms ease,
-    transform 150ms ease;
+    box-shadow var(--rtwiki-motion-card-hover) ease,
+    border-color var(--rtwiki-motion-card-hover) ease,
+    transform var(--rtwiki-motion-card-hover) ease;
   position: relative;
   overflow: hidden;
   min-height: var(--page-card-min-height);
