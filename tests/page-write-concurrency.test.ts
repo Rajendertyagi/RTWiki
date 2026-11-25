@@ -12,6 +12,11 @@ import { ShutdownCoordinator } from '../src/server/shutdown-coordinator.js'
 // Namespace imports (never named ones) so a missing export surfaces as a
 // failing assertion rather than a module-link error while the fix is pending.
 
+/** Canonical Rich Note content for one text block, for HTTP-level writes. */
+function rich(text: string): string {
+  return JSON.stringify([{ type: 'paragraph', content: [{ type: 'text', text, styles: {} }] }])
+}
+
 function makeTempDir(): string {
   const dir = join(
     tmpdir(),
@@ -101,7 +106,7 @@ describe('page write concurrency control', () => {
       new Request(`${BASE}/api/pages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, pageType: 'rich', content })
+        body: JSON.stringify({ title, pageType: 'rich', content: rich(content) })
       })
     )
     expect(res.status).toBe(201)
@@ -113,11 +118,15 @@ describe('page write concurrency control', () => {
     id: string,
     body: Record<string, unknown>
   ): Promise<{ status: number; error?: string }> {
+    // Rich Note writes must carry canonical BlockNote JSON; the tests below
+    // pass short text labels, so wrap them in a minimal valid document.
+    const payload =
+      typeof body.content === 'string' ? { ...body, content: rich(body.content) } : body
     const res = await app.fetch(
       new Request(`${BASE}/api/pages/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(payload)
       })
     )
     const parsed = (await res.json()) as { error?: string }
@@ -222,7 +231,7 @@ describe('page write concurrency control', () => {
 
     const afterStale = storedRow(page.id)
     expect(afterStale.content).toBe(afterTabA.content)
-    expect(afterStale.content).toBe('tab A')
+    expect(afterStale.content).toBe(rich('tab A'))
     expect(afterStale.version).toBe(afterTabA.version)
     expect(afterStale.updated_at).toBe(afterTabA.updated_at)
   })
@@ -246,7 +255,7 @@ describe('page write concurrency control', () => {
     expect((await patch(page.id, { content: 'x', version: 0 })).status).toBe(400)
     expect((await patch(page.id, { content: 'x', version: 1.5 })).status).toBe(400)
     expect((await patch(page.id, { content: 'x', version: String(page.version) })).status).toBe(400)
-    expect(storedRow(page.id).content).toBe('untouched')
+    expect(storedRow(page.id).content).toBe(rich('untouched'))
   })
 
   it('two sequential clients: the first write succeeds, the second is rejected', async () => {
@@ -262,7 +271,7 @@ describe('page write concurrency control', () => {
     const second = await patch(page.id, { content: 'client B text', version: clientB })
     expect(second.status).toBe(409)
 
-    expect(storedRow(page.id).content).toBe('client A text')
+    expect(storedRow(page.id).content).toBe(rich('client A text'))
     expect(storedRow(page.id).version).toBe(clientA + 1)
   })
 
@@ -274,7 +283,7 @@ describe('page write concurrency control', () => {
     const { page: reloaded } = (await res.json()) as { page: { version: number } }
 
     expect((await patch(page.id, { content: 'v3', version: reloaded.version })).status).toBe(200)
-    expect(storedRow(page.id).content).toBe('v3')
+    expect(storedRow(page.id).content).toBe(rich('v3'))
     expect(storedRow(page.id).version).toBe(3)
   })
 

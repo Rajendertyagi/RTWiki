@@ -11,6 +11,7 @@ import {
 } from '@rtwiki/shared/schemas/markdown-content'
 import { extractPageLinks, findLinkContext } from '@rtwiki/shared/schemas/page-links'
 import type { CreatePageInput, UpdatePageInput } from '@rtwiki/shared/schemas/pages'
+import { parseRichContent } from '@rtwiki/shared/schemas/rich-content'
 import {
   createStarterVisualContent,
   parseVisualPageContent,
@@ -44,7 +45,10 @@ export { HierarchyError } from '../repositories/page-repository.js'
  * pages seamlessly. Any other value must already be canonical JSON — it is
  * validated but stored verbatim, never re-serialized or "fixed".
  *
- * Rich pages are unchanged: every string remains accepted.
+ * Rich pages: an empty string is still stored verbatim (the editor supplies
+ * the canonical empty document on load), but any non-empty value must be a
+ * structurally valid BlockNote document. Validation is structural only —
+ * unknown block types are accepted so documents from a newer RTWiki survive.
  *
  * Dedicated Diagram / Mind Map pages: empty content becomes the starter
  * document; any other value must be canonical visual-page JSON.
@@ -80,6 +84,16 @@ function resolveCreatedContent(pageType: PageType, content: string): string {
     }
     return content
   }
+  if (pageType === 'rich') {
+    if (content === '') {
+      return content
+    }
+    const parsed = parseRichContent(content)
+    if (!parsed.ok) {
+      throw new PageValidationError(parsed.error)
+    }
+    return content
+  }
   return content
 }
 
@@ -96,7 +110,8 @@ function resolveCreatedContent(pageType: PageType, content: string): string {
  * Empty content is **not** special-cased here. On create, `''` means "give me a starter
  * document"; on update it means "the caller sent nothing useful", and quietly replacing a
  * user's note with a template because a write arrived empty is data loss dressed as a
- * default. An empty update is therefore rejected.
+ * default. An empty update is therefore rejected — including for Rich Notes,
+ * whose non-empty content must be a structurally valid BlockNote document.
  */
 function validateReplacementContent(pageType: PageType, content: string): void {
   if (pageType === 'html') {
@@ -115,6 +130,18 @@ function validateReplacementContent(pageType: PageType, content: string): void {
   }
   if (pageType === 'markdown') {
     const parsed = parseMarkdownPageContent(content)
+    if (!parsed.ok) {
+      throw new PageValidationError(parsed.error)
+    }
+    return
+  }
+  if (pageType === 'rich') {
+    // Empty is not a starter document on update: silently replacing a note
+    // with a template because a write arrived empty is data loss.
+    if (content === '') {
+      throw new PageValidationError('Rich Note content cannot be empty.')
+    }
+    const parsed = parseRichContent(content)
     if (!parsed.ok) {
       throw new PageValidationError(parsed.error)
     }

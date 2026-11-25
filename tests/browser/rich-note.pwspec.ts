@@ -1,5 +1,7 @@
+import { Database } from 'bun:sqlite'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import { purgeUntitledPages } from './utils/cleanup.js'
 import { railHome } from './utils/shell.js'
@@ -34,6 +36,27 @@ async function seedPage(
   expect(res.status(), 'seed page should be created').toBe(201)
   const body = (await res.json()) as { page: { id: string } }
   return body.page.id
+}
+
+/**
+ * Seeds a page whose stored bytes are deliberately malformed.
+ *
+ * Rich Note writes are validated server-side, so malformed content can no
+ * longer be submitted through the API. This test exercises the *read* recovery
+ * UI for a row written before validation existed, so the raw bytes go straight
+ * into the throwaway Playwright database — the same path a legacy row took.
+ */
+async function seedMalformedRichPage(request: APIRequestContext, title: string): Promise<void> {
+  const id = await seedPage(request, title, 'rich', '')
+  const dataDir = resolve(
+    process.env.PLAYWRIGHT_DATA_DIR ?? join(tmpdir(), 'rtwiki-playwright-data')
+  )
+  const db = new Database(join(dataDir, 'rtwiki.sqlite'))
+  try {
+    db.query('UPDATE pages SET content = ? WHERE id = ?').run('{ not valid json', id)
+  } finally {
+    db.close()
+  }
 }
 
 async function openNote(page: Page, title: string): Promise<void> {
@@ -249,7 +272,7 @@ test.describe('Rich Note lifecycle (real application)', () => {
     request
   }) => {
     const title = uniqueTitle('Broken note')
-    await seedPage(request, title, 'rich', '{ not valid json')
+    await seedMalformedRichPage(request, title)
     await page.goto('/')
     await openNote(page, title)
     await expect(page.getByText('could not be loaded')).toBeVisible()

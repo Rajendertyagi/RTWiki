@@ -99,7 +99,7 @@ describe('createApp factory', () => {
       new Request('http://127.0.0.1:8080/api/pages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'App Test Page', pageType: 'rich', content: '{}' })
+        body: JSON.stringify({ title: 'App Test Page', pageType: 'rich', content: '[]' })
       })
     )
     expect(createRes.status).toBe(201)

@@ -22,6 +22,11 @@ function cleanup(dir: string): void {
   } catch {}
 }
 
+/** Minimal canonical Rich Note content for a single text block. */
+function richDoc(text: string): string {
+  return JSON.stringify([{ type: 'paragraph', content: [{ type: 'text', text, styles: {} }] }])
+}
+
 describe('page CRUD', () => {
   let tempDir: string
   let db: ReturnType<typeof getDb>
@@ -60,12 +65,16 @@ describe('page CRUD', () => {
   })
 
   it('gets a page by id', () => {
-    const created = service.createPage(db, { title: 'Get Test', pageType: 'rich', content: 'body' })
+    const created = service.createPage(db, {
+      title: 'Get Test',
+      pageType: 'rich',
+      content: richDoc('body')
+    })
     const fetched = service.getPage(db, created.id)
     expect(fetched).not.toBeNull()
     expect(fetched?.id).toBe(created.id)
     expect(fetched?.title).toBe('Get Test')
-    expect(fetched?.content).toBe('body')
+    expect(fetched?.content).toBe(richDoc('body'))
   })
 
   it('returns null for non-existent page', () => {
@@ -82,9 +91,16 @@ describe('page CRUD', () => {
   })
 
   it('updates page content', () => {
-    const page = service.createPage(db, { title: 'Content Test', pageType: 'rich', content: 'v1' })
-    const updated = service.updatePage(db, page.id, { content: 'v2', version: page.version })
-    expect(updated?.content).toBe('v2')
+    const page = service.createPage(db, {
+      title: 'Content Test',
+      pageType: 'rich',
+      content: richDoc('v1')
+    })
+    const updated = service.updatePage(db, page.id, {
+      content: richDoc('v2'),
+      version: page.version
+    })
+    expect(updated?.content).toBe(richDoc('v2'))
   })
 
   it('drops pageType from update input (no conversion in Phase 4A)', async () => {
@@ -118,8 +134,16 @@ describe('page CRUD', () => {
   })
 
   it('searches pages by title', () => {
-    service.createPage(db, { title: 'Quantum Physics Notes', pageType: 'rich', content: 'quarks' })
-    service.createPage(db, { title: 'History Timeline', pageType: 'rich', content: 'dates' })
+    service.createPage(db, {
+      title: 'Quantum Physics Notes',
+      pageType: 'rich',
+      content: richDoc('quarks')
+    })
+    service.createPage(db, {
+      title: 'History Timeline',
+      pageType: 'rich',
+      content: richDoc('dates')
+    })
 
     const result = service.listPages(db, { search: 'Physics' })
     expect(result.pages.some((p) => p.title === 'Quantum Physics Notes')).toBe(true)
@@ -145,13 +169,13 @@ describe('page CRUD', () => {
     const original = service.createPage(db, {
       title: 'Original Page',
       pageType: 'rich',
-      content: 'content here'
+      content: richDoc('content here')
     })
     const copy = service.duplicatePage(db, original.id)
     expect(copy).not.toBeNull()
     expect(copy?.id).not.toBe(original.id)
     expect(copy?.title).toBe('Original Page - Copy')
-    expect(copy?.content).toBe('content here')
+    expect(copy?.content).toBe(richDoc('content here'))
     expect(copy?.pageType).toBe('rich')
   })
 
@@ -197,20 +221,17 @@ describe('rich-content JSON round trip', () => {
   })
 
   it('stores and retrieves BlockNote JSON content', () => {
-    const blockNoteJson = JSON.stringify({
-      type: 'blockContainer',
-      children: [
-        {
-          type: 'heading',
-          props: { level: 1 },
-          content: [{ type: 'text', text: 'Hello', styles: {} }]
-        },
-        {
-          type: 'paragraph',
-          content: [{ type: 'text', text: 'World', styles: { bold: true } }]
-        }
-      ]
-    })
+    const blockNoteJson = JSON.stringify([
+      {
+        type: 'heading',
+        props: { level: 1 },
+        content: [{ type: 'text', text: 'Hello', styles: {} }]
+      },
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'World', styles: { bold: true } }]
+      }
+    ])
     const page = service.createPage(db, {
       title: 'JSON Test',
       pageType: 'rich',
@@ -219,24 +240,18 @@ describe('rich-content JSON round trip', () => {
     const fetched = service.getPage(db, page.id)
     expect(fetched?.content).toBe(blockNoteJson)
     const parsed = JSON.parse(fetched?.content as string)
-    expect(parsed.children[0].type).toBe('heading')
-    expect(parsed.children[0].content[0].text).toBe('Hello')
+    expect(parsed[0].type).toBe('heading')
+    expect(parsed[0].content[0].text).toBe('Hello')
   })
 
   it('preserves content through update cycle', () => {
-    const original = JSON.stringify({
-      type: 'blockContainer',
-      children: [{ type: 'paragraph', content: [{ type: 'text', text: 'v1', styles: {} }] }]
-    })
+    const original = richDoc('v1')
     const page = service.createPage(db, {
       title: 'Update Test',
       pageType: 'rich',
       content: original
     })
-    const updatedContent = JSON.stringify({
-      type: 'blockContainer',
-      children: [{ type: 'paragraph', content: [{ type: 'text', text: 'v2', styles: {} }] }]
-    })
+    const updatedContent = richDoc('v2')
     service.updatePage(db, page.id, { content: updatedContent, version: page.version })
     const fetched = service.getPage(db, page.id)
     expect(fetched?.content).toBe(updatedContent)
@@ -319,14 +334,26 @@ describe('HTML-page canonical content lifecycle', () => {
     expect(updated?.content).toBe(next)
   })
 
-  it('leaves rich-page content validation unchanged (any string accepted)', () => {
-    const page = service.createPage(db, { title: 'Rich Any', pageType: 'rich', content: '<raw>' })
-    expect(page.content).toBe('<raw>')
+  it('validates rich-page content on write while leaving other page types alone', () => {
+    // Rich Notes now reject structurally invalid content on both write paths.
+    expect(() =>
+      service.createPage(db, { title: 'Rich Bad', pageType: 'rich', content: '<raw>' })
+    ).toThrow(service.PageValidationError)
+
+    const page = service.createPage(db, {
+      title: 'Rich Valid',
+      pageType: 'rich',
+      content: richDoc('accepted')
+    })
+    expect(page.content).toBe(richDoc('accepted'))
+    expect(() =>
+      service.updatePage(db, page.id, { content: 'still anything', version: page.version })
+    ).toThrow(service.PageValidationError)
     const updated = service.updatePage(db, page.id, {
-      content: 'still anything',
+      content: richDoc('updated'),
       version: page.version
     })
-    expect(updated?.content).toBe('still anything')
+    expect(updated?.content).toBe(richDoc('updated'))
   })
 
   it('preserves stored legacy/malformed content verbatim (validate-on-write only)', () => {
