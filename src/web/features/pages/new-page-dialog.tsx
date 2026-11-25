@@ -50,6 +50,10 @@ export function NewPageDialog({
   }, [opened, initialType])
 
   const handleSubmit = async (): Promise<void> => {
+    // The title field's Enter key calls this directly, bypassing the Create
+    // button's `loading` disable. Guard here so rapid Enter presses cannot
+    // issue duplicate creates while one is in flight.
+    if (submitting) return
     const trimmed = title.trim()
     if (!trimmed) {
       setError(UI_TEXT.titleRequired)
@@ -154,6 +158,10 @@ export function NewPageDialog({
         ) : null}
 
         <Group justify="flex-end" gap="sm">
+          {/* Cancel stays disabled while submitting: closing mid-flight would
+              unmount the dialog and strand the in-flight create, whose result
+              could then select a page behind a closed dialog. The Create button's
+              `loading` state blocks its own re-entry; this blocks the other exit. */}
           <Button variant="subtle" onClick={onClose} disabled={submitting}>
             {UI_TEXT.cancelButton}
           </Button>

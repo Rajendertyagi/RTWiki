@@ -744,15 +744,13 @@ export function App(): JSX.Element {
       pageType === 'rich' && template && template !== 'blank'
         ? buildTemplateContent(template)
         : undefined
-    // The controller re-throws a refused create. The error banner is raised from
-    // `controller.mutationError` by the shell, so the failure is already visible here;
-    // this catch exists only so the rejection does not escape an async handler.
-    try {
-      const page = await controller.createPage(title, pageType, content)
-      if (page) void handleSelectPage(page.id)
-    } catch {
-      // Reported by the shell's error banner.
-    }
+    // Let a refused create reject all the way to NewPageDialog's `try/catch`:
+    // that is what keeps the dialog open, preserves the entered title and shows
+    // the server message. Swallowing it here used to close the dialog on failure
+    // and silently lose the title. The controller still records `mutationError`,
+    // so the shell's error banner is unchanged.
+    const page = await controller.createPage(title, pageType, content)
+    if (page) void handleSelectPage(page.id)
   }
 
   const handleDeleteRequest = (id: string): void => {
