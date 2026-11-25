@@ -3,14 +3,12 @@ import { IconDotsVertical } from '@tabler/icons-react'
 import { isValidElement, type ReactNode, useState } from 'react'
 import { LAYOUT, UI_TEXT } from '../../../config/index.js'
 import { useToolbarOverflow } from '../../../hooks/use-toolbar-overflow.js'
-import { DIAGRAM_TEMPLATES, type DiagramTemplateId, diagramTemplateFor } from '../insert-blocks.js'
+import { diagramTemplateFor } from '../insert-blocks.js'
 import classes from './diagram-template-bar.module.css'
 import {
   BUTTON_SIZE,
-  DIAGRAM_TEMPLATE_FAMILIES,
   type DiagramTemplateOption,
   diagramTemplateOptions,
-  diagramTemplatePresentationIds,
   type Family,
   hasVariants,
   ICON_SIZE,

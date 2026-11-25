@@ -13,7 +13,6 @@ import { join } from 'node:path'
 import { closeDatabase, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import {
-  readDesktopSettings,
   readServerPort,
   writeDesktopSettings,
   writeServerPort

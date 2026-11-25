@@ -11,18 +11,18 @@ import { updateColorScheme } from '../services/server-settings-api.js'
  * so Mantine mounts with the correct value and never consults localStorage.
  */
 const CHOICE_ATTRIBUTE = 'data-rtwiki-color-scheme-choice'
-const CHANGE_EVENT = 'rtwiki:color-scheme-change'
 
 function isColorScheme(value: string | null | undefined): value is MantineColorScheme {
   return value === 'auto' || value === 'light' || value === 'dark'
 }
 
 export function createDbColorSchemeManager(): MantineColorSchemeManager {
-  let handler: ((value: MantineColorScheme) => void) | null = null
-
-  const onEvent = (event: Event): void => {
-    const value = (event as CustomEvent<MantineColorScheme>).detail
-    if (isColorScheme(value)) handler?.(value)
+  const set = (value: MantineColorScheme): void => {
+    // Persist to the database. On failure keep the in-memory value; there is
+    // deliberately no localStorage fallback.
+    void updateColorScheme(value).catch((error: unknown) => {
+      console.warn('[RTWiki] Could not save color scheme:', error)
+    })
   }
 
   return {
@@ -31,27 +31,23 @@ export function createDbColorSchemeManager(): MantineColorSchemeManager {
       return isColorScheme(attribute) ? attribute : defaultValue
     },
 
-    set(value: MantineColorScheme): void {
-      // Persist to the database. On failure keep the in-memory value; there is
-      // deliberately no localStorage fallback.
-      void updateColorScheme(value).catch((error: unknown) => {
-        console.warn('[RTWiki] Could not save color scheme:', error)
-      })
-      window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: value }))
-    },
+    set,
 
-    subscribe(onUpdate: (value: MantineColorScheme) => void): void {
-      handler = onUpdate
-      window.addEventListener(CHANGE_EVENT, onEvent)
+    subscribe(_onUpdate: (value: MantineColorScheme) => void): void {
+      // No-op. Mantine's own setColorScheme updates its provider state directly,
+      // and RTWiki has no external color-scheme change source: the settings UI
+      // goes through useMantineColorScheme().setColorScheme, and the pre-paint
+      // bootstrap value is read via get(). Mantine calls subscribe in an effect,
+      // so a no-op is safe. Dispatching an event here used to call Mantine's
+      // setColorScheme again, which called set() again - infinite recursion.
     },
 
     unsubscribe(): void {
-      handler = null
-      window.removeEventListener(CHANGE_EVENT, onEvent)
+      // No-op: there is no subscription to tear down (see subscribe).
     },
 
     clear(): void {
-      this.set('auto')
+      set('auto')
     }
   }
 }

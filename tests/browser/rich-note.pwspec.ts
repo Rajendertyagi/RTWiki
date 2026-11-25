@@ -125,7 +125,7 @@ test.describe('Rich Note lifecycle (real application)', () => {
         railHtml:
           document.querySelector('nav[aria-label="RTWiki"]')?.outerHTML?.slice(0, 300) ?? null,
         prosemirror: !!document.querySelector('.ProseMirror'),
-        recoveryUi: document.body.innerText.includes('encountered a problem'),
+        recoveryUi: document.body.textContent.includes('encountered a problem'),
         rootChildren: document.getElementById('root')?.children.length ?? -1
       }))
       .catch((err) => `probe failed: ${err.message}`)

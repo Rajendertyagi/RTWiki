@@ -1,4 +1,4 @@
-import { Alert, Loader, NavLink, Stack, Text } from '@mantine/core'
+import { Alert, Loader, Stack, Text } from '@mantine/core'
 import { useFileDialog } from '@mantine/hooks'
 import { PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES } from '@rtwiki/shared/constants'
 import type { Page, PageType } from '@rtwiki/shared/contracts/pages'

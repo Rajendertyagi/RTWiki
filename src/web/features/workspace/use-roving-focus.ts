@@ -134,7 +134,7 @@ export function useRovingFocus(itemCount: number): RovingFocus {
       } else if (event.key === LAST_KEY) {
         next = items.length - 1
       } else {
-        const from = current >= 0 ? current : 0
+        const from = Math.max(current, 0)
         next = isNext ? from + 1 : from - 1
       }
 

@@ -80,7 +80,7 @@ interface Surface {
   overlay: string
 }
 
-function surfaces(prefix: string, svgIndex = 0): Surface[] {
+function surfaces(_prefix: string, svgIndex = 0): Surface[] {
   return [
     {
       name: 'rich note',

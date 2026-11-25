@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { contrastRatio, type Oklch, parseOklch } from '../src/web/theme/contrast.js'
+import { contrastRatio, type Oklch } from '../src/web/theme/contrast.js'
 
 const THEMES_DIR = join(import.meta.dir, '..', 'src', 'web', 'themes')
 // WCAG AA: 4.5:1 for normal body text, 3:1 for large text and UI components.

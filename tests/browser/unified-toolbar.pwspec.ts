@@ -259,7 +259,7 @@ test.describe('a greyed control explains itself', () => {
     const tooltip = page.getByRole('tooltip').first()
     await expect(tooltip).toBeVisible({ timeout: 5_000 })
     // The reason is in the tooltip text, not only in an attribute.
-    expect((await tooltip.innerText()).length).toBeGreaterThan(3)
+    expect(((await tooltip.textContent()) ?? '').length).toBeGreaterThan(3)
   })
 
   test('a greyed control does not change the document when pressed', async ({ page, request }) => {

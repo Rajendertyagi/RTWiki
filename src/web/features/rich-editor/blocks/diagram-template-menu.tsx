@@ -7,8 +7,7 @@ import {
   diagramTemplateOptions,
   type Family,
   presentationFor,
-  ROW_ICON_SIZE,
-  type Variant
+  ROW_ICON_SIZE
 } from './diagram-template-catalog.js'
 import classes from './diagram-template-menu.module.css'
 
@@ -156,7 +155,6 @@ export function DiagramTemplateMenu({
        * `--rtwiki-panel-max-height`.
        */}
       <ScrollArea.Autosize mah={LAYOUT.panelMaxHeight} type="always" scrollbars="y">
-        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a menu container takes focus when it opens so the arrow keys and Escape reach it; see the note above. */}
         <div
           className={classes.panel}
           data-testid={containerTestId}

@@ -108,7 +108,10 @@ async function focusedControlId(page: Page): Promise<string | null> {
 }
 
 test.describe('the HTML page is on the unified toolbar', () => {
-  test('there is exactly one toolbar, and it is the shared shell', async ({ page, request }) => {
+  test('there is exactly one toolbar, and it is the shared shell', async ({
+    page,
+    request: _request
+  }) => {
     await page.setViewportSize(WIDE)
     await openSourcePage(page)
 
@@ -182,7 +185,7 @@ test.describe('the HTML page is on the unified toolbar', () => {
 test.describe('the two groups are data, and they are in order', () => {
   test('formatting precedes IDE, and each group is internally ordered', async ({
     page,
-    request
+    request: _request
   }) => {
     await page.setViewportSize(WIDE)
     await openSourcePage(page)
@@ -239,7 +242,10 @@ test.describe('the two groups are data, and they are in order', () => {
     expect(ids.filter((id) => ide.includes(id))).toEqual(ide)
   })
 
-  test('a divider separates the formatting group from the IDE group', async ({ page, request }) => {
+  test('a divider separates the formatting group from the IDE group', async ({
+    page,
+    request: _request
+  }) => {
     await page.setViewportSize(WIDE)
     await openSourcePage(page)
 
@@ -273,7 +279,10 @@ test.describe('availability is honest on this surface', () => {
     expect(reason).toContain('smallest')
   })
 
-  test('undo greys out with a reason when there is nothing to undo', async ({ page, request }) => {
+  test('undo greys out with a reason when there is nothing to undo', async ({
+    page,
+    request: _request
+  }) => {
     await page.setViewportSize(WIDE)
     await openSourcePage(page)
 

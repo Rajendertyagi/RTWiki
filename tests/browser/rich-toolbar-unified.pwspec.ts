@@ -177,10 +177,7 @@ test.describe('Rich Note commands reach BlockNote', () => {
   test('a heading control changes the block type', async ({ page, request }) => {
     await page.setViewportSize(WIDE)
     await openRichNote(page, request, ONE_PARAGRAPH)
-    await page
-      .locator(EDITABLE + ' [data-content-type="paragraph"]')
-      .first()
-      .click()
+    await page.locator(`${EDITABLE} [data-content-type="paragraph"]`).first().click()
     await press(page, 'Heading 2')
     await page.waitForTimeout(400)
     await expect(control(page, 'Heading 2')).toHaveAttribute('aria-pressed', 'true')
@@ -190,10 +187,7 @@ test.describe('Rich Note commands reach BlockNote', () => {
   test('alignment is applied and the control reports itself active', async ({ page, request }) => {
     await page.setViewportSize(WIDE)
     await openRichNote(page, request, ONE_PARAGRAPH)
-    await page
-      .locator(EDITABLE + ' [data-content-type="paragraph"]')
-      .first()
-      .click()
+    await page.locator(`${EDITABLE} [data-content-type="paragraph"]`).first().click()
     const centre = control(page, 'Align centre')
     await centre.click()
     await page.waitForTimeout(400)
@@ -203,10 +197,7 @@ test.describe('Rich Note commands reach BlockNote', () => {
   test('a list control changes the block type', async ({ page, request }) => {
     await page.setViewportSize(WIDE)
     await openRichNote(page, request, ONE_PARAGRAPH)
-    await page
-      .locator(EDITABLE + ' [data-content-type="paragraph"]')
-      .first()
-      .click()
+    await page.locator(`${EDITABLE} [data-content-type="paragraph"]`).first().click()
     await press(page, 'Bulleted list')
     await page.waitForTimeout(400)
     await expect(page.locator(`${EDITABLE} [data-content-type="bulletListItem"]`)).toHaveCount(1)
@@ -318,7 +309,7 @@ test.describe('the menu seam, proven on the real surface', () => {
     const focusedIndex = () =>
       page.evaluate(() => {
         const all = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
-        return all.findIndex((el) => el === document.activeElement)
+        return all.indexOf(document.activeElement as HTMLElement)
       })
 
     await grid.locator('[tabindex="0"]').focus()

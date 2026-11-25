@@ -3,7 +3,6 @@ import {
   ActionIcon,
   Button,
   Group,
-  Select,
   Text,
   Textarea,
   Tooltip,
@@ -16,7 +15,6 @@ import { useEffect, useRef, useState } from 'react'
 import { UI_TEXT } from '../../../config/index.js'
 import { debugLog, safeHash } from '../../../diagnostics/debug-log.js'
 import { RTWIKI_SCROLL } from '../../../theme/registry.js'
-import { DIAGRAM_TEMPLATES } from '../insert-blocks.js'
 import { ResizableBlockContainer } from './block-resize.js'
 import { DiagramTemplateBar } from './diagram-template-bar.js'
 import { DiagramView } from './diagram-view.js'

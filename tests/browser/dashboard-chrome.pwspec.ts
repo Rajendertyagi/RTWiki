@@ -95,7 +95,7 @@ test.describe('Dashboard chrome', () => {
     // The location breadcrumb renders on the dashboard too, so there is a Home
     // control and a label - not just the app name.
     await expect(page.getByTestId('status-home')).toBeVisible()
-    const text = (await status.innerText()).trim()
+    const text = ((await status.textContent()) ?? '').trim()
     expect(text.length, 'the status bar must not be blank on the dashboard').toBeGreaterThan(3)
   })
 

@@ -80,7 +80,7 @@ describe('Mermaid template presentation coverage', () => {
     }
     const shared = [...byIcon.entries()]
       .filter(([, ids]) => ids.length > 1)
-      .map(([icon, ids]) => `${ids.join(' = ')}`)
+      .map(([_icon, ids]) => `${ids.join(' = ')}`)
     expect(shared, 'templates sharing one icon').toEqual([])
   })
 

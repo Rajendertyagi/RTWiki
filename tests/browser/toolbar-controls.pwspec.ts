@@ -236,7 +236,7 @@ test.describe('Rich Note toolbar controls', () => {
           page.evaluate(() => {
             const active = document.activeElement
             const panelNode = document.querySelector('[data-testid="toolbar-overflow-panel"]')
-            return Boolean(active && panelNode && panelNode.contains(active))
+            return Boolean(active && panelNode?.contains(active))
           }),
         { message: 'focus must move into the panel when it opens' }
       )
@@ -247,7 +247,7 @@ test.describe('Rich Note toolbar controls', () => {
     const afterTab = await page.evaluate(() => {
       const active = document.activeElement
       const panelNode = document.querySelector('[data-testid="toolbar-overflow-panel"]')
-      return Boolean(active && panelNode && panelNode.contains(active))
+      return Boolean(active && panelNode?.contains(active))
     })
     expect(afterTab, 'Tab must stay within the panel').toBe(true)
   })

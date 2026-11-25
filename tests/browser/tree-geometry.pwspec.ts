@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs'
-import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { type APIRequestContext, expect, test } from '@playwright/test'
 
 /**
  * Narrows a value that a test assumes is present, failing with a diagnostic if it is not.

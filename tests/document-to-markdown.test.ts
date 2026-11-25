@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test'
-import type { DetectedUpload } from '../src/server/ingest/detect-upload.js'
 import { documentToMarkdown, extractImages } from '../src/server/ingest/document-to-markdown.js'
 import { acceptedDocumentFormatByExt } from '../src/shared/attachments/document-formats.js'
 import { acceptedImageFormatFor } from '../src/shared/attachments/image-formats.js'

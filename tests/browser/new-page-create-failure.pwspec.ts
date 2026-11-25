@@ -139,7 +139,7 @@ test.describe('New page creation failure keeps the dialog and its title', () => 
     await dialog.getByRole('button', { name: /create/i }).click()
     const alert = await assertFailureKeepsDialog(dialog, title)
     // No server message exists here; assert a non-empty error is shown.
-    expect((await alert.textContent()).trim().length).toBeGreaterThan(0)
+    expect((await alert.textContent())?.trim().length ?? 0).toBeGreaterThan(0)
     expect(await countPages(request)).toBe(before)
     expect(await countPagesWithTitle(request, title)).toBe(0)
   })

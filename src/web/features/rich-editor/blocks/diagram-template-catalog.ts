@@ -35,7 +35,6 @@ import {
   IconCirclesRelation,
   IconColumns3Filled,
   IconDatabaseFilled,
-  IconDotsVertical,
   IconFishBoneFilled,
   IconGitBranch,
   IconGridDots,
@@ -56,8 +55,7 @@ import {
   IconTrain,
   type Icon as TablerIcon
 } from '@tabler/icons-react'
-import { UI_TEXT } from '../../../config/index.js'
-import { DIAGRAM_TEMPLATES, type DiagramTemplateId, diagramTemplateFor } from '../insert-blocks.js'
+import { DIAGRAM_TEMPLATES, type DiagramTemplateId } from '../insert-blocks.js'
 
 /**
  * Flat diagram-template bar.
