@@ -4,7 +4,7 @@ import {
   Group,
   Modal,
   Radio,
-  SegmentedControl,
+  SimpleGrid,
   Stack,
   Text,
   TextInput
@@ -13,7 +13,17 @@ import type { PageType } from '@rtwiki/shared/contracts/pages'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { UI_TEXT } from '../../config/index.js'
+import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
 import { RICH_TEMPLATES, type RichTemplateKey } from '../rich-editor/rich-templates.js'
+
+/**
+ * Viewport width at or below which the dialog switches to full-screen.
+ *
+ * Named rather than inlined so the media query and the test share one value.
+ * Below this width a centred `size="md"` modal leaves too little room for the
+ * two-column grids, so the dialog fills the viewport and scrolls internally.
+ */
+const FULL_SCREEN_BREAKPOINT_PX = 520
 
 const TEMPLATE_OPTIONS = (Object.keys(RICH_TEMPLATES) as RichTemplateKey[]).map((key) => ({
   value: key,
@@ -38,6 +48,7 @@ export function NewPageDialog({
   const [template, setTemplate] = useState<RichTemplateKey>('blank')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isNarrow = useMediaQueryBelow(FULL_SCREEN_BREAKPOINT_PX)
 
   useEffect(() => {
     if (opened) {
@@ -77,7 +88,14 @@ export function NewPageDialog({
   }
 
   return (
-    <Modal opened={opened} onClose={onClose} title={UI_TEXT.newPageTitle} centered>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={UI_TEXT.newPageTitle}
+      centered
+      size="md"
+      fullScreen={isNarrow}
+    >
       <Stack gap="md">
         {error ? (
           <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
@@ -126,7 +144,7 @@ export function NewPageDialog({
           value={pageType}
           onChange={(v) => setPageType(v as PageType)}
         >
-          <Group mt="xs" gap="md">
+          <SimpleGrid cols={2} spacing="sm" mt="xs">
             <Radio value="rich" label={UI_TEXT.richNote} />
             <Radio value="html" label={UI_TEXT.htmlPage} />
             <Radio
@@ -139,7 +157,7 @@ export function NewPageDialog({
               label={UI_TEXT.markdownPage}
               data-testid="new-page-type-markdown"
             />
-          </Group>
+          </SimpleGrid>
         </Radio.Group>
 
         {pageType === 'rich' ? (
@@ -147,13 +165,29 @@ export function NewPageDialog({
             <Text size="sm" fw={500}>
               {UI_TEXT.richTemplateLabel}
             </Text>
-            <SegmentedControl
-              fullWidth
-              data={TEMPLATE_OPTIONS}
-              value={template}
-              onChange={(value) => setTemplate(value as RichTemplateKey)}
-              aria-label={UI_TEXT.richTemplateLabel}
-            />
+            {/*
+             * A 2x2 grid of toggle buttons replaces the old full-width
+             * SegmentedControl, which clipped "Revision Sheet" at narrow
+             * widths. `aria-pressed` exposes the single selection to assistive
+             * tech; `variant` paints it with Mantine theme tokens only.
+             */}
+            <SimpleGrid cols={2} spacing="sm" role="group" aria-label={UI_TEXT.richTemplateLabel}>
+              {TEMPLATE_OPTIONS.map((option) => {
+                const selected = template === option.value
+                return (
+                  <Button
+                    key={option.value}
+                    fullWidth
+                    variant={selected ? 'filled' : 'light'}
+                    aria-pressed={selected}
+                    data-testid={`new-page-template-${option.value}`}
+                    onClick={() => setTemplate(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                )
+              })}
+            </SimpleGrid>
           </Stack>
         ) : null}
 

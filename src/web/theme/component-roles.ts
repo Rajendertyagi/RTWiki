@@ -273,6 +273,7 @@ export const COMPONENT_ROLES = {
   Burger: [],
   Divider: [],
   Group: [],
+  SimpleGrid: [],
   Kbd: [],
   Loader: [],
   Skeleton: [],
