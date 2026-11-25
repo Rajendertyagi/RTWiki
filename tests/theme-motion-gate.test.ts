@@ -112,6 +112,26 @@ function findDurationLiterals(source: string, file: string): FoundDuration[] {
   return found
 }
 
+/**
+ * Removes the `@media (prefers-reduced-motion: reduce)` block so a test about
+ * *authored* token values does not trip over the render-time override. Braces
+ * are counted from the media query's opening brace to find its matching close.
+ */
+function withoutReducedMotionOverride(source: string): string {
+  const marker = '@media (prefers-reduced-motion: reduce)'
+  const start = source.indexOf(marker)
+  if (start === -1) return source
+  let depth = 0
+  for (let i = source.indexOf('{', start); i < source.length; i++) {
+    if (source[i] === '{') depth++
+    else if (source[i] === '}') {
+      depth--
+      if (depth === 0) return source.slice(0, start) + source.slice(i + 1)
+    }
+  }
+  return source.slice(0, start)
+}
+
 // ---------------------------------------------------------------------------
 // Baseline
 // ---------------------------------------------------------------------------
@@ -159,6 +179,14 @@ const MOTION_BASELINE: readonly BaselineEntry[] = [
     disposition: 'allowlist',
     rationale:
       'tree-specific quick expander feedback; single use, owner decision 3 preserves its home and value'
+  },
+  {
+    file: 'src/web/theme/customization.css',
+    value: '0ms',
+    count: 5,
+    disposition: 'allowlist',
+    rationale:
+      'reduced-motion render-time override of the five --rtwiki-motion-* tokens; zero duration, not an authored interaction value'
   }
 ]
 
@@ -252,8 +280,22 @@ describe('motion-literal gate', () => {
 
   it('customization.css no longer statically defines the tree-hover token', () => {
     const css = readFileSync(CUSTOMIZATION_PATH, 'utf8')
-    expect(css).not.toMatch(/--rtwiki-motion-tree-hover\s*:/)
+    // The reduced-motion media query overrides the token at render time; that
+    // is not a static definition. Strip that block before asserting the
+    // authored value still lives in css-variables.ts / config/index.ts.
+    const authored = withoutReducedMotionOverride(css)
+    expect(authored).not.toMatch(/--rtwiki-motion-tree-hover\s*:/)
     // The single-use tree-quick token stays put.
-    expect(css).toMatch(/--rtwiki-motion-tree-quick:\s*80ms/)
+    expect(authored).toMatch(/--rtwiki-motion-tree-quick:\s*80ms/)
+  })
+
+  it('the reduced-motion override collapses every RTWiki motion token to zero', () => {
+    const css = readFileSync(CUSTOMIZATION_PATH, 'utf8')
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/)
+    for (const token of ['fast', 'tab', 'tree-hover', 'card-hover', 'tree-quick']) {
+      expect(css, `reduced-motion override for --rtwiki-motion-${token}`).toMatch(
+        new RegExp(`--rtwiki-motion-${token}:\\s*0ms\\s*!important`)
+      )
+    }
   })
 })

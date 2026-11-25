@@ -178,6 +178,46 @@
   background: var(--rtwiki-floating-bg);
 }
 
+/*
+ * Mantine hardcodes the resting Checkbox/Radio box to white (light) and
+ * dark-6 (dark) directly on the input class (Checkbox.css:52,57;
+ * Radio.css:64,69). No component CSS variable controls that declaration, so a
+ * Styles API inline style is not usable here: it would also beat the
+ * :checked/:disabled/:indeterminate rules that own the other states.
+ *
+ * These selectors target ONLY the resting box. :not(:checked) preserves the
+ * accent fill (--checkbox-color / --radio-color), :not(:disabled) preserves
+ * the decision-3 disabled surface (--mantine-color-disabled), and
+ * :not([data-indeterminate]) preserves the indeterminate fill. The error rule
+ * only sets border-color, so it is unaffected.
+ *
+ * --rtwiki-pane is the raised control surface, consistent with Kbd and
+ * SegmentedControl; Mantine's own border still outlines the box.
+ */
+.mantine-Checkbox-input:not(:checked):not(:disabled):not([data-indeterminate]),
+.mantine-Radio-radio:not(:checked):not(:disabled) {
+  background-color: var(--rtwiki-pane);
+}
+
+/*
+ * NavLink's default hover/active background is hardcoded to gray-0 (light)
+ * and dark-6 (dark) on the root class (NavLink.css:15-29). The active and
+ * active+hover states are already owned by --nl-bg / --nl-hover
+ * (NavLink.css:39,46,53), so they are excluded here. --rtwiki-hover is the
+ * semantic hover surface (component-roles.ts INTERACTION_ROLES.hover).
+ */
+@media (hover: hover) {
+  .mantine-NavLink-root:not([data-active]):not([aria-current="page"]):not([data-disabled]):hover {
+    background-color: var(--rtwiki-hover);
+  }
+}
+
+@media (hover: none) {
+  .mantine-NavLink-root:not([data-active]):not([aria-current="page"]):not([data-disabled]):active {
+    background-color: var(--rtwiki-hover);
+  }
+}
+
 /* Interface adjustments (Contrast / Glass opacity) are applied by the theme
  * resolver and by inline styles on <html>, not here. Mantine injects its
  * resolver style tag after this stylesheet, so a rule here would be
@@ -329,4 +369,51 @@ body,
  */
 .bn-editor {
   --bn-colors-editor-text: var(--rtwiki-text);
+}
+
+/*
+ * Reduced motion — RTWiki-owned transitions (Phase 4a finding 1).
+ *
+ * Mantine's `respectReducedMotion: true` only governs Mantine's own
+ * Transition/Collapse/FloatingIndicator components. It does not touch the CSS
+ * transitions RTWiki declares in its own stylesheets. This is the single
+ * render-time override for those: it collapses every RTWiki-owned duration to
+ * zero when the OS asks for reduced motion, WITHOUT changing the MOTION config
+ * values (MOTION.fast/tab/treeHover/cardHover stay as authored).
+ *
+ * Inventory of RTWiki-owned transitions and how each is covered:
+ *   - tab-strip.module.css (.tab, .tab::after, .tabClose) ..... --rtwiki-motion-tab / -fast
+ *   - page-card.module.css (.card) ........................... --rtwiki-motion-card-hover
+ *   - page-tree.module.css (.wb-row, expander, row action) ... --rtwiki-motion-tree-hover / -quick / -fast
+ *   - sidebar.module.css (.navItem) .......................... --rtwiki-motion-tree-hover
+ *   - pane-divider.module.css (.line) ........................ --rtwiki-motion-fast
+ *   - markdown-columns.css (.rt-cols__divider::after) ........ --rtwiki-motion-fast
+ *   - diagram-view.module.css (.controls) ................... --rtwiki-motion-fast
+ *   - debug-log-viewer.module.css (.rowChevron) .............. --rtwiki-motion-fast
+ *   - markdown-content.css ([data-rt-markdown-preview] a) .... raw 120ms (no token)
+ *   - window-chrome.module.css (.ctrlBtn) .................... raw 75ms (no token)
+ *
+ * The token overrides use `!important` because Mantine injects its resolver
+ * style tag AFTER this stylesheet (see the note above), so a plain declaration
+ * here would lose the cascade. The two raw-duration consumers are targeted by
+ * their global selectors — CSS Modules hash the class names, so they cannot be
+ * named from here. This is deliberately NOT a blanket `*` rule: only RTWiki's
+ * own declarations are touched; Mantine and third-party chrome keep theirs.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rtwiki-motion-fast: 0ms !important;
+    --rtwiki-motion-tab: 0ms !important;
+    --rtwiki-motion-tree-hover: 0ms !important;
+    --rtwiki-motion-card-hover: 0ms !important;
+    --rtwiki-motion-tree-quick: 0ms !important;
+  }
+
+  [data-rt-markdown-preview] a {
+    transition: none !important;
+  }
+
+  [data-testid="window-chrome"] button {
+    transition: none !important;
+  }
 }

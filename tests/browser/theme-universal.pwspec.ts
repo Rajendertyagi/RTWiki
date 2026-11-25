@@ -717,6 +717,156 @@ test.describe('A6 — rapid adjustments', () => {
     expect(attrs.contrast, 'data-rtwiki-contrast must match the last event').toBe('75')
     expect(attrs.glass, 'data-rtwiki-glass-opacity must match the last event').toBe('55')
   })
+
+  /**
+   * A6 persistence — the REAL interaction → API → SQLite → reload path.
+   *
+   * The test above dispatches synthetic events; this one drives the actual
+   * Mantine slider thumbs with the keyboard. Each keypress fires the slider's
+   * `onChangeEnd`, which calls `PUT /api/settings/appearance` (the DB write).
+   * Evidence is read three ways: the API response, the live computed style,
+   * and the server-injected `--rtwiki-contrast` custom property after a reload
+   * (which can only come from the database, not from in-memory React state).
+   */
+  test('real slider changes persist to the database and last-write-wins across reload (default light/dark)', async ({
+    page,
+    request
+  }) => {
+    test.setTimeout(120_000)
+
+    const readApi = async (): Promise<Appearance> => {
+      const res = await request.get('/api/settings/appearance')
+      expect(res.status(), 'GET /api/settings/appearance').toBe(200)
+      return (await res.json()) as Appearance
+    }
+
+    const readComputed = () =>
+      page.evaluate(() => {
+        const root = document.documentElement
+        const cs = getComputedStyle(root)
+        return {
+          contrastAttr: root.getAttribute('data-rtwiki-contrast'),
+          glassAttr: root.getAttribute('data-rtwiki-glass-opacity'),
+          // Emitted by the server pre-paint bootstrap from the DB value; it can
+          // only change after a reload that re-reads the database.
+          contrastVar: cs.getPropertyValue('--rtwiki-contrast').trim(),
+          glassVar: cs.getPropertyValue('--rtwiki-glass-opacity').trim(),
+          text: cs.getPropertyValue('--rtwiki-text').trim()
+        }
+      })
+
+    const stepSlider = async (name: string, key: 'ArrowLeft' | 'ArrowRight', times: number) => {
+      const slider = page.getByRole('slider', { name })
+      await expect(slider, `${name} slider must render`).toBeVisible()
+      await slider.focus()
+      for (let i = 0; i < times; i++) await slider.press(key)
+    }
+
+    for (const scheme of ['light', 'dark'] as const) {
+      await setAppearance(request, {
+        themeId: 'default',
+        colorScheme: scheme,
+        contrast: 100,
+        glassOpacity: 100
+      })
+      await openApp(page)
+      await openSettings(page)
+      const label = `default/${scheme}`
+
+      // Baseline: API and computed state agree at the neutral values.
+      const initialApi = await readApi()
+      expect(initialApi.contrast, `${label} initial API contrast`).toBe(100)
+      expect(initialApi.glassOpacity, `${label} initial API glass`).toBe(100)
+      const initialComputed = await readComputed()
+      expect(initialComputed.contrastAttr, `${label} initial contrast attribute`).toBe('100')
+
+      // REAL UI interaction: 100 → 60 in eight rapid -5 steps. Every keypress
+      // fires onChangeEnd → PUT, so the last one must win in the database.
+      await stepSlider('Contrast', 'ArrowLeft', 8)
+      await expect.poll(async () => (await readApi()).contrast, { timeout: 10_000 }).toBe(60)
+      const afterContrast = await readApi()
+      expect(afterContrast.contrast, `${label} API contrast after slider`).toBe(60)
+      expect(afterContrast.glassOpacity, `${label} API glass must be unchanged`).toBe(100)
+      await expect
+        .poll(async () => (await readComputed()).contrastAttr, { timeout: 10_000 })
+        .toBe('60')
+      const live = await readComputed()
+      expect(live.text, `${label} live text token must change with contrast`).not.toBe(
+        initialComputed.text
+      )
+      test.info().annotations.push({
+        type: 'evidence',
+        description:
+          `${label} contrast slider → API {contrast:${String(afterContrast.contrast)},` +
+          `glassOpacity:${String(afterContrast.glassOpacity)}}; ` +
+          `computed {contrastAttr:${String(live.contrastAttr)},text:${live.text}}`
+      })
+
+      // Reload: the server-injected custom property can only come from SQLite.
+      await page.reload()
+      await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+      const reloadedApi = await readApi()
+      expect(reloadedApi.contrast, `${label} API contrast after reload`).toBe(60)
+      const reloaded = await readComputed()
+      expect(reloaded.contrastAttr, `${label} contrast attribute after reload`).toBe('60')
+      expect(reloaded.contrastVar, `${label} --rtwiki-contrast after reload`).toBe('0.6')
+      expect(
+        colorsClose(reloaded.text, live.text, 3),
+        `${label} text token after reload must match the live value`
+      ).toBe(true)
+      test.info().annotations.push({
+        type: 'evidence',
+        description:
+          `${label} after reload → API {contrast:${String(reloadedApi.contrast)}}; ` +
+          `computed {contrastAttr:${String(reloaded.contrastAttr)},` +
+          `contrastVar:${reloaded.contrastVar},text:${reloaded.text}}`
+      })
+
+      // Glass slider: 100 → 70 in six rapid steps, then reload.
+      await openSettings(page)
+      await stepSlider('Glass opacity', 'ArrowLeft', 6)
+      await expect.poll(async () => (await readApi()).glassOpacity, { timeout: 10_000 }).toBe(70)
+      const afterGlass = await readApi()
+      expect(afterGlass.glassOpacity, `${label} API glass after slider`).toBe(70)
+      expect(afterGlass.contrast, `${label} API contrast must be unchanged`).toBe(60)
+      await page.reload()
+      await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+      expect((await readApi()).glassOpacity, `${label} API glass after reload`).toBe(70)
+      const glassReload = await readComputed()
+      expect(glassReload.glassAttr, `${label} glass attribute after reload`).toBe('70')
+      expect(glassReload.glassVar, `${label} --rtwiki-glass-opacity after reload`).toBe('0.7')
+
+      // Rapid burst ending on a known value: 60 → 75 → 70. The last write must
+      // win in the API, in the live computed style, and after another reload.
+      await openSettings(page)
+      await stepSlider('Contrast', 'ArrowRight', 3)
+      await stepSlider('Contrast', 'ArrowLeft', 1)
+      await expect.poll(async () => (await readApi()).contrast, { timeout: 10_000 }).toBe(70)
+      const burstApi = await readApi()
+      expect(burstApi.contrast, `${label} last rapid write must win in the API`).toBe(70)
+      expect(burstApi.glassOpacity, `${label} glass must survive the burst`).toBe(70)
+      await expect
+        .poll(async () => (await readComputed()).contrastAttr, { timeout: 10_000 })
+        .toBe('70')
+      await page.reload()
+      await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+      const finalApi = await readApi()
+      expect(finalApi.contrast, `${label} last rapid write must survive reload`).toBe(70)
+      expect(finalApi.glassOpacity, `${label} glass must survive reload`).toBe(70)
+      const finalComputed = await readComputed()
+      expect(finalComputed.contrastAttr, `${label} final contrast attribute`).toBe('70')
+      expect(finalComputed.contrastVar, `${label} final --rtwiki-contrast`).toBe('0.7')
+      expect(finalComputed.glassAttr, `${label} final glass attribute`).toBe('70')
+      test.info().annotations.push({
+        type: 'evidence',
+        description:
+          `${label} rapid burst → API {contrast:${String(finalApi.contrast)},` +
+          `glassOpacity:${String(finalApi.glassOpacity)}}; ` +
+          `computed {contrastAttr:${String(finalComputed.contrastAttr)},` +
+          `contrastVar:${finalComputed.contrastVar},glassAttr:${String(finalComputed.glassAttr)}}`
+      })
+    }
+  })
 })
 
 // ===========================================================================
@@ -801,4 +951,148 @@ test.describe('P4 — accessibility media features', () => {
       ).toBe(true)
     })
   }
+
+  /**
+   * Owner decision 4 puts forced-colors IN scope as a one-time unreadability
+   * check. The loop above exercises it in the light scheme only; this dedicated
+   * case covers default light AND dark so a forced-colors regression in the dark
+   * scheme cannot hide behind the light-only probe. It is a real browser
+   * computed-style check: emulateMedia drives Chromium's forced-colors mode and
+   * `distinct()` compares the painted body text against its painted background.
+   */
+  test('forced colours: body text stays readable in default light and dark', async ({
+    page,
+    request
+  }) => {
+    for (const scheme of ['light', 'dark'] as const) {
+      await setAppearance(request, {
+        themeId: 'default',
+        colorScheme: scheme,
+        contrast: 100,
+        glassOpacity: 100
+      })
+      await page.emulateMedia({ forcedColors: 'active' })
+      await openApp(page)
+
+      await expect(page.getByTestId('page-tree')).toBeVisible()
+      const body = requireReading(await readStyle(page, 'body'), `forced colours ${scheme} body`)
+      expect(
+        distinct(body.color, body.background),
+        `forced colours ${scheme}: body text must remain distinct from its background`
+      ).toBe(true)
+    }
+  })
+
+  /**
+   * Finding 1: Mantine's `respectReducedMotion` does not reach RTWiki's own CSS
+   * transitions. This is a REAL computed-style check — it reads
+   * `getComputedStyle(el).transitionDuration` on representative RTWiki-owned
+   * elements, first with normal motion and then with `reducedMotion: 'reduce'`.
+   * A fresh context per scheme keeps workspace-session restore from reopening a
+   * tab and hiding the dashboard between the two states.
+   */
+  test('reduced motion collapses RTWiki-owned transition durations to 0s (default light/dark)', async ({
+    browser,
+    request
+  }) => {
+    test.setTimeout(120_000)
+
+    interface Probe {
+      label: string
+      selector: string
+    }
+    // Each transition lives in a CSS module (hashed class), so the probes use
+    // stable global hooks that survive class-name hashing.
+    const DASHBOARD_PROBES: readonly Probe[] = [
+      { label: 'page-card', selector: '[data-page-type]' },
+      { label: 'tree row', selector: 'div.wb-row:has(span.wb-node)' },
+      { label: 'nav link (Home entry)', selector: '[data-testid="tree-root-entry"]' }
+    ]
+    const PAGE_PROBES: readonly Probe[] = [
+      { label: 'tab', selector: '[role="tab"]' },
+      { label: 'tree row', selector: 'div.wb-row:has(span.wb-node)' },
+      { label: 'nav link (Home entry)', selector: '[data-testid="tree-root-entry"]' }
+    ]
+
+    const readDurations = (target: Page, probes: readonly Probe[]) =>
+      target.evaluate((items) => {
+        const result: Record<string, string | null> = {}
+        for (const item of items) {
+          const el = document.querySelector(item.selector) as HTMLElement | null
+          result[item.label] = el ? getComputedStyle(el).transitionDuration : null
+        }
+        return result
+      }, probes)
+
+    const parseDurations = (value: string): number[] =>
+      value
+        .split(',')
+        .map((part) => Number.parseFloat(part.trim()))
+        .filter((n) => Number.isFinite(n))
+
+    const assertPair = (
+      normal: Record<string, string | null>,
+      reduced: Record<string, string | null>,
+      probes: readonly Probe[],
+      label: string
+    ): void => {
+      for (const probe of probes) {
+        const before = normal[probe.label]
+        const after = reduced[probe.label]
+        expect(before, `${label} normal ${probe.label} must exist`).not.toBeNull()
+        expect(after, `${label} reduced ${probe.label} must exist`).not.toBeNull()
+        if (before === null || after === null) continue
+        const beforeValues = parseDurations(before)
+        const afterValues = parseDurations(after)
+        expect(
+          beforeValues.length,
+          `${label} normal ${probe.label} must report a duration`
+        ).toBeGreaterThan(0)
+        expect(
+          beforeValues.some((d) => d > 0),
+          `${label} normal ${probe.label} must have a non-zero duration (got "${before}")`
+        ).toBe(true)
+        expect(
+          afterValues.every((d) => d === 0),
+          `${label} reduced ${probe.label} must be 0s (got "${after}")`
+        ).toBe(true)
+      }
+    }
+
+    for (const scheme of ['light', 'dark'] as const) {
+      await setAppearance(request, {
+        themeId: 'default',
+        colorScheme: scheme,
+        contrast: 100,
+        glassOpacity: 100
+      })
+      const label = `default/${scheme}`
+      const context = await browser.newContext()
+      try {
+        const page = await context.newPage()
+        await page.setViewportSize({ width: 1280, height: 800 })
+
+        // Dashboard state: page cards, tree rows and the Home nav entry.
+        await page.emulateMedia({ reducedMotion: 'no-preference' })
+        await page.goto('/')
+        await expect(page.getByTestId('page-tree')).toBeVisible({ timeout: 20_000 })
+        await expect(page.locator('[data-page-type]').first()).toBeVisible({ timeout: 20_000 })
+        const dashboardNormal = await readDurations(page, DASHBOARD_PROBES)
+        await page.emulateMedia({ reducedMotion: 'reduce' })
+        const dashboardReduced = await readDurations(page, DASHBOARD_PROBES)
+        assertPair(dashboardNormal, dashboardReduced, DASHBOARD_PROBES, `${label} dashboard`)
+
+        // Page state: an open tab plus the same tree/nav chrome.
+        await page.emulateMedia({ reducedMotion: 'no-preference' })
+        await page.goto(`/?page=${richPageId}`)
+        await expect(page.getByRole('tab').first()).toBeVisible({ timeout: 20_000 })
+        const pageNormal = await readDurations(page, PAGE_PROBES)
+        await page.emulateMedia({ reducedMotion: 'reduce' })
+        const pageReduced = await readDurations(page, PAGE_PROBES)
+        assertPair(pageNormal, pageReduced, PAGE_PROBES, `${label} page`)
+      } finally {
+        await context.close()
+      }
+    }
+  })
 })

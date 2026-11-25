@@ -48,6 +48,7 @@ import { App } from './App.js'
 import { AppErrorBoundary } from './diagnostics/app-error-boundary.js'
 import { configureDebugLoggingFromStorage } from './diagnostics/debug-log.js'
 import { installGlobalErrorReporting } from './diagnostics/error-reporter.js'
+import { THEME_SHOWCASE_PATH, ThemeShowcase } from './features/theme-showcase/theme-showcase.js'
 import { createDbColorSchemeManager } from './theme/color-scheme-manager.js'
 import { migrateLocalStorageToDatabase } from './theme/migrate-local-storage.js'
 import { ThemeProvider } from './theme/theme-provider.js'
@@ -74,12 +75,18 @@ if (!rootElement) {
 // awaiting this cannot cause a flash.
 await migrateLocalStorageToDatabase()
 
+/**
+ * Internal theming reference (gate C4). A dedicated, extensionless path renders
+ * the component showcase inside the SAME ThemeProvider as the app, so Playwright
+ * reads real computed styles under the active theme. It is never linked from
+ * normal navigation; the only way here is typing the path directly.
+ */
+const isThemeShowcase = window.location.pathname === THEME_SHOWCASE_PATH
+
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ThemeProvider colorSchemeManager={createDbColorSchemeManager()}>
-      <AppErrorBoundary>
-        <App />
-      </AppErrorBoundary>
+      <AppErrorBoundary>{isThemeShowcase ? <ThemeShowcase /> : <App />}</AppErrorBoundary>
     </ThemeProvider>
   </React.StrictMode>
 )

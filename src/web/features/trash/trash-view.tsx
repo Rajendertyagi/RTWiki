@@ -101,7 +101,7 @@ export function TrashView({ onRestorePage }: TrashViewProps): JSX.Element {
             <IconTrash size={24} color="var(--mantine-color-gray-6)" />
             <Title order={2}>{UI_TEXT.trashTitle}</Title>
           </Group>
-          <Badge variant="light" color="gray">
+          <Badge variant="light" color="gray" data-testid="trash-count-badge">
             {trashedPages.length} {trashedPages.length === 1 ? 'page' : 'pages'}
           </Badge>
         </Group>

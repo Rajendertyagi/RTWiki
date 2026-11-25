@@ -83,9 +83,9 @@ describe('theme docs sync', () => {
     }
   })
 
-  it('registers all seven waivers with all seven required fields', () => {
+  it('registers all thirteen waivers with all seven required fields', () => {
     const rows = waiverRows()
-    for (let n = 1; n <= 7; n += 1) {
+    for (let n = 1; n <= 13; n += 1) {
       const id = `W-${String(n).padStart(3, '0')}`
       const cells = rows.get(id)
       expect(cells, `${id} must be a row in docs/theme-waivers.md`).toBeDefined()
@@ -93,8 +93,21 @@ describe('theme docs sync', () => {
       for (const [index, cell] of (cells ?? []).entries()) {
         expect(cell.length, `${id} field ${index + 1} must be non-empty`).toBeGreaterThan(0)
       }
-      expect(cells?.[4], `${id} date must be 2026-11-24`).toContain('2026-11-24')
+      // W-013 was added on 2026-11-25; the original twelve are dated 2026-11-24.
+      expect(cells?.[4], `${id} must carry its expected date`).toContain(
+        n === 13 ? '2026-11-25' : '2026-11-24'
+      )
     }
+  })
+
+  it('registers the typography, motion and status exceptions reconciled in Phase 4b', () => {
+    const row = (id: string): string => waiverRows().get(id)?.join(' ') ?? ''
+    expect(row('W-008').toLowerCase(), 'document typography relative').toContain('intentional')
+    expect(row('W-008')).toContain('em')
+    expect(row('W-009')).toContain('75ms')
+    expect(row('W-010')).toContain('120ms')
+    expect(row('W-011')).toContain('80ms')
+    expect(row('W-012').toLowerCase(), 'status fixed decision').toContain('decision')
   })
 
   it('W-003 references the C9 baseline dispositions', () => {
@@ -110,6 +123,22 @@ describe('theme docs sync', () => {
     expect(row.toLowerCase()).toContain('nonce')
   })
 
+  it('W-013 waives the Windows caption close-button colours in the C9 baseline', () => {
+    const row = waiverRows().get('W-013')?.join(' ') ?? ''
+    expect(row, 'W-013 must target the C9 colour baseline').toContain('C9')
+    expect(row, 'W-013 must name the close hover colour').toContain('#e81123')
+    expect(row, 'W-013 must name the close glyph colour').toContain('#fff')
+    expect(row, 'W-013 must name the close active colour').toContain('#c50f1f')
+    expect(row.toLowerCase(), 'W-013 must give a platform-convention rationale').toContain(
+      'platform convention'
+    )
+    expect(row, 'W-013 must point at the C9 baseline dispositions').toContain(
+      'theme-consumers.test.ts'
+    )
+    expect(row.toLowerCase(), 'W-013 must state the allowlist disposition').toContain('allowlist')
+    expect(row, 'W-013 must carry the 2026-11-25 date').toContain('2026-11-25')
+  })
+
   it('the four theme ids and three risky Mantine keys appear in the coverage doc', () => {
     for (const id of ['default', 'pastel-dreams', 'catppuccin', 'vercel']) {
       expect(coverage.includes(id), `coverage doc must mention theme "${id}"`).toBe(true)
@@ -121,5 +150,26 @@ describe('theme docs sync', () => {
     ]) {
       expect(coverage.includes(key), `coverage doc must mention "${key}"`).toBe(true)
     }
+  })
+
+  it('documents the owner-approved heading ratio scale (plan decision 8)', () => {
+    for (const ratio of ['1.85', '1.45', '1.2', '1.05', '0.95', '1.55', '1.3']) {
+      expect(coverage.includes(ratio), `heading ratio ${ratio} must be documented`).toBe(true)
+    }
+    expect(coverage, 'Mantine must own the preview base size').toContain('--mantine-font-size-sm')
+    expect(coverage, 'RTWiki must own the document ratio scale').toContain('RTWiki owns')
+  })
+
+  it('documents the reconciled S1, A6 and reduced-motion status with evidence', () => {
+    for (const cls of ['sizes', 'spacing', 'radius', 'motion durations', 'z-index']) {
+      expect(coverage.includes(cls), `S1 must document the "${cls}" value class`).toBe(true)
+    }
+    expect(coverage, 'S1 must cover TSX style objects').toContain('TSX')
+    expect(coverage, 'A6 must document the real API/DB path').toContain('SQLite')
+    expect(coverage, 'A6 must document last-write-wins').toContain('last-write-wins')
+    expect(coverage, 'reduced motion must be a computed-style check').toContain('computed-style')
+    expect(coverage, 'reduced motion must name the RTWiki-owned transition override').toContain(
+      'prefers-reduced-motion: reduce'
+    )
   })
 })
