@@ -85,6 +85,14 @@ None. The 12 deduplicated combinations are captured once each under the strict f
 
 - Tooltip capture claimed a visible tooltip when none was rendered; sidebar-tree at 390px left a tooltip over the search field. Fixed in the temp capture script with a pre-screenshot visibility/contrast assertion and pointer parking. Final matrix records `readable=true` for all 14 tooltip captures.
 
+### F7 — Desktop sidecar spawn path verified (W-005 removed)
+
+- **Original waiver:** `RTWikiServer.exe` was reported absent from the checkout, so the sidecar-spawn path was untested.
+- **Correction:** the compiled server existed at `build/server/RTWiki.exe` (124 MB); CI renames it to `RTWikiServer.exe` during staging (`scripts/ci/package-desktop.ps1:57`). The Tauri shell (`src-tauri/target/release/rtwiki.exe`), `src-tauri/Cargo.lock` and Rust 1.100.0 were also present.
+- **Action:** stopped the dev server on port 8080, rebuilt web/server/desktop, staged the portable package, and ran `scripts/ci/windows-smoke-desktop.ps1`.
+- **Result:** **DESKTOP SMOKE TEST PASSED** — identity hashes match; both binaries are GUI-subsystem (PE subsystem 2); shell spawned the sidecar and `/health` returned 200; the sidecar owned port 8080 as a child of the shell; runtime dirs and JSONL log were created; the SPA was served; the close-dialog handshake worked; a second shell attached without starting a second server; token-protected shutdown stopped the sidecar while the shell survived; the Job Object killed the sidecar with no orphan; the borrow path left a standalone server untouched; cleanup released the port and left no processes.
+- **Disposition:** W-005 removed; waiver count 12 → 11.
+
 ## C. Theme-debt results
 
 ### Known `customization.css` issues
@@ -111,7 +119,7 @@ Full scan of `src/**/*.{css,ts,tsx,js,jsx,json,html}` for hex/rgb/rgba/oklch/hsl
 | W-002 | STILL VALID | JS-free rendering is not a product requirement; SPA requires JS. |
 | W-003 | **REMOVED** | Underlying dialog-shadow debt fixed as semantic token (F5). |
 | W-004 | STILL VALID | Mermaid theme-following deferred by owner Decision 2. |
-| W-005 | STILL VALID | Sidecar `RTWikiServer.exe` absent from checkout; spawn path untestable here. |
+| W-005 | **REMOVED** | Sidecar spawn path verified end-to-end by the Windows desktop smoke test. |
 | W-006 | STILL VALID | Risky Mantine keys pending visual validation; fallback logging active. |
 | W-007 | STILL VALID | CSP `styleSrc` includes `'unsafe-inline'`; nonce gate unnecessary. |
 | W-008 | STILL VALID | Document typography em ratios intentionally relative. |
@@ -121,11 +129,11 @@ Full scan of `src/**/*.{css,ts,tsx,js,jsx,json,html}` for hex/rgb/rgba/oklch/hsl
 | W-012 | STILL VALID | Status colors fixed — Decision 1 traceability record, not a defect. |
 | W-013 | STILL VALID | Windows close-button colors are a platform convention. |
 
-**Final waiver count: 12.** No new waivers were added. No unresolved defect is hidden by a waiver.
+**Final waiver count: 11.** No new waivers were added. No unresolved defect is hidden by a waiver.
 
 ### Genuinely unavoidable exceptions
 
-W-002 (JS required), W-004 (owner-deferred Mermaid), W-005 (sidecar artifact absent), W-007 (CSP design), W-013 (OS close-button convention) are documented with technical evidence. W-001, W-006, W-008–W-012 are design decisions or traceability records, not defects.
+W-002 (JS required), W-004 (owner-deferred Mermaid), W-007 (CSP design), W-013 (OS close-button convention) are documented with technical evidence. W-001, W-006, W-008–W-012 are design decisions or traceability records, not defects.
 
 ## D. Verification
 
@@ -178,13 +186,14 @@ All changes are uncommitted in the working tree at report time. No commit or pus
 | `tests/theme-docs-sync.test.ts` | Waiver count 13 → 12; W-003 removal |
 | `tests/theme-registry.test.ts` | New token assertions |
 | `tests/theme-adjustments-coverage.test.ts` | New oklch token keys |
-| `docs/theme-waivers.md` | W-003 removed |
+| `docs/theme-waivers.md` | W-003 and W-005 removed |
+| `docs/THEME_COVERAGE.md` | Desktop sidecar spawn now recorded as verified |
 | `docs/VISUAL_AUDIT_FINAL_REPORT.md` | This report |
 
-Pre-existing untracked `docs/PLAN_EXTERNAL_AI_INTEGRATION.md` was not created or touched by this work and remains untouched.
+`docs/PLAN_EXTERNAL_AI_INTEGRATION.md` was pre-existing and untracked when this report was first written; it was later updated at the owner's request (see `PLAN_EXTERNAL_AI_INTEGRATION_AUDIT.md`).
 
 ## Completion status
 
-**COMPLETE.** Every required major screen and applicable state was audited; the full theme × scheme × viewport matrix was covered; **all 260 final screenshots were individually opened and visually inspected**; confirmed defects were fixed at source; all known hardcoded values were resolved; all 13 waivers were individually reviewed with W-003 removed; keyboard/accessibility coverage was completed; the full regression suite and production build pass; and the final screenshot matrix was recaptured and inspected after the last change.
+**COMPLETE.** Every required major screen and applicable state was audited; the full theme × scheme × viewport matrix was covered; **all 260 final screenshots were individually opened and visually inspected**; confirmed defects were fixed at source; all known hardcoded values were resolved; all 13 waivers were individually reviewed with W-003 and W-005 removed; keyboard/accessibility coverage was completed; the full regression suite and production build pass; and the final screenshot matrix was recaptured and inspected after the last change.
 
-Limitations honestly stated: the desktop sidecar spawn path (W-005) could not be exercised because `RTWikiServer.exe` is absent from this checkout; Mermaid theme-following remains deferred by owner Decision 2 (W-004); and the 3 risky Mantine surface keys remain at defaults pending visual validation (W-006). These are documented, accepted exceptions — not uninspected screenshots or hidden defects.
+Limitations honestly stated: Mermaid theme-following remains deferred by owner Decision 2 (W-004); and the 3 risky Mantine surface keys remain at defaults pending visual validation (W-006). These are documented, accepted exceptions — not uninspected screenshots or hidden defects. The desktop sidecar spawn path (formerly W-005) is no longer a limitation: it was verified end-to-end by the Windows desktop smoke test (F7).

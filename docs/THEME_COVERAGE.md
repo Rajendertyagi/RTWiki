@@ -171,9 +171,9 @@ matrix. Both are additive: removing a literal is always fine.
 | # | Stage | Gate | Status |
 |---|-------|------|--------|
 | 1 | Emission unification | D1/D2/D3 parity, C1/C2/C3, scheme-correct floating bg, Decision 3 fallback distinctness + structured log assertion, Decision 1 status-colour readability | Complete |
-| 2 | Rendered consumers | C4/C5/C6/C7/C8/C9/C10: browser computed-style spec on real components (C4/C8/C10) + desktop screenshot smoke; desktop computed-style spec not performed (see W-005). Mermaid scheme-matched transparent rendering. Mantine style-tag CSP nonce gate dropped (see W-007). | Complete |
+| 2 | Rendered consumers | C4/C5/C6/C7/C8/C9/C10: browser computed-style spec on real components (C4/C8/C10) + desktop screenshot smoke and sidecar-spawn smoke (shell spawns sidecar, process tree, shutdown, no orphan). Mermaid scheme-matched transparent rendering. Mantine style-tag CSP nonce gate dropped (see W-007). | Complete |
 | 3 | Adjustments | A1–A7: WCAG + alpha + parity tests, clamping, combinations, races, saturation. A6 now includes the real slider → API → SQLite → reload path with last-write-wins (`theme-universal.pwspec.ts`) | Complete |
-| 4 | Delivery & environments | D4/D5, P1b/P2/P3/P4: iframe probe, no-flash probe, 16 screenshots, accessibility pass. Reduced motion is a real computed-style check, not a source scan | Complete (desktop sidecar untested — W-005; JS-disabled paint — W-002) |
+| 4 | Delivery & environments | D4/D5, P1b/P2/P3/P4: iframe probe, no-flash probe, 16 screenshots, accessibility pass. Reduced motion is a real computed-style check, not a source scan | Complete (desktop sidecar spawn verified by smoke test; JS-disabled paint — W-002) |
 | 5 | Docs | This matrix as definition of done; token/consumer inventory; waiver registry; typography ownership split and heading scale; motion exemptions | Complete |
 | 6 | Enforcement | CI gates + PR rule + docs-sync guard (below). S1 now covers all five promised value classes in CSS and TSX | Complete |
 

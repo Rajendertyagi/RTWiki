@@ -84,12 +84,12 @@ describe('theme docs sync', () => {
   })
 
   // W-003 was removed after its dialog shadow became a semantic theme token,
-  // so the remaining ids are deliberately non-contiguous.
+  // and W-005 after the desktop sidecar spawn path passed the smoke test, so
+  // the remaining ids are deliberately non-contiguous.
   const EXPECTED_WAIVERS = [
     'W-001',
     'W-002',
     'W-004',
-    'W-005',
     'W-006',
     'W-007',
     'W-008',
@@ -100,7 +100,7 @@ describe('theme docs sync', () => {
     'W-013'
   ] as const
 
-  it('registers all twelve waivers with all seven required fields', () => {
+  it('registers all eleven waivers with all seven required fields', () => {
     const rows = waiverRows()
     for (const id of EXPECTED_WAIVERS) {
       const cells = rows.get(id)
@@ -114,8 +114,11 @@ describe('theme docs sync', () => {
         id === 'W-013' ? '2026-11-25' : '2026-11-24'
       )
     }
-    expect(rows.size, 'no waiver beyond the twelve expected ids').toBe(EXPECTED_WAIVERS.length)
+    expect(rows.size, 'no waiver beyond the eleven expected ids').toBe(EXPECTED_WAIVERS.length)
     expect(rows.has('W-003'), 'W-003 must be removed, not narrowed').toBe(false)
+    expect(rows.has('W-005'), 'W-005 must be removed after the sidecar smoke test passed').toBe(
+      false
+    )
   })
 
   it('registers the typography, motion and status exceptions reconciled in Phase 4b', () => {
