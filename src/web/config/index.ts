@@ -52,6 +52,8 @@ export const LAYOUT = {
   treePaneMaxWidth: 520,
   /** Central workspace minimum the narrow-window rule preserves first. */
   workspaceMinWidth: 480,
+  /** Settings section-list width; also derives the settings stacking breakpoint. */
+  settingsNavWidth: 200,
   /** Rich Note right-sidebar width (user default; persisted). */
   rightSidebarWidth: 260,
   /** Right-sidebar drag/resize bounds. */

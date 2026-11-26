@@ -83,10 +83,26 @@ describe('theme docs sync', () => {
     }
   })
 
-  it('registers all thirteen waivers with all seven required fields', () => {
+  // W-003 was removed after its dialog shadow became a semantic theme token,
+  // so the remaining ids are deliberately non-contiguous.
+  const EXPECTED_WAIVERS = [
+    'W-001',
+    'W-002',
+    'W-004',
+    'W-005',
+    'W-006',
+    'W-007',
+    'W-008',
+    'W-009',
+    'W-010',
+    'W-011',
+    'W-012',
+    'W-013'
+  ] as const
+
+  it('registers all twelve waivers with all seven required fields', () => {
     const rows = waiverRows()
-    for (let n = 1; n <= 13; n += 1) {
-      const id = `W-${String(n).padStart(3, '0')}`
+    for (const id of EXPECTED_WAIVERS) {
       const cells = rows.get(id)
       expect(cells, `${id} must be a row in docs/theme-waivers.md`).toBeDefined()
       expect(cells?.length, `${id} must have 7 fields`).toBe(7)
@@ -95,9 +111,11 @@ describe('theme docs sync', () => {
       }
       // W-013 was added on 2026-11-25; the original twelve are dated 2026-11-24.
       expect(cells?.[4], `${id} must carry its expected date`).toContain(
-        n === 13 ? '2026-11-25' : '2026-11-24'
+        id === 'W-013' ? '2026-11-25' : '2026-11-24'
       )
     }
+    expect(rows.size, 'no waiver beyond the twelve expected ids').toBe(EXPECTED_WAIVERS.length)
+    expect(rows.has('W-003'), 'W-003 must be removed, not narrowed').toBe(false)
   })
 
   it('registers the typography, motion and status exceptions reconciled in Phase 4b', () => {
@@ -108,12 +126,6 @@ describe('theme docs sync', () => {
     expect(row('W-010')).toContain('120ms')
     expect(row('W-011')).toContain('80ms')
     expect(row('W-012').toLowerCase(), 'status fixed decision').toContain('decision')
-  })
-
-  it('W-003 references the C9 baseline dispositions', () => {
-    const row = waiverRows().get('W-003')?.join(' ') ?? ''
-    expect(row).toContain('theme-consumers.test.ts')
-    expect(row.toLowerCase()).toContain('tracked-debt')
   })
 
   it('W-007 records the dropped Mantine style-tag CSP nonce gate', () => {

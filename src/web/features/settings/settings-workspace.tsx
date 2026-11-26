@@ -41,12 +41,13 @@ import {
   IconX
 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { UI_TEXT } from '../../config/index.js'
+import { LAYOUT, UI_TEXT } from '../../config/index.js'
 import {
   debugLog,
   isDebugLoggingEnabled,
   setDebugLoggingEnabled
 } from '../../diagnostics/debug-log.js'
+import { useMediaQueryBelow } from '../../hooks/use-media-query.js'
 import {
   type BrowserPermission,
   browserNotificationPermission,
@@ -133,6 +134,16 @@ const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ size?:
   { id: 'debugLogs', label: UI_TEXT.settingsDebugLogs, icon: IconFileAnalytics }
 ]
 
+/**
+ * Below this viewport width the nav plus a minimum-width content pane cannot
+ * fit beside the shell's rail and tree, so the nav stacks above the content and
+ * the content takes the full width. Derived from the same named layout values
+ * the shell and the stylesheet use, so it cannot drift from the panes it
+ * protects.
+ */
+const SETTINGS_STACK_MAX_WIDTH_PX =
+  LAYOUT.railWidth + LAYOUT.treePaneWidth + LAYOUT.settingsNavWidth + LAYOUT.workspaceMinWidth - 1
+
 function browserPermissionText(permission: BrowserPermission): string {
   switch (permission) {
     case 'granted':
@@ -152,6 +163,7 @@ export function SettingsWorkspace({
   onClose
 }: SettingsWorkspaceProps): JSX.Element {
   const [section, setSection] = useState<Section>('appearance')
+  const stacked = useMediaQueryBelow(SETTINGS_STACK_MAX_WIDTH_PX)
   // Filters the section list. Trilium ships a settings search for the same
   // reason: a settings pane is a long list of short rows, and finding one by
   // scrolling is worse than typing three letters.
@@ -411,7 +423,10 @@ export function SettingsWorkspace({
   }
 
   return (
-    <div className={classes.workspace} data-testid="settings-workspace">
+    <div
+      className={stacked ? `${classes.workspace} ${classes.workspaceStacked}` : classes.workspace}
+      data-testid="settings-workspace"
+    >
       <nav className={classes.nav} aria-label={UI_TEXT.settingsLabel}>
         <TextInput
           size="xs"
@@ -422,7 +437,11 @@ export function SettingsWorkspace({
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
-        <ScrollArea className={classes.navScroll} type="always" scrollbars="y">
+        <ScrollArea
+          className={classes.navScroll}
+          type={stacked ? 'never' : 'always'}
+          scrollbars="y"
+        >
           <div className={classes.navList}>
             {visibleSections.map((item) => {
               const active = section === item.id
@@ -575,27 +594,36 @@ export function SettingsWorkspace({
                     {UI_TEXT.appearanceReset}
                   </Button>
                 </Group>
-                <Text size="xs" c="dimmed" mb="xs">
+                <Text size="xs" c="dimmed" mb="md">
                   {UI_TEXT.appearanceContrastHint}
                 </Text>
-                <Slider
-                  value={appearance?.contrast ?? CONTRAST_DEFAULT}
-                  min={CONTRAST_MIN}
-                  max={CONTRAST_MAX}
-                  step={5}
-                  label={(v) => `${v}%`}
-                  labelAlwaysOn
-                  thumbLabel={UI_TEXT.appearanceContrastLabel}
-                  thumbValueText={(v) => `${v}%`}
-                  disabled={appearance === null}
-                  onChange={(value) => {
-                    setAppearance((current) =>
-                      current ? { ...current, contrast: value } : current
-                    )
-                    requestAdjustments(value, appearance?.glassOpacity ?? GLASS_OPACITY_DEFAULT)
-                  }}
-                  onChangeEnd={(value) => void persistAdjustment({ contrast: value })}
-                />
+                {/*
+                 * Mantine's labelAlwaysOn label floats above the slider root
+                 * (top: -2.25rem), so the hint needs room for it. The extra
+                 * spacing is theme tokens only: the hint's margin plus the
+                 * wrapper's padding keep the label clear of the hint text at
+                 * every viewport without a hardcoded pixel offset.
+                 */}
+                <Box pt="xl">
+                  <Slider
+                    value={appearance?.contrast ?? CONTRAST_DEFAULT}
+                    min={CONTRAST_MIN}
+                    max={CONTRAST_MAX}
+                    step={5}
+                    label={(v) => `${v}%`}
+                    labelAlwaysOn
+                    thumbLabel={UI_TEXT.appearanceContrastLabel}
+                    thumbValueText={(v) => `${v}%`}
+                    disabled={appearance === null}
+                    onChange={(value) => {
+                      setAppearance((current) =>
+                        current ? { ...current, contrast: value } : current
+                      )
+                      requestAdjustments(value, appearance?.glassOpacity ?? GLASS_OPACITY_DEFAULT)
+                    }}
+                    onChangeEnd={(value) => void persistAdjustment({ contrast: value })}
+                  />
+                </Box>
               </Box>
               <Box>
                 <Group justify="space-between" mb={4}>
@@ -611,27 +639,29 @@ export function SettingsWorkspace({
                     {UI_TEXT.appearanceReset}
                   </Button>
                 </Group>
-                <Text size="xs" c="dimmed" mb="xs">
+                <Text size="xs" c="dimmed" mb="md">
                   {UI_TEXT.appearanceGlassHint}
                 </Text>
-                <Slider
-                  value={appearance?.glassOpacity ?? GLASS_OPACITY_DEFAULT}
-                  min={GLASS_OPACITY_MIN}
-                  max={GLASS_OPACITY_MAX}
-                  step={5}
-                  label={(v) => `${v}%`}
-                  labelAlwaysOn
-                  thumbLabel={UI_TEXT.appearanceGlassLabel}
-                  thumbValueText={(v) => `${v}%`}
-                  disabled={appearance === null}
-                  onChange={(value) => {
-                    setAppearance((current) =>
-                      current ? { ...current, glassOpacity: value } : current
-                    )
-                    requestAdjustments(appearance?.contrast ?? CONTRAST_DEFAULT, value)
-                  }}
-                  onChangeEnd={(value) => void persistAdjustment({ glassOpacity: value })}
-                />
+                <Box pt="xl">
+                  <Slider
+                    value={appearance?.glassOpacity ?? GLASS_OPACITY_DEFAULT}
+                    min={GLASS_OPACITY_MIN}
+                    max={GLASS_OPACITY_MAX}
+                    step={5}
+                    label={(v) => `${v}%`}
+                    labelAlwaysOn
+                    thumbLabel={UI_TEXT.appearanceGlassLabel}
+                    thumbValueText={(v) => `${v}%`}
+                    disabled={appearance === null}
+                    onChange={(value) => {
+                      setAppearance((current) =>
+                        current ? { ...current, glassOpacity: value } : current
+                      )
+                      requestAdjustments(appearance?.contrast ?? CONTRAST_DEFAULT, value)
+                    }}
+                    onChangeEnd={(value) => void persistAdjustment({ glassOpacity: value })}
+                  />
+                </Box>
               </Box>
             </Stack>
           ) : null}

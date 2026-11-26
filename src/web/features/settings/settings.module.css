@@ -1,5 +1,4 @@
 .workspace {
-  --settings-nav-width: 200px;
   --settings-nav-gap: 2px;
   --settings-nav-item-min-height: 30px;
   --settings-nav-compact-gap: var(--mantine-spacing-xxs2);
@@ -20,7 +19,7 @@
  * custom properties the tree rows use, not approximations of them.
  */
 .nav {
-  flex: 0 0 var(--settings-nav-width);
+  flex: 0 0 var(--rtwiki-settings-nav-width);
   display: flex;
   flex-direction: column;
   gap: var(--settings-nav-gap);
@@ -94,6 +93,36 @@
   text-align: center;
 }
 
+/*
+ * Narrow windows: the nav cannot sit beside a minimum-width content pane, so it
+ * becomes a horizontal strip above the content and the content gets the full
+ * width. This is what keeps the scheme SegmentedControl and the slider labels
+ * from being squeezed into each other at 390px and 800px.
+ */
+.workspaceStacked {
+  flex-direction: column;
+}
+
+.workspaceStacked .nav {
+  flex: 0 0 auto;
+  width: 100%;
+  border-right: 0;
+  border-bottom: 1px solid var(--rtwiki-border, var(--mantine-color-default-border));
+}
+
+.workspaceStacked .navScroll {
+  flex: 0 0 auto;
+}
+
+.workspaceStacked .navList {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.workspaceStacked .navItem {
+  width: auto;
+}
+
 .content {
   flex: 1 1 auto;
   min-width: 0;
@@ -125,6 +154,11 @@
 .section {
   max-width: var(--settings-content-max-width);
   padding: var(--mantine-spacing-lg);
+}
+
+/* Narrow windows keep more of the content pane for the controls. */
+.workspaceStacked .section {
+  padding: var(--mantine-spacing-md);
 }
 
 .kv {

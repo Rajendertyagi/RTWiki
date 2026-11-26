@@ -170,6 +170,12 @@ export function NewPageDialog({
              * SegmentedControl, which clipped "Revision Sheet" at narrow
              * widths. `aria-pressed` exposes the single selection to assistive
              * tech; `variant` paints it with Mantine theme tokens only.
+             *
+             * Unselected buttons use `default`, not `light`. `light` derives its
+             * fill from the theme's primary accent, and a monochrome accent
+             * (Vercel) resolves to a dark fill with black text in the light
+             * scheme — unreadable. `default` uses Mantine's neutral surface and
+             * its paired text token, which stay legible in every theme/scheme.
              */}
             <SimpleGrid cols={2} spacing="sm" role="group" aria-label={UI_TEXT.richTemplateLabel}>
               {TEMPLATE_OPTIONS.map((option) => {
@@ -178,7 +184,7 @@ export function NewPageDialog({
                   <Button
                     key={option.value}
                     fullWidth
-                    variant={selected ? 'filled' : 'light'}
+                    variant={selected ? 'filled' : 'default'}
                     aria-pressed={selected}
                     data-testid={`new-page-template-${option.value}`}
                     onClick={() => setTemplate(option.value)}

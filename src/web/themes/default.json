@@ -174,7 +174,37 @@
           "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)"
         },
         "tabDragShadow": { "$type": "css", "$value": "0 8px 24px rgba(0, 0, 0, 0.45)" },
-        "tabCloseHoverBg": { "$type": "css", "$value": "rgba(255, 255, 255, 0.1)" }
+        "tabCloseHoverBg": { "$type": "css", "$value": "rgba(255, 255, 255, 0.1)" },
+        "spellcheckUnderline": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.6192, 0.1694, 25] }
+        },
+        "tplFlow": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.52, 0.17, 260] }
+        },
+        "tplStructures": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.52, 0.16, 295] }
+        },
+        "tplTiming": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.51, 0.13, 155] }
+        },
+        "tplThinking": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.53, 0.13, 75] }
+        },
+        "tplAnalysis": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.53, 0.16, 5] }
+        },
+        "tplData": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.51, 0.12, 205] }
+        },
+        "shadowChip": { "$type": "css", "$value": "0 1px 2px -0.5px rgb(0 0 0 / 0.08)" },
+        "dialogShadow": { "$type": "css", "$value": "0 8px 24px rgba(0, 0, 0, 0.45)" }
       },
       "dark": {
         "canvas": { "$type": "color", "$value": "{primitives.color.neutral.dark.canvas}" },
@@ -210,7 +240,37 @@
           "$value": "color-mix(in srgb, var(--mantine-color-blue-filled) 26%, transparent)"
         },
         "tabDragShadow": { "$type": "css", "$value": "0 8px 24px rgba(0, 0, 0, 0.45)" },
-        "tabCloseHoverBg": { "$type": "css", "$value": "rgba(255, 255, 255, 0.1)" }
+        "tabCloseHoverBg": { "$type": "css", "$value": "rgba(255, 255, 255, 0.1)" },
+        "spellcheckUnderline": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.72, 0.16, 25] }
+        },
+        "tplFlow": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.75, 0.15, 260] }
+        },
+        "tplStructures": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.76, 0.15, 295] }
+        },
+        "tplTiming": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.78, 0.13, 155] }
+        },
+        "tplThinking": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.8, 0.13, 75] }
+        },
+        "tplAnalysis": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.75, 0.15, 5] }
+        },
+        "tplData": {
+          "$type": "color",
+          "$value": { "colorSpace": "oklch", "components": [0.78, 0.11, 205] }
+        },
+        "shadowChip": { "$type": "css", "$value": "0 1px 1px -0.5px rgb(0 0 0 / 0.22)" },
+        "dialogShadow": { "$type": "css", "$value": "0 8px 24px rgba(0, 0, 0, 0.45)" }
       }
     }
   },

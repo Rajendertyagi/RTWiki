@@ -67,20 +67,22 @@
   --rtwiki-tree-subfile-pad-left: var(--mantine-spacing-xxs2);
   --rtwiki-tree-menu-pad-inline: 14px;
   --rtwiki-tree-menu-section-gap: var(--mantine-spacing-sm);
-  /* Rich editor semantic colours. These were previously undefined tokens whose
-     CSS fallbacks carried the rendering; defining them at their current values
-     makes the fallback explicit and theme-controllable without a visual change. */
-  --rtwiki-spellcheck-underline: #d9534f;
-  /* Diagram template family palette. Same six colours the fallbacks used. */
-  --rtwiki-tpl-flow: #4c8dff;
-  --rtwiki-tpl-structures: #9d7bff;
-  --rtwiki-tpl-timing: #2fb87a;
-  --rtwiki-tpl-thinking: #d9a13a;
-  --rtwiki-tpl-analysis: #e0648c;
-  --rtwiki-tpl-data: #35b8c4;
-  /* Small elevation for control chips, and the compact monospace text size
-     shared by document and linked-page previews. */
-  --rtwiki-shadow-chip: 0 1px 3px oklch(0 0 0 / 0.1);
+  /* Rich editor semantic colours. These are theme tokens, not hardcoded
+     fallbacks: the resolver emits each value in a scheme-scoped rule
+     (:root[data-mantine-color-scheme=...]) that outranks this :root declaration,
+     so the active theme always supplies the colour. The references below keep
+     the inventory of editor colour tokens in one place. */
+  --rtwiki-spellcheck-underline: var(--rtwiki-spellcheck-underline);
+  /* Diagram template family palette — six theme tokens, one per family. */
+  --rtwiki-tpl-flow: var(--rtwiki-tpl-flow);
+  --rtwiki-tpl-structures: var(--rtwiki-tpl-structures);
+  --rtwiki-tpl-timing: var(--rtwiki-tpl-timing);
+  --rtwiki-tpl-thinking: var(--rtwiki-tpl-thinking);
+  --rtwiki-tpl-analysis: var(--rtwiki-tpl-analysis);
+  --rtwiki-tpl-data: var(--rtwiki-tpl-data);
+  /* Small elevation for control chips (a theme token), and the compact
+     monospace text size shared by document and linked-page previews. */
+  --rtwiki-shadow-chip: var(--rtwiki-shadow-chip);
   --rtwiki-code-compact-font-size: 13px;
   /* Editor and placeholder minimum heights. */
   --rtwiki-editor-min-height: 320px;

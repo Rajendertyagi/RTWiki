@@ -162,6 +162,7 @@ export function buildThemeCssVariables(
       '--rtwiki-scrollbar-size': `${LAYOUT.scrollbar.size}px`,
       '--rtwiki-panel-max-height': `${LAYOUT.panelMaxHeight}px`,
       '--rtwiki-workspace-min-width': `${LAYOUT.workspaceMinWidth}px`,
+      '--rtwiki-settings-nav-width': `${LAYOUT.settingsNavWidth}px`,
       '--rtwiki-block-controls-min-height': `${LAYOUT.blockControlsMinHeight}px`,
       '--rtwiki-visual-page-block-min-height': `${LAYOUT.visualPageBlockMinHeight}px`,
       // Focus ring geometry shared by shell chrome controls.

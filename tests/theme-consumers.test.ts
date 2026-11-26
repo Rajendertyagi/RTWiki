@@ -208,62 +208,6 @@ interface BaselineEntry {
  */
 const C9_BASELINE: readonly BaselineEntry[] = [
   {
-    file: 'src/web/theme/customization.css',
-    line: 71,
-    value: '#d9534f',
-    disposition: 'tracked-debt',
-    note: 'spellcheck underline'
-  },
-  {
-    file: 'src/web/theme/customization.css',
-    line: 73,
-    value: '#4c8dff',
-    disposition: 'tracked-debt',
-    note: 'diagram template palette — flow'
-  },
-  {
-    file: 'src/web/theme/customization.css',
-    line: 74,
-    value: '#9d7bff',
-    disposition: 'tracked-debt',
-    note: 'diagram template palette — structures'
-  },
-  {
-    file: 'src/web/theme/customization.css',
-    line: 75,
-    value: '#2fb87a',
-    disposition: 'tracked-debt',
-    note: 'diagram template palette — timing'
-  },
-  {
-    file: 'src/web/theme/customization.css',
-    line: 76,
-    value: '#d9a13a',
-    disposition: 'tracked-debt',
-    note: 'diagram template palette — thinking'
-  },
-  {
-    file: 'src/web/theme/customization.css',
-    line: 77,
-    value: '#e0648c',
-    disposition: 'tracked-debt',
-    note: 'diagram template palette — analysis'
-  },
-  {
-    file: 'src/web/theme/customization.css',
-    line: 78,
-    value: '#35b8c4',
-    disposition: 'tracked-debt',
-    note: 'diagram template palette — data'
-  },
-  {
-    file: 'src/web/theme/customization.css',
-    line: 81,
-    value: 'oklch(0 0 0 / 0.1)',
-    disposition: 'allowlist',
-    note: 'chip shadow — intentionally fixed'
-  },
-  {
     file: 'src/web/components/window-chrome.module.css',
     line: 105,
     value: '#e81123',
@@ -283,13 +227,6 @@ const C9_BASELINE: readonly BaselineEntry[] = [
     value: '#c50f1f',
     disposition: 'allowlist',
     note: 'Windows caption close active — OS-defined colour'
-  },
-  {
-    file: 'src/web/features/html-editor/source-find-dialog.module.css',
-    line: 12,
-    value: 'rgba(0, 0, 0, 0.28)',
-    disposition: 'tracked-debt',
-    note: 'dialog shadow — should become a token'
   },
   {
     file: 'src/web/theme/mantine-base.ts',
@@ -390,7 +327,7 @@ describe('C5 — TSX inline styles / style props', () => {
   // C9 baseline values are intentionally fixed *in CSS*, not a global
   // allowance. Allowing one here just because it exists in a stylesheet would
   // let a new literal through the gate (R2-D1). Verified: no current TSX file
-  // uses any of the 15 baseline values.
+  // uses any of the 6 baseline values.
   function isAllowed(value: string): boolean {
     return (
       ALLOWED_KEYWORDS.has(value) || SEMANTIC_COLOUR_NAMES.has(value) || value.startsWith('var(--')

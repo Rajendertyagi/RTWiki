@@ -23,10 +23,11 @@ export type RequiredVariantToken = (typeof REQUIRED_VARIANT_TOKENS)[number]
 
 /**
  * Interaction and chrome tokens that every variant must declare. These are not
- * oklch region colours — they carry shadows, hairlines and accent fills — so
- * they live in their own set rather than in REQUIRED_VARIANT_TOKENS. The
- * oklch-only invariant and the ladder assertions apply to the region set alone;
- * this set has its own presence and exact-value assertions.
+ * oklch *region* colours — they carry shadows, hairlines, accent fills and the
+ * editor's semantic/status colours — so they live in their own set rather than
+ * in REQUIRED_VARIANT_TOKENS. The oklch-only invariant and the ladder assertions
+ * apply to the region set alone; this set has its own presence and exact-value
+ * assertions.
  */
 export const REQUIRED_INTERACTION_TOKENS = [
   'chromeHairline',
@@ -35,7 +36,16 @@ export const REQUIRED_INTERACTION_TOKENS = [
   'treeSelected',
   'treeSelectedHover',
   'tabDragShadow',
-  'tabCloseHoverBg'
+  'tabCloseHoverBg',
+  'spellcheckUnderline',
+  'tplFlow',
+  'tplStructures',
+  'tplTiming',
+  'tplThinking',
+  'tplAnalysis',
+  'tplData',
+  'shadowChip',
+  'dialogShadow'
 ] as const
 
 export type RequiredInteractionToken = (typeof REQUIRED_INTERACTION_TOKENS)[number]
@@ -84,5 +94,14 @@ export const VARIANT_TOKEN_NAMES: Record<RequiredVariantToken | RequiredInteract
     treeSelected: 'tree-selected',
     treeSelectedHover: 'tree-selected-hover',
     tabDragShadow: 'tab-drag-shadow',
-    tabCloseHoverBg: 'tab-close-hover-bg'
+    tabCloseHoverBg: 'tab-close-hover-bg',
+    spellcheckUnderline: 'spellcheck-underline',
+    tplFlow: 'tpl-flow',
+    tplStructures: 'tpl-structures',
+    tplTiming: 'tpl-timing',
+    tplThinking: 'tpl-thinking',
+    tplAnalysis: 'tpl-analysis',
+    tplData: 'tpl-data',
+    shadowChip: 'shadow-chip',
+    dialogShadow: 'dialog-shadow'
   }

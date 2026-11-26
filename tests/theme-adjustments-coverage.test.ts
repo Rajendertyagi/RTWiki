@@ -75,8 +75,19 @@ const ADJUSTED_TOKENS = ['text', 'textMuted', 'border'] as const
 const TEXT_REQUIREMENT = contrastRequirementFor('text')
 if (TEXT_REQUIREMENT === null) throw new Error('rule book must classify text tokens')
 
-/** Colour-valued keys emitted by buildThemeCssVariables (interaction tokens are CSS, not oklch). */
+/**
+ * Colour-valued keys emitted by buildThemeCssVariables. Most interaction tokens
+ * are CSS expressions (shadows/hairlines), but the editor semantic and template
+ * family tokens are oklch colours and belong here too.
+ */
 const COLOUR_KEYS = [
+  '--rtwiki-spellcheck-underline',
+  '--rtwiki-tpl-flow',
+  '--rtwiki-tpl-structures',
+  '--rtwiki-tpl-timing',
+  '--rtwiki-tpl-thinking',
+  '--rtwiki-tpl-analysis',
+  '--rtwiki-tpl-data',
   '--rtwiki-canvas',
   '--rtwiki-pane',
   '--rtwiki-rail',

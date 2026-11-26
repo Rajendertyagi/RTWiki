@@ -113,9 +113,21 @@ describe('interaction tokens', () => {
     'treeSelected',
     'treeSelectedHover',
     'tabDragShadow',
-    'tabCloseHoverBg'
+    'tabCloseHoverBg',
+    'dialogShadow'
   ] as const
-  const schemeSpecific = ['chromeHairline', 'floatingShadow'] as const
+  const schemeSpecific = [
+    'chromeHairline',
+    'floatingShadow',
+    'spellcheckUnderline',
+    'tplFlow',
+    'tplStructures',
+    'tplTiming',
+    'tplThinking',
+    'tplAnalysis',
+    'tplData',
+    'shadowChip'
+  ] as const
 
   it.each(Object.keys(APP_THEMES))('%s declares every interaction token in both variants', (id) => {
     const { variants } = getTheme(id)
@@ -163,6 +175,35 @@ describe('interaction tokens', () => {
       expect(variants[variantName].treeSelectedHover).toBe(treeSelectedHover)
       expect(variants[variantName].tabDragShadow).toBe(tabDragShadow)
       expect(variants[variantName].tabCloseHoverBg).toBe(tabCloseHoverBg)
+      expect(variants[variantName].spellcheckUnderline).toBe(
+        variantName === 'light' ? 'oklch(0.6192 0.1694 25)' : 'oklch(0.72 0.16 25)'
+      )
+      expect(variants[variantName].tplFlow).toBe(
+        variantName === 'light' ? 'oklch(0.52 0.17 260)' : 'oklch(0.75 0.15 260)'
+      )
+      expect(variants[variantName].tplStructures).toBe(
+        variantName === 'light' ? 'oklch(0.52 0.16 295)' : 'oklch(0.76 0.15 295)'
+      )
+      expect(variants[variantName].tplTiming).toBe(
+        variantName === 'light' ? 'oklch(0.51 0.13 155)' : 'oklch(0.78 0.13 155)'
+      )
+      expect(variants[variantName].tplThinking).toBe(
+        variantName === 'light' ? 'oklch(0.53 0.13 75)' : 'oklch(0.8 0.13 75)'
+      )
+      expect(variants[variantName].tplAnalysis).toBe(
+        variantName === 'light' ? 'oklch(0.53 0.16 5)' : 'oklch(0.75 0.15 5)'
+      )
+      expect(variants[variantName].tplData).toBe(
+        variantName === 'light' ? 'oklch(0.51 0.12 205)' : 'oklch(0.78 0.11 205)'
+      )
+      expect(variants[variantName].shadowChip).toBe(
+        variantName === 'light'
+          ? '0 1px 2px -0.5px rgb(0 0 0 / 0.08)'
+          : '0 1px 1px -0.5px rgb(0 0 0 / 0.22)'
+      )
+      // Reuses the theme's existing strongest floating elevation (tabDragShadow):
+      // same 0 8px 24px geometry as the retired literal, stronger 0.45 alpha.
+      expect(variants[variantName].dialogShadow).toBe('0 8px 24px rgba(0, 0, 0, 0.45)')
     }
   })
 })

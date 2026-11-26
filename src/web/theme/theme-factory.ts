@@ -138,7 +138,21 @@ export function toAppTheme(json: unknown): AppTheme {
         Menu: Menu.extend({ classNames: { dropdown: FLOATING } }),
         Popover: Popover.extend({ classNames: { dropdown: FLOATING } }),
         Modal: Modal.extend({ classNames: { content: FLOATING } }),
-        Tooltip: Tooltip.extend({ classNames: { tooltip: FLOATING } }),
+        Tooltip: Tooltip.extend({
+          classNames: { tooltip: FLOATING },
+          /*
+           * .rtwiki-floating repaints the tooltip surface with
+           * --rtwiki-floating-bg (the theme's elevated token). Mantine's own
+           * text colour is the inverse default — white in light, black in
+           * dark — so the label was invisible on that surface (1.00:1 in
+           * light, 1.16–1.91:1 in dark). Bind the tooltip's text variable to
+           * the theme's text token, which is paired with elevated in every
+           * theme and scheme. Scoped to Tooltip only: Menu, Popover, Modal
+           * and the notification keep their own text colours and the shared
+           * floating background recipe.
+           */
+          vars: () => ({ tooltip: { '--tooltip-color': 'var(--rtwiki-text)' } })
+        }),
         /*
          * Scrollbar thickness for every `ScrollArea` in the application.
          * Set as a component default rather than at each call site, so the size

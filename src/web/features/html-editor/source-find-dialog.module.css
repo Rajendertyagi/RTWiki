@@ -9,7 +9,7 @@
   background: var(--rtwiki-chrome-bg, var(--mantine-color-body));
   border: 1px solid var(--rtwiki-chrome-border, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--rtwiki-dialog-shadow);
 }
 
 .statusBad {
