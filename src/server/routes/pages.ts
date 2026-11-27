@@ -23,6 +23,18 @@ import { type JsonBodyResult, readJson } from '../utils/read-json.js'
 const MAX_SEARCH_QUERY_LENGTH = 200
 
 /**
+ * Pagination window. `limit` is bounded so a request cannot ask for the whole
+ * table in one call, and both values must be genuine integers: `Number(x) || 50`
+ * previously let a negative limit bypass the window and let an unbounded
+ * positive one through. Invalid values are refused, never silently clamped —
+ * a clamped answer would not be the page set the caller asked for.
+ */
+const DEFAULT_PAGE_LIMIT = 50
+const MIN_PAGE_LIMIT = 1
+const MAX_PAGE_LIMIT = 100
+const MIN_PAGE_OFFSET = 0
+
+/**
  * What the user is told when a write is rejected because the page moved on.
  * Nothing was stored, so the text they typed is still in the editor: say so, and
  * tell them to take a copy before reloading.
@@ -57,8 +69,24 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
           400
         )
       }
-      const limit = Number(c.req.query('limit')) || 50
-      const offset = Number(c.req.query('offset')) || 0
+      const limitRaw = c.req.query('limit')
+      const offsetRaw = c.req.query('offset')
+      const limit = limitRaw === undefined ? DEFAULT_PAGE_LIMIT : Number(limitRaw)
+      const offset = offsetRaw === undefined ? MIN_PAGE_OFFSET : Number(offsetRaw)
+      if (
+        !Number.isInteger(limit) ||
+        limit < MIN_PAGE_LIMIT ||
+        limit > MAX_PAGE_LIMIT ||
+        !Number.isInteger(offset) ||
+        offset < MIN_PAGE_OFFSET
+      ) {
+        return c.json(
+          {
+            error: `Invalid pagination: limit must be an integer from ${MIN_PAGE_LIMIT} to ${MAX_PAGE_LIMIT} and offset a non-negative integer`
+          },
+          400
+        )
+      }
       const result = service.listPages(db, { search, limit, offset })
       return c.json(result)
     } catch (err) {
@@ -143,6 +171,44 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       const links = service.listOutgoingLinks(db, id)
       return c.json({ links })
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  // Bounded revision history. A permanently deleted page has no row and no
+  // revisions, so it cannot be resurrected through this endpoint.
+  routes.get('/:id/revisions', (c) => {
+    try {
+      const db = getDbFn()
+      const id = c.req.param('id')
+      const exists = db.query('SELECT 1 FROM pages WHERE id = ?').get(id)
+      if (!exists) {
+        return c.json({ error: 'Page not found' }, 404)
+      }
+      return c.json({ revisions: service.listPageRevisions(db, id) })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  // Undo to a specific pre-mutation snapshot. An expired or missing snapshot
+  // answers 410 with a machine-readable code and changes nothing.
+  routes.post('/:id/revisions/:revId/restore', (c) => {
+    try {
+      const db = getDbFn()
+      const page = service.restorePage(db, c.req.param('id'), {
+        revisionId: c.req.param('revId')
+      })
+      if (!page) {
+        return c.json({ error: 'Page not found in trash' }, 404)
+      }
+      return c.json({ page })
+    } catch (err) {
+      if (err instanceof service.RecoveryDataExpiredError) {
+        return c.json({ error: err.message, code: 'recovery_data_expired' }, 410)
+      }
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
     }
@@ -242,7 +308,12 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     try {
       const db = getDbFn()
       const id = c.req.param('id')
-      const page = service.restorePage(db, id)
+      // The UI's normal restore carries no revision id. Resolve the newest
+      // usable pre-delete snapshot so hierarchy, links and search text come
+      // back; pages trashed before migration 015 have none and keep the legacy
+      // fallback inside restorePage.
+      const revisionId = service.latestPreDeleteRevisionId(db, id)
+      const page = service.restorePage(db, id, revisionId === undefined ? {} : { revisionId })
       if (!page) {
         return c.json({ error: 'Page not found in trash' }, 404)
       }
@@ -254,6 +325,14 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
   })
 
   routes.delete('/:id/permanent', (c) => {
+    // Irreversible deletes always require the explicit query-parameter speed
+    // bump. It is not a security boundary; it stops an accidental call.
+    if (c.req.query('confirm') !== 'permanent') {
+      return c.json(
+        { error: 'Permanent deletion requires confirmation', code: 'confirmation_required' },
+        400
+      )
+    }
     try {
       const db = getDbFn()
       const id = c.req.param('id')

@@ -722,7 +722,9 @@ async function main(): Promise<void> {
       const res = await json('/api/pages', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title, content: `body of ${title}` })
+        // Canonical empty BlockNote document: a plain string is rejected by the
+        // Rich Note validator, so this fixture must use valid rich content.
+        body: JSON.stringify({ title, pageType: 'rich', content: '[]' })
       })
       return res.status
     }
@@ -914,13 +916,20 @@ async function main(): Promise<void> {
       liveTitles.includes('Before the backup') && !liveTitles.includes('After the backup'),
       liveTitles.join(',').slice(0, 90)
     )
-    // 001-013 inclusive. 007/008 are recorded by migrateAttachmentBytesToBlobs;
-    // the other eleven are applyMigration calls. The old literal 9 predates
-    // migrations 010-013 and made this check fail on every fresh database.
+    // Compare against the backup's own migration set, not a hand-maintained
+    // count: literals here drifted at 9 and again at 13. The invariant that
+    // matters is that restore preserved the schema the backup carried.
+    const backupDb = new Database(join(stage, 'data', 'backups', 'rtwiki-backup-daily'), {
+      readonly: true
+    })
+    const backupMigrations = (
+      backupDb.query('SELECT count(*) AS n FROM _migrations').all() as Array<{ n: number }>
+    )[0]?.n
+    backupDb.close()
     check(
       'the restored database kept its schema',
-      liveMigrations === 13,
-      `migrations ${liveMigrations}`
+      liveMigrations === backupMigrations,
+      `migrations ${liveMigrations}, backup ${backupMigrations}`
     )
   } finally {
     // `stopServer` rather than `server.kill`, so every exit path — including a

@@ -13,10 +13,14 @@ import type { IngestRejectionReason, IngestResult } from '../ingest/ingest-types
 import type { Logger } from '../logging/index.js'
 import { reindexPagesReferencingAttachment } from '../services/page-service.js'
 import { isSameOrigin } from '../utils/request-origin.js'
+import { LOCAL_CLIENT_ACTOR, logAttachmentOperation } from './attachment-operations.js'
 import {
   type AttachmentRecord,
   deleteAttachment,
   getAttachment,
+  listAttachments,
+  restoreAttachment,
+  softDeleteAttachment,
   streamAttachmentBytes
 } from './attachment-repository.js'
 import {
@@ -134,11 +138,18 @@ const INGEST_REJECTION_MAP: Partial<Record<IngestRejectionReason, RejectionReaso
  * are:
  *
  *   - `POST   /api/attachments`        - upload an image or a document
+ *   - `GET    /api/attachments/trash`  - list soft-deleted attachments only
  *   - `GET    /api/attachments/:id`    - serve it, addressed by catalogue id
  *   - `GET    /api/attachments/:id/view` - serve a document inline, for the
  *                                          browser to draw in a new tab
  *   - `GET    /api/attachments/:id/text` - its extracted text
- *   - `DELETE /api/attachments/:id`    - remove the bytes and the metadata
+ *   - `DELETE /api/attachments/:id`    - move it to the trash, keeping the bytes
+ *   - `POST   /api/attachments/:id/restore` - return it to the living set
+ *   - `DELETE /api/attachments/:id/permanent?confirm=permanent` - purge it
+ *
+ * Every ordinary read uses the repository's default `living` visibility, so a
+ * trashed attachment is invisible by id and absent from search. Only the trash
+ * endpoints opt in to `trashed` rows.
  *
  * ## Why uploads are addressed by id
  *
@@ -263,10 +274,25 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     )
   })
 
+  /**
+   * The trash contains ONLY soft-deleted rows. Registered before `/:id` so the
+   * literal `trash` cannot be swallowed as an attachment id.
+   */
+  routes.get('/trash', (c) => {
+    if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+    const attachments = listAttachments(getDb(), 'trashed')
+    return c.json({
+      attachments: attachments.map(toResponse),
+      total: attachments.length
+    })
+  })
+
   routes.get('/:id', async (c) => {
     if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
     const db = getDb()
     const id = c.req.param('id')
+    // Default visibility is `living`: a trashed attachment is not downloadable
+    // by its normal id, and its bytes are never streamed.
     const record = getAttachment(db, id)
     if (!record) return c.json({ error: 'Not found' }, 404)
 
@@ -326,7 +352,7 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
     const db = getDb()
     const id = c.req.param('id')
-    const record = getAttachment(db, id)
+    const record = getAttachment(db, id, 'living')
     if (!record) return c.json({ error: 'Not found' }, 404)
 
     // Only a document may be rendered. An image is bytes the browser already
@@ -372,38 +398,123 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
 
   routes.get('/:id/text', (c) => {
     if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
-    const record = getAttachment(getDb(), c.req.param('id'))
+    const record = getAttachment(getDb(), c.req.param('id'), 'living')
     if (!record) return c.json({ error: 'Not found' }, 404)
     // Returned as JSON text, never as markup, so a document's contents can never
     // become a rendering surface.
     return c.json({ text: record.extractedText ?? '', kind: record.kind })
   })
 
+  /**
+   * Soft delete. The bytes and every metadata column stay; only `deleted_at`
+   * changes. The mutation and its operation-log row share one transaction, so
+   * the trash can never contain an attachment the log does not know about.
+   */
   routes.delete('/:id', async (c) => {
     if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
     if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+    const db = getDb()
     const id = c.req.param('id')
-    if (!getAttachment(getDb(), id)) return c.json({ error: 'Not found' }, 404)
-    // One statement removes the bytes and their metadata together. There is no
-    // second step that can fail and leave the two disagreeing.
-    if (!deleteAttachment(getDb(), id)) return c.json({ error: 'Not found' }, 404)
-    // The document's text was indexed against every page that referenced it, and those
-    // page rows still hold its URL. Without this the deleted document's words stay
-    // findable and lead to a page that no longer shows it. Reindexing cannot fail in a
-    // way that should fail the delete — the attachment is already gone, and the worst
-    // case is stale search text, not a wrong result.
+    if (!getAttachment(db, id, 'living')) return c.json({ error: 'Not found' }, 404)
+
+    db.run('BEGIN IMMEDIATE')
     try {
-      reindexPagesReferencingAttachment(getDb(), id)
+      if (!softDeleteAttachment(db, id)) {
+        db.run('ROLLBACK')
+        return c.json({ error: 'Not found' }, 404)
+      }
+      logAttachmentOperation(db, 'attachment.trash', id, LOCAL_CLIENT_ACTOR)
+      db.run('COMMIT')
     } catch (err) {
-      logger.warn('Attachment delete: reindex failed', {
-        event: 'attachment_reindex_failed',
-        code: err instanceof Error ? err.name : 'unknown'
-      })
+      db.run('ROLLBACK')
+      throw err
+    }
+
+    // The document's text was indexed against every page that referenced it, and
+    // those pages still hold its URL. Now that the row is trashed, the shared
+    // extractor omits its text; reindex so stale words stop being findable. This
+    // is best-effort: the trash transition is already committed, and the worst
+    // case is stale search text, not a wrong result.
+    reindexAfterTrashChange(db, id, logger)
+    return c.json({ ok: true })
+  })
+
+  /** Restores a trashed attachment to the living set, atomically with its log row. */
+  routes.post('/:id/restore', async (c) => {
+    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
+    if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+    const db = getDb()
+    const id = c.req.param('id')
+    if (!getAttachment(db, id, 'trashed')) return c.json({ error: 'Not found' }, 404)
+
+    db.run('BEGIN IMMEDIATE')
+    try {
+      if (!restoreAttachment(db, id)) {
+        db.run('ROLLBACK')
+        return c.json({ error: 'Not found' }, 404)
+      }
+      logAttachmentOperation(db, 'attachment.restore', id, LOCAL_CLIENT_ACTOR)
+      db.run('COMMIT')
+    } catch (err) {
+      db.run('ROLLBACK')
+      throw err
+    }
+
+    // The attachment is living again, so its extracted text belongs back in the
+    // search rows of every page whose content still references it.
+    reindexAfterTrashChange(db, id, logger)
+    const restored = getAttachment(db, id, 'living')
+    if (!restored) return c.json({ error: 'Not found' }, 404)
+    return c.json({ attachment: toResponse(restored) })
+  })
+
+  /**
+   * Irreversible purge. The query parameter is a deliberate speed bump, not a
+   * security boundary; the origin guard above is the real gate. Row and BLOB go
+   * in one statement, with the log row in the same transaction.
+   */
+  routes.delete('/:id/permanent', async (c) => {
+    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
+    if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+    if (c.req.query('confirm') !== 'permanent') {
+      return c.json({ error: 'Confirmation required', code: 'confirmation_required' }, 400)
+    }
+    const db = getDb()
+    const id = c.req.param('id')
+    if (!getAttachment(db, id, 'any')) return c.json({ error: 'Not found' }, 404)
+
+    db.run('BEGIN IMMEDIATE')
+    try {
+      if (!deleteAttachment(db, id)) {
+        db.run('ROLLBACK')
+        return c.json({ error: 'Not found' }, 404)
+      }
+      logAttachmentOperation(db, 'attachment.permanent_delete', id, LOCAL_CLIENT_ACTOR)
+      db.run('COMMIT')
+    } catch (err) {
+      db.run('ROLLBACK')
+      throw err
     }
     return c.json({ ok: true })
   })
 
   return routes
+}
+
+/**
+ * Recomputes the search rows of pages that referenced an attachment whose trash
+ * state just changed. Kept in one place so the soft-delete and restore routes
+ * cannot disagree about when text is indexed.
+ */
+function reindexAfterTrashChange(db: ReturnType<typeof getDb>, id: string, logger: Logger): void {
+  try {
+    reindexPagesReferencingAttachment(db, id)
+  } catch (err) {
+    logger?.warn('Attachment reindex failed', {
+      event: 'attachment_reindex_failed',
+      code: err instanceof Error ? err.name : 'unknown'
+    })
+  }
 }
 
 /**
@@ -471,6 +582,8 @@ function toResponse(record: AttachmentRecord) {
     signatureless:
       record.kind === 'document' &&
       acceptedDocumentFormatFor(record.mimeType)?.signatureless === true,
-    originalName: record.originalName
+    originalName: record.originalName,
+    /** Null for a living attachment; set only for rows returned by the trash list. */
+    deletedAt: record.deletedAt
   }
 }

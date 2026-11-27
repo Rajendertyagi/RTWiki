@@ -44,6 +44,9 @@ const ADJUSTMENTS = { contrast: 100, glassOpacity: 100 }
 const SURFACES = ['canvas', 'pane', 'elevated'] as const
 const COLOR_FIELDS = ['text', 'background', 'border', 'hover'] as const
 
+/** The authoritative family -> variants table used by the coverage gates. */
+const AUTHORITATIVE_COMPONENT_ROLES = COMPONENT_ROLES
+
 type Scheme = 'light' | 'dark'
 
 function resolverOf(theme: AppTheme): VariantColorsResolver {
@@ -180,7 +183,9 @@ describe('component roles: coverage', () => {
   it('maps every Mantine component rendered in src/web', () => {
     const used = usedMantineComponents()
     expect(used.size, 'source scan found components').toBeGreaterThan(20)
-    const unmapped = [...used].filter((name) => !Object.hasOwn(COMPONENT_ROLES, name)).sort()
+    const unmapped = [...used]
+      .filter((name) => !Object.hasOwn(AUTHORITATIVE_COMPONENT_ROLES, name))
+      .sort()
     expect(unmapped, `unmapped Mantine components: ${unmapped.join(', ')}`).toEqual([])
   })
 
@@ -200,7 +205,7 @@ describe('component roles: coverage', () => {
   })
 
   it('every family variant resolves to a defined variant role', () => {
-    for (const [family, variants] of Object.entries(COMPONENT_ROLES)) {
+    for (const [family, variants] of Object.entries(AUTHORITATIVE_COMPONENT_ROLES)) {
       for (const variant of variants) {
         expect(Object.hasOwn(VARIANT_ROLES, variant), `${family}/${variant}`).toBe(true)
       }
@@ -220,10 +225,14 @@ describe('component roles: coverage', () => {
       Card: [],
       Tooltip: ['filled'],
       Popover: [],
-      Modal: []
+      Modal: [],
+      Drawer: [],
+      Tabs: []
     }
     for (const [family, variants] of Object.entries(expected)) {
-      const actual: string[] = [...COMPONENT_ROLES[family as keyof typeof COMPONENT_ROLES]].sort()
+      const actual: string[] = [
+        ...AUTHORITATIVE_COMPONENT_ROLES[family as keyof typeof AUTHORITATIVE_COMPONENT_ROLES]
+      ].sort()
       const wanted: string[] = [...variants].sort()
       expect(actual).toEqual(wanted)
     }

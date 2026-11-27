@@ -413,6 +413,69 @@ export async function runMigrations(
     `)
     db.run('CREATE INDEX IF NOT EXISTS idx_import_sources_page ON import_sources(page_id)')
   })
+
+  await applyMigration(db, '014_soft_delete_attachments', (db) => {
+    // Soft delete keeps the bytes: a trashed attachment must be restorable, so
+    // `data` is deliberately left untouched and there is no table rebuild.
+    // `deleted_at IS NULL` is the living set; the index serves the trash list
+    // and the retention sweep, both of which filter on it.
+    db.run('ALTER TABLE attachments ADD COLUMN deleted_at TEXT')
+    db.run('CREATE INDEX idx_attachments_deleted_at ON attachments(deleted_at)')
+  })
+
+  await applyMigration(db, '015_recovery_data', (db) => {
+    // Recovery snapshots are deliberately detached from `pages` and
+    // `attachments`: no foreign keys, following the `import_sources` precedent
+    // (ADR-024 §4). Soft-deleted pages keep their revisions for restore; a
+    // permanent delete explicitly purges them in the same transaction (§6.13),
+    // so no cascade is needed and no recovery row can outlive that decision.
+    //
+    // `created_at` is the page's ORIGINAL creation time, captured with the
+    // snapshot and preserved verbatim on restore; `captured_at` is when the
+    // revision itself was taken. They are not interchangeable.
+    db.run(`
+      CREATE TABLE page_revisions (
+        id TEXT PRIMARY KEY,
+        page_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        page_type TEXT NOT NULL,
+        parent_id TEXT,
+        position INTEGER NOT NULL,
+        search_content TEXT,
+        children_snapshot TEXT,
+        links_snapshot TEXT,
+        capture_kind TEXT NOT NULL,
+        actor TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `)
+    db.run('CREATE INDEX idx_page_revisions_page_version ON page_revisions(page_id, version DESC)')
+    db.run('CREATE INDEX idx_page_revisions_captured_at ON page_revisions(captured_at)')
+
+    // Only committed recovery operations are logged -- this is not a general
+    // activity log. The closed value sets live in shared/schemas/recovery.ts.
+    db.run(`
+      CREATE TABLE operation_log (
+        id TEXT PRIMARY KEY,
+        operation_kind TEXT NOT NULL,
+        target_page_id TEXT,
+        target_attachment_id TEXT,
+        before_revision_id TEXT,
+        after_revision_id TEXT,
+        actor TEXT,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `)
+    db.run('CREATE INDEX idx_operation_log_created_at ON operation_log(created_at)')
+
+    // Internal structural counter: increments only when parent_id or position
+    // changes, never on ordinary content edits. Existing rows start at 0.
+    db.run('ALTER TABLE pages ADD COLUMN structure_version INTEGER NOT NULL DEFAULT 0')
+  })
 }
 
 /**

@@ -2,3 +2,10 @@
 .actionsCell {
   text-align: right;
 }
+
+/* Keyboard focus stays visible on the icon-only row actions. Geometry comes
+   from the shared focus-ring tokens, so it matches every other chrome control. */
+.actionButton:focus-visible {
+  outline: var(--rtwiki-focus-ring-width) solid var(--mantine-color-blue-outline);
+  outline-offset: var(--rtwiki-focus-ring-offset);
+}

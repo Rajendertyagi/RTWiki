@@ -928,7 +928,63 @@ export const UI_TEXT = {
   backupRestoreShutsDown: 'RTWiki will close when the restore finishes. Open it again to carry on.',
   backupRestoreConfirm: 'Restore and close RTWiki',
   backupRestoreCancel: 'Cancel',
-  backupRestoreRefused: 'This backup cannot be restored, so nothing has been changed.'
+  backupRestoreRefused: 'This backup cannot be restored, so nothing has been changed.',
+
+  // Trash — Attachments tab (Phase 1 recovery). Every user-facing string for
+  // the soft-deleted attachment list and its purge confirmation lives here.
+  trashTabPages: 'Pages',
+  trashTabAttachments: 'Attachments',
+  trashColumnTitle: 'Title',
+  trashColumnName: 'Name',
+  trashColumnType: 'Type',
+  trashColumnDeletedAt: 'Deleted At',
+  trashColumnActions: 'Actions',
+  loadingAttachments: 'Loading attachments...',
+  trashAttachmentsEmpty: 'No deleted attachments',
+  trashAttachmentsEmptySubtitle:
+    'Soft-deleted attachments will appear here. You can restore or permanently delete them.',
+  attachmentRestoreLabel: 'Restore attachment',
+  attachmentPurgeLabel: 'Delete attachment permanently',
+  attachmentPurgeTitle: 'Delete attachment permanently',
+  attachmentPurgeConfirmation:
+    'Are you sure you want to permanently delete this attachment? This action cannot be undone.',
+  attachmentLoadFailed: 'Failed to load deleted attachments.',
+  attachmentRestoreFailed: 'Failed to restore attachment.',
+  attachmentPurgeFailed: 'Failed to permanently delete attachment.',
+
+  // Page history panel (Phase 1 recovery). The capture-kind and actor labels
+  // are keyed by the shared tuples in `@rtwiki/shared/schemas/recovery`, so a
+  // new value cannot be added on the server and silently render as raw text.
+  historyOpenLabel: 'Page history',
+  historyTitle: 'Page history',
+  historyEmpty: 'No revisions yet',
+  historyEmptySubtitle: 'Revisions appear here after this page is changed.',
+  historyLoadFailed: 'Failed to load page history.',
+  historyColumnCapturedAt: 'Captured',
+  historyColumnKind: 'Capture',
+  historyColumnActor: 'Actor',
+  historyColumnVersion: 'Version',
+  historyColumnActions: 'Actions',
+  historyPreviewAction: 'Preview revision',
+  historyRestoreAction: 'Restore this revision',
+  historyPreviewTitle: 'Revision preview',
+  historyPreviewContentLabel: 'Content',
+  historyPreviewNoContent: 'This revision has no content.',
+  historyRestoreConfirmTitle: 'Restore revision',
+  historyRestoreConfirmMessage:
+    'Replace this page with the selected revision? Your current content is saved as a new revision first.',
+  historyRestoreConfirmButton: 'Restore',
+  historyRestoreSuccess: 'Revision restored. Reload the page to see the restored content.',
+  historyReloadButton: 'Reload page',
+  historyRecoveryExpired: 'This change is too old to undo.',
+  historyRestoreUnavailable: 'This revision can only be restored while the page is in Trash.',
+  historyRestoreFailed: 'This revision could not be restored.',
+  historyCaptureKindBeforeUpdate: 'Before edit',
+  historyCaptureKindBeforeSoftDelete: 'Before deletion',
+  historyCaptureKindBeforeRestore: 'Before restore',
+  historyActorLocalClient: 'This device',
+  historyActorSystem: 'System',
+  historyActorAi: 'AI'
 } as const
 
 export const STATUS_TEXT = {

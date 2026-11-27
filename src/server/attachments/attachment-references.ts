@@ -70,11 +70,17 @@ export function pageIdsReferencingAttachment(db: Database, attachmentId: string)
 }
 
 /**
- * The extracted text of the attachments a page references, in the page's own order.
+ * The extracted text of the **living** attachments a page references, in the
+ * page's own order.
  *
  * Returns `[]` for a page with no attachments, for an image (which has no text by
- * construction), and for an attachment that has since been deleted — a dangling URL in
+ * construction), and for an attachment that has since been removed — a dangling URL in
  * page content is normal after an attachment is removed, and must not throw.
+ *
+ * A soft-deleted attachment is excluded here for the same reason it is excluded
+ * from download: its text must stop being findable the moment it enters the
+ * trash. The URL stays in the page content so a restore can bring the text back
+ * by reindexing; only the index changes.
  */
 export function attachmentTextForContent(db: Database, content: string): string[] {
   const ids = attachmentIdsInContent(content)
@@ -83,7 +89,8 @@ export function attachmentTextForContent(db: Database, content: string): string[
   const rows = db
     .query(
       `SELECT id, extracted_text FROM attachments
-       WHERE id IN (${placeholders}) AND extracted_text IS NOT NULL AND extracted_text <> ''`
+       WHERE id IN (${placeholders}) AND deleted_at IS NULL
+         AND extracted_text IS NOT NULL AND extracted_text <> ''`
     )
     .all(...ids) as Array<{ id: string; extracted_text: string | null }>
   const byId = new Map(rows.map((row) => [row.id, row.extracted_text ?? '']))
@@ -94,4 +101,43 @@ export function attachmentTextForContent(db: Database, content: string): string[
     if (text !== undefined && text !== '') out.push(text)
   }
   return out
+}
+
+/**
+ * The ids of retained revision snapshots whose stored content still references
+ * the attachment.
+ *
+ * This is the third gate on the trashed-attachment purge. Revisions survive a
+ * permanent page deletion by design, so a revision can be the *only* remaining
+ * holder of an attachment URL. Purging that attachment would make a later undo
+ * silently lose the asset — the exact failure the retention rule exists to
+ * prevent. Both `content` (the canonical page JSON) and `search_content` (the
+ * extracted text) are scanned, because either may carry the URL.
+ *
+ * The LIKE prefilter is the same one `pageIdsReferencingAttachment` uses: a
+ * parameter cannot be interpolated into the regex, so the candidate rows are
+ * narrowed by SQL and then confirmed by the shared reader.
+ */
+export function revisionIdsReferencingAttachment(db: Database, attachmentId: string): string[] {
+  const rows = db
+    .query(
+      `SELECT id, content, search_content FROM page_revisions
+       WHERE (content LIKE '%' || ? || '%' AND content LIKE '%/api/attachments/%')
+          OR (search_content LIKE '%' || ? || '%' AND search_content LIKE '%/api/attachments/%')`
+    )
+    .all(attachmentId, attachmentId) as Array<{
+    id: string
+    content: string | null
+    search_content: string | null
+  }>
+  const confirmed: string[] = []
+  for (const row of rows) {
+    const inContent =
+      typeof row.content === 'string' && attachmentIdsInContent(row.content).includes(attachmentId)
+    const inSearch =
+      typeof row.search_content === 'string' &&
+      attachmentIdsInContent(row.search_content).includes(attachmentId)
+    if (inContent || inSearch) confirmed.push(row.id)
+  }
+  return confirmed
 }

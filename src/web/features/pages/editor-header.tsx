@@ -1,10 +1,11 @@
 import { ActionIcon, Menu, TextInput, Tooltip } from '@mantine/core'
 import { getHotkeyHandler } from '@mantine/hooks'
 import type { Page } from '@rtwiki/shared/contracts/pages'
-import { IconArrowLeft, IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
+import { IconArrowLeft, IconCopy, IconDots, IconHistory, IconTrash } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { PageTypeIcon } from '../../components/page-type-icon.js'
 import { UI_TEXT } from '../../config/index.js'
+import { PageHistoryPanel } from '../page-history/page-history-panel.js'
 import classes from './editor-header.module.css'
 
 interface EditorHeaderProps {
@@ -29,6 +30,7 @@ export function EditorHeader({
 }: EditorHeaderProps): JSX.Element {
   const [title, setTitle] = useState(page.title)
   const [editing, setEditing] = useState(false)
+  const [historyOpened, setHistoryOpened] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -64,78 +66,97 @@ export function EditorHeader({
   ])
 
   return (
-    <div className={classes.header}>
-      <div className={classes.left}>
-        <Tooltip label={UI_TEXT.backToDashboard}>
-          <ActionIcon variant="subtle" onClick={onBack} aria-label={UI_TEXT.backToDashboard}>
-            <IconArrowLeft size={18} />
-          </ActionIcon>
-        </Tooltip>
+    <>
+      <div className={classes.header}>
+        <div className={classes.left}>
+          <Tooltip label={UI_TEXT.backToDashboard}>
+            <ActionIcon variant="subtle" onClick={onBack} aria-label={UI_TEXT.backToDashboard}>
+              <IconArrowLeft size={18} />
+            </ActionIcon>
+          </Tooltip>
 
-        {editing ? (
-          <TextInput
-            ref={inputRef}
-            value={title}
-            onChange={(event) => setTitle(event.currentTarget.value)}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
-            placeholder={UI_TEXT.editorPlaceholderTitle}
-            aria-label={UI_TEXT.titleLabel}
-            className={classes.titleInput}
-            variant="default"
-            size="md"
-            fw={600}
-          />
-        ) : (
-          <button
-            type="button"
-            className={classes.titleDisplay}
-            onDoubleClick={() => setEditing(true)}
-            onKeyDown={getHotkeyHandler([
-              ['Enter', () => setEditing(true)],
-              ['F2', () => setEditing(true)]
-            ])}
-            title={UI_TEXT.renameHint}
-            aria-label={UI_TEXT.titleLabel}
-            data-testid="editor-title"
-          >
-            {title || UI_TEXT.untitledPage}
-          </button>
-        )}
+          {editing ? (
+            <TextInput
+              ref={inputRef}
+              value={title}
+              onChange={(event) => setTitle(event.currentTarget.value)}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              placeholder={UI_TEXT.editorPlaceholderTitle}
+              aria-label={UI_TEXT.titleLabel}
+              className={classes.titleInput}
+              variant="default"
+              size="md"
+              fw={600}
+            />
+          ) : (
+            <button
+              type="button"
+              className={classes.titleDisplay}
+              onDoubleClick={() => setEditing(true)}
+              onKeyDown={getHotkeyHandler([
+                ['Enter', () => setEditing(true)],
+                ['F2', () => setEditing(true)]
+              ])}
+              title={UI_TEXT.renameHint}
+              aria-label={UI_TEXT.titleLabel}
+              data-testid="editor-title"
+            >
+              {title || UI_TEXT.untitledPage}
+            </button>
+          )}
 
-        <span className={classes.typeIcon} aria-hidden="true">
-          <PageTypeIcon pageType={page.pageType} size={16} />
-        </span>
+          <span className={classes.typeIcon} aria-hidden="true">
+            <PageTypeIcon pageType={page.pageType} size={16} />
+          </span>
+
+          <Tooltip label={UI_TEXT.historyOpenLabel}>
+            <ActionIcon
+              variant="subtle"
+              aria-label={UI_TEXT.historyOpenLabel}
+              onClick={() => setHistoryOpened(true)}
+              data-testid="editor-history"
+            >
+              <IconHistory size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </div>
+
+        <Menu position="bottom-end" withinPortal>
+          <Menu.Target>
+            <ActionIcon
+              variant="subtle"
+              aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
+              data-testid="editor-actions"
+            >
+              <IconDots size={16} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item
+              leftSection={<IconCopy size={14} />}
+              onClick={onDuplicate}
+              data-testid="editor-duplicate"
+            >
+              {UI_TEXT.duplicateAction}
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<IconTrash size={14} />}
+              color="red"
+              onClick={onDelete}
+              data-testid="editor-delete"
+            >
+              {UI_TEXT.deleteAction}
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
       </div>
 
-      <Menu position="bottom-end" withinPortal>
-        <Menu.Target>
-          <ActionIcon
-            variant="subtle"
-            aria-label={`Actions for ${page.title || UI_TEXT.untitledPage}`}
-            data-testid="editor-actions"
-          >
-            <IconDots size={16} />
-          </ActionIcon>
-        </Menu.Target>
-        <Menu.Dropdown>
-          <Menu.Item
-            leftSection={<IconCopy size={14} />}
-            onClick={onDuplicate}
-            data-testid="editor-duplicate"
-          >
-            {UI_TEXT.duplicateAction}
-          </Menu.Item>
-          <Menu.Item
-            leftSection={<IconTrash size={14} />}
-            color="red"
-            onClick={onDelete}
-            data-testid="editor-delete"
-          >
-            {UI_TEXT.deleteAction}
-          </Menu.Item>
-        </Menu.Dropdown>
-      </Menu>
-    </div>
+      <PageHistoryPanel
+        pageId={page.id}
+        opened={historyOpened}
+        onClose={() => setHistoryOpened(false)}
+      />
+    </>
   )
 }

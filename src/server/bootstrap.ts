@@ -16,7 +16,10 @@ import {
   SHUTDOWN_FULL_SAVE_TIMEOUT_MS
 } from '@rtwiki/shared/constants'
 import { createApp } from './app.js'
-import { reclaimUnreferencedAttachments } from './attachments/attachment-retention.js'
+import {
+  purgeExpiredTrashedAttachments,
+  reclaimUnreferencedAttachments
+} from './attachments/attachment-retention.js'
 import { sweepPartialBackups } from './backup/backup-service.js'
 import { type BackupSchedule, startBackupSchedule } from './backup/schedule.js'
 import { joinPaths, type RuntimePaths, resolveRuntimePaths } from './config/index.js'
@@ -34,6 +37,7 @@ import { type Launcher, launchBrowser } from './launcher.js'
 import { createLogger, type Logger } from './logging/index.js'
 import { RotatingJsonlSink } from './logging/rotating-sink.js'
 import { sanitizePathForLog } from './logging/sanitize-path.js'
+import { pruneRecoveryData } from './services/page-service.js'
 import { readAllSettings } from './settings/index.js'
 import { ShutdownCoordinator } from './shutdown-coordinator.js'
 
@@ -473,6 +477,35 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Runtime
   // file sitting where a backup belongs. Runs after migrations, which need the
   // write lock first.
   sweepPartialBackups(dataDir)
+
+  // One transactional recovery prune at startup, never per request. It runs
+  // BEFORE the trashed-attachment purge so condition (c) of that purge sees only
+  // revisions that are still retained: an expired revision must not keep an
+  // attachment alive, but a retained one must. Both routines are synchronous
+  // and open their own BEGIN IMMEDIATE transaction.
+  step('recovery_prune')
+  try {
+    const pruned = pruneRecoveryData(db)
+    const purged = purgeExpiredTrashedAttachments(db)
+    if (pruned.operationsDeleted > 0 || pruned.revisionsDeleted > 0 || purged.purged.length > 0) {
+      logger.info('Recovery prune completed', {
+        event: 'startup',
+        action: 'recovery_prune',
+        operationsDeleted: pruned.operationsDeleted,
+        revisionsDeleted: pruned.revisionsDeleted,
+        attachmentsPurged: purged.purged.length,
+        bytesReclaimed: purged.bytes
+      })
+    }
+  } catch (err) {
+    // A failed pass rolls its own transaction back, so the data is exactly as it
+    // was before. Stale recovery data is not a reason to refuse to start.
+    logger.warn('Recovery prune failed', {
+      event: 'startup',
+      action: 'recovery_prune',
+      detail: err instanceof Error ? err.message : String(err)
+    })
+  }
 
   // Reclaims attachments no document refers to. Runs once at
   // startup rather than on a timer: the leak only grows when a note is deleted, and

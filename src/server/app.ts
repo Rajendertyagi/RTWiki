@@ -16,6 +16,7 @@ import { createClientDebugEventRoutes, type DebugEventSink } from './routes/clie
 import { createClientErrorRoutes } from './routes/client-errors.js'
 import { createImportRoutes } from './routes/import.js'
 import { createPageRoutes } from './routes/pages.js'
+import { createRecoveryRoutes } from './routes/recovery.js'
 import { createScheduleRoutes } from './routes/schedule.js'
 import { createSchedulePresetRoutes } from './routes/schedule-presets.js'
 import { createSettingsRoutes } from './routes/settings.js'
@@ -257,6 +258,7 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
   })
 
   app.route('/api/pages', createPageRoutes(deps.getDb))
+  app.route('/api/recovery', createRecoveryRoutes(deps.getDb))
   // Full ingest: page + attachment + provenance in one transaction (ADR-024).
   // The attachment route below is the other consumer of the same ingest core.
   app.route('/api/import', createImportRoutes(deps.getDb))

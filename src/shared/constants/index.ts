@@ -383,3 +383,25 @@ export const BACKUP_VALIDATION_REASONS = [
 ] as const
 
 export type BackupValidationReason = (typeof BACKUP_VALIDATION_REASONS)[number]
+
+// ---------------------------------------------------------------------------
+// Recovery (docs/PLAN_EXTERNAL_AI_INTEGRATION.md §6)
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a soft-deleted attachment is kept before the startup purge may
+ * reclaim it, in days. The purge also requires that no living or trashed page
+ * and no retained revision snapshot still references the attachment's URL.
+ * Distinct from the living-orphan sweep's `DEFAULT_UNREFERENCED_MIN_AGE_MS`,
+ * which governs a different set of rows.
+ */
+export const TRASHED_ATTACHMENT_RETENTION_DAYS = 30 as const
+
+/**
+ * Upper bound on retained revisions per page. The newest revision is never
+ * pruned, so "undo last change" always has a target.
+ */
+export const MAX_PAGE_REVISIONS_PER_PAGE = 10 as const
+
+/** Age in days past which operation-log rows and eligible revisions are pruned. */
+export const RECOVERY_RETENTION_DAYS = 30 as const

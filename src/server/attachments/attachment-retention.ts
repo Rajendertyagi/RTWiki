@@ -1,5 +1,11 @@
 import type { Database } from 'bun:sqlite'
-import { attachmentIdsInContent } from './attachment-references.js'
+import { TRASHED_ATTACHMENT_RETENTION_DAYS } from '@rtwiki/shared/constants'
+import { logAttachmentOperation, SYSTEM_ACTOR } from './attachment-operations.js'
+import {
+  attachmentIdsInContent,
+  pageIdsReferencingAttachment,
+  revisionIdsReferencingAttachment
+} from './attachment-references.js'
 import { deleteAttachment, listAttachments } from './attachment-repository.js'
 
 /**
@@ -65,6 +71,8 @@ export interface RetentionOptions {
  */
 export const DEFAULT_UNREFERENCED_MIN_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
 /**
  * The attachment ids any document still refers to.
  *
@@ -102,6 +110,9 @@ export function findUnreferencedAttachments(
 ): UnreferencedAttachment[] {
   const referenced = referencedIds(db)
   const orphans: UnreferencedAttachment[] = []
+  // `listAttachments` defaults to the living set. A soft-deleted row is owned by
+  // the trash purge below, not by this sweep: letting this pass hard-delete it
+  // would bypass its own 30-day window and make restore impossible.
   for (const attachment of listAttachments(db)) {
     if (referenced.has(attachment.id)) continue
     const createdAt = Date.parse(attachment.createdAt)
@@ -167,4 +178,82 @@ export function reclaimUnreferencedAttachments(
     }
   }
   return result
+}
+
+/** Why a trashed attachment survived a purge pass. Named so it is never silent. */
+export type TrashedRetentionReason = 'young' | 'page-reference' | 'revision-reference'
+
+export interface TrashedPurgeResult {
+  /** Rows physically removed, with their BLOBs. */
+  purged: string[]
+  /** Bytes reclaimed by those removals. */
+  bytes: number
+  /** Rows kept, and the condition that kept them. */
+  retained: Array<{ id: string; reason: TrashedRetentionReason }>
+}
+
+export interface TrashedPurgeOptions {
+  /** Injected so the policy is testable without a real clock. */
+  now?: number
+  /** Defaults to the one shared retention constant; overridable in tests. */
+  retentionDays?: number
+}
+
+/**
+ * Startup purge of soft-deleted attachments.
+ *
+ * All three conditions must hold, and they are checked in this order:
+ *
+ *   (a) `deleted_at` is older than `TRASHED_ATTACHMENT_RETENTION_DAYS`. An
+ *       unparseable timestamp is treated as young, never as infinitely old.
+ *   (b) No page references the URL — including pages in the trash, which can be
+ *       restored and would otherwise come back with a missing asset.
+ *   (c) No retained revision snapshot references the URL. This is mandatory:
+ *       revisions survive permanent deletion by design, so a revision can be
+ *       the only remaining holder of the URL. Purging here would make a later
+ *       undo silently lose the attachment.
+ *
+ * The whole pass is one transaction. Each purge also records its
+ * `attachment.permanent_delete` operation in that same transaction, so the log
+ * can never claim a purge that did not happen or omit one that did.
+ */
+export function purgeExpiredTrashedAttachments(
+  db: Database,
+  options: TrashedPurgeOptions = {}
+): TrashedPurgeResult {
+  const { now = Date.now(), retentionDays = TRASHED_ATTACHMENT_RETENTION_DAYS } = options
+  const cutoff = now - retentionDays * MS_PER_DAY
+  const result: TrashedPurgeResult = { purged: [], bytes: 0, retained: [] }
+
+  const trashed = listAttachments(db, 'trashed')
+  if (trashed.length === 0) return result
+
+  db.run('BEGIN IMMEDIATE')
+  try {
+    for (const attachment of trashed) {
+      const deletedAt =
+        attachment.deletedAt === null ? Number.NaN : Date.parse(attachment.deletedAt)
+      if (Number.isNaN(deletedAt) || deletedAt >= cutoff) {
+        result.retained.push({ id: attachment.id, reason: 'young' })
+        continue
+      }
+      if (pageIdsReferencingAttachment(db, attachment.id).length > 0) {
+        result.retained.push({ id: attachment.id, reason: 'page-reference' })
+        continue
+      }
+      if (revisionIdsReferencingAttachment(db, attachment.id).length > 0) {
+        result.retained.push({ id: attachment.id, reason: 'revision-reference' })
+        continue
+      }
+      if (!deleteAttachment(db, attachment.id)) continue
+      logAttachmentOperation(db, 'attachment.permanent_delete', attachment.id, SYSTEM_ACTOR)
+      result.purged.push(attachment.id)
+      result.bytes += attachment.byteSize
+    }
+    db.run('COMMIT')
+    return result
+  } catch (err) {
+    db.run('ROLLBACK')
+    throw err
+  }
 }

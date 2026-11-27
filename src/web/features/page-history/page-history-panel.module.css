@@ -1,0 +1,19 @@
+/* Actions column, right-aligned in both the header and the body cells. */
+.actionsCell {
+  text-align: right;
+}
+
+/* Keyboard focus stays visible on the icon-only row actions. Geometry comes
+   from the shared focus-ring tokens, so it matches every other chrome control. */
+.actionButton:focus-visible {
+  outline: var(--rtwiki-focus-ring-width) solid var(--mantine-color-blue-outline);
+  outline-offset: var(--rtwiki-focus-ring-offset);
+}
+
+/* The preview shows a bounded excerpt of a JSON-encoded document. Wrapping is
+   required because BlockNote JSON has no line breaks; the clamp keeps a large
+   page from pushing the dialog past the viewport. */
+.contentPreview {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

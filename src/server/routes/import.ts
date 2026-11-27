@@ -173,17 +173,41 @@ export function createImportRoutes(
       return c.json({ error: 'The import did not create a page.', code: 'internal' }, 500)
     }
 
+    // `ingestFile` has already COMMITted by the time it returns ok. These three
+    // reads are diagnostics, not part of the write: a miss here cannot undo the
+    // commit, and answering 500 would tell the client to retry and duplicate the
+    // note. Return 201 with the ids the commit reported, log the gap, and let a
+    // subsequent GET show the full records once they are readable again.
     const page = getPage(db, result.pageId)
     const attachment = getAttachment(db, result.attachmentId)
     const provenance = getImportSourceByPage(db, result.pageId)
     if (!page || !attachment || !provenance) {
-      return c.json(
-        { error: 'The import completed but its records could not be read back.', code: 'internal' },
-        500
-      )
+      deps.logger.warn('Import readback incomplete after commit', {
+        event: 'import_readback_incomplete',
+        pageFound: page !== null,
+        attachmentFound: attachment !== null,
+        provenanceFound: provenance !== null
+      })
     }
 
-    return c.json({ page, attachment, provenance, warnings: result.warnings }, 201)
+    return c.json(
+      {
+        page: page ?? { id: result.pageId },
+        attachment: attachment ?? {
+          id: result.attachmentId,
+          mimeType: result.mimeType,
+          byteSize: result.byteSize
+        },
+        provenance: provenance ?? {
+          pageId: result.pageId,
+          attachmentId: result.attachmentId,
+          sourceKind: 'file',
+          originalName: file.name
+        },
+        warnings: result.warnings
+      },
+      201
+    )
   })
 
   return routes

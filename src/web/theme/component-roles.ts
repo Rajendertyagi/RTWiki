@@ -253,6 +253,8 @@ export const COMPONENT_ROLES = {
   Table: [],
   Modal: [],
   Popover: [],
+  Drawer: [],
+  Tabs: [],
   ScrollArea: [],
   AppShell: [],
   Container: [],

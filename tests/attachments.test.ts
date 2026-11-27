@@ -267,25 +267,54 @@ describe('attachment lookup and removal', () => {
     expect(response.status).toBe(404)
   })
 
-  it('removes the bytes and the metadata in one step', async () => {
-    // The reason this test can be simple is the point of ADR-014: there is no
-    // second filesystem step that could fail and leave a row pointing at nothing.
+  it('soft-deletes: hides the attachment from every normal read but keeps its bytes for restore', async () => {
+    // Phase 1 changed DELETE from a physical purge to a soft delete. The bytes
+    // stay in the one ADR-014 row, so restore is lossless; what changes is the
+    // filtering contract, which is what this test now pins down.
     const created = (await (await upload(REAL_PNG, 'temporary.png', 'image/png')).json()) as {
       attachment: { id: string; url: string }
     }
-    expect(getAttachment(db, created.attachment.id)).not.toBeNull()
+    const id = created.attachment.id
+    expect(getAttachment(db, id)).not.toBeNull()
 
-    const removed = await app.request(`/api/attachments/${created.attachment.id}`, {
-      method: 'DELETE'
-    })
+    const removed = await app.request(`/api/attachments/${id}`, { method: 'DELETE' })
     expect(removed.status).toBe(200)
-    expect(getAttachment(db, created.attachment.id)).toBeNull()
-    // The bytes went with it: the row that held them no longer exists.
+
+    // The row and its BLOB are still physically present — that is the whole
+    // point of a soft delete, and the reason restore can be lossless.
     const stored = db
-      .query('SELECT length(data) AS size FROM attachments WHERE id = ?')
-      .get(created.attachment.id)
-    expect(stored).toBeNull()
+      .query('SELECT length(data) AS size, deleted_at FROM attachments WHERE id = ?')
+      .get(id) as { size: number; deleted_at: string | null } | undefined
+    expect(stored?.size).toBe(REAL_PNG.byteLength)
+    expect(stored?.deleted_at).not.toBeNull()
+
+    // Normal reads no longer expose it.
+    expect(getAttachment(db, id)).toBeNull()
+    expect(listAttachments(db).map((a) => a.id)).not.toContain(id)
     expect((await app.request(created.attachment.url)).status).toBe(404)
+    expect((await app.request(`/api/attachments/${id}/view`)).status).toBe(404)
+    expect((await app.request(`/api/attachments/${id}/text`)).status).toBe(404)
+
+    // Only the trash path sees it, with its deleted timestamp.
+    const trash = (await (await app.request('/api/attachments/trash')).json()) as {
+      attachments: Array<{ id: string; deletedAt: string | null }>
+      total: number
+    }
+    expect(trash.attachments.map((a) => a.id)).toContain(id)
+    expect(trash.attachments.find((a) => a.id === id)?.deletedAt).not.toBeNull()
+
+    // Restore brings it back to the living set with the same bytes.
+    const restored = await app.request(`/api/attachments/${id}/restore`, { method: 'POST' })
+    expect(restored.status).toBe(200)
+    const restoredBody = (await restored.json()) as {
+      attachment: { id: string; deletedAt: string | null }
+    }
+    expect(restoredBody.attachment.id).toBe(id)
+    expect(restoredBody.attachment.deletedAt).toBeNull()
+    expect(getAttachment(db, id)).not.toBeNull()
+    const served = await app.request(created.attachment.url)
+    expect(served.status).toBe(200)
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(new Uint8Array(REAL_PNG))
   })
 
   it('reports a missing id on removal rather than failing', async () => {

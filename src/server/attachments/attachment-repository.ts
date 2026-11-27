@@ -28,6 +28,8 @@ export interface AttachmentRecord {
   originalName: string | null
   checksum: string | null
   createdAt: string
+  /** Null for a living attachment; the trash timestamp for a soft-deleted one. */
+  deletedAt: string | null
 }
 
 interface AttachmentRow {
@@ -39,16 +41,34 @@ interface AttachmentRow {
   original_name: string | null
   checksum: string | null
   created_at: string
+  deleted_at: string | null
 }
 
 /**
  * The columns a metadata read needs.
  *
  * Deliberately excludes `data`, so listing or fetching an attachment's details
- * never pulls a 40 MB document into memory to read its filename.
+ * never pulls a 40 MB document into memory to read its filename. `deleted_at`
+ * is included because every read must be able to state which set it belongs to.
  */
 const METADATA_COLUMNS =
-  'id, mime_type, byte_size, kind, extracted_text, original_name, checksum, created_at'
+  'id, mime_type, byte_size, kind, extracted_text, original_name, checksum, created_at, deleted_at'
+
+/**
+ * Which rows a read may see.
+ *
+ * The default is deliberately `living`: every ordinary read path (download,
+ * view, text, search indexing, the orphan sweep) must exclude trashed rows
+ * without each caller remembering a `WHERE`. Only the trash endpoints opt in
+ * to `trashed`, and the permanent-delete route alone uses `any`.
+ */
+export type AttachmentVisibility = 'living' | 'trashed' | 'any'
+
+const VISIBILITY_WHERE: Record<AttachmentVisibility, string> = {
+  living: 'deleted_at IS NULL',
+  trashed: 'deleted_at IS NOT NULL',
+  any: '1 = 1'
+}
 
 function toRecord(row: AttachmentRow): AttachmentRecord {
   return {
@@ -59,7 +79,8 @@ function toRecord(row: AttachmentRow): AttachmentRecord {
     extractedText: row.extracted_text,
     originalName: row.original_name,
     checksum: row.checksum,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    deletedAt: row.deleted_at ?? null
   }
 }
 
@@ -68,7 +89,11 @@ export type AttachmentSummary = AttachmentRecord
 
 export function insertAttachment(
   db: Database,
-  record: Omit<AttachmentRecord, 'createdAt'> & { data: Uint8Array | null }
+  record: Omit<AttachmentRecord, 'createdAt' | 'deletedAt'> & {
+    data: Uint8Array | null
+    /** New rows are living unless a caller explicitly seeds a trashed fixture. */
+    deletedAt?: string | null
+  }
 ): AttachmentRecord {
   /*
    * The bytes and the metadata go in as one statement, so an attachment can never exist
@@ -87,8 +112,8 @@ export function insertAttachment(
    */
   const bytesStored = record.data === null ? 0 : 1
   db.run(
-    `INSERT INTO attachments (id, mime_type, byte_size, kind, extracted_text, original_name, checksum, data, bytes_stored)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO attachments (id, mime_type, byte_size, kind, extracted_text, original_name, checksum, data, bytes_stored, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       record.id,
       record.mimeType,
@@ -98,28 +123,71 @@ export function insertAttachment(
       record.originalName,
       record.checksum,
       record.data,
-      bytesStored
+      bytesStored,
+      record.deletedAt ?? null
     ]
   )
-  const stored = getAttachment(db, record.id)
+  // `any`, not the default living set: a caller may seed a trashed fixture, and
+  // the post-insert assertion must still see the row it just wrote.
+  const stored = getAttachment(db, record.id, 'any')
   if (!stored) throw new Error('Attachment row missing immediately after insert')
   return stored
 }
 
-export function getAttachment(db: Database, id: string): AttachmentRecord | null {
+export function getAttachment(
+  db: Database,
+  id: string,
+  visibility: AttachmentVisibility = 'living'
+): AttachmentRecord | null {
   const row = db
-    .query(`SELECT ${METADATA_COLUMNS} FROM attachments WHERE id = ?`)
+    .query(
+      `SELECT ${METADATA_COLUMNS} FROM attachments WHERE id = ? AND ${VISIBILITY_WHERE[visibility]}`
+    )
     .get(id) as AttachmentRow | null
   return row ? toRecord(row) : null
 }
 
-export function listAttachments(db: Database): AttachmentSummary[] {
+export function listAttachments(
+  db: Database,
+  visibility: AttachmentVisibility = 'living'
+): AttachmentSummary[] {
   const rows = db
-    .query(`SELECT ${METADATA_COLUMNS} FROM attachments ORDER BY created_at DESC`)
+    .query(
+      `SELECT ${METADATA_COLUMNS} FROM attachments
+       WHERE ${VISIBILITY_WHERE[visibility]} ORDER BY created_at DESC`
+    )
     .all() as AttachmentRow[]
   return rows.map(toRecord)
 }
 
+/**
+ * Moves a living attachment into the trash. The bytes and every metadata column
+ * are left untouched — only `deleted_at` changes — so a restore is lossless.
+ * The caller owns the transaction so this and its operation-log row commit
+ * together.
+ */
+export function softDeleteAttachment(db: Database, id: string): boolean {
+  const result = db.run(
+    'UPDATE attachments SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL',
+    [new Date().toISOString(), id]
+  )
+  return result.changes > 0
+}
+
+/** Returns a trashed attachment to the living set. Caller owns the transaction. */
+export function restoreAttachment(db: Database, id: string): boolean {
+  const result = db.run(
+    'UPDATE attachments SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL',
+    [id]
+  )
+  return result.changes > 0
+}
+
+/**
+ * Physically removes the row and its BLOB. One statement, so the bytes and the
+ * metadata cannot disagree. Used by the explicit permanent-delete route and by
+ * the two startup sweeps; neither may be reached through a normal read path.
+ */
 export function deleteAttachment(db: Database, id: string): boolean {
   const result = db.run('DELETE FROM attachments WHERE id = ?', [id])
   return result.changes > 0
@@ -131,10 +199,16 @@ export function deleteAttachment(db: Database, id: string): boolean {
  * A separate query from the read so the response can declare `content-length`
  * before any bytes are produced.
  */
-export function getAttachmentByteSize(db: Database, id: string): number | null {
-  const row = db.query('SELECT length(data) AS size FROM attachments WHERE id = ?').get(id) as {
-    size: number | null
-  } | null
+export function getAttachmentByteSize(
+  db: Database,
+  id: string,
+  visibility: AttachmentVisibility = 'living'
+): number | null {
+  const row = db
+    .query(
+      `SELECT length(data) AS size FROM attachments WHERE id = ? AND ${VISIBILITY_WHERE[visibility]}`
+    )
+    .get(id) as { size: number | null } | null
   return row?.size ?? null
 }
 
@@ -161,8 +235,12 @@ export const BLOB_STREAM_CHUNK_BYTES = 512 * 1024
  * Returns `null` when there is no such attachment, so the caller can answer 404
  * without having started a response.
  */
-export function streamAttachmentBytes(db: Database, id: string): ReadableStream<Uint8Array> | null {
-  const size = getAttachmentByteSize(db, id)
+export function streamAttachmentBytes(
+  db: Database,
+  id: string,
+  visibility: AttachmentVisibility = 'living'
+): ReadableStream<Uint8Array> | null {
+  const size = getAttachmentByteSize(db, id, visibility)
   if (size === null) return null
 
   let offset = 1 // substr is 1-based
@@ -173,7 +251,10 @@ export function streamAttachmentBytes(db: Database, id: string): ReadableStream<
         return
       }
       const row = db
-        .query('SELECT substr(data, ?, ?) AS chunk FROM attachments WHERE id = ?')
+        .query(
+          `SELECT substr(data, ?, ?) AS chunk FROM attachments
+           WHERE id = ? AND ${VISIBILITY_WHERE[visibility]}`
+        )
         .get(offset, BLOB_STREAM_CHUNK_BYTES, id) as { chunk: Uint8Array | null } | null
       if (!row?.chunk || row.chunk.length === 0) {
         controller.close()
