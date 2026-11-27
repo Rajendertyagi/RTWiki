@@ -22,6 +22,7 @@
     "test:coverage": "bun test --coverage",
     "test:browser": "playwright test",
     "test:compiled-images": "bun build --compile scripts/verify-compiled-image-detection.ts --outfile build/verify-images.exe && build/verify-images.exe",
+    "test:compiled-openapi": "bun scripts/verify-compiled-openapi.ts",
     "db:migrate": "bun run src/server/database/migrations.ts"
   },
   "dependencies": {
@@ -58,6 +59,7 @@
     "dompurify": "3.4.18",
     "file-type": "22.3.0",
     "hono": "4.13.23",
+    "hono-openapi": "1.6.0",
     "image-size": "2.1.0",
     "latest": "0.2.0",
     "mdast-util-from-markdown": "2.1.0",

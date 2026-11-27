@@ -344,6 +344,25 @@ export function createPage(db: Database, input: CreatePageInput): Page {
 }
 
 /**
+ * Creates several related pages in ONE write transaction. Every item goes
+ * through `createPageCore`, so content validation, search indexing and the
+ * internal-link index are identical to the single-page path — this is not a
+ * second ingest path or a new content format. A failure in any item rolls the
+ * whole batch back, so a caller never sees a partially created set.
+ */
+export function createPagesBatch(db: Database, inputs: CreatePageInput[]): Page[] {
+  db.run('BEGIN IMMEDIATE')
+  try {
+    const pages = inputs.map((input) => createPageCore(db, crypto.randomUUID(), input))
+    db.run('COMMIT')
+    return pages
+  } catch (err) {
+    db.run('ROLLBACK')
+    throw err
+  }
+}
+
+/**
  * Transactional hierarchy move. All validation reads happen after the write
  * lock is acquired (BEGIN IMMEDIATE), so concurrent moves serialize and the
  * ancestor walk can never race a competing structural change.

@@ -43,7 +43,13 @@ const compileOptions: Parameters<typeof Bun.build>[0]['compile'] = {
 
 const result = await Bun.build({
   entrypoints: ['src/server/index.ts'],
-  compile: compileOptions
+  compile: compileOptions,
+  // Build-time-only workaround for a guarded, unreachable Zod-3 fallback import
+  // inside @standard-community/standard-json (pulled in by hono-openapi). Bun's
+  // bundler tries to resolve it statically even though the runtime branch is
+  // never taken with Zod 4. It is NOT a runtime dependency: no node_modules is
+  // shipped, and the compiled executable never loads this module.
+  external: ['zod-to-json-schema']
 })
 
 if (!result.success) {

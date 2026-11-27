@@ -24,6 +24,17 @@ The owner accepted the Phase 0 hard gate and authorised **Phase 1 only**. Phase 
 
 The compiled external-dependency packaging question remains a Phase 2 gate. The historical audit findings below are retained unchanged as the record of the original review.
 
+## Owner authorization — Phase 2 and Phase 3 (2026-11-27)
+
+The owner explicitly authorised **both Phase 2 and Phase 3**, to be executed **sequentially**: Phase 3 begins only after Phase 2 verification passes. This supersedes the earlier "Phase 1 only" / "Phase 2 and Phase 3 remain unauthorised" statements recorded above; those are retained as the historical record of the earlier decision, not rewritten.
+
+- **Phase 2 (AI capability surface)** — authorised. Scope is unchanged from [PLAN_EXTERNAL_AI_INTEGRATION.md](PLAN_EXTERNAL_AI_INTEGRATION.md) §7: derived tool manifest, `?confirm=permanent` on irreversible delete/replace, content handling, batch endpoint, preset confirmation and the §7.5 tests. The compiled external-dependency packaging question (`--external zod-to-json-schema`, §6.15) is a Phase 2 gate.
+- **Phase 3 (import orchestration)** — authorised but **gated**: do not begin it until Phase 2 verification passes. Scope is unchanged from §8; `.rtwiki.zip` still requires a separate ADR superseding ADR-024.
+- **Phase 1 status** — complete at commit `322b08f` on `feature/external-ai-integration`; working tree clean at the time of this record.
+- **§7.1 validation status updated** — Phase 0 assertion 7 produced measured evidence that tags survive into the generated spec ([ADR-025](adr/ADR-025-openapi-library-selection.md), including the `hono@4.13.23` re-test), so the derived-manifest design is now validated. The ten Phase 0 assertions in §5 were not changed and no results were fabricated.
+
+Per AGENTS.md §10, implementation and verification remain separate: Phase 2 implementation is reported and reviewed, then verified by a separate read-only prompt before Phase 3 work begins.
+
 ## Verified accurate
 
 | Plan claim | Evidence |

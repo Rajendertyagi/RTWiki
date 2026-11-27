@@ -5,12 +5,14 @@ import {
 } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { describeRoute } from 'hono-openapi'
 import { acceptedDocumentFormatFor } from '../../shared/attachments/document-formats.js'
 import { DOCUMENT_CSP_KEY } from '../app.js'
 import type { getDb } from '../database/index.js'
 import { ingestFile } from '../ingest/ingest-file.js'
 import type { IngestRejectionReason, IngestResult } from '../ingest/ingest-types.js'
 import type { Logger } from '../logging/index.js'
+import { AI_SAFE_TAG } from '../openapi/index.js'
 import { reindexPagesReferencingAttachment } from '../services/page-service.js'
 import { isSameOrigin } from '../utils/request-origin.js'
 import { LOCAL_CLIENT_ACTOR, logAttachmentOperation } from './attachment-operations.js'
@@ -214,65 +216,78 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     onError: (c) => c.json({ error: 'That file is too large' }, 413)
   })
 
-  routes.post('/', limited, async (c) => {
-    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
-    if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+  routes.post(
+    '/',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Upload an attachment',
+      description: 'Stores an image or document through the single shared ingest pipeline.',
+      responses: {
+        201: { description: 'Stored attachment' },
+        415: { description: 'Unsupported file' }
+      }
+    }),
+    limited,
+    async (c) => {
+      if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
+      if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
 
-    const body = await c.req.parseBody()
-    const file = body.file
-    if (!(file instanceof File)) return c.json({ error: 'No file provided' }, 400)
-    if (file.size === 0) return reject(c, 'empty', logger)
+      const body = await c.req.parseBody()
+      const file = body.file
+      if (!(file instanceof File)) return c.json({ error: 'No file provided' }, 400)
+      if (file.size === 0) return reject(c, 'empty', logger)
 
-    // The whole file is read because it is stored whole, but every *decision*
-    // about it is made from its own bytes. Detection, byte storage and warnings
-    // all live in the one ingest pipeline (ADR-024 §1); this route only maps the
-    // result onto the response it has always returned.
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const db = getDb()
-    let result: IngestResult
-    try {
-      result = await ingestFile(
-        db,
+      // The whole file is read because it is stored whole, but every *decision*
+      // about it is made from its own bytes. Detection, byte storage and warnings
+      // all live in the one ingest pipeline (ADR-024 §1); this route only maps the
+      // result onto the response it has always returned.
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const db = getDb()
+      let result: IngestResult
+      try {
+        result = await ingestFile(
+          db,
+          {
+            sourceKind: 'file',
+            bytes,
+            reportedType: file.type,
+            originalName: file.name,
+            createPage: false
+          },
+          { logger, documentSizeWarningBytes: warningBytes }
+        )
+      } catch (err) {
+        logger?.error('Attachment write failed', {
+          event: 'attachment_write_failed',
+          code: err instanceof Error ? err.name : 'unknown'
+        })
+        return c.json({ error: 'Could not store the file' }, 500)
+      }
+      if (!result.ok) return rejectIngest(c, result, logger)
+
+      // A large document is still accepted — this is advisory, not a limit. The
+      // warning is produced by ingest for both the page and attachment paths; keep
+      // the operator log here and surface the first warning in the response, which
+      // has always carried a single `warning` object.
+      if (result.warnings.some((w) => w.code === 'document_size_warning')) {
+        logger.warn('Large document accepted', {
+          event: 'document_size_warning',
+          bytes: bytes.length
+        })
+      }
+
+      const record = getAttachment(db, result.attachmentId)
+      if (!record) return c.json({ error: 'Could not store the file' }, 500)
+      const warning = result.warnings[0]
+      return c.json(
         {
-          sourceKind: 'file',
-          bytes,
-          reportedType: file.type,
-          originalName: file.name,
-          createPage: false
+          attachment: toResponse(record),
+          ...(warning ? { warning: { code: warning.code, message: warning.message } } : {})
         },
-        { logger, documentSizeWarningBytes: warningBytes }
+        201
       )
-    } catch (err) {
-      logger?.error('Attachment write failed', {
-        event: 'attachment_write_failed',
-        code: err instanceof Error ? err.name : 'unknown'
-      })
-      return c.json({ error: 'Could not store the file' }, 500)
     }
-    if (!result.ok) return rejectIngest(c, result, logger)
-
-    // A large document is still accepted — this is advisory, not a limit. The
-    // warning is produced by ingest for both the page and attachment paths; keep
-    // the operator log here and surface the first warning in the response, which
-    // has always carried a single `warning` object.
-    if (result.warnings.some((w) => w.code === 'document_size_warning')) {
-      logger.warn('Large document accepted', {
-        event: 'document_size_warning',
-        bytes: bytes.length
-      })
-    }
-
-    const record = getAttachment(db, result.attachmentId)
-    if (!record) return c.json({ error: 'Could not store the file' }, 500)
-    const warning = result.warnings[0]
-    return c.json(
-      {
-        attachment: toResponse(record),
-        ...(warning ? { warning: { code: warning.code, message: warning.message } } : {})
-      },
-      201
-    )
-  })
+  )
 
   /**
    * The trash contains ONLY soft-deleted rows. Registered before `/:id` so the
@@ -287,50 +302,59 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     })
   })
 
-  routes.get('/:id', async (c) => {
-    if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
-    const db = getDb()
-    const id = c.req.param('id')
-    // Default visibility is `living`: a trashed attachment is not downloadable
-    // by its normal id, and its bytes are never streamed.
-    const record = getAttachment(db, id)
-    if (!record) return c.json({ error: 'Not found' }, 404)
+  routes.get(
+    '/:id',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Download an attachment by id',
+      description: 'Returns the stored bytes. Documents are forced downloads with a blocking CSP.',
+      responses: { 200: { description: 'Attachment bytes' }, 404: { description: 'Not found' } }
+    }),
+    async (c) => {
+      if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+      const db = getDb()
+      const id = c.req.param('id')
+      // Default visibility is `living`: a trashed attachment is not downloadable
+      // by its normal id, and its bytes are never streamed.
+      const record = getAttachment(db, id)
+      if (!record) return c.json({ error: 'Not found' }, 404)
 
-    // Streamed rather than read whole, so an in-flight response holds one chunk
-    // instead of the entire file (ADR-014 §4).
-    const stream = streamAttachmentBytes(db, id)
-    if (!stream) return c.json({ error: 'Not found' }, 404)
+      // Streamed rather than read whole, so an in-flight response holds one chunk
+      // instead of the entire file (ADR-014 §4).
+      const stream = streamAttachmentBytes(db, id)
+      if (!stream) return c.json({ error: 'Not found' }, 404)
 
-    const headers: Record<string, string> = {
-      'content-type': record.mimeType,
-      // Stops a browser second-guessing the type and reinterpreting the bytes.
-      'x-content-type-options': 'nosniff',
-      // The file is addressed by id, so the cache key must be too: a shared cache
-      // must never hand one attachment's bytes to another URL.
-      'cache-control': 'private, no-cache',
-      etag: `"${record.id}"`,
-      // Declared from the stored length so the browser can show progress and
-      // refuse a truncated file rather than saving half of it.
-      'content-length': String(record.byteSize)
+      const headers: Record<string, string> = {
+        'content-type': record.mimeType,
+        // Stops a browser second-guessing the type and reinterpreting the bytes.
+        'x-content-type-options': 'nosniff',
+        // The file is addressed by id, so the cache key must be too: a shared cache
+        // must never hand one attachment's bytes to another URL.
+        'cache-control': 'private, no-cache',
+        etag: `"${record.id}"`,
+        // Declared from the stored length so the browser can show progress and
+        // refuse a truncated file rather than saving half of it.
+        'content-length': String(record.byteSize)
+      }
+
+      if (record.kind === 'document') {
+        // Two independent layers, either of which alone would stop execution: the
+        // disposition means the browser saves rather than renders, and the policy
+        // means that even if it rendered, nothing in it could run.
+        headers['content-disposition'] = contentDisposition(
+          'attachment',
+          record.originalName,
+          acceptedDocumentFormatFor(record.mimeType)?.ext ?? 'bin'
+        )
+        // The policy is requested through the context rather than set here, because
+        // the app-wide `secureHeaders` middleware runs after this handler and would
+        // overwrite a header written here. See `DOCUMENT_CSP_KEY`.
+        c.set(DOCUMENT_CSP_KEY, DOCUMENT_CONTENT_SECURITY_POLICY)
+      }
+
+      return new Response(stream, { headers })
     }
-
-    if (record.kind === 'document') {
-      // Two independent layers, either of which alone would stop execution: the
-      // disposition means the browser saves rather than renders, and the policy
-      // means that even if it rendered, nothing in it could run.
-      headers['content-disposition'] = contentDisposition(
-        'attachment',
-        record.originalName,
-        acceptedDocumentFormatFor(record.mimeType)?.ext ?? 'bin'
-      )
-      // The policy is requested through the context rather than set here, because
-      // the app-wide `secureHeaders` middleware runs after this handler and would
-      // overwrite a header written here. See `DOCUMENT_CSP_KEY`.
-      c.set(DOCUMENT_CSP_KEY, DOCUMENT_CONTENT_SECURITY_POLICY)
-    }
-
-    return new Response(stream, { headers })
-  })
+  )
 
   /**
    * Serve a document **inline**, so the browser draws it in a new tab.
@@ -396,14 +420,23 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
     return new Response(stream, { headers })
   })
 
-  routes.get('/:id/text', (c) => {
-    if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
-    const record = getAttachment(getDb(), c.req.param('id'), 'living')
-    if (!record) return c.json({ error: 'Not found' }, 404)
-    // Returned as JSON text, never as markup, so a document's contents can never
-    // become a rendering surface.
-    return c.json({ text: record.extractedText ?? '', kind: record.kind })
-  })
+  routes.get(
+    '/:id/text',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Read an attachment’s extracted text',
+      description: 'Returns extracted text as JSON, never as markup.',
+      responses: { 200: { description: 'Extracted text' }, 404: { description: 'Not found' } }
+    }),
+    (c) => {
+      if (!available) return c.json({ error: 'Attachments are unavailable' }, 503)
+      const record = getAttachment(getDb(), c.req.param('id'), 'living')
+      if (!record) return c.json({ error: 'Not found' }, 404)
+      // Returned as JSON text, never as markup, so a document's contents can never
+      // become a rendering surface.
+      return c.json({ text: record.extractedText ?? '', kind: record.kind })
+    }
+  )
 
   /**
    * Soft delete. The bytes and every metadata column stay; only `deleted_at`

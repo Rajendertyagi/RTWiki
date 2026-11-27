@@ -1,9 +1,9 @@
 # Plan — External AI Integration, Functionality and Data Recovery
 
-**Status:** Phase 0 **ACCEPTED** by the owner; Phase 1 **AUTHORIZED**. Phase 2 and Phase 3 remain **UNAUTHORIZED** — do not begin them without a separate owner prompt.
+**Status:** Phase 0 **ACCEPTED** by the owner; Phase 1 **COMPLETE** (commit `322b08f`); Phase 2 **AUTHORIZED**; Phase 3 **AUTHORIZED**, gated on Phase 2 verification passing — begin Phase 3 only after that gate passes.
 **Baseline:** `docs/` architecture audit (saved as `RTWiki-AI-Integration-Audit.md` outside the repo), corrected by owner review 2026-11-25. Phase 0 measured evidence is recorded in [ADR-025](adr/ADR-025-openapi-library-selection.md).
-**Branch:** `feature/external-ai-integration`, based on `1c017b6` (`1c017b651b63be79dd9a651604bcfd7519d2f7cb`).
-**Scope:** research-derived implementation plan. Phase 0 is complete and accepted; **Phase 1 is the only currently authorised implementation scope**. This document does not by itself authorise Phase 2 or Phase 3.
+**Branch:** `feature/external-ai-integration`, HEAD `322b08f` (`322b08f9536a8426840a43ac5a3dacb9e0fc4d5f`), based on `1c017b6` (`1c017b651b63be79dd9a651604bcfd7519d2f7cb`).
+**Scope:** research-derived implementation plan. Phase 0 is accepted and Phase 1 is complete at `322b08f`. The owner has explicitly authorised **Phase 2 and Phase 3**, to be executed sequentially — Phase 3 begins only after Phase 2 verification passes. Authorization comes from the owner's prompt, not from this document.
 
 ---
 
@@ -11,11 +11,11 @@
 
 At the time this plan was last updated (2026-11-27):
 
-- Work is on branch `feature/external-ai-integration`, based on `1c017b6` (`1c017b651b63be79dd9a651604bcfd7519d2f7cb`).
-- The working tree contains the Phase 0 ADR files: a modified `docs/adr/README.md` (the ADR-025 index row) and an untracked `docs/adr/ADR-025-openapi-library-selection.md`. These are the accepted Phase 0 deliverable and must be preserved.
+- Work is on branch `feature/external-ai-integration`, HEAD `322b08f` (`322b08f9536a8426840a43ac5a3dacb9e0fc4d5f`), based on `1c017b6` (`1c017b651b63be79dd9a651604bcfd7519d2f7cb`).
+- The working tree is clean (`git status --porcelain` returned no output). The Phase 0 ADR files — `docs/adr/README.md` (the ADR-025 index row) and `docs/adr/ADR-025-openapi-library-selection.md` — and the Phase 1 work are committed at `322b08f` and must be preserved.
 - Phase 0 was executed outside the repository in a throwaway probe directory; it made no `package.json`, `bun.lock`, route or source change.
 
-**Rules:** re-check `git status` at execution time — this snapshot will go stale. Never reset, clean, stash, overwrite or commit files outside the phase scope. Do not assume a clean tree. Other agents may be working concurrently — do not touch files outside the scope listed in each phase. Phase 2 and Phase 3 are not authorised; do not act on their sections.
+**Rules:** re-check `git status` at execution time — this snapshot will go stale. Never reset, clean, stash, overwrite or commit files outside the phase scope. Do not assume a clean tree. Other agents may be working concurrently — do not touch files outside the scope listed in each phase. Phase 2 is authorised; Phase 3 is authorised but gated — do not act on its section until Phase 2 verification passes.
 
 ---
 
@@ -328,7 +328,7 @@ This is the deliberate boundary between trashed content (recoverable, revisions 
 - The same tag drives OpenAPI grouping, so documentation and tools cannot disagree.
 - If Phase 0 proves tags are not introspectable, use a registry that routes register into at definition time. Still derived; still no hardcoded list.
 
-**Validation status:** the derived-manifest design above is a design claim, not a validated result. It is fully validated only when Phase 0 assertion 7 produces measured evidence that route tags survive into the generated spec (or that the registration-time fallback works). Do not describe the capability surface as proven before then.
+**Validation status:** validated. Phase 0 assertion 7 produced measured evidence that `describeRoute` tags survive into the generated OpenAPI spec and that the cached spec read is deterministic — on the original `hono@4.13.19` probe and again on the authorised `hono@4.13.23` re-test (`tagsSurvive:true`, `deterministic:true`, `identicalBytes:true`). The derived-manifest design above is therefore confirmed: the tool surface can be derived from tagged operations with no hardcoded list, and the registration-time registry fallback was not needed. See [ADR-025](adr/ADR-025-openapi-library-selection.md), §"The hard gate: tag introspection (assertion 7)" and the "Re-test on `hono@4.13.23`" section. This validates the derivation mechanism only; the Phase 2 endpoint itself is still to be implemented.
 
 ### 7.2 Enforcement boundary — honest statement
 
@@ -411,7 +411,7 @@ Quality gates (CI): `bun run format:check`, `bun run lint`, `bun run typecheck`,
 | 2 | AI capability surface | route tags, tools endpoint, semantic validation, batch endpoint, preset confirmation | tool manifest derived; no hardcoded list |
 | 3 | Import orchestration | batch/preview UI | separate ADR for `.rtwiki.zip` |
 
-**Current authorization (2026-11-27):** Phase 0 accepted; Phase 1 authorised; Phase 2 and Phase 3 not authorised. The compiled external-dependency packaging question is a Phase 2 gate (§6.15).
+**Current authorization (2026-11-27):** Phase 0 accepted; Phase 1 complete at `322b08f`; Phase 2 authorised; Phase 3 authorised but gated — begin Phase 3 only after Phase 2 verification passes. The compiled external-dependency packaging question is a Phase 2 gate (§6.15).
 
 **Owner action before Phase 1 ships:** notify the owner that backups created before migrations 014/015 cannot be restored by the new recovery process (§6.10).
 

@@ -1,9 +1,15 @@
 import { MAX_PAGE_JSON_BODY_BYTES } from '@rtwiki/shared/constants'
 import { PageMoveSchema } from '@rtwiki/shared/schemas/page-move'
-import { CreatePageSchema, UpdatePageSchema } from '@rtwiki/shared/schemas/pages'
+import {
+  BatchCreatePagesSchema,
+  CreatePageSchema,
+  UpdatePageSchema
+} from '@rtwiki/shared/schemas/pages'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { describeRoute, resolver, validator } from 'hono-openapi'
 import type { getDb } from '../database/index.js'
+import { AI_SAFE_TAG, jsonRequestGuard, rtwikiValidationHook } from '../openapi/index.js'
 // The version conflict is raised by the repository's guarded write, and the
 // service layer passes it through untranslated, so the route maps it to 409.
 // `page-service.ts` re-exports `HierarchyError` for the same reason; re-exporting
@@ -57,71 +63,140 @@ async function readJsonBody(c: Context): Promise<JsonBodyResult> {
 export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono {
   const routes = new Hono()
 
-  routes.get('/', (c) => {
-    try {
-      const db = getDbFn()
-      const search = c.req.query('q') || undefined
-      if (search !== undefined && search.length > MAX_SEARCH_QUERY_LENGTH) {
-        return c.json(
-          {
-            error: `Search text is limited to ${MAX_SEARCH_QUERY_LENGTH} characters. Shorten your search.`
-          },
-          400
-        )
+  routes.get(
+    '/',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'List pages, optionally filtered by a search substring',
+      description:
+        'Returns a bounded page list. Pass q to search page text; limit and offset control the window.',
+      parameters: [
+        { in: 'query', name: 'q', required: false, schema: { type: 'string' } },
+        { in: 'query', name: 'limit', required: false, schema: { type: 'integer' } },
+        { in: 'query', name: 'offset', required: false, schema: { type: 'integer' } }
+      ],
+      responses: { 200: { description: 'Page list' }, 400: { description: 'Invalid query' } }
+    }),
+    (c) => {
+      try {
+        const db = getDbFn()
+        const search = c.req.query('q') || undefined
+        if (search !== undefined && search.length > MAX_SEARCH_QUERY_LENGTH) {
+          return c.json(
+            {
+              error: `Search text is limited to ${MAX_SEARCH_QUERY_LENGTH} characters. Shorten your search.`
+            },
+            400
+          )
+        }
+        const limitRaw = c.req.query('limit')
+        const offsetRaw = c.req.query('offset')
+        const limit = limitRaw === undefined ? DEFAULT_PAGE_LIMIT : Number(limitRaw)
+        const offset = offsetRaw === undefined ? MIN_PAGE_OFFSET : Number(offsetRaw)
+        if (
+          !Number.isInteger(limit) ||
+          limit < MIN_PAGE_LIMIT ||
+          limit > MAX_PAGE_LIMIT ||
+          !Number.isInteger(offset) ||
+          offset < MIN_PAGE_OFFSET
+        ) {
+          return c.json(
+            {
+              error: `Invalid pagination: limit must be an integer from ${MIN_PAGE_LIMIT} to ${MAX_PAGE_LIMIT} and offset a non-negative integer`
+            },
+            400
+          )
+        }
+        const result = service.listPages(db, { search, limit, offset })
+        return c.json(result)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
       }
-      const limitRaw = c.req.query('limit')
-      const offsetRaw = c.req.query('offset')
-      const limit = limitRaw === undefined ? DEFAULT_PAGE_LIMIT : Number(limitRaw)
-      const offset = offsetRaw === undefined ? MIN_PAGE_OFFSET : Number(offsetRaw)
-      if (
-        !Number.isInteger(limit) ||
-        limit < MIN_PAGE_LIMIT ||
-        limit > MAX_PAGE_LIMIT ||
-        !Number.isInteger(offset) ||
-        offset < MIN_PAGE_OFFSET
-      ) {
-        return c.json(
-          {
-            error: `Invalid pagination: limit must be an integer from ${MIN_PAGE_LIMIT} to ${MAX_PAGE_LIMIT} and offset a non-negative integer`
-          },
-          400
-        )
-      }
-      const result = service.listPages(db, { search, limit, offset })
-      return c.json(result)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
     }
-  })
+  )
 
-  routes.post('/', async (c) => {
-    const bodyResult = await readJsonBody(c)
-    // The shared reader answers every failure itself, so a non-ok result is always
-    // a response to return. The private reader this replaced had a second,
-    // unreachable "not handled" branch that fell through to a generic message.
-    if (!bodyResult.ok) {
-      return bodyResult.response
+  routes.post(
+    '/',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Create a page',
+      description:
+        'Creates one page of any of the four canonical types. Content is validated against that type.',
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: resolver(CreatePageSchema) } }
+      },
+      responses: { 201: { description: 'Created page' }, 400: { description: 'Invalid input' } }
+    }),
+    async (c) => {
+      const bodyResult = await readJsonBody(c)
+      // The shared reader answers every failure itself, so a non-ok result is always
+      // a response to return. The private reader this replaced had a second,
+      // unreachable "not handled" branch that fell through to a generic message.
+      if (!bodyResult.ok) {
+        return bodyResult.response
+      }
+      try {
+        const parsed = CreatePageSchema.safeParse(bodyResult.body)
+        if (!parsed.success) {
+          return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
+        }
+        const db = getDbFn()
+        const page = service.createPage(db, parsed.data)
+        return c.json({ page }, 201)
+      } catch (err) {
+        if (err instanceof service.PageValidationError) {
+          return c.json({ error: err.message }, 400)
+        }
+        if (err instanceof service.HierarchyError) {
+          return c.json({ error: err.message }, err.status)
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
+      }
     }
-    try {
-      const parsed = CreatePageSchema.safeParse(bodyResult.body)
-      if (!parsed.success) {
-        return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
+  )
+
+  // Atomic multi-page creation. The validator uses the shared hook so its 400
+  // body matches every other JSON route, and the guard reuses readJson's media
+  // type and byte ceiling. The service owns the single BEGIN IMMEDIATE.
+  routes.post(
+    '/batch',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Create several related pages atomically',
+      description:
+        'Creates multiple pages in one transaction. If any item fails validation, no page is created.',
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: resolver(BatchCreatePagesSchema) } }
+      },
+      responses: {
+        201: { description: 'Created pages' },
+        400: { description: 'Invalid input; nothing was created' }
       }
-      const db = getDbFn()
-      const page = service.createPage(db, parsed.data)
-      return c.json({ page }, 201)
-    } catch (err) {
-      if (err instanceof service.PageValidationError) {
-        return c.json({ error: err.message }, 400)
+    }),
+    jsonRequestGuard(MAX_PAGE_JSON_BODY_BYTES),
+    validator('json', BatchCreatePagesSchema, rtwikiValidationHook),
+    (c) => {
+      const inputs = c.req.valid('json').pages
+      try {
+        const db = getDbFn()
+        const pages = service.createPagesBatch(db, inputs)
+        return c.json({ pages }, 201)
+      } catch (err) {
+        if (err instanceof service.PageValidationError) {
+          return c.json({ error: err.message }, 400)
+        }
+        if (err instanceof service.HierarchyError) {
+          return c.json({ error: err.message }, err.status)
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
       }
-      if (err instanceof service.HierarchyError) {
-        return c.json({ error: err.message }, err.status)
-      }
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
     }
-  })
+  )
 
   routes.get('/trash', (c) => {
     try {
@@ -134,20 +209,28 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     }
   })
 
-  routes.get('/:id', (c) => {
-    try {
-      const db = getDbFn()
-      const id = c.req.param('id')
-      const page = service.getPage(db, id)
-      if (!page) {
-        return c.json({ error: 'Page not found' }, 404)
+  routes.get(
+    '/:id',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Get a page by id',
+      responses: { 200: { description: 'Page' }, 404: { description: 'Not found' } }
+    }),
+    (c) => {
+      try {
+        const db = getDbFn()
+        const id = c.req.param('id')
+        const page = service.getPage(db, id)
+        if (!page) {
+          return c.json({ error: 'Page not found' }, 404)
+        }
+        return c.json({ page })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
       }
-      return c.json({ page })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
     }
-  })
+  )
 
   // Living pages whose Rich Note content links to this page (exact ID-based
   // relationships from the maintained page_links index).
@@ -214,119 +297,165 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     }
   })
 
-  routes.patch('/:id', async (c) => {
-    const bodyResult = await readJsonBody(c)
-    if (!bodyResult.ok) {
-      return bodyResult.response
-    }
+  routes.patch(
+    '/:id',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Update a page title or content',
+      description: 'Updates an existing page. The version field is the optimistic-lock token.',
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: resolver(UpdatePageSchema) } }
+      },
+      responses: { 200: { description: 'Updated page' }, 400: { description: 'Invalid input' } }
+    }),
+    async (c) => {
+      const bodyResult = await readJsonBody(c)
+      if (!bodyResult.ok) {
+        return bodyResult.response
+      }
 
-    // Page-type conversion is not supported in Phase 4A. The shared update
-    // schema strips unknown keys silently, so presence is rejected here to
-    // give clients an explicit, actionable error.
-    if (
-      bodyResult.body !== null &&
-      typeof bodyResult.body === 'object' &&
-      'pageType' in bodyResult.body
-    ) {
-      return c.json({ error: 'Page type conversion is not supported' }, 400)
-    }
+      // Page-type conversion is not supported in Phase 4A. The shared update
+      // schema strips unknown keys silently, so presence is rejected here to
+      // give clients an explicit, actionable error.
+      if (
+        bodyResult.body !== null &&
+        typeof bodyResult.body === 'object' &&
+        'pageType' in bodyResult.body
+      ) {
+        return c.json({ error: 'Page type conversion is not supported' }, 400)
+      }
 
-    // Hierarchy changes are out of scope for PATCH: moves happen only through
-    // the dedicated move endpoint so cycle and sibling-order validation cannot
-    // be bypassed.
-    if (
-      bodyResult.body !== null &&
-      typeof bodyResult.body === 'object' &&
-      'parentId' in bodyResult.body
-    ) {
-      return c.json({ error: 'Use POST /api/pages/:id/move to change page hierarchy' }, 400)
-    }
+      // Hierarchy changes are out of scope for PATCH: moves happen only through
+      // the dedicated move endpoint so cycle and sibling-order validation cannot
+      // be bypassed.
+      if (
+        bodyResult.body !== null &&
+        typeof bodyResult.body === 'object' &&
+        'parentId' in bodyResult.body
+      ) {
+        return c.json({ error: 'Use POST /api/pages/:id/move to change page hierarchy' }, 400)
+      }
 
-    try {
-      const parsed = UpdatePageSchema.safeParse(bodyResult.body)
-      if (!parsed.success) {
-        return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
+      try {
+        const parsed = UpdatePageSchema.safeParse(bodyResult.body)
+        if (!parsed.success) {
+          return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
+        }
+        const db = getDbFn()
+        const id = c.req.param('id')
+        const page = service.updatePage(db, id, parsed.data)
+        if (!page) {
+          return c.json({ error: 'Page not found' }, 404)
+        }
+        return c.json({ page })
+      } catch (err) {
+        if (err instanceof PageVersionConflictError) {
+          return c.json({ error: PAGE_VERSION_CONFLICT_MESSAGE }, 409)
+        }
+        if (err instanceof service.PageValidationError) {
+          return c.json({ error: err.message }, 400)
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
       }
-      const db = getDbFn()
-      const id = c.req.param('id')
-      const page = service.updatePage(db, id, parsed.data)
-      if (!page) {
-        return c.json({ error: 'Page not found' }, 404)
-      }
-      return c.json({ page })
-    } catch (err) {
-      if (err instanceof PageVersionConflictError) {
-        return c.json({ error: PAGE_VERSION_CONFLICT_MESSAGE }, 409)
-      }
-      if (err instanceof service.PageValidationError) {
-        return c.json({ error: err.message }, 400)
-      }
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
     }
-  })
+  )
 
-  routes.post('/:id/move', async (c) => {
-    const bodyResult = await readJsonBody(c)
-    if (!bodyResult.ok) {
-      return bodyResult.response
-    }
-    try {
-      const parsed = PageMoveSchema.safeParse(bodyResult.body)
-      if (!parsed.success) {
-        return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
+  routes.post(
+    '/:id/move',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Move a page in the hierarchy',
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: resolver(PageMoveSchema) } }
+      },
+      responses: { 200: { description: 'Move result' }, 400: { description: 'Invalid input' } }
+    }),
+    async (c) => {
+      const bodyResult = await readJsonBody(c)
+      if (!bodyResult.ok) {
+        return bodyResult.response
       }
-      const db = getDbFn()
-      const id = c.req.param('id')
-      const result = service.movePage(db, id, parsed.data.newParentId, parsed.data.newPosition)
-      return c.json(result)
-    } catch (err) {
-      if (err instanceof service.HierarchyError) {
-        return c.json({ error: err.message }, err.status)
+      try {
+        const parsed = PageMoveSchema.safeParse(bodyResult.body)
+        if (!parsed.success) {
+          return c.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, 400)
+        }
+        const db = getDbFn()
+        const id = c.req.param('id')
+        const result = service.movePage(db, id, parsed.data.newParentId, parsed.data.newPosition)
+        return c.json(result)
+      } catch (err) {
+        if (err instanceof service.HierarchyError) {
+          return c.json({ error: err.message }, err.status)
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
       }
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
     }
-  })
+  )
 
-  routes.post('/:id/duplicate', (c) => {
-    try {
-      const db = getDbFn()
-      const id = c.req.param('id')
-      const page = service.duplicatePage(db, id)
-      if (!page) {
-        return c.json({ error: 'Page not found' }, 404)
+  routes.post(
+    '/:id/duplicate',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Duplicate a page',
+      responses: { 201: { description: 'Duplicated page' }, 404: { description: 'Not found' } }
+    }),
+    (c) => {
+      try {
+        const db = getDbFn()
+        const id = c.req.param('id')
+        const page = service.duplicatePage(db, id)
+        if (!page) {
+          return c.json({ error: 'Page not found' }, 404)
+        }
+        return c.json({ page }, 201)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
       }
-      return c.json({ page }, 201)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
     }
-  })
+  )
 
-  routes.post('/:id/restore', (c) => {
-    try {
-      const db = getDbFn()
-      const id = c.req.param('id')
-      // The UI's normal restore carries no revision id. Resolve the newest
-      // usable pre-delete snapshot so hierarchy, links and search text come
-      // back; pages trashed before migration 015 have none and keep the legacy
-      // fallback inside restorePage.
-      const revisionId = service.latestPreDeleteRevisionId(db, id)
-      const page = service.restorePage(
-        db,
-        id,
-        revisionId === undefined ? { requireTrashed: true } : { revisionId, requireTrashed: true }
-      )
-      if (!page) {
-        return c.json({ error: 'Page not found in trash' }, 404)
+  routes.post(
+    '/:id/restore',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Restore a trashed page',
+      description:
+        'Returns a page from the trash, recovering its hierarchy, links and search text.',
+      responses: {
+        200: { description: 'Restored page' },
+        404: { description: 'Not found in trash' }
       }
-      return c.json({ page })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
+    }),
+    (c) => {
+      try {
+        const db = getDbFn()
+        const id = c.req.param('id')
+        // The UI's normal restore carries no revision id. Resolve the newest
+        // usable pre-delete snapshot so hierarchy, links and search text come
+        // back; pages trashed before migration 015 have none and keep the legacy
+        // fallback inside restorePage.
+        const revisionId = service.latestPreDeleteRevisionId(db, id)
+        const page = service.restorePage(
+          db,
+          id,
+          revisionId === undefined ? { requireTrashed: true } : { revisionId, requireTrashed: true }
+        )
+        if (!page) {
+          return c.json({ error: 'Page not found in trash' }, 404)
+        }
+        return c.json({ page })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
+      }
     }
-  })
+  )
 
   routes.delete('/:id/permanent', (c) => {
     // Irreversible deletes always require the explicit query-parameter speed
@@ -351,23 +480,32 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
     }
   })
 
-  routes.delete('/:id', (c) => {
-    try {
-      const db = getDbFn()
-      const id = c.req.param('id')
-      const deleted = service.softDeletePage(db, id)
-      if (!deleted) {
-        return c.json({ error: 'Page not found' }, 404)
+  routes.delete(
+    '/:id',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Move a page to the trash',
+      description: 'A reversible soft delete. The page and its recovery data are retained.',
+      responses: { 200: { description: 'Moved to trash' }, 404: { description: 'Not found' } }
+    }),
+    (c) => {
+      try {
+        const db = getDbFn()
+        const id = c.req.param('id')
+        const deleted = service.softDeletePage(db, id)
+        if (!deleted) {
+          return c.json({ error: 'Page not found' }, 404)
+        }
+        return c.json({ ok: true })
+      } catch (err) {
+        if (err instanceof service.HierarchyError) {
+          return c.json({ error: err.message }, err.status)
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
       }
-      return c.json({ ok: true })
-    } catch (err) {
-      if (err instanceof service.HierarchyError) {
-        return c.json({ error: err.message }, err.status)
-      }
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
     }
-  })
+  )
 
   return routes
 }

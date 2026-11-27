@@ -8,9 +8,11 @@ import {
 } from '@rtwiki/shared/constants'
 import { Hono } from 'hono'
 import { NONCE, type SecureHeadersVariables, secureHeaders } from 'hono/secure-headers'
+import { generateSpecs } from 'hono-openapi'
 import { createAttachmentRoutes } from './attachments/attachment-routes.js'
 import { checkIntegrity, getDb } from './database/index.js'
 import { createConsoleLogger, type Logger } from './logging/index.js'
+import { deriveAiTools, OPENAPI_DOCUMENTATION, type OpenApiSpec } from './openapi/index.js'
 import { createBackupRoutes } from './routes/backup.js'
 import { createClientDebugEventRoutes, type DebugEventSink } from './routes/client-debug-events.js'
 import { createClientErrorRoutes } from './routes/client-errors.js'
@@ -317,6 +319,32 @@ export function createApp(deps: AppDependencies): Hono<{ Variables: AppVariables
     '/api/client-debug-events',
     createClientDebugEventRoutes({ sink: deps.debugEventSink, scrubValues: [deps.token] })
   )
+
+  // OpenAPI document and the AI tool manifest derived from it.
+  //
+  // The document is generated once, lazily, on the first request — by then every
+  // `app.route()` child above is mounted. Caching the Promise (not just the
+  // resolved value) makes concurrent first requests share one generation, so two
+  // reads are byte-identical. `generateSpecs` skips routes with no OpenAPI
+  // metadata entirely, which is what makes the tool manifest fail-safe: a new
+  // dangerous route added without a tag cannot appear in it.
+  let cachedSpecJson: Promise<string> | undefined
+  const getSpecJson = (): Promise<string> => {
+    cachedSpecJson ??= generateSpecs(app, {
+      documentation: OPENAPI_DOCUMENTATION
+    }).then((spec) => JSON.stringify(spec))
+    return cachedSpecJson
+  }
+
+  app.get('/openapi.json', async (c) => {
+    const specJson = await getSpecJson()
+    return c.newResponse(specJson, 200, { 'content-type': 'application/json' })
+  })
+
+  app.get('/api/ai/tools', async (c) => {
+    const spec = JSON.parse(await getSpecJson()) as OpenApiSpec
+    return c.json({ tools: deriveAiTools(spec) })
+  })
 
   app.use(
     '/*',

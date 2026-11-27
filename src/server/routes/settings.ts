@@ -8,7 +8,9 @@ import {
 } from '@rtwiki/shared/constants'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { describeRoute } from 'hono-openapi'
 import type { Database } from '../database/index.js'
+import { AI_SAFE_TAG } from '../openapi/index.js'
 import {
   isCloseBehavior,
   isValidColorScheme,
@@ -67,19 +69,27 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
     }
   }
 
-  routes.get('/server', (c) => {
-    try {
-      return c.json({
-        port: opts.getCurrentPort(),
-        configuredPort: readServerPort(opts.getDb),
-        defaultPort: DEFAULT_PORT,
-        restartRequired: false
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
+  routes.get(
+    '/server',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Read server settings',
+      responses: { 200: { description: 'Server settings' } }
+    }),
+    (c) => {
+      try {
+        return c.json({
+          port: opts.getCurrentPort(),
+          configuredPort: readServerPort(opts.getDb),
+          defaultPort: DEFAULT_PORT,
+          restartRequired: false
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
+      }
     }
-  })
+  )
 
   routes.put('/server', async (c) => {
     if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
@@ -104,14 +114,22 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
     }
   })
 
-  routes.get('/desktop', (c) => {
-    try {
-      return c.json(readDesktopSettings(opts.getDb))
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
+  routes.get(
+    '/desktop',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Read desktop settings',
+      responses: { 200: { description: 'Desktop settings' } }
+    }),
+    (c) => {
+      try {
+        return c.json(readDesktopSettings(opts.getDb))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
+      }
     }
-  })
+  )
 
   routes.put('/desktop', async (c) => {
     if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)
@@ -167,18 +185,26 @@ export function createSettingsRoutes(opts: SettingsRouteOptions): Hono {
     }
   }
 
-  routes.get('/appearance', (c) => {
-    try {
-      const themes = listThemes()
-      return c.json({
-        ...readAppearanceSettings(opts.getDb, new Set(themes.map((t) => t.id))),
-        themes
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return c.json({ error: message }, 500)
+  routes.get(
+    '/appearance',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Read appearance settings and available themes',
+      responses: { 200: { description: 'Appearance settings' } }
+    }),
+    (c) => {
+      try {
+        const themes = listThemes()
+        return c.json({
+          ...readAppearanceSettings(opts.getDb, new Set(themes.map((t) => t.id))),
+          themes
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
+      }
     }
-  })
+  )
 
   routes.put('/appearance', async (c) => {
     if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden' }, 403)

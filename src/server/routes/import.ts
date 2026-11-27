@@ -7,6 +7,7 @@ import {
 import { CreatePageSchema } from '@rtwiki/shared/schemas/pages'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { describeRoute } from 'hono-openapi'
 import { z } from 'zod'
 import { getAttachment } from '../attachments/attachment-repository.js'
 import type { getDb } from '../database/index.js'
@@ -18,6 +19,7 @@ import type {
 } from '../ingest/ingest-types.js'
 import { getImportSourceByPage } from '../ingest/provenance-repository.js'
 import type { Logger } from '../logging/index.js'
+import { AI_SAFE_TAG } from '../openapi/index.js'
 import { getPage } from '../repositories/page-repository.js'
 import { isSameOrigin } from '../utils/request-origin.js'
 
@@ -114,101 +116,115 @@ export function createImportRoutes(
     onError: (c) => c.json({ error: 'That file is too large', code: 'too_large' }, 413)
   })
 
-  routes.post('/', limited, async (c) => {
-    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden', code: 'forbidden' }, 403)
+  routes.post(
+    '/',
+    describeRoute({
+      tags: [AI_SAFE_TAG],
+      summary: 'Import a file into a page',
+      description:
+        'Runs the one shared ingest pipeline: page, attachment and provenance in one transaction.',
+      responses: {
+        201: { description: 'Imported page and attachment' },
+        415: { description: 'Unsupported file' }
+      }
+    }),
+    limited,
+    async (c) => {
+      if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden', code: 'forbidden' }, 403)
 
-    const contentType = c.req.header('content-type') ?? ''
-    if (!contentType.toLowerCase().startsWith('multipart/form-data')) {
-      return c.json(
-        { error: 'This endpoint accepts a multipart file upload.', code: 'wrong_media_type' },
-        415
-      )
-    }
+      const contentType = c.req.header('content-type') ?? ''
+      if (!contentType.toLowerCase().startsWith('multipart/form-data')) {
+        return c.json(
+          { error: 'This endpoint accepts a multipart file upload.', code: 'wrong_media_type' },
+          415
+        )
+      }
 
-    const body = await c.req.parseBody()
-    const file = body.file
-    if (!(file instanceof File)) {
-      return c.json({ error: 'No file was provided.', code: 'no_file' }, 400)
-    }
+      const body = await c.req.parseBody()
+      const file = body.file
+      if (!(file instanceof File)) {
+        return c.json({ error: 'No file was provided.', code: 'no_file' }, 400)
+      }
 
-    const fields = ImportFieldsSchema.safeParse({
-      title: body.title,
-      parentId: body.parentId,
-      source: body.source
-    })
-    if (!fields.success) {
-      return c.json(
-        { error: fields.error.issues[0]?.message ?? 'Invalid field', code: 'invalid_field' },
-        400
-      )
-    }
-
-    const source = parseSource(fields.data.source ?? DEFAULT_SOURCE_TEXT)
-    if (!source.ok) return c.json({ error: source.error, code: source.code }, 400)
-
-    const db = getDbFn()
-    let result: IngestResult
-    try {
-      result = await ingestFile(
-        db,
-        {
-          sourceKind: 'file',
-          bytes: new Uint8Array(await file.arrayBuffer()),
-          reportedType: file.type,
-          originalName: file.name,
-          title: fields.data.title,
-          parentId: fields.data.parentId ?? null,
-          createPage: true
-        },
-        deps
-      )
-    } catch {
-      return c.json({ error: 'The import could not be completed.', code: 'internal' }, 500)
-    }
-
-    if (!result.ok) {
-      return c.json({ error: result.message, code: REASON_TO_CODE[result.reason] }, result.status)
-    }
-    if (result.pageId === null) {
-      return c.json({ error: 'The import did not create a page.', code: 'internal' }, 500)
-    }
-
-    // `ingestFile` has already COMMITted by the time it returns ok. These three
-    // reads are diagnostics, not part of the write: a miss here cannot undo the
-    // commit, and answering 500 would tell the client to retry and duplicate the
-    // note. Return 201 with the ids the commit reported, log the gap, and let a
-    // subsequent GET show the full records once they are readable again.
-    const page = getPage(db, result.pageId)
-    const attachment = getAttachment(db, result.attachmentId)
-    const provenance = getImportSourceByPage(db, result.pageId)
-    if (!page || !attachment || !provenance) {
-      deps.logger.warn('Import readback incomplete after commit', {
-        event: 'import_readback_incomplete',
-        pageFound: page !== null,
-        attachmentFound: attachment !== null,
-        provenanceFound: provenance !== null
+      const fields = ImportFieldsSchema.safeParse({
+        title: body.title,
+        parentId: body.parentId,
+        source: body.source
       })
-    }
+      if (!fields.success) {
+        return c.json(
+          { error: fields.error.issues[0]?.message ?? 'Invalid field', code: 'invalid_field' },
+          400
+        )
+      }
 
-    return c.json(
-      {
-        page: page ?? { id: result.pageId },
-        attachment: attachment ?? {
-          id: result.attachmentId,
-          mimeType: result.mimeType,
-          byteSize: result.byteSize
+      const source = parseSource(fields.data.source ?? DEFAULT_SOURCE_TEXT)
+      if (!source.ok) return c.json({ error: source.error, code: source.code }, 400)
+
+      const db = getDbFn()
+      let result: IngestResult
+      try {
+        result = await ingestFile(
+          db,
+          {
+            sourceKind: 'file',
+            bytes: new Uint8Array(await file.arrayBuffer()),
+            reportedType: file.type,
+            originalName: file.name,
+            title: fields.data.title,
+            parentId: fields.data.parentId ?? null,
+            createPage: true
+          },
+          deps
+        )
+      } catch {
+        return c.json({ error: 'The import could not be completed.', code: 'internal' }, 500)
+      }
+
+      if (!result.ok) {
+        return c.json({ error: result.message, code: REASON_TO_CODE[result.reason] }, result.status)
+      }
+      if (result.pageId === null) {
+        return c.json({ error: 'The import did not create a page.', code: 'internal' }, 500)
+      }
+
+      // `ingestFile` has already COMMITted by the time it returns ok. These three
+      // reads are diagnostics, not part of the write: a miss here cannot undo the
+      // commit, and answering 500 would tell the client to retry and duplicate the
+      // note. Return 201 with the ids the commit reported, log the gap, and let a
+      // subsequent GET show the full records once they are readable again.
+      const page = getPage(db, result.pageId)
+      const attachment = getAttachment(db, result.attachmentId)
+      const provenance = getImportSourceByPage(db, result.pageId)
+      if (!page || !attachment || !provenance) {
+        deps.logger.warn('Import readback incomplete after commit', {
+          event: 'import_readback_incomplete',
+          pageFound: page !== null,
+          attachmentFound: attachment !== null,
+          provenanceFound: provenance !== null
+        })
+      }
+
+      return c.json(
+        {
+          page: page ?? { id: result.pageId },
+          attachment: attachment ?? {
+            id: result.attachmentId,
+            mimeType: result.mimeType,
+            byteSize: result.byteSize
+          },
+          provenance: provenance ?? {
+            pageId: result.pageId,
+            attachmentId: result.attachmentId,
+            sourceKind: 'file',
+            originalName: file.name
+          },
+          warnings: result.warnings
         },
-        provenance: provenance ?? {
-          pageId: result.pageId,
-          attachmentId: result.attachmentId,
-          sourceKind: 'file',
-          originalName: file.name
-        },
-        warnings: result.warnings
-      },
-      201
-    )
-  })
+        201
+      )
+    }
+  )
 
   return routes
 }

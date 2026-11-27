@@ -83,6 +83,18 @@ export function createSchedulePresetRoutes(getDbFn: () => ReturnType<typeof getD
     if (!parsed.success) {
       return badRequest(c, parsed.error.issues[0]?.message ?? 'Invalid apply request')
     }
+    // `replace` clears the whole timetable. The query parameter is a deliberate
+    // speed bump, not a security boundary — the same `?confirm=permanent` rule
+    // every irreversible delete uses. The request body is unchanged.
+    if (parsed.data.mode === 'replace' && c.req.query('confirm') !== 'permanent') {
+      return c.json(
+        {
+          error: 'Replacing the timetable requires confirmation',
+          code: 'confirmation_required'
+        },
+        400
+      )
+    }
     try {
       const db = getDbFn()
       service.applyPreset(db, parsed.data.source, parsed.data.mode)

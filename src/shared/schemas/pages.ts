@@ -38,5 +38,16 @@ export const UpdatePageSchema = z.object({
     .min(1)
 })
 
+/**
+ * Payload for `POST /api/pages/batch`. Each item is validated with the very
+ * same `CreatePageSchema` the single-page endpoint uses, so a batch can never
+ * accept a shape the ordinary create would reject. The byte ceiling on the
+ * request body is the existing page-route ceiling, not a new count limit.
+ */
+export const BatchCreatePagesSchema = z.object({
+  pages: z.array(CreatePageSchema).min(1)
+})
+
+export type BatchCreatePagesInput = z.infer<typeof BatchCreatePagesSchema>
 export type CreatePageInput = z.infer<typeof CreatePageSchema>
 export type UpdatePageInput = z.infer<typeof UpdatePageSchema>
