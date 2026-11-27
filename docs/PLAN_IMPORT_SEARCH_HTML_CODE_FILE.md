@@ -213,7 +213,7 @@ One ADR covering all eight parts, including:
 
 ## Dead code — verified audit (2026-11-28, read-only)
 
-Thorough audit completed. Every finding below was confirmed by targeted grep/glob/read against `src/`, `tests/`, `scripts/`, `package.json`, `bun.lock`, and `src-tauri/`. The scan was conservative — a full O(n²) pass was too slow, so this is a verified minimum, not an exhaustive list.
+Thorough audit completed. Every finding below was confirmed by targeted grep/glob/read against `src/`, `tests/`, `scripts/`, `package.json`, `bun.lock`, and `src-tauri/`. A full O(n²) scan later completed and added the "Addendum" items below. This is a verified list, not speculative.
 
 ### Confirmed dead exports (zero `src/` importers)
 - `src/shared/schemas/import.ts:80,88` — `ImportRequestSchema`, `ImportRequest` (test-only; `ImportFieldsSchema` is live)
@@ -221,7 +221,7 @@ Thorough audit completed. Every finding below was confirmed by targeted grep/glo
 - `src/shared/import/policy.ts:156` — `MARKDOWN_IMPORT_MAX_CHARS` (dead alias of `MAX_MARKDOWN_SOURCE_CHARS`)
 - `src/shared/schemas/import.ts:97,106,109,114,128` — `ImportPreviewPageSchema`, `ImportPreviewPage`, `ImportPreviewSchema`, `ImportPreview`, `ConfirmImport` (`ConfirmImportSchema` at `:123` **is** live)
 - `src/shared/schemas/health.ts:3,13` — `HealthResponseSchema`, `HealthResponseInput`
-- `src/shared/contracts/health.ts:1,3` — `HealthStatus`, `HealthResponse`
+- `src/shared/contracts/health.ts:3` — `HealthResponse` (`HealthStatus` at `:1` is used internally at `:4`, so not dead)
 - `src/shared/contracts/pages.ts:49` — `PageListResponse`
 - `src/shared/schemas/rich-content.ts:42` — `isPreservedUnknownBlockContent` (only a comment mention at `:214`)
 - `src/web/util/recent-pages.ts:54` — `clearRecentPages`
@@ -236,6 +236,17 @@ Thorough audit completed. Every finding below was confirmed by targeted grep/glo
 - `src/web/features/workspace/editor-preferences.ts:108,122,136` — `setSpellCheck`, `addPersonalWord`, `removePersonalWord`
 - `src/web/features/tabs/tabs-model.ts:42,78` — `activationIsAlreadyOpen`, `removeFromTabs`
 - `src/shared/constants/index.ts:261,309,310,311,329` — `ScheduleColor`, `SHELL_LOG_FILENAME`, `SHELL_LOG_MAX_BYTES`, `SHELL_LOG_MAX_ROTATED_FILES`, `SETTINGS_KEY_WINDOW_GEOMETRY` (shell log values mirrored in Rust `src-tauri/src/main.rs:79-81`; TS copies unused)
+
+**Addendum — additional dead exports (full scan completed):**
+- `src/shared/schedule/calendar.ts:143` — `findOverlappingEntryIds` (never called; `rangesOverlap` at `:134` and `getWeekEnd` at `:13` ARE used)
+- `src/shared/schemas/debug-events.ts:159,173` — `DebugEvent`, `DebugEventBatch` types (`DebugEventBatchSchema` at `:166` **is** live)
+- `src/shared/schemas/import.ts:69` — `ImportSource` type
+- `src/shared/schemas/schedule.ts:136,143,153` — `CreatePresetInput`, `UpdatePresetInput`, `ApplyPresetInput`
+- `src/web/features/code/code-registry.ts:46` — `CanonicalCodeLanguage` type
+- `src/web/features/code/shiki-service.ts:270` — `ensureCodeThemeStyles`
+- `src/web/features/workspace/scheduler-preferences.ts:79` — `resetSchedulerPreferences`
+- `src/web/theme/component-roles.ts:229,291` — `InteractionName`, `ComponentFamily`
+- `src/web/theme/theme-definition.ts:59` — `ThemeDefinition` type (`themeDefinitionSchema` and `parseThemeDefinition` at `:35,175` are live)
 
 ### Test-only exports (keep the test or the function becomes live — see conflicts)
 - `src/web/features/rich-editor/document.ts:283` — `isUnknownBlockPreserved` (only `tests/rich-blocks-compat.test.ts`; documents the unbuilt "surface a warning" half)
@@ -284,7 +295,7 @@ Thorough audit completed. Every finding below was confirmed by targeted grep/glo
 - Resolve the three conflicts above first.
 - Do not remove `codemirror`.
 - Do not change an accepted ADR silently — stale line numbers in AGENTS.md are reported, not edited here.
-- No speculative deletion of private/internal helpers (the O(n²) scan did not finish).
+- The full O(n²) scan completed; the addendum list is verified. Still no speculative deletion of private/internal helpers not named above.
 
 ## Scope limits
 
