@@ -1,20 +1,21 @@
 # Plan — External AI Integration, Functionality and Data Recovery
 
-**Status:** Proposed — awaiting owner approval and Phase 0 proof-of-fit.
-**Baseline:** `docs/` architecture audit (saved as `RTWiki-AI-Integration-Audit.md` outside the repo), corrected by owner review 2026-11-25.
-**Branch:** implement on a dedicated branch created from `develop`.
-**Scope:** research-derived implementation plan only. This document does not authorise code changes by itself.
+**Status:** Phase 0 **ACCEPTED** by the owner; Phase 1 **AUTHORIZED**. Phase 2 and Phase 3 remain **UNAUTHORIZED** — do not begin them without a separate owner prompt.
+**Baseline:** `docs/` architecture audit (saved as `RTWiki-AI-Integration-Audit.md` outside the repo), corrected by owner review 2026-11-25. Phase 0 measured evidence is recorded in [ADR-025](adr/ADR-025-openapi-library-selection.md).
+**Branch:** `feature/external-ai-integration`, based on `1c017b6` (`1c017b651b63be79dd9a651604bcfd7519d2f7cb`).
+**Scope:** research-derived implementation plan. Phase 0 is complete and accepted; **Phase 1 is the only currently authorised implementation scope**. This document does not by itself authorise Phase 2 or Phase 3.
 
 ---
 
 ## 1. Repository state — mandatory warning
 
-At the time this plan was last updated (2026-11-26):
+At the time this plan was last updated (2026-11-27):
 
-- Local `develop` HEAD is `7e8580f`, **in sync with** `origin/develop`. The earlier snapshot (`de7326a`, four commits ahead of `e865923`) is stale: those commits and the Stage 1 theme work were committed and pushed in `7e8580f`.
-- The working tree contains four uncommitted files from the W-005 closeout: `docs/THEME_COVERAGE.md`, `docs/VISUAL_AUDIT_FINAL_REPORT.md`, `docs/theme-waivers.md`, `tests/theme-docs-sync.test.ts`. It also contains untracked documentation: `docs/PENDING_ACTIONABLE.md`, `docs/PLAN_EXTERNAL_AI_INTEGRATION_AUDIT.md`, and this plan.
+- Work is on branch `feature/external-ai-integration`, based on `1c017b6` (`1c017b651b63be79dd9a651604bcfd7519d2f7cb`).
+- The working tree contains the Phase 0 ADR files: a modified `docs/adr/README.md` (the ADR-025 index row) and an untracked `docs/adr/ADR-025-openapi-library-selection.md`. These are the accepted Phase 0 deliverable and must be preserved.
+- Phase 0 was executed outside the repository in a throwaway probe directory; it made no `package.json`, `bun.lock`, route or source change.
 
-**Rules:** re-check `git status` at execution time — this snapshot will go stale. Never reset, clean, stash, overwrite or commit files outside the phase scope. Do not assume a clean tree. Other agents may be working concurrently — do not touch files outside the scope listed in each phase.
+**Rules:** re-check `git status` at execution time — this snapshot will go stale. Never reset, clean, stash, overwrite or commit files outside the phase scope. Do not assume a clean tree. Other agents may be working concurrently — do not touch files outside the scope listed in each phase. Phase 2 and Phase 3 are not authorised; do not act on their sections.
 
 ---
 
@@ -131,7 +132,8 @@ CREATE TABLE page_revisions (
   links_snapshot TEXT,
   capture_kind TEXT NOT NULL,
   actor TEXT,
-  captured_at TEXT NOT NULL
+  captured_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 CREATE INDEX idx_page_revisions_page_version ON page_revisions(page_id, version DESC);
 CREATE INDEX idx_page_revisions_captured_at ON page_revisions(captured_at);
@@ -148,9 +150,13 @@ CREATE TABLE operation_log (
   created_at TEXT NOT NULL
 );
 CREATE INDEX idx_operation_log_created_at ON operation_log(created_at);
+
+ALTER TABLE pages ADD COLUMN structure_version INTEGER NOT NULL DEFAULT 0;
 ```
 
 No foreign keys to `pages` or `attachments` — follows the `import_sources` precedent so recovery data survives permanent deletion.
+
+`page_revisions.created_at` is the page's **original creation timestamp**, captured with the snapshot and preserved verbatim on restore (owner decision 3, §6.3); it is distinct from `captured_at`, which records when the revision itself was taken. `pages.structure_version` is an internal counter (owner decision 4, §6.14): it changes only on structural writes (`parent_id` or `position`), never on ordinary content edits. Both columns are part of migration 015.
 
 `capture_kind`, `operation_kind` and `status` are **not free text**. Define them once as `as const` tuples/unions in shared code (following the `ImportErrorCode` pattern at `src/shared/schemas/import.ts:11-31`), validate at service boundaries, and store the same string values in SQLite. Routes, UI and tests import those constants — they never restate the literals.
 
@@ -160,7 +166,7 @@ The current restore (`src/server/repositories/page-repository.ts:303-352`) loses
 
 - `title`, `content`, `page_type`, `parent_id`, `position`, `version`, `created_at` — the page row itself. `created_at` is preserved on restore; `updated_at` is set to the restore time.
 - `search_content` — extracted searchable text via the shared `searchContentForPage` (`src/server/services/page-service.ts:168-171`), **not** raw JSON.
-- `children_snapshot` — JSON array of `{id, parent_id, position}` for **direct** living children at deletion time, captured in **pre-promotion order** (`position ASC, rowid ASC`) with their original `parent_id` (the deleted page) and original positions. Grandchildren need no snapshot: they remain under their promoted parent, which returns with it.
+- `children_snapshot` — JSON array of `{id, parent_id, position, structure_version}` for **direct** living children at deletion time, captured in **pre-promotion order** (`position ASC, rowid ASC`) with their original `parent_id` (the deleted page) and original positions. `structure_version` is the child's **expected post-promotion structure version** (owner decision 4, §6.14): the value its `pages.structure_version` holds after the deletion's promotion reindexes siblings. Restore is conditional on both parent and this version still matching (§6.3). Grandchildren need no snapshot: they remain under their promoted parent, which returns with it.
 - `links_snapshot` — outgoing link targets from `page_links`.
 
 ### 6.3 Restore algorithm
@@ -173,7 +179,7 @@ Two distinct paths. Both run in **one `BEGIN IMMEDIATE` transaction** and abort 
 2. Restore the page row: `deleted_at = NULL`, original `parent_id` if that parent is living (otherwise `NULL`), original `position` after making room at the target level. Preserve `created_at`; set `updated_at` to restore time.
 3. Re-index using the stored `search_content`.
 4. Re-insert outgoing links from `links_snapshot`.
-5. For each child in `children_snapshot`, in recorded order: re-parent it back to the restored page **only if** it is still living **and** its current parent is still the grandparent it was promoted to. Children moved elsewhere by the user, or independently deleted, are left alone. Remove eligible children from the promoted parent's sibling list, **compact the remaining siblings**, then insert under the restored page at the recorded position, making room there. Deterministic order is `position ASC, rowid ASC`.
+5. For each child in `children_snapshot`, in recorded order: re-parent it back to the restored page **only if** it is still living, its current parent is still the grandparent it was promoted to, **and** its current `pages.structure_version` still equals the `structure_version` stored in the snapshot (owner decision 4, §6.14). Same-parent reordering counts as movement, so a reindex that leaves the parent unchanged still increments `structure_version` and makes the child ineligible. Children moved elsewhere by the user, independently deleted, or reordered are left untouched. Remove eligible children from the promoted parent's sibling list, **compact the remaining siblings**, then insert under the restored page at the recorded position, making room there. Deterministic order is `position ASC, rowid ASC`.
 6. Apply the same make-room/compaction logic at root level — this fixes the root-page collision (`src/server/repositories/page-repository.ts:258,269-275`).
 7. Bump `version` so concurrent writers receive a 409.
 
@@ -211,6 +217,8 @@ Rules:
 - The newest revision per page is never pruned, so "undo last change" always works.
 - Undo validates the snapshot exists before mutating anything. If expired → `410 Gone` with `recovery_data_expired`; the UI says "this change is too old to undo." **Never report silent success.**
 - Capture points: before update (previous row), before soft delete, before restore. There is **no import-overwrite path today** (`POST /api/import` only creates pages, `src/server/routes/import.ts:149-187`); do not add a capture point for a path that does not exist. If an overwrite path is added later, add its capture point in the same change.
+
+The rows written at these capture points obey the exact contract in §6.12: eight fixed operation kinds, `committed` status only, three fixed actors, and the revision-chain rule already described in step 2 above. Only these recovery operations are logged — this is **not** a general activity log.
 
 ### 6.6 New endpoints
 
@@ -267,6 +275,44 @@ These two fixes are unrelated to recovery but are independent of OpenAPI, so the
 
 - Bound `GET /api/pages` pagination: `limit` must be an integer in `1..100`, `offset` an integer `>= 0`; invalid values return 400. Currently `Number(...) || 50/0` lets a negative limit bypass the 50-row window and allows unbounded positive limits (`src/server/routes/pages.ts:60-62`).
 - Fix the import post-commit readback that returns 500 after a successful commit (`src/server/routes/import.ts:176-184`).
+
+### 6.12 Operation-log contract (owner decision — Phase 1)
+
+The `operation_log` table records **only** the recovery operations below. It is not a general activity log; do not expand it to ordinary reads, edits, settings writes or other events.
+
+- **Operation kinds — exactly these eight, no others:** `page.update`, `page.trash`, `page.restore`, `page.revision.restore`, `page.permanent_delete`, `attachment.trash`, `attachment.restore`, `attachment.permanent_delete`. Define them once as an `as const` tuple/union in shared code (§6.1) and validate at the service boundary; routes, UI and tests import the constants rather than restating the literals.
+- **Status — exactly `committed` only.** There is no `pending`, `failed` or `rolled_back` state in this log; a row exists only for a committed operation.
+- **Actors — exactly `local-client`, `system`, `ai`.** No other actor value is written.
+- **Revision references — the §6.5 chain rule applies:** one operation's `after_revision_id` is the next operation's `before_revision_id`. No further revision-reference semantics were specified, so do not invent extra fields or rules beyond §6.5.
+- **API response shape:** `GET /api/recovery/operations` returns `{operations}` with bounded, newest-first ordering. Do not add extra fields to the envelope or to each operation beyond the `operation_log` columns in §6.1.
+- **Expiry:** operation records older than 30 days are pruned by the §6.5 routine (`RECOVERY_RETENTION_DAYS = 30`).
+
+### 6.13 Permanent page deletion — purge policy (owner decision — Phase 1)
+
+`DELETE /api/pages/:id/permanent?confirm=permanent` is irreversible and, unlike trash, leaves no recoverable content behind:
+
+1. Purge **all** `page_revisions` rows for that page.
+2. Purge **all** historical `operation_log` rows that reference that page (`target_page_id`), so no operation points at a deleted page or a purged revision.
+3. Record **one** metadata-only `page.permanent_delete` operation (§6.12) with **no revision references and no content** — only the target id, actor, status and timestamp from the §6.1 schema.
+4. Make revision history unavailable after permanent deletion: `GET /api/pages/:id/revisions` and restore must not resurrect the page or its revisions.
+5. Perform all of the above **atomically** in one transaction; abort before any mutation if any step cannot complete.
+
+This is the deliberate boundary between trashed content (recoverable, revisions retained) and physically deleted content (purged, absent from backups). See [SECURITY.md](SECURITY.md) §8.
+
+### 6.14 Child movement and `structure_version` (owner decision — Phase 1)
+
+- **Same-parent reordering counts as movement.** A child whose `position` changes while its `parent_id` stays the same has moved for recovery purposes.
+- `pages.structure_version` (migration 015, §6.1) is an internal counter that **increments whenever `parent_id` or `position` changes**, including sibling reindexing during delete and restore. It does **not** increment for ordinary content edits (title, content, autosave version bumps, search reindex).
+- Each child snapshot stores the **expected post-promotion structure version** (§6.2). Restore re-parents a child **only if** both its parent and its `structure_version` still match the snapshot (§6.3 step 5); otherwise the child is left untouched.
+- **Audit every structural-write path** before implementation — including sibling reindexing in soft delete, restore, permanent delete and any hierarchy/move route — so no path changes `parent_id`/`position` without incrementing `structure_version`. A missed path would let a later restore silently re-parent a child the user had moved.
+
+### 6.15 Hono 4.13.23 bump (owner decision — Phase 1)
+
+- Update the production dependency to `hono@4.13.23` in a **separate commit** from the recovery work, and update `bun.lock` with it.
+- Run focused regression tests after the bump, then **re-run all ten Phase 0 assertions** (§5) with Hono 4.13.23 and the selected candidate `hono-openapi`.
+- **Preserve the original 4.13.19 measured evidence** in [ADR-025](adr/ADR-025-openapi-library-selection.md) and **append** the new measured results; do not overwrite or restate the old numbers as if they had been measured on 4.13.23.
+- **Do not install `hono-openapi` into the production project during Phase 1.** The library selection is accepted, but integrating it into the app is Phase 2 work.
+- The **compiled external-dependency packaging question** — the `--external zod-to-json-schema` compile flag and how it is carried into the Windows build — remains a **Phase 2 gate**. Phase 1 re-runs the probe assertions; it does not change the production build script.
 
 ---
 
@@ -364,6 +410,8 @@ Quality gates (CI): `bun run format:check`, `bun run lint`, `bun run typecheck`,
 | 1 | Reliable recovery + two independent fixes (§6.11) | migrations, repository/service, recovery routes, trash UI, tests, pagination and import-readback fixes | every accidental-delete scenario recoverable |
 | 2 | AI capability surface | route tags, tools endpoint, semantic validation, batch endpoint, preset confirmation | tool manifest derived; no hardcoded list |
 | 3 | Import orchestration | batch/preview UI | separate ADR for `.rtwiki.zip` |
+
+**Current authorization (2026-11-27):** Phase 0 accepted; Phase 1 authorised; Phase 2 and Phase 3 not authorised. The compiled external-dependency packaging question is a Phase 2 gate (§6.15).
 
 **Owner action before Phase 1 ships:** notify the owner that backups created before migrations 014/015 cannot be restored by the new recovery process (§6.10).
 

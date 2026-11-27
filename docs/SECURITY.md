@@ -405,13 +405,30 @@ Before any restore operation begins, the backup service validates:
 If any validation step fails, the restore is aborted, **nothing has been moved**, and the user is
 shown which check failed.
 
-**A backup contains no deleted page content.** This is documented SQLite behaviour, not merely a
-local observation: `VACUUM INTO` leaves *"all deleted content purged from the backup, leaving behind
-no forensic traces"* — see [lang_vacuum.html](https://www.sqlite.org/lang_vacuum.html). Measured on
-two functionally identical databases after deleting a row, a plain file copy still held the deleted
-text in dead pages (40,960 bytes) while the `VACUUM INTO` output did not (8,192 bytes); both opened
-cleanly with `integrity_check = ok`. For a private-notes wiki that is a deliberate property, recorded
-here so it is not later mistaken for an accident. There is nothing to scrub.
+**A backup contains no physically deleted page content — but it does contain trashed content and
+retained revisions.** These are two different states and must not be conflated:
+
+- **Trashed content and retained revisions are live rows.** A soft-deleted page (`deleted_at` set)
+  and its `page_revisions` rows are ordinary rows in `rtwiki.sqlite`; they are **present in backups**
+  and recoverable from them. The same applies to soft-deleted attachments, whose bytes remain in the
+  database. This is intentional: trash and revision history are the primary recovery mechanism, so
+  a backup taken while content is in trash restores that content with it.
+- **Physically deleted content is purged.** Content actually removed from the database — a
+  permanently deleted page's revisions and historical operation records under the Phase 1 recovery
+  policy ([PLAN_EXTERNAL_AI_INTEGRATION.md](PLAN_EXTERNAL_AI_INTEGRATION.md) §6.13, planned), or an
+  expired trashed attachment's row and BLOB — is no longer a live row. For such content, `VACUUM INTO`
+  leaves *"all deleted content purged from the backup, leaving behind no forensic traces"* —
+  documented SQLite behaviour, not merely a local observation — see
+  [lang_vacuum.html](https://www.sqlite.org/lang_vacuum.html). Measured on two functionally identical
+  databases after deleting a row, a plain file copy still held the deleted text in dead pages
+  (40,960 bytes) while the `VACUUM INTO` output did not (8,192 bytes); both opened cleanly with
+  `integrity_check = ok`. For a private-notes wiki that is a deliberate property, recorded here so it
+  is not later mistaken for an accident. There is nothing to scrub **for purged content**.
+
+The distinction matters for disclosure: a backup is not a way to erase a note the user only trashed,
+and it is not a forensic risk for a note the user permanently deleted. Do not describe backups as
+"containing no deleted content" without this qualification — trashed rows and retained revisions are
+still live data in the backup.
 
 **Backups carry no attachment bytes held outside the database.** A fully migrated database needs
 exactly one file. The exception is a database caught mid-migration by `dropStoredName()`, where some

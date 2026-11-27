@@ -30,6 +30,7 @@ Architecture Decision Records (ADRs) capture significant design decisions made d
 | [ADR-022](ADR-022-capability-driven-document-toolbar.md) | One Document Toolbar, Driven by Editor Capabilities | **Accepted** |
 | [ADR-023](ADR-023-signatureless-bytes-and-forced-download.md) | Signatureless Bytes Are Stored and Served as Forced Downloads | **Accepted** (supersedes ADR-015 §7 only) |
 | [ADR-024](ADR-024-one-ingest-pipeline-and-structured-import.md) | One Ingest Pipeline and Structured Import | **Accepted** (foundation only; full ADR-006 pipeline still unbuilt) |
+| [ADR-025](ADR-025-openapi-library-selection.md) | OpenAPI Library Selection for the External-AI Capability Surface | **Accepted** (Phase 0 library selection only; does not authorise Phase 2 integration) |
 
 ## How to Read an ADR
 

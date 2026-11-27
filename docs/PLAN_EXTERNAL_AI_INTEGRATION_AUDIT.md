@@ -12,6 +12,18 @@ Read-only audit at the time; every claim below was checked against the current s
 
 **Owner-approved refinements (same date):** the owner approved the plan with three targeted changes, all applied — (1) dead-code removal explicitly kept out of scope (§9); (2) the independent pagination and import-readback fixes moved from §7.4 to §6.11 so Phase 2 stays focused; (3) an explicit owner-facing action added in §6.10 and §12 stating that backups created before migrations 014/015 cannot be restored by the new recovery process. Phase 1 was deliberately **not** split; the plan records that it should be split only if the schema/service vs. routes/UI boundary is genuinely clean. §7.1 now states that the derived-manifest SSOT design is a design claim until Phase 0 assertion 7 produces measured evidence.
 
+## Phase 0 acceptance and Phase 1 owner decisions (2026-11-27)
+
+The owner accepted the Phase 0 hard gate and authorised **Phase 1 only**. Phase 2 and Phase 3 remain **unauthorised**. Current work is on `feature/external-ai-integration`, based on `1c017b6`. The five Phase 1 stop conditions were resolved with these exact decisions, now incorporated into [PLAN_EXTERNAL_AI_INTEGRATION.md](PLAN_EXTERNAL_AI_INTEGRATION.md) §6:
+
+1. **Operation-log contract** — operation kinds exactly `page.update`, `page.trash`, `page.restore`, `page.revision.restore`, `page.permanent_delete`, `attachment.trash`, `attachment.restore`, `attachment.permanent_delete`; status exactly `committed` only; actors exactly `local-client`, `system`, `ai`. Revision-reference semantics and API response shape: since no further detail was given, the plan's §6.5 chain rule applies (one operation's `after_revision_id` is the next operation's `before_revision_id`) and `GET /api/recovery/operations` returns `{operations}` with bounded, newest-first ordering; no extra fields were invented. Expiry: older than 30 days. Only these recovery operations are logged — not a general activity log.
+2. **Permanent page deletion** — purge all page revisions; purge historical operation records for that page; record one metadata-only permanent-deletion event with no revision references and no content; make revision history unavailable after permanent deletion; perform atomically. [SECURITY.md](SECURITY.md) §8 now distinguishes trashed content and retained revisions (live rows, present in backups) from physically deleted content (purged, absent from backups).
+3. **Snapshot** — add `created_at TEXT NOT NULL` to `page_revisions` and preserve it during restoration.
+4. **Child movement** — same-parent reordering counts as movement. Add internal `structure_version INTEGER NOT NULL DEFAULT 0` to `pages` in migration 015; increment it whenever `parent_id` or `position` changes, never for ordinary content edits. Store the expected post-promotion structure version in each child snapshot; restore children only if parent AND structure version still match, otherwise leave untouched. Audit every structural-write path, including sibling reindexing.
+5. **Hono** — update to `hono@4.13.23` in a separate commit, update the lockfile, run focused regression tests, and re-run all ten Phase 0 assertions with Hono 4.13.23 and `hono-openapi`. Preserve the old 4.13.19 evidence and append new measured results (recorded in [ADR-025](adr/ADR-025-openapi-library-selection.md)). Do not install `hono-openapi` into the production project during Phase 1.
+
+The compiled external-dependency packaging question remains a Phase 2 gate. The historical audit findings below are retained unchanged as the record of the original review.
+
 ## Verified accurate
 
 | Plan claim | Evidence |
