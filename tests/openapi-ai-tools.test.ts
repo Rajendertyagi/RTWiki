@@ -154,6 +154,18 @@ describe('OpenAPI document and derived AI tool manifest', () => {
       expect(media?.schema?.properties?.file?.format).toBe('binary')
       expect(media?.schema?.required).toContain('file')
     }
+    // The import tool accepts optional text fields in addition to the file;
+    // they must be advertised so an AI caller can build a complete request.
+    const importTool = uploads.find((tool) => tool.path === '/api/import')
+    const props = importTool?.requestBody?.content?.['multipart/form-data']?.schema?.properties
+    expect(props?.title?.type).toBe('string')
+    expect(props?.parentId?.format).toBe('uuid')
+    expect(props?.source?.type).toBe('string')
+    // The attachment tool keeps the file-only contract.
+    const attachmentTool = uploads.find((tool) => tool.path === '/api/attachments')
+    const attachmentProps =
+      attachmentTool?.requestBody?.content?.['multipart/form-data']?.schema?.properties
+    expect(Object.keys(attachmentProps ?? {})).toEqual(['file'])
   })
 
   it('never exposes an untagged route', async () => {

@@ -29,17 +29,55 @@ export const AI_SAFE_TAG = 'ai-safe' as const
  * and the two routes cannot drift apart. Typed through `DescribeRouteOptions`
  * so the literal schema values are checked against hono-openapi's own types.
  */
+/** The one definition of the required binary `file` field, shared by both upload routes. */
+const MULTIPART_FILE_PROPERTY = {
+  type: 'string',
+  format: 'binary',
+  description: 'The file to upload.'
+} as const
+
 export const MULTIPART_FILE_REQUEST_BODY: DescribeRouteOptions['requestBody'] = {
   required: true,
   content: {
     'multipart/form-data': {
       schema: {
         type: 'object',
+        properties: { file: MULTIPART_FILE_PROPERTY },
+        required: ['file']
+      }
+    }
+  }
+}
+
+/**
+ * The import route accepts the same file plus the optional text fields parsed by
+ * `ImportFieldsSchema` in `routes/import.ts`. They are advertised here so an AI
+ * caller can construct a complete request; the `file` property is the shared one
+ * above, so the two upload contracts cannot drift apart.
+ */
+export const MULTIPART_IMPORT_REQUEST_BODY: DescribeRouteOptions['requestBody'] = {
+  required: true,
+  content: {
+    'multipart/form-data': {
+      schema: {
+        type: 'object',
         properties: {
-          file: {
+          file: MULTIPART_FILE_PROPERTY,
+          title: {
             type: 'string',
-            format: 'binary',
-            description: 'The file to upload.'
+            minLength: 1,
+            maxLength: 200,
+            description: 'Optional page title; defaults to the file name.'
+          },
+          parentId: {
+            // OpenAPI 3.1 expresses nullability as a type union, not `nullable`.
+            type: ['string', 'null'],
+            format: 'uuid',
+            description: 'Optional living parent page id; omitted or null creates a root page.'
+          },
+          source: {
+            type: 'string',
+            description: 'Optional import source label.'
           }
         },
         required: ['file']

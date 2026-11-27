@@ -26,7 +26,7 @@ import type {
 import { createPreviewStore, type PreviewStore } from '../ingest/preview-store.js'
 import { getImportSourceByPage } from '../ingest/provenance-repository.js'
 import type { Logger } from '../logging/index.js'
-import { AI_SAFE_TAG, MULTIPART_FILE_REQUEST_BODY } from '../openapi/index.js'
+import { AI_SAFE_TAG, MULTIPART_IMPORT_REQUEST_BODY } from '../openapi/index.js'
 import { getPage } from '../repositories/page-repository.js'
 import { readJson } from '../utils/read-json.js'
 import { isSameOrigin } from '../utils/request-origin.js'
@@ -156,7 +156,7 @@ export function createImportRoutes(
       summary: 'Import a file into a page',
       description:
         'Runs the one shared ingest pipeline: page, attachment and provenance in one transaction.',
-      requestBody: MULTIPART_FILE_REQUEST_BODY,
+      requestBody: MULTIPART_IMPORT_REQUEST_BODY,
       responses: {
         201: { description: 'Imported page and attachment' },
         415: { description: 'Unsupported file' }
