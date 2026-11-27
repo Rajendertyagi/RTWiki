@@ -705,4 +705,95 @@ describe('attachment references survive page recovery', () => {
     expect(searchText(page.id)).toContain('ATTACHED_DOCUMENT_TEXT_6F4D')
     expect(f.db.query('SELECT 1 FROM attachments WHERE id = ?').get(attachmentId)).not.toBeNull()
   })
+
+  it("does not resurrect a trashed attachment's text when restoring a trashed page", async () => {
+    const needle = 'TRASHED_DOC_RESTORE_5B2A'
+    const attachmentId = f.attachment({
+      mimeType: 'text/plain',
+      kind: 'document',
+      extractedText: needle
+    })
+    const page = f.page({
+      title: 'With trashed doc',
+      content: richAttachment(attachmentId, 'document follows')
+    })
+    expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(1)
+
+    // Trash the page: its pre-delete revision still holds the attachment text.
+    expect((await f.json('DELETE', `/api/pages/${page.id}`)).status).toBe(200)
+    const revisionId = await softDeleteRevisionId(page.id)
+    const snapshot = f.db
+      .query('SELECT search_content FROM page_revisions WHERE id = ?')
+      .get(revisionId) as { search_content: string }
+    expect(snapshot.search_content).toContain(needle)
+
+    // Trash the attachment: its text must stop being findable everywhere.
+    expect((await f.json('DELETE', `/api/attachments/${attachmentId}`)).status).toBe(200)
+    expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(0)
+
+    // Restoring must recompute search text from the restored content under
+    // CURRENT attachment visibility, not replay the stale snapshot text.
+    const restored = await f.json<PageResponse>(
+      'POST',
+      `/api/pages/${page.id}/revisions/${revisionId}/restore`
+    )
+    expect(restored.status).toBe(200)
+    expect(searchText(page.id)).not.toContain(needle)
+    expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(0)
+
+    // The immutable snapshot is untouched: it still holds the original text.
+    const after = f.db
+      .query('SELECT search_content FROM page_revisions WHERE id = ?')
+      .get(revisionId) as { search_content: string }
+    expect(after.search_content).toBe(snapshot.search_content)
+  })
+
+  it("does not resurrect a trashed attachment's text when undoing a living page revision", async () => {
+    const needle = 'LIVING_UNDO_TRASHED_DOC_7E4C'
+    const attachmentId = f.attachment({
+      mimeType: 'text/plain',
+      kind: 'document',
+      extractedText: needle
+    })
+    const withDoc = richAttachment(attachmentId, 'document follows')
+    const page = f.page({ title: 'Living', content: withDoc })
+    expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(1)
+
+    // Move the living page off the attachment; the before-update revision keeps
+    // the old content and its extracted text.
+    const changed = await f.json<PageResponse>('PATCH', `/api/pages/${page.id}`, {
+      title: 'Living',
+      content: richParagraph('document removed'),
+      version: row(page.id).version ?? 1
+    })
+    expect(changed.status).toBe(200)
+    const history = await f.json<RevisionsResponse>('GET', `/api/pages/${page.id}/revisions`)
+    const beforeUpdateId =
+      history.body.revisions.find((r) => r.captureKind === BEFORE_UPDATE)?.id ?? ''
+    expect(beforeUpdateId).not.toBe('')
+    const snapshot = f.db
+      .query('SELECT content, search_content FROM page_revisions WHERE id = ?')
+      .get(beforeUpdateId) as { content: string; search_content: string }
+    expect(snapshot.content).toContain(`/api/attachments/${attachmentId}`)
+    expect(snapshot.search_content).toContain(needle)
+
+    // Trash the attachment while the page is living and no longer references it.
+    expect((await f.json('DELETE', `/api/attachments/${attachmentId}`)).status).toBe(200)
+
+    // Undo to the revision that still references the now-trashed attachment.
+    const undone = await f.json<PageResponse>(
+      'POST',
+      `/api/pages/${page.id}/revisions/${beforeUpdateId}/restore`
+    )
+    expect(undone.status).toBe(200)
+    expect(undone.body.page.content).toBe(withDoc)
+    expect(searchText(page.id)).not.toContain(needle)
+    expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(0)
+
+    // The immutable snapshot is untouched.
+    const after = f.db
+      .query('SELECT search_content FROM page_revisions WHERE id = ?')
+      .get(beforeUpdateId) as { search_content: string }
+    expect(after.search_content).toBe(snapshot.search_content)
+  })
 })

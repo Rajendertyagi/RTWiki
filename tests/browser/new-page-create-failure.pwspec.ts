@@ -25,7 +25,7 @@ async function countPages(request: APIRequestContext): Promise<number> {
 }
 
 async function countPagesWithTitle(request: APIRequestContext, title: string): Promise<number> {
-  const res = await request.get(`/api/pages?q=${encodeURIComponent(title)}&limit=200`)
+  const res = await request.get(`/api/pages?q=${encodeURIComponent(title)}&limit=100`)
   expect(res.ok()).toBe(true)
   const body = (await res.json()) as { pages: Array<{ title: string }> }
   return body.pages.filter((p) => p.title === title).length
@@ -55,7 +55,7 @@ async function assertFailureKeepsDialog(dialog: Locator, title: string): Promise
 test.afterEach(async ({ request }) => {
   // Remove any page this spec managed to create so the shared throwaway DB
   // stays clean for the next file.
-  const res = await request.get(`/api/pages?q=${PREFIX}&limit=200`)
+  const res = await request.get(`/api/pages?q=${PREFIX}&limit=100`)
   const body = (await res.json()) as { pages: Array<{ id: string; title: string }> }
   for (const p of body.pages) {
     if (p.title.startsWith(PREFIX)) await request.delete(`/api/pages/${p.id}`)

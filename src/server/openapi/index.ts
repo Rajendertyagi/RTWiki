@@ -14,10 +14,39 @@
  */
 import { APP_VERSION } from '@rtwiki/shared/constants'
 import type { Context, MiddlewareHandler } from 'hono'
+import type { DescribeRouteOptions } from 'hono-openapi'
 import { readJson } from '../utils/read-json.js'
 
 /** The one tag that marks an operation as safe to expose to external AI tools. */
 export const AI_SAFE_TAG = 'ai-safe' as const
+
+/**
+ * The multipart request body shared by every file-upload AI tool.
+ *
+ * Both `POST /api/attachments` and `POST /api/import` accept the same envelope:
+ * one required binary `file` field. Defining it once here means the manifest
+ * derived from the OpenAPI document can tell a caller how to build the request,
+ * and the two routes cannot drift apart. Typed through `DescribeRouteOptions`
+ * so the literal schema values are checked against hono-openapi's own types.
+ */
+export const MULTIPART_FILE_REQUEST_BODY: DescribeRouteOptions['requestBody'] = {
+  required: true,
+  content: {
+    'multipart/form-data': {
+      schema: {
+        type: 'object',
+        properties: {
+          file: {
+            type: 'string',
+            format: 'binary',
+            description: 'The file to upload.'
+          }
+        },
+        required: ['file']
+      }
+    }
+  }
+}
 
 /** OpenAPI document metadata. Defined once; the cached spec is built from it. */
 export const OPENAPI_DOCUMENTATION = {

@@ -651,7 +651,14 @@ export interface RestorePageOptions {
   /** Parsed snapshot arrays. The service validates them before opening this path. */
   children?: ChildSnapshot[]
   links?: string[]
-  /** Search text for the legacy path, where no stored snapshot exists. */
+  /**
+   * Search text for the restored page, recomputed by the service from the
+   * restored content under current attachment visibility. Used by BOTH paths:
+   * a snapshot's stored `search_content` is immutable history and may include
+   * text from an attachment that has since been trashed, so replaying it would
+   * make that text findable again. Optional only for legacy callers that have
+   * no recomputed value, which fall back to the snapshot text.
+   */
   searchContent?: string
   actor: RecoveryActor
 }
@@ -754,7 +761,9 @@ export function restorePageCore(
     db.run(
       `INSERT INTO search_index (page_id, title, content) VALUES (?, ?, ?)
        ON CONFLICT(page_id) DO UPDATE SET title = excluded.title, content = excluded.content`,
-      [id, revision.title, revision.searchContent ?? '']
+      // Prefer the service's recomputed text; fall back to the snapshot only for
+      // callers that did not supply one. The revision row is never mutated.
+      [id, revision.title, options.searchContent ?? revision.searchContent ?? '']
     )
     replaceOutgoingLinksCore(db, id, options.links ?? [])
 

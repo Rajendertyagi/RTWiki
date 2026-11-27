@@ -27,8 +27,9 @@ interface ImportPreviewModalProps {
  * The preview-before-confirm gate for file import.
  *
  * Cancellation is deliberately just `onCancel`: no confirm request is made, so
- * the server creates nothing. The preview itself is read-only on the server;
- * this modal only decides whether to spend the one-time preview id.
+ * the server creates no page or attachment. The caller may fire a best-effort
+ * discard to release the in-memory preview, but this modal only decides whether
+ * to spend the one-time preview id.
  */
 export function ImportPreviewModal({
   opened,

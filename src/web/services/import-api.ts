@@ -106,6 +106,21 @@ export async function previewImport(
 }
 
 /**
+ * Releases a preview the user cancelled so the server can drop its retained
+ * bytes immediately. Fire-and-forget by design: this is a memory optimisation,
+ * not a write, so a network failure must never surface as a user-facing error —
+ * the entry simply expires on its own. No page or attachment is ever created.
+ */
+export function discardImportPreview(previewId: string): void {
+  void fetch(`${API_BASE}/import/preview/${encodeURIComponent(previewId)}`, {
+    method: 'DELETE'
+  }).catch(() => {
+    // Deliberately swallowed: discarding is best-effort and has no user-visible
+    // outcome. The server's TTL is the backstop if this request never lands.
+  })
+}
+
+/**
  * Commits every prepared page from a preview in one transaction. An optional
  * `parentId` overrides the parent captured at preview; omitting it keeps the
  * preview's value. Cancelling means simply never calling this function.

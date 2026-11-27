@@ -669,7 +669,7 @@ test.describe('Tree geometry', () => {
     await page.waitForTimeout(1200)
 
     // The child must now be a child of the parent, not a root.
-    const nested = await request.get('/api/pages?limit=200')
+    const nested = await request.get('/api/pages?limit=100')
     const body = (await nested.json()) as {
       pages: Array<{ id: string; title: string; parentId?: string | null }>
     }

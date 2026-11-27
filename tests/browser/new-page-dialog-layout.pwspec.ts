@@ -118,7 +118,7 @@ async function openDialog(page: Page): Promise<Locator> {
 }
 
 async function countPagesWithTitle(request: APIRequestContext, title: string): Promise<number> {
-  const res = await request.get(`/api/pages?q=${encodeURIComponent(title)}&limit=200`)
+  const res = await request.get(`/api/pages?q=${encodeURIComponent(title)}&limit=100`)
   expect(res.ok()).toBe(true)
   const body = (await res.json()) as { pages: Array<{ title: string }> }
   return body.pages.filter((p) => p.title === title).length
@@ -352,7 +352,7 @@ async function createPage(
 // ---------------------------------------------------------------------------
 
 test.afterEach(async ({ request }) => {
-  const res = await request.get(`/api/pages?q=${PREFIX}&limit=200`)
+  const res = await request.get(`/api/pages?q=${PREFIX}&limit=100`)
   const body = (await res.json()) as { pages: Array<{ id: string; title: string }> }
   for (const p of body.pages) {
     if (p.title.startsWith(PREFIX)) await request.delete(`/api/pages/${p.id}`)

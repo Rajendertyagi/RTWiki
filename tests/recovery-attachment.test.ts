@@ -20,6 +20,7 @@ const NOW = Date.now()
 const OLD = new Date(NOW - (TRASHED_ATTACHMENT_RETENTION_DAYS + 5) * MS_PER_DAY).toISOString()
 const YOUNG = new Date(NOW - MS_PER_DAY).toISOString()
 const BEFORE_SOFT_DELETE = RevisionCaptureKind[1]
+const BEFORE_UPDATE = RevisionCaptureKind[0]
 
 interface TrashResponse {
   attachments: Array<{ id: string; deletedAt: string | null }>
@@ -188,5 +189,67 @@ describe('soft-deleted attachment filtering contract', () => {
     expect(listAttachments(f.db).map((a) => a.id)).toContain(id)
     expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(1)
     expect(page.id).toBeTruthy()
+  })
+})
+
+describe('living-orphan sweep respects retained revisions', () => {
+  it('keeps a living attachment held only by a revision, then reclaims it once that revision is pruned', async () => {
+    const needle = 'REVISION_HELD_LIVING_4C1E'
+    const id = f.attachment({
+      mimeType: 'text/plain',
+      kind: 'document',
+      extractedText: needle,
+      originalName: 'held.txt'
+    })
+    const page = f.page({
+      title: 'Owner',
+      content: richAttachment(id, 'reference to be removed')
+    })
+    expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(1)
+
+    // Move the living page off the attachment. The before-update revision keeps
+    // the old content (and its extracted text), so the revision is now the only
+    // holder of the URL.
+    const version = (
+      f.db.query('SELECT version FROM pages WHERE id = ?').get(page.id) as { version: number }
+    ).version
+    const updated = await f.json('PATCH', `/api/pages/${page.id}`, {
+      title: 'Owner',
+      content: richParagraph('reference removed'),
+      version
+    })
+    expect(updated.status).toBe(200)
+    expect((await f.json<ListResponse>('GET', `/api/pages?q=${needle}`)).body.total).toBe(0)
+
+    const history = await f.json<RevisionsResponse>('GET', `/api/pages/${page.id}/revisions`)
+    const revisionId = history.body.revisions.find((r) => r.captureKind === BEFORE_UPDATE)?.id ?? ''
+    expect(revisionId).not.toBe('')
+    const snapshot = f.db
+      .query('SELECT content, search_content FROM page_revisions WHERE id = ?')
+      .get(revisionId) as { content: string; search_content: string }
+    expect(snapshot.content).toContain(`/api/attachments/${id}`)
+
+    // The living-orphan sweep must respect that revision: the asset stays
+    // downloadable, so a later revision restore cannot lose it.
+    const first = reclaimUnreferencedAttachments(f.db, {
+      now: NOW + 365 * MS_PER_DAY,
+      minAgeMs: 0
+    })
+    expect(first.reclaimed).not.toContain(id)
+    expect(exists(id)).toBe(true)
+    expect((await f.request(`/api/attachments/${id}`)).status).toBe(200)
+
+    // Simulate the retention prune removing that revision (and its operation).
+    // With no holder left, the same sweep reclaims the attachment and it stops
+    // downloading.
+    f.db.run('DELETE FROM operation_log WHERE before_revision_id = ?', [revisionId])
+    f.db.run('DELETE FROM page_revisions WHERE id = ?', [revisionId])
+    const second = reclaimUnreferencedAttachments(f.db, {
+      now: NOW + 365 * MS_PER_DAY,
+      minAgeMs: 0
+    })
+    expect(second.reclaimed).toContain(id)
+    expect(exists(id)).toBe(false)
+    expect((await f.request(`/api/attachments/${id}`)).status).toBe(404)
   })
 })

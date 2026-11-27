@@ -1,6 +1,6 @@
 # External AI Integration — Final Report (Phases 0–3)
 
-**Repository:** Rajendertyagi/RTWiki · **Branch:** `feature/external-ai-integration` · **Final HEAD:** `3ded2e3` · **Report date:** 2026-11-27
+**Repository:** Rajendertyagi/RTWiki · **Branch:** `feature/external-ai-integration` · **Branch HEAD at time of writing:** `0d8ddb4` · **Report date:** 2026-11-27
 
 This report records the completed implementation and independent verification of Phases 0–3 of [PLAN_EXTERNAL_AI_INTEGRATION.md](PLAN_EXTERNAL_AI_INTEGRATION.md). It is a factual record of work actually performed. No merge into `develop` was performed.
 
@@ -14,6 +14,8 @@ This report records the completed implementation and independent verification of
 | 4 | `322b08f` | Phase 1 restore-semantics correction |
 | 5 | `bec1c06` | Phase 2 AI capability surface (19 files) |
 | 6 | `3ded2e3` | Phase 3 import preview/confirm (15 files) |
+
+The six commits above are the **implementation** commits; `3ded2e3` was the branch HEAD when this report was first written. Two documentation-only commits followed and did not change any implementation behaviour: `20faaa0` added this report, and `0d8ddb4` added the verified test matrix in [EXTERNAL_AI_TEST_MATRIX.md](EXTERNAL_AI_TEST_MATRIX.md). The branch HEAD is therefore `0d8ddb4`, not `3ded2e3`. No implementation work was added after `3ded2e3`.
 
 **Deviation:** Phase 2 and Phase 3 corrections were folded into their implementation commits rather than separate commits. Splitting them now would require history rewriting, which is prohibited.
 

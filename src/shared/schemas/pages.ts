@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_BATCH_PAGES } from '../constants/index.js'
 
 /**
  * The four canonical page types, defined once. `CreatePageSchema` and the import
@@ -49,10 +50,11 @@ export const UpdatePageSchema = z.object({
  * Payload for `POST /api/pages/batch`. Each item is validated with the very
  * same `CreatePageSchema` the single-page endpoint uses, so a batch can never
  * accept a shape the ordinary create would reject. The byte ceiling on the
- * request body is the existing page-route ceiling, not a new count limit.
+ * request body is the existing page-route ceiling; the count ceiling is the
+ * shared `MAX_BATCH_PAGES`, so one request cannot request unbounded write work.
  */
 export const BatchCreatePagesSchema = z.object({
-  pages: z.array(CreatePageSchema).min(1)
+  pages: z.array(CreatePageSchema).min(1).max(MAX_BATCH_PAGES)
 })
 
 export type BatchCreatePagesInput = z.infer<typeof BatchCreatePagesSchema>

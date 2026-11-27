@@ -16,6 +16,17 @@ export const MAX_USER_PORT = 65535 as const
 // JSON encoding overhead of a fully populated canonical HTML-page content
 // document (2 MiB HTML + 2 x 512 KiB CSS/JS) with generous headroom.
 export const MAX_PAGE_JSON_BODY_BYTES = 4 * 1024 * 1024
+
+/**
+ * Largest number of pages `POST /api/pages/batch` may create in one transaction.
+ *
+ * The request body already has a byte ceiling above; this bounds the amount of
+ * write and search-index work a single batch can request. Defined once so the
+ * schema that refuses an oversized batch and any client that builds one cannot
+ * disagree about the number.
+ */
+export const MAX_BATCH_PAGES = 100
+
 // Ceiling for schedule entry, reminder and timetable-preset JSON bodies.
 // A timetable is a list of small period/reminder records (titles capped at 200
 // characters, times as HH:mm), so this is generous by roughly an order of
@@ -68,6 +79,27 @@ export const DEFAULT_IMPORTED_PAGE_TITLE = 'Untitled' as const
  */
 export const IMPORT_PREVIEW_TTL_MS = 10 * 60 * 1000
 export const IMPORT_PREVIEW_MAX_ENTRIES = 32
+
+/**
+ * Total bytes retained across all pending import previews.
+ *
+ * A preview holds the prepared file bytes in memory until confirm consumes them.
+ * Without an aggregate ceiling, 32 entries of near-100 MB files could retain
+ * roughly 3.2 GB. On `store()` the oldest entries are evicted until the total
+ * fits this budget. A single preview is still admitted even if it alone exceeds
+ * the budget: the multipart body limit already bounds one request, and refusing
+ * an explicitly requested preview would be worse than a bounded overshoot.
+ */
+export const IMPORT_PREVIEW_MAX_TOTAL_BYTES = 256 * 1024 * 1024
+
+/**
+ * Largest number of files a single import preview may contain.
+ *
+ * Bounds the conversion work of one preview request and the number of pages a
+ * confirm commits in one transaction. Defined once so the store that refuses an
+ * oversized batch and any client that builds one cannot disagree.
+ */
+export const IMPORT_PREVIEW_MAX_FILES_PER_PREVIEW = 50
 
 /**
  * Largest Markdown file the picker will *read into memory*.

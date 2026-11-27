@@ -121,6 +121,41 @@ describe('OpenAPI document and derived AI tool manifest', () => {
     }
   })
 
+  it('advertises a multipart request body on both file-upload tools', async () => {
+    interface UploadTool {
+      method: string
+      path: string
+      requestBody?: {
+        required?: boolean
+        content?: Record<
+          string,
+          {
+            schema?: {
+              type?: string
+              properties?: Record<string, { type?: string; format?: string }>
+              required?: string[]
+            }
+          }
+        >
+      } | null
+    }
+    const body = (await (await app.request('/api/ai/tools')).json()) as { tools: UploadTool[] }
+    const uploads = body.tools.filter(
+      (tool) =>
+        tool.method === 'POST' && (tool.path === '/api/attachments' || tool.path === '/api/import')
+    )
+    expect(uploads).toHaveLength(2)
+    for (const tool of uploads) {
+      expect(tool.requestBody).not.toBeNull()
+      const media = tool.requestBody?.content?.['multipart/form-data']
+      expect(media).toBeDefined()
+      expect(media?.schema?.type).toBe('object')
+      expect(media?.schema?.properties?.file?.type).toBe('string')
+      expect(media?.schema?.properties?.file?.format).toBe('binary')
+      expect(media?.schema?.required).toContain('file')
+    }
+  })
+
   it('never exposes an untagged route', async () => {
     const body = (await (await app.request('/api/ai/tools')).json()) as { tools: Tool[] }
     expect(body.tools.some((tool) => tool.path === '/api/untagged-probe')).toBe(false)

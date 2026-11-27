@@ -3,6 +3,7 @@ import { TRASHED_ATTACHMENT_RETENTION_DAYS } from '@rtwiki/shared/constants'
 import { logAttachmentOperation, SYSTEM_ACTOR } from './attachment-operations.js'
 import {
   attachmentIdsInContent,
+  attachmentIdsInRetainedRevisions,
   pageIdsReferencingAttachment,
   revisionIdsReferencingAttachment
 } from './attachment-references.js'
@@ -29,7 +30,9 @@ import { deleteAttachment, listAttachments } from './attachment-repository.js'
  * page content for that id — including content in the **recycle bin**. A binned
  * page can be restored, so its images must survive; a retention pass that ignored
  * the bin would destroy the images of a note the user had merely deleted by
- * mistake, which is worse than the leak it fixes.
+ * mistake, which is worse than the leak it fixes. Retained revision snapshots
+ * count too: a revision can be the only remaining holder of a URL, and a later
+ * restore needs the asset to still be there.
  *
  * ## Why a threshold, and why a dry run
  *
@@ -80,7 +83,10 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
  * scans every page for every row, which is quadratic in exactly the case the leak
  * makes large. One pass builds a set, and each attachment is then a lookup.
  *
- * Includes trashed pages, deliberately — see the module note.
+ * Includes trashed pages, deliberately — see the module note. Also includes
+ * retained revision snapshots: a living attachment can be the only remaining
+ * holder of a URL that a revision still needs for a future restore, and the
+ * orphan sweep must protect it just as the trashed purge does.
  */
 function referencedIds(db: Database): Set<string> {
   const referenced = new Set<string>()
@@ -95,6 +101,11 @@ function referencedIds(db: Database): Set<string> {
     // of this regex is how the two would quietly disagree about ownership.
     for (const id of attachmentIdsInContent(content)) referenced.add(id)
   }
+  // A retained revision can be the only holder of a URL after a page's living
+  // content was edited to drop it. Protect those ids here too, so a later
+  // revision restore cannot lose the asset. The trashed purge has its own
+  // equivalent gate; this one covers living attachments.
+  for (const id of attachmentIdsInRetainedRevisions(db)) referenced.add(id)
   return referenced
 }
 
@@ -209,9 +220,10 @@ export interface TrashedPurgeOptions {
  *   (b) No page references the URL — including pages in the trash, which can be
  *       restored and would otherwise come back with a missing asset.
  *   (c) No retained revision snapshot references the URL. This is mandatory:
- *       revisions survive permanent deletion by design, so a revision can be
- *       the only remaining holder of the URL. Purging here would make a later
- *       undo silently lose the attachment.
+ *       revisions survive a soft delete (trash), so a revision can be the only
+ *       remaining holder of the URL. Purging here would make a later undo
+ *       silently lose the attachment. Permanent deletion purges revisions, so
+ *       no snapshot outlives a permanent deletion.
  *
  * The whole pass is one transaction. Each purge also records its
  * `attachment.permanent_delete` operation in that same transaction, so the log

@@ -54,10 +54,14 @@ jobs:
         run: bun run lint
       - name: Typecheck
         run: bun run typecheck
-      - name: Test
-        run: bun test
+      # `build:web` runs `vite build && bun scripts/copy-themes.ts`, which
+      # materialises build/web/themes. The theme-parity test in
+      # tests/theme-stage-d.test.ts compares that directory byte-for-byte with
+      # the authored themes, so it must exist before `bun test` runs.
       - name: Build web
         run: bun run build:web
+      - name: Test
+        run: bun test
       - name: Build server (compile executable)
         run: bun run build:server
 
@@ -86,7 +90,13 @@ jobs:
         # everything Chromium needs.
         run: bunx playwright install chromium
       - name: Run browser tests against the built application
-        run: bunx playwright test
+        # Playwright's CLI carries a `#!/usr/bin/env node` shebang. On a runner
+        # with Node on PATH (windows-latest has it), bunx honours that shebang
+        # and Playwright spawns Node workers, whose ESM loader cannot resolve
+        # the `bun:sqlite` import in tests/browser/rich-note.pwspec.ts.
+        # `bun --help` documents `x` as the package-binary runner (bunx) and
+        # `--bun` as forcing Bun's runtime, so this runs the suite under Bun.
+        run: bun --bun x playwright test
       - name: Upload browser-test failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -1,4 +1,7 @@
-import { PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES } from '@rtwiki/shared/constants'
+import {
+  IMPORT_PREVIEW_MAX_FILES_PER_PREVIEW,
+  PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES
+} from '@rtwiki/shared/constants'
 import {
   ConfirmImportSchema,
   type ImportErrorCode,
@@ -23,7 +26,7 @@ import type {
 import { createPreviewStore, type PreviewStore } from '../ingest/preview-store.js'
 import { getImportSourceByPage } from '../ingest/provenance-repository.js'
 import type { Logger } from '../logging/index.js'
-import { AI_SAFE_TAG } from '../openapi/index.js'
+import { AI_SAFE_TAG, MULTIPART_FILE_REQUEST_BODY } from '../openapi/index.js'
 import { getPage } from '../repositories/page-repository.js'
 import { readJson } from '../utils/read-json.js'
 import { isSameOrigin } from '../utils/request-origin.js'
@@ -153,6 +156,7 @@ export function createImportRoutes(
       summary: 'Import a file into a page',
       description:
         'Runs the one shared ingest pipeline: page, attachment and provenance in one transaction.',
+      requestBody: MULTIPART_FILE_REQUEST_BODY,
       responses: {
         201: { description: 'Imported page and attachment' },
         415: { description: 'Unsupported file' }
@@ -319,6 +323,15 @@ export function createImportRoutes(
     }
 
     const previewId = previewStore.store(prepareds)
+    if (previewId === null) {
+      return c.json(
+        {
+          error: `A preview may contain at most ${IMPORT_PREVIEW_MAX_FILES_PER_PREVIEW} files.`,
+          code: 'invalid_field'
+        },
+        400
+      )
+    }
     const preview: ImportPreview = {
       previewId,
       pages: prepareds.map((prepared) => ({
@@ -334,6 +347,19 @@ export function createImportRoutes(
       }))
     }
     return c.json(preview, 200)
+  })
+
+  /**
+   * Releases a preview the client cancelled. Untagged like preview and confirm:
+   * a new orchestration route is not part of the AI tool surface. Idempotent —
+   * an unknown or already-consumed id is a successful no-op — and it makes no
+   * database writes of any kind. The bytes stop being retained immediately
+   * instead of waiting for the preview to expire.
+   */
+  routes.delete('/preview/:id', (c) => {
+    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden', code: 'forbidden' }, 403)
+    previewStore.discard(c.req.param('id'))
+    return c.json({ ok: true })
   })
 
   /**

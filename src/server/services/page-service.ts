@@ -606,7 +606,12 @@ export function restorePage(db: Database, id: string, input: RestorePageInput = 
         // before_update revision carries no links_snapshot, so derive them
         // from the revision's own content — the same rule updatePage uses.
         links: extractPageLinks(revision.content),
-        searchContent: revision.searchContent
+        // The snapshot's search text is immutable history: it was computed when
+        // the revision was captured and may include text from an attachment
+        // that has since been trashed. Recompute from the restored content under
+        // CURRENT attachment visibility so a trashed document's words do not
+        // become findable again. The revision row itself is never mutated.
+        searchContent: searchContentForPage(db, revision.pageType, revision.content)
       })
       if (page === null) {
         db.run('COMMIT')
@@ -650,7 +655,11 @@ export function restorePage(db: Database, id: string, input: RestorePageInput = 
         if (err instanceof RecoveryDataExpiredError) throw err
         throw new RecoveryDataExpiredError()
       }
-      searchContent = revision.searchContent
+      // As in the living-page undo path, the snapshot's search text is immutable
+      // history and may carry text from an attachment that has since been
+      // trashed. Recompute from the restored content under CURRENT attachment
+      // visibility; leave the revision row untouched.
+      searchContent = searchContentForPage(db, revision.pageType, revision.content)
     } else {
       searchContent = searchContentForPage(db, pageType, currentContent)
     }

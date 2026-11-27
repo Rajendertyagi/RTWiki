@@ -7,6 +7,7 @@ import { type AppDependencies, createApp } from '../src/server/app.js'
 import { closeDatabase, initDatabase } from '../src/server/database/index.js'
 import { runMigrations } from '../src/server/database/migrations.js'
 import { ShutdownCoordinator } from '../src/server/shutdown-coordinator.js'
+import { MAX_BATCH_PAGES } from '../src/shared/constants/index.js'
 import { parseHtmlContent } from '../src/shared/schemas/html-content'
 import { parseMarkdownPageContent } from '../src/shared/schemas/markdown-content'
 import { parseRichContent } from '../src/shared/schemas/rich-content'
@@ -133,6 +134,29 @@ describe('page creation and atomic batch creation through the API', () => {
     expect(body.pages).toHaveLength(2)
     expect(body.pages.map((p) => p.title)).toEqual(['Batch A', 'Batch B'])
     expect(await totalPages()).toBe(before + 2)
+  })
+
+  it('accepts exactly the maximum batch size and refuses one more', async () => {
+    const before = await totalPages()
+    const makePages = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        title: `Boundary ${i}`,
+        pageType: 'markdown',
+        content: ''
+      }))
+
+    const atMax = await postJson('/api/pages/batch', { pages: makePages(MAX_BATCH_PAGES) })
+    expect(atMax.status).toBe(201)
+    expect(((await atMax.json()) as { pages: Page[] }).pages).toHaveLength(MAX_BATCH_PAGES)
+    expect(await totalPages()).toBe(before + MAX_BATCH_PAGES)
+
+    const overMax = await postJson('/api/pages/batch', {
+      pages: makePages(MAX_BATCH_PAGES + 1)
+    })
+    expect(overMax.status).toBe(400)
+    const body = (await overMax.json()) as { error?: string }
+    expect(typeof body.error).toBe('string')
+    expect(await totalPages()).toBe(before + MAX_BATCH_PAGES)
   })
 
   it('rolls the whole batch back when an item fails page-type validation', async () => {

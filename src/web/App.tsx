@@ -71,7 +71,12 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
-import { confirmImport, type ImportPreview, previewImport } from './services/import-api.js'
+import {
+  confirmImport,
+  discardImportPreview,
+  type ImportPreview,
+  previewImport
+} from './services/import-api.js'
 import { isNativeMode } from './services/native-bridge.js'
 import { downloadTextFile, sanitizeFileName } from './util/file-download.js'
 import { pagePreviewText } from './util/page-preview-text.js'
@@ -393,7 +398,8 @@ export function App(): JSX.Element {
   }
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   // Phase 3: a preview is held only in memory until the user confirms. Clearing
-  // it (Cancel) makes no request and therefore creates nothing on the server.
+  // it (Cancel) only discards that in-memory preview — no page or attachment is
+  // ever written on the server.
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [importConfirming, setImportConfirming] = useState(false)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
@@ -529,8 +535,9 @@ export function App(): JSX.Element {
    * The picker no longer commits on selection. It runs the server's real
    * detection/conversion stage through `/api/import/preview`, which writes
    * nothing, and opens a review modal. Only the explicit Confirm action spends
-   * the one-time preview id at `/api/import/confirm`; Cancel simply clears the
-   * preview and makes no request at all.
+   * the one-time preview id at `/api/import/confirm`; Cancel releases the
+   * preview with a fire-and-forget DELETE so its bytes are not retained, but
+   * makes no page or attachment write of any kind.
    *
    * A refusal arrives as an Error carrying the server's own message; the picker
    * reports it next to the control the user pressed, exactly as before.
@@ -541,10 +548,14 @@ export function App(): JSX.Element {
     return true
   }, [])
 
-  /** Cancel is deliberately a local state clear: no request, no writes. */
+  /**
+   * Cancel clears local state and asks the server to drop the retained preview.
+   * The discard is fire-and-forget and never creates a page or attachment.
+   */
   const handleCancelImport = useCallback((): void => {
+    if (importPreview) discardImportPreview(importPreview.previewId)
     setImportPreview(null)
-  }, [])
+  }, [importPreview])
 
   /** Confirm commits every prepared page in one server-side transaction. */
   const handleConfirmImport = useCallback(async (): Promise<void> => {

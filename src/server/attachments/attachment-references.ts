@@ -104,14 +104,45 @@ export function attachmentTextForContent(db: Database, content: string): string[
 }
 
 /**
+ * Every attachment id referenced by any retained revision snapshot, in one pass.
+ *
+ * A living attachment can be the only remaining holder of a URL in a revision
+ * that is still in `page_revisions` — for example after a page was trashed and
+ * its living content edited to drop the reference. The living-orphan sweep must
+ * protect it just as the trashed purge does, or a later revision restore would
+ * silently lose the asset. Both `content` (the canonical page JSON) and
+ * `search_content` (the extracted text) are scanned, because either may carry
+ * the URL. The shared reader is used so "what does this snapshot reference" has
+ * exactly one definition.
+ */
+export function attachmentIdsInRetainedRevisions(db: Database): Set<string> {
+  const referenced = new Set<string>()
+  const rows = db.query('SELECT content, search_content FROM page_revisions').all() as Array<{
+    content: string | null
+    search_content: string | null
+  }>
+  for (const row of rows) {
+    if (typeof row.content === 'string') {
+      for (const id of attachmentIdsInContent(row.content)) referenced.add(id)
+    }
+    if (typeof row.search_content === 'string') {
+      for (const id of attachmentIdsInContent(row.search_content)) referenced.add(id)
+    }
+  }
+  return referenced
+}
+
+/**
  * The ids of retained revision snapshots whose stored content still references
  * the attachment.
  *
  * This is the third gate on the trashed-attachment purge. Revisions survive a
- * permanent page deletion by design, so a revision can be the *only* remaining
+ * SOFT delete (trash) by design, so a revision can be the *only* remaining
  * holder of an attachment URL. Purging that attachment would make a later undo
  * silently lose the asset — the exact failure the retention rule exists to
- * prevent. Both `content` (the canonical page JSON) and `search_content` (the
+ * prevent. Permanent deletion is different: it purges the page's revisions
+ * along with its history (plan §6.13), so no revision outlives a permanent
+ * deletion. Both `content` (the canonical page JSON) and `search_content` (the
  * extracted text) are scanned, because either may carry the URL.
  *
  * The LIKE prefilter is the same one `pageIdsReferencingAttachment` uses: a

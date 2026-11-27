@@ -10,7 +10,9 @@ import type { APIRequestContext } from '@playwright/test'
  */
 export async function purgeUntitledPages(request: APIRequestContext): Promise<void> {
   for (let sweep = 0; sweep < 50; sweep++) {
-    const res = await request.get('/api/pages?limit=200')
+    // MAX_PAGE_LIMIT is 100; a larger value is rejected with 400. The outer
+    // sweep loop handles pagination, so a bounded window is sufficient.
+    const res = await request.get('/api/pages?limit=100')
     const list = (await res.json()) as { pages: Array<{ id: string; title: string }> }
     const targets = list.pages.filter((p) => p.title === 'Untitled')
     if (targets.length === 0) return
@@ -40,7 +42,9 @@ export async function purgeUntitledPages(request: APIRequestContext): Promise<vo
  */
 export async function purgeAllPages(request: APIRequestContext): Promise<void> {
   for (let sweep = 0; sweep < 200; sweep++) {
-    const res = await request.get('/api/pages?limit=200')
+    // MAX_PAGE_LIMIT is 100; a larger value is rejected with 400. The outer
+    // sweep loop handles pagination, so a bounded window is sufficient.
+    const res = await request.get('/api/pages?limit=100')
     const list = (await res.json()) as { pages: Array<{ id: string }> }
     if (list.pages.length === 0) return
     for (const page of list.pages) {

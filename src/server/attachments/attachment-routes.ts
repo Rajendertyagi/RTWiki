@@ -12,7 +12,7 @@ import type { getDb } from '../database/index.js'
 import { ingestFile } from '../ingest/ingest-file.js'
 import type { IngestRejectionReason, IngestResult } from '../ingest/ingest-types.js'
 import type { Logger } from '../logging/index.js'
-import { AI_SAFE_TAG } from '../openapi/index.js'
+import { AI_SAFE_TAG, MULTIPART_FILE_REQUEST_BODY } from '../openapi/index.js'
 import { reindexPagesReferencingAttachment } from '../services/page-service.js'
 import { isSameOrigin } from '../utils/request-origin.js'
 import { LOCAL_CLIENT_ACTOR, logAttachmentOperation } from './attachment-operations.js'
@@ -222,6 +222,7 @@ export function createAttachmentRoutes(opts: AttachmentRouteOptions) {
       tags: [AI_SAFE_TAG],
       summary: 'Upload an attachment',
       description: 'Stores an image or document through the single shared ingest pipeline.',
+      requestBody: MULTIPART_FILE_REQUEST_BODY,
       responses: {
         201: { description: 'Stored attachment' },
         415: { description: 'Unsupported file' }

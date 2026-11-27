@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,6 +14,7 @@ import type { Logger } from '../src/server/logging/index.js'
 import { createImportRoutes } from '../src/server/routes/import.js'
 import { createPage } from '../src/server/services/page-service.js'
 import { ShutdownCoordinator } from '../src/server/shutdown-coordinator.js'
+import { IMPORT_PREVIEW_MAX_FILES_PER_PREVIEW } from '../src/shared/constants/index.js'
 
 /**
  * Phase 3 — preview/confirm orchestration over real HTTP with the app-wide
@@ -72,6 +73,33 @@ function confirmBody(previewId: string, parentId?: string | null): string {
 function previewIdOf(preview: PreviewResponse): string {
   if (!preview.previewId) throw new Error('Expected a preview id')
   return preview.previewId
+}
+
+function idOf(value: string | null): string {
+  if (value === null) throw new Error('Expected a preview id')
+  return value
+}
+
+/** A minimal prepared descriptor with a controlled retained-byte footprint. */
+function fakePrepared(byteSize: number): PreparedImport {
+  return {
+    attachment: {
+      id: randomUUID(),
+      mimeType: 'text/markdown',
+      byteSize,
+      kind: 'document',
+      extractedText: null,
+      originalName: 'x.md',
+      checksum: 'x',
+      data: new Uint8Array(byteSize)
+    },
+    page: null,
+    images: [],
+    provenance: null,
+    warnings: [],
+    mimeType: 'text/markdown',
+    byteSize
+  }
 }
 
 interface PreviewResponse {
@@ -340,7 +368,7 @@ describe('POST /api/import/preview and /api/import/confirm', () => {
       ...prepared,
       page: { ...prepared.page, title: '' }
     }
-    const previewId = store.store([bad])
+    const previewId = idOf(store.store([bad]))
 
     const routes = createImportRoutes(() => db, {}, store)
     const direct = new Hono().route('/api/import', routes)
@@ -353,5 +381,154 @@ describe('POST /api/import/preview and /api/import/confirm', () => {
     expect(res.status).toBe(400)
     expect(((await res.json()) as ConfirmResponse).code).toBe('invalid_field')
     expect(counts(db)).toEqual(before)
+  })
+
+  it('discard releases a preview so a later confirm writes nothing', async () => {
+    const before = counts(db)
+    const previewRes = await app.request(`${BASE}/api/import/preview`, {
+      method: 'POST',
+      body: previewForm([mdFile('# Discard me', 'discard.md')])
+    })
+    expect(previewRes.status).toBe(200)
+    const preview = (await previewRes.json()) as PreviewResponse
+    expect(counts(db)).toEqual(before)
+
+    const discardRes = await app.request(`${BASE}/api/import/preview/${previewIdOf(preview)}`, {
+      method: 'DELETE'
+    })
+    expect(discardRes.status).toBe(200)
+    expect(((await discardRes.json()) as { ok: boolean }).ok).toBe(true)
+
+    const confirmRes = await app.request(`${BASE}/api/import/confirm`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: confirmBody(previewIdOf(preview))
+    })
+    expect(confirmRes.status).toBe(400)
+    expect(((await confirmRes.json()) as ConfirmResponse).code).toBe('invalid_field')
+    expect(counts(db)).toEqual(before)
+  })
+
+  it('Cancel (discard) causes zero page and attachment writes', async () => {
+    const before = counts(db)
+    const previewRes = await app.request(`${BASE}/api/import/preview`, {
+      method: 'POST',
+      body: previewForm([mdFile('# Cancelled', 'cancelled.md')])
+    })
+    expect(previewRes.status).toBe(200)
+    const preview = (await previewRes.json()) as PreviewResponse
+
+    // This is the exact request the UI's fire-and-forget Cancel path sends.
+    const discardRes = await app.request(`${BASE}/api/import/preview/${previewIdOf(preview)}`, {
+      method: 'DELETE'
+    })
+    expect(discardRes.status).toBe(200)
+    expect(counts(db)).toEqual(before)
+  })
+
+  it('discard is idempotent for an unknown id', async () => {
+    const before = counts(db)
+    const res = await app.request(`${BASE}/api/import/preview/${randomUUID()}`, {
+      method: 'DELETE'
+    })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true)
+    expect(counts(db)).toEqual(before)
+  })
+
+  it('rejects a preview with more files than the shared limit, writing nothing', async () => {
+    const before = counts(db)
+    const files = Array.from({ length: IMPORT_PREVIEW_MAX_FILES_PER_PREVIEW + 1 }, (_, i) =>
+      mdFile(`# ${i}`, `f${i}.md`)
+    )
+    const res = await app.request(`${BASE}/api/import/preview`, {
+      method: 'POST',
+      body: previewForm(files)
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as PreviewResponse
+    expect(body.code).toBe('invalid_field')
+    expect(body.error).toContain(String(IMPORT_PREVIEW_MAX_FILES_PER_PREVIEW))
+    expect(counts(db)).toEqual(before)
+  })
+})
+
+describe('preview store bounds', () => {
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('evicts the oldest entries until the total byte budget is met', () => {
+    const store = createPreviewStore(10 * 60 * 1000, 10, 100, 10)
+    const first = idOf(store.store([fakePrepared(60)]))
+    const second = idOf(store.store([fakePrepared(60)]))
+    // 60 + 60 > 100, so the oldest entry was evicted when the second arrived.
+    expect(store.take(first)).toBeNull()
+    expect(store.take(second)).not.toBeNull()
+  })
+
+  it('counts extracted image bytes toward the budget', () => {
+    const store = createPreviewStore(10 * 60 * 1000, 10, 100, 10)
+    const withImage: PreparedImport = {
+      ...fakePrepared(10),
+      images: [
+        {
+          id: randomUUID(),
+          mimeType: 'image/png',
+          byteSize: 80,
+          originalName: 'i.png',
+          checksum: 'i',
+          data: new Uint8Array(80)
+        }
+      ]
+    }
+    const first = idOf(store.store([withImage]))
+    const second = idOf(store.store([fakePrepared(20)]))
+    expect(store.take(first)).toBeNull()
+    expect(store.take(second)).not.toBeNull()
+  })
+
+  it('rejects a batch with more files than a preview may hold', () => {
+    const store = createPreviewStore(10 * 60 * 1000, 10, 1000, 2)
+    expect(store.store([fakePrepared(1), fakePrepared(1), fakePrepared(1)])).toBeNull()
+    expect(store.size).toBe(0)
+    expect(store.store([fakePrepared(1), fakePrepared(1)])).not.toBeNull()
+    expect(store.size).toBe(1)
+  })
+
+  it('sweeps expired entries on take', () => {
+    jest.useFakeTimers()
+    jest.setSystemTime(0)
+    const store = createPreviewStore(10, 10, 1000, 10)
+    const a = idOf(store.store([fakePrepared(10)]))
+    const b = idOf(store.store([fakePrepared(10)]))
+    expect(store.size).toBe(2)
+    jest.setSystemTime(20)
+    // A take on an unrelated id still sweeps both expired entries away.
+    expect(store.take(randomUUID())).toBeNull()
+    expect(store.size).toBe(0)
+    expect(store.take(a)).toBeNull()
+    expect(store.take(b)).toBeNull()
+  })
+
+  it('sweeps expired entries on discard', () => {
+    jest.useFakeTimers()
+    jest.setSystemTime(0)
+    const store = createPreviewStore(10, 10, 1000, 10)
+    const a = idOf(store.store([fakePrepared(10)]))
+    expect(store.size).toBe(1)
+    jest.setSystemTime(20)
+    expect(store.discard(a)).toBe(false)
+    expect(store.size).toBe(0)
+  })
+
+  it('discard releases a live entry and is idempotent', () => {
+    const store = createPreviewStore()
+    const id = idOf(store.store([fakePrepared(10)]))
+    expect(store.size).toBe(1)
+    expect(store.discard(id)).toBe(true)
+    expect(store.size).toBe(0)
+    expect(store.take(id)).toBeNull()
+    expect(store.discard(id)).toBe(false)
   })
 })
