@@ -516,6 +516,12 @@ export interface RestorePageInput {
   /** When present, use the revision-backed path; otherwise the legacy fallback. */
   revisionId?: string
   actor?: RecoveryActor
+  /**
+   * Trash restoration only: refuse a living page instead of letting a stale
+   * pre-delete revision undo it. The history UI's explicit-revision restore
+   * deliberately omits this flag so living-page undo keeps working.
+   */
+  requireTrashed?: boolean
 }
 
 export function restorePage(db: Database, id: string, input: RestorePageInput = {}): Page | null {
@@ -528,6 +534,15 @@ export function restorePage(db: Database, id: string, input: RestorePageInput = 
       )
       .get(id) as Record<string, unknown> | undefined
     if (!existing) {
+      db.run('COMMIT')
+      return null
+    }
+
+    // A trash restore has no business touching a living page. Without this
+    // guard, a stale `before_soft_delete` revision resolved by the route would
+    // fall through to the living-page undo branch below and silently revert
+    // the page. Refuse before any read or write beyond the existence check.
+    if (input.requireTrashed === true && existing.deleted_at === null) {
       db.run('COMMIT')
       return null
     }

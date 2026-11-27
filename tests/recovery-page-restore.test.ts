@@ -527,6 +527,165 @@ describe('living-page revision restore', () => {
   })
 })
 
+describe('trash restore vs explicit revision restore', () => {
+  it('rejects trash restoration of a living page without modifying it', async () => {
+    const content = richParagraph('LIVING_TRASH_REFUSAL_A1B2')
+    const page = f.page({ title: 'Living', content })
+    const before = row(page.id)
+
+    const result = await f.json<{ error: string }>('POST', `/api/pages/${page.id}/restore`)
+    expect(result.status).toBe(404)
+    expect(result.body.error).toBe('Page not found in trash')
+
+    const after = row(page.id)
+    expect(after.content).toBe(content)
+    expect(after.version).toBe(before.version)
+    expect(after.created_at).toBe(before.created_at)
+    expect(after.deleted_at).toBeNull()
+    expect((await f.json('GET', `/api/pages/${page.id}`)).status).toBe(200)
+  })
+
+  it('cannot revert a living page through trash using a stale pre-delete revision', async () => {
+    const original = richParagraph('STALE_REVISION_ORIGINAL_C3D4')
+    const page = f.page({ title: 'Stale', content: original })
+
+    // Trash then restore through the normal endpoint. The page is living again,
+    // but its `before_soft_delete` snapshot is still in the history table — the
+    // exact state that used to let a second trash-restore silently undo it.
+    expect((await f.json('DELETE', `/api/pages/${page.id}`)).status).toBe(200)
+    const firstRestore = await f.json<PageResponse>('POST', `/api/pages/${page.id}/restore`)
+    expect(firstRestore.status).toBe(200)
+    expect(row(page.id).deleted_at).toBeNull()
+
+    const history = await f.json<RevisionsResponse>('GET', `/api/pages/${page.id}/revisions`)
+    expect(history.status).toBe(200)
+    expect(history.body.revisions.some((r) => r.captureKind === BEFORE_SOFT_DELETE)).toBe(true)
+
+    // Move the living page forward so a revert would be observable.
+    const livingContent = richParagraph('STALE_REVISION_LIVING_E5F6')
+    const updated = await f.json<PageResponse>('PATCH', `/api/pages/${page.id}`, {
+      title: 'Stale',
+      content: livingContent,
+      version: row(page.id).version ?? 1
+    })
+    expect(updated.status).toBe(200)
+    const versionBefore = row(page.id).version
+
+    const secondRestore = await f.json<{ error: string }>('POST', `/api/pages/${page.id}/restore`)
+    expect(secondRestore.status).toBe(404)
+    expect(secondRestore.body.error).toBe('Page not found in trash')
+
+    const after = row(page.id)
+    expect(after.content).toBe(livingContent)
+    expect(after.version).toBe(versionBefore)
+    expect(after.deleted_at).toBeNull()
+  })
+
+  it('restores an explicitly requested historical revision of a living page and bumps the version', async () => {
+    const original = richParagraph('HISTORICAL_ORIGINAL_G7H8')
+    const page = f.page({ title: 'Historical', content: original })
+
+    const changed = await f.json<PageResponse>('PATCH', `/api/pages/${page.id}`, {
+      title: 'Historical',
+      content: richParagraph('HISTORICAL_CHANGED_I9J0'),
+      version: row(page.id).version ?? 1
+    })
+    expect(changed.status).toBe(200)
+    const versionAfterUpdate = row(page.id).version
+
+    const history = await f.json<RevisionsResponse>('GET', `/api/pages/${page.id}/revisions`)
+    expect(history.status).toBe(200)
+    const beforeUpdate = history.body.revisions.find((r) => r.captureKind === BEFORE_UPDATE)
+    expect(beforeUpdate).toBeDefined()
+
+    const restored = await f.json<PageResponse>(
+      'POST',
+      `/api/pages/${page.id}/revisions/${beforeUpdate?.id}/restore`
+    )
+    expect(restored.status).toBe(200)
+    expect(restored.body.page.content).toBe(original)
+    expect(row(page.id).version).toBe((versionAfterUpdate ?? 1) + 1)
+    expect(searchText(page.id)).toContain('HISTORICAL_ORIGINAL_G7H8')
+  })
+
+  it('makes no mutation when the requested revision belongs to a different page', async () => {
+    const contentA = richParagraph('WRONG_PAGE_A_K1L2')
+    const pageA = f.page({ title: 'Page A', content: contentA })
+    const pageB = f.page({ title: 'Page B', content: richParagraph('WRONG_PAGE_B_M3N4') })
+
+    // Give page B a revision of its own by updating it.
+    const updatedB = await f.json<PageResponse>('PATCH', `/api/pages/${pageB.id}`, {
+      title: 'Page B',
+      content: richParagraph('WRONG_PAGE_B_CHANGED_O5P6'),
+      version: row(pageB.id).version ?? 1
+    })
+    expect(updatedB.status).toBe(200)
+    const historyB = await f.json<RevisionsResponse>('GET', `/api/pages/${pageB.id}/revisions`)
+    expect(historyB.status).toBe(200)
+    const revisionOfB = historyB.body.revisions.find((r) => r.captureKind === BEFORE_UPDATE)
+    expect(revisionOfB).toBeDefined()
+
+    const versionBefore = row(pageA.id).version
+    const operationsBefore = (
+      f.db.query('SELECT COUNT(*) AS n FROM operation_log').get() as { n: number }
+    ).n
+    const revisionsBefore = (
+      f.db.query('SELECT COUNT(*) AS n FROM page_revisions').get() as { n: number }
+    ).n
+
+    const result = await f.json<{ error: string; code: string }>(
+      'POST',
+      `/api/pages/${pageA.id}/revisions/${revisionOfB?.id}/restore`
+    )
+    expect(result.status).toBe(410)
+    expect(result.body.code).toBe('recovery_data_expired')
+
+    const after = row(pageA.id)
+    expect(after.content).toBe(contentA)
+    expect(after.version).toBe(versionBefore)
+    expect((f.db.query('SELECT COUNT(*) AS n FROM operation_log').get() as { n: number }).n).toBe(
+      operationsBefore
+    )
+    expect((f.db.query('SELECT COUNT(*) AS n FROM page_revisions').get() as { n: number }).n).toBe(
+      revisionsBefore
+    )
+  })
+
+  it('rejects a stale concurrent writer after a restore bumps the version', async () => {
+    const original = richParagraph('CAS_ORIGINAL_Q7R8')
+    const page = f.page({ title: 'CAS', content: original })
+
+    const changed = await f.json<PageResponse>('PATCH', `/api/pages/${page.id}`, {
+      title: 'CAS',
+      content: richParagraph('CAS_CHANGED_S9T0'),
+      version: row(page.id).version ?? 1
+    })
+    expect(changed.status).toBe(200)
+    const preRestoreVersion = row(page.id).version
+
+    const history = await f.json<RevisionsResponse>('GET', `/api/pages/${page.id}/revisions`)
+    expect(history.status).toBe(200)
+    const beforeUpdate = history.body.revisions.find((r) => r.captureKind === BEFORE_UPDATE)
+    expect(beforeUpdate).toBeDefined()
+
+    const restored = await f.json<PageResponse>(
+      'POST',
+      `/api/pages/${page.id}/revisions/${beforeUpdate?.id}/restore`
+    )
+    expect(restored.status).toBe(200)
+    expect(restored.body.page.content).toBe(original)
+    expect(row(page.id).version).toBe((preRestoreVersion ?? 1) + 1)
+
+    const stale = await f.json<{ error: string }>('PATCH', `/api/pages/${page.id}`, {
+      title: 'CAS',
+      content: richParagraph('CAS_STALE_U1V2'),
+      version: preRestoreVersion
+    })
+    expect(stale.status).toBe(409)
+    expect(row(page.id).content).toBe(original)
+  })
+})
+
 describe('attachment references survive page recovery', () => {
   it('keeps a referenced asset when a page is trashed and restored', async () => {
     const attachmentId = f.attachment({

@@ -313,7 +313,11 @@ export function createPageRoutes(getDbFn: () => ReturnType<typeof getDb>): Hono 
       // back; pages trashed before migration 015 have none and keep the legacy
       // fallback inside restorePage.
       const revisionId = service.latestPreDeleteRevisionId(db, id)
-      const page = service.restorePage(db, id, revisionId === undefined ? {} : { revisionId })
+      const page = service.restorePage(
+        db,
+        id,
+        revisionId === undefined ? { requireTrashed: true } : { revisionId, requireTrashed: true }
+      )
       if (!page) {
         return c.json({ error: 'Page not found in trash' }, 404)
       }
