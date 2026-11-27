@@ -1,12 +1,19 @@
 import { z } from 'zod'
 
+/**
+ * The four canonical page types, defined once. `CreatePageSchema` and the import
+ * preview descriptor both derive from this tuple, so a new type cannot be added
+ * to one without the other (AGENTS.md §5 — one source of truth).
+ *
+ * `mindmap` is deliberately absent: migration 010 rewrites any surviving row to
+ * `diagram`, so a row that still holds it is a corrupted database and is
+ * rejected rather than silently coerced.
+ */
+export const PAGE_TYPES = ['rich', 'html', 'diagram', 'markdown'] as const
+
 export const CreatePageSchema = z.object({
   title: z.string().min(1).max(200),
-  // `mindmap` is gone from this enum. Migration 010 rewrites any surviving row to
-  // `diagram`, so a row that still holds it is a corrupted database and is
-  // rejected rather than silently coerced. Rejecting is deliberate and the blast
-  // radius is the whole response, which is exactly why the migration exists.
-  pageType: z.enum(['rich', 'html', 'diagram', 'markdown']).default('rich'),
+  pageType: z.enum(PAGE_TYPES).default('rich'),
   content: z.string().default(''),
   // Optional parent: omitted/NULL creates a root page. Validated against a
   // living parent inside the creation transaction.

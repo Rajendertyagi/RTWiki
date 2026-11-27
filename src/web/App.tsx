@@ -21,6 +21,7 @@ import {
   selectionCountLabel
 } from './features/html-editor/use-codemirror.js'
 import { DeleteConfirmModal } from './features/pages/delete-confirm-modal.js'
+import { ImportPreviewModal } from './features/pages/import-preview-modal.js'
 import { NewPageDialog } from './features/pages/new-page-dialog.js'
 import { PageWorkspace } from './features/pages/page-workspace.js'
 import {
@@ -70,7 +71,7 @@ import { usePagesController } from './hooks/use-pages-controller.js'
 import { AppShellLayout } from './layout/app-shell.js'
 import { Sidebar } from './layout/sidebar.js'
 import { UtilityRail } from './layout/utility-rail.js'
-import { importFile } from './services/import-api.js'
+import { confirmImport, type ImportPreview, previewImport } from './services/import-api.js'
 import { isNativeMode } from './services/native-bridge.js'
 import { downloadTextFile, sanitizeFileName } from './util/file-download.js'
 import { pagePreviewText } from './util/page-preview-text.js'
@@ -391,6 +392,10 @@ export function App(): JSX.Element {
     setCalendarOpen(false)
   }
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
+  // Phase 3: a preview is held only in memory until the user confirms. Clearing
+  // it (Cancel) makes no request and therefore creates nothing on the server.
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
+  const [importConfirming, setImportConfirming] = useState(false)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [shutdownToken, setShutdownToken] = useState<string | null>(null)
   const [shutdownStatus, setShutdownStatus] = useState<'idle' | 'stopping' | 'stopped' | 'error'>(
@@ -519,34 +524,37 @@ export function App(): JSX.Element {
   )
 
   /**
-   * Imports a Markdown file as a new page, and reports whether it worked.
+   * Phase 3 preview-before-confirm import.
    *
-   * Previously this returned `void` and did `if (!page) return` on a failed create, so
-   * a refused import produced **no signal at all**: no navigation, no error, and a file
-   * that had not become a note. The only trace was a generic banner in the main column
-   * reading "Stored content is not a valid Markdown page document." ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â which was wrong
-   * (nothing was stored) and named neither the limit nor the file.
+   * The picker no longer commits on selection. It runs the server's real
+   * detection/conversion stage through `/api/import/preview`, which writes
+   * nothing, and opens a review modal. Only the explicit Confirm action spends
+   * the one-time preview id at `/api/import/confirm`; Cancel simply clears the
+   * preview and makes no request at all.
    *
-   * It now reports the outcome so the picker can raise a failure next to the control the
-   * user pressed, and rethrows the server's own message when there is one, because the
-   * server is the authority on *why* a create was refused.
+   * A refusal arrives as an Error carrying the server's own message; the picker
+   * reports it next to the control the user pressed, exactly as before.
    */
-  const handleImportFile = useCallback(
-    async (file: File): Promise<boolean> => {
-      /*
-       * One path for Markdown: the file goes to the server's single ingest
-       * pipeline, which detects, converts, stores the bytes and writes the page
-       * and its provenance in one transaction. The browser no longer reads the
-       * file or derives a title — the server owns both, so the picker and the
-       * page can never disagree about what was imported.
-       *
-       * A refusal arrives as an Error carrying the server's own message; the
-       * picker reports it next to the control the user pressed.
-       */
-      const result = await importFile(file)
-      // The server's advisory warnings are part of the import result. Surface
-      // every one of them: a skipped image or a lossy conversion must never be
-      // silently dropped between the API and the user (AGENTS.md §4).
+  const handleImportFile = useCallback(async (files: File[]): Promise<boolean> => {
+    const preview = await previewImport(files)
+    setImportPreview(preview)
+    return true
+  }, [])
+
+  /** Cancel is deliberately a local state clear: no request, no writes. */
+  const handleCancelImport = useCallback((): void => {
+    setImportPreview(null)
+  }, [])
+
+  /** Confirm commits every prepared page in one server-side transaction. */
+  const handleConfirmImport = useCallback(async (): Promise<void> => {
+    if (importPreview === null) return
+    setImportConfirming(true)
+    try {
+      const result = await confirmImport(importPreview.previewId)
+      setImportPreview(null)
+      // Surface every advisory warning: a skipped image or a lossy conversion
+      // must never be silently dropped (AGENTS.md §4).
       for (const warning of result.warnings) {
         notifications.show({
           title: UI_TEXT.importWarningTitle,
@@ -556,11 +564,19 @@ export function App(): JSX.Element {
         })
       }
       if (flushRef.current) await flushRef.current()
-      void handleSelectPage(result.page.id)
-      return true
-    },
-    [handleSelectPage]
-  )
+      const first = result.pages[0]
+      if (first) void handleSelectPage(first.id)
+    } catch (err) {
+      notifications.show({
+        title: UI_TEXT.importErrorTitle,
+        message: err instanceof Error ? err.message : UI_TEXT.importPreviewConfirmFailed,
+        color: 'red',
+        autoClose: 8000
+      })
+    } finally {
+      setImportConfirming(false)
+    }
+  }, [importPreview, handleSelectPage])
 
   const handleExportPage = useCallback(
     (pageId: string): void => {
@@ -1139,6 +1155,14 @@ export function App(): JSX.Element {
         pageTitle={deleteTarget?.title ?? UI_TEXT.untitledPage}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteConfirm}
+      />
+
+      <ImportPreviewModal
+        opened={importPreview !== null}
+        preview={importPreview}
+        confirming={importConfirming}
+        onConfirm={() => void handleConfirmImport()}
+        onCancel={handleCancelImport}
       />
 
       <StopConfirmModal

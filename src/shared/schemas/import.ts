@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PAGE_TYPES } from './pages.js'
 
 /**
  * Every machine-readable code an import can return.
@@ -85,6 +86,46 @@ export const ImportRequestSchema = z.object({
 })
 
 export type ImportRequest = z.infer<typeof ImportRequestSchema>
+
+/**
+ * One proposed page in an import preview. Deliberately carries no bytes and no
+ * canonical content: the preview is a description of what *would* be created,
+ * not a second copy of the document. The server keeps the prepared descriptor
+ * (including bytes) in a process-local store keyed by `previewId`; the client
+ * only ever sees this reduced, JSON-safe view.
+ */
+export const ImportPreviewPageSchema = z.object({
+  title: z.string(),
+  pageType: z.enum(PAGE_TYPES),
+  byteSize: z.number().int().nonnegative(),
+  originalName: z.string(),
+  mimeType: z.string(),
+  warnings: z.array(z.object({ code: z.string(), message: z.string() }))
+})
+
+export type ImportPreviewPage = z.infer<typeof ImportPreviewPageSchema>
+
+/** The response of `POST /api/import/preview`. */
+export const ImportPreviewSchema = z.object({
+  previewId: z.string().uuid(),
+  pages: z.array(ImportPreviewPageSchema).min(1)
+})
+
+export type ImportPreview = z.infer<typeof ImportPreviewSchema>
+
+/**
+ * The body of `POST /api/import/confirm`. `parentId` is optional: when present it
+ * overrides the parent captured at preview time for every prepared page; when
+ * absent the preview's own value is used. `null` explicitly means "create at
+ * root". The field reuses the create-page constraint so a confirm cannot place a
+ * page somewhere the ordinary create route would refuse.
+ */
+export const ConfirmImportSchema = z.object({
+  previewId: z.string().uuid(),
+  parentId: z.string().uuid().nullable().optional()
+})
+
+export type ConfirmImport = z.infer<typeof ConfirmImportSchema>
 
 /**
  * Reads the machine-readable code from a zod failure, if one was attached.

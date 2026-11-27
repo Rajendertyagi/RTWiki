@@ -58,6 +58,18 @@ export const MAX_MARKDOWN_SOURCE_CHARS = 100_000
 export const DEFAULT_IMPORTED_PAGE_TITLE = 'Untitled' as const
 
 /**
+ * Import preview store bounds (Phase 3, `POST /api/import/preview`).
+ *
+ * A preview keeps the prepared bytes in memory until confirm consumes them. It
+ * is process-local and non-durable by design: a restart discards every pending
+ * preview, and the client must preview again. These two values keep that store
+ * bounded so a long-running session cannot grow it without limit. They are
+ * provisional centralized defaults, like the neighbouring limits.
+ */
+export const IMPORT_PREVIEW_TTL_MS = 10 * 60 * 1000
+export const IMPORT_PREVIEW_MAX_ENTRIES = 32
+
+/**
  * Largest Markdown file the picker will *read into memory*.
  *
  * A transport concern, distinct from `MAX_MARKDOWN_SOURCE_CHARS` above and deliberately

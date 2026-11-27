@@ -420,6 +420,15 @@ export const UI_TEXT = {
   importErrorTooLarge: `That file is too large. The limit is ${PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024)} MB.`,
   importErrorCreateFailed:
     'That file could not be imported. Nothing was created — try again, or import it as a file attachment instead.',
+  // Phase 3 preview-before-confirm workflow. Every user-facing string lives in
+  // this one dictionary (DEVELOPMENT_STANDARDS §5.2), never in the component.
+  importPreviewTitle: 'Review import',
+  importPreviewDescription:
+    'Review the pages that will be created. Nothing is saved until you confirm.',
+  importPreviewProposedLabel: 'Proposed pages',
+  importPreviewConfirm: 'Confirm import',
+  importPreviewConfirming: 'Importing…',
+  importPreviewConfirmFailed: 'The import could not be completed. Nothing was created.',
   exportUnavailable: 'No export available for this page type.',
   backLabel: '‹ Back',
   htmlSourceBackToPreview: 'Return to preview',

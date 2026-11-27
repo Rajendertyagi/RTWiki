@@ -16,11 +16,16 @@ import type { DetectResult } from './detect-upload.js'
 import { detectUpload } from './detect-upload.js'
 import { documentToMarkdown, extractImages } from './document-to-markdown.js'
 import type {
+  CommitResult,
+  CommittedImport,
   IngestDependencies,
+  IngestFailure,
   IngestFileInput,
   IngestRejectionReason,
   IngestResult,
-  IngestWarning
+  IngestWarning,
+  PreparedImport,
+  PrepareResult
 } from './ingest-types.js'
 import { insertImportSource } from './provenance-repository.js'
 
@@ -31,6 +36,19 @@ import { insertImportSource } from './provenance-repository.js'
  * transaction opens. Everything inside `BEGIN IMMEDIATE` is synchronous, so the
  * page, its attachment and its provenance commit as one unit and a crash can
  * never leave a partial import observable.
+ *
+ * Phase 3 splits that single pipeline into two explicit stages without adding a
+ * second one:
+ *
+ *   `prepareImport`  — validation, detection, conversion, descriptor building.
+ *                      Pure with respect to the database; safe for a preview.
+ *   `commit*`        — the original single transaction, replayed from the
+ *                      descriptor. `ingestFile = prepare + commit`, so the
+ *                      existing `POST /api/import` and attachment consumers are
+ *                      byte-for-byte unchanged in behaviour.
+ *
+ * The preview/confirm routes reuse these same two stages. No detection or
+ * conversion logic is duplicated there.
  */
 
 type IngestStatus = 400 | 404 | 413 | 415 | 422
@@ -39,11 +57,11 @@ function reject(
   reason: IngestRejectionReason,
   status: IngestStatus,
   message: string
-): IngestResult {
+): IngestFailure {
   return { ok: false, reason, status, message }
 }
 
-function fromDetectFailure(failure: Extract<DetectResult, { ok: false }>): IngestResult {
+function fromDetectFailure(failure: Extract<DetectResult, { ok: false }>): IngestFailure {
   switch (failure.reason) {
     case 'empty':
       return reject('empty', 400, 'That file is empty.')
@@ -63,15 +81,15 @@ function fromDetectFailure(failure: Extract<DetectResult, { ok: false }>): Inges
 }
 
 /**
- * Ingests one file: detect, convert, then store bytes + page + provenance in a
- * single transaction. Failure is always a structured value, never a thrown
- * error, so an HTTP consumer can map it to a status without guessing.
+ * Validates, detects and converts one file into a descriptor that is ready to
+ * commit. This stage performs **no database reads or writes**, which is what
+ * lets `POST /api/import/preview` run the real pipeline without creating
+ * anything. Failure is always a structured value, never a thrown error.
  */
-export async function ingestFile(
-  db: Database,
+export async function prepareImport(
   input: IngestFileInput,
   deps: IngestDependencies
-): Promise<IngestResult> {
+): Promise<PrepareResult> {
   // Source validation comes first: paste and API sources are refused before a
   // single byte is examined (ADR-023 security gate).
   if (input.sourceKind !== 'file') {
@@ -179,12 +197,32 @@ export async function ingestFile(
         ? detected.rawText.replace(/\s+/g, ' ').trim().slice(0, DOCUMENT_TEXT_MAX_CHARS)
         : null
 
-  db.run('BEGIN IMMEDIATE')
-  try {
-    // D1-A: the original bytes are ALWAYS stored, including for signature-less
-    // files. ADR-023 reversed ADR-015 §7 for the ingest path so an imported text
-    // file is downloadable like every other document.
-    insertAttachment(db, {
+  const images: Array<{
+    id: string
+    mimeType: string
+    byteSize: number
+    originalName: string
+    checksum: string
+    data: Uint8Array
+  }> = []
+  if (imageExtraction) {
+    for (const image of imageExtraction.images) {
+      const id = imageIds.get(image.name)
+      if (!id) throw new Error('Invariant: extracted image without an id')
+      images.push({
+        id,
+        mimeType: image.mimeType,
+        byteSize: image.bytes.length,
+        originalName: image.name,
+        checksum: checksumOf(image.bytes),
+        data: image.bytes
+      })
+    }
+  }
+
+  return {
+    ok: true,
+    attachment: {
       id: attachmentId,
       mimeType: detected.format.mime,
       byteSize: input.bytes.length,
@@ -193,61 +231,120 @@ export async function ingestFile(
       originalName,
       checksum,
       data: input.bytes
-    })
+    },
+    page:
+      pageId !== null && converted?.ok
+        ? {
+            id: pageId,
+            title:
+              (input.title ?? markdownNoteTitle(input.originalName)) || DEFAULT_IMPORTED_PAGE_TITLE,
+            pageType: 'markdown',
+            content: serializeMarkdownContent({ version: 1, markdown: converted.markdown }),
+            parentId: input.parentId ?? null
+          }
+        : null,
+    images,
+    provenance:
+      pageId !== null
+        ? {
+            id: crypto.randomUUID(),
+            sourceKind: 'file',
+            originalName,
+            byteSize: input.bytes.length,
+            checksum,
+            mimeType: detected.format.mime
+          }
+        : null,
+    warnings,
+    mimeType: detected.format.mime,
+    byteSize: input.bytes.length
+  }
+}
 
-    if (pageId !== null) {
-      // Conversion runs exactly when createPage is true, which is the only case
-      // that sets pageId. Fail loudly rather than store a page-less import if
-      // that invariant is ever broken.
-      if (!converted?.ok) throw new Error('Invariant: page requested without a conversion result')
+/**
+ * Writes one prepared import inside the caller's transaction. No `BEGIN` here:
+ * the single and batch commit wrappers own the lock so a multi-page confirm can
+ * commit every item as one unit. Throws on failure so the caller rolls back.
+ */
+function commitPreparedImportCore(db: Database, prepared: PreparedImport): CommittedImport {
+  // D1-A: the original bytes are ALWAYS stored, including for signature-less
+  // files. ADR-023 reversed ADR-015 §7 for the ingest path so an imported text
+  // file is downloadable like every other document.
+  insertAttachment(db, {
+    id: prepared.attachment.id,
+    mimeType: prepared.attachment.mimeType,
+    byteSize: prepared.attachment.byteSize,
+    kind: prepared.attachment.kind,
+    extractedText: prepared.attachment.extractedText,
+    originalName: prepared.attachment.originalName,
+    checksum: prepared.attachment.checksum,
+    data: prepared.attachment.data
+  })
 
-      // Store every extracted image under the id the Markdown already references.
-      // This is inside the same transaction: a failed image write rolls back the
-      // page, so the note can never link to an attachment that does not exist.
-      if (imageExtraction) {
-        for (const image of imageExtraction.images) {
-          const id = imageIds.get(image.name)
-          if (!id) throw new Error('Invariant: extracted image without an id')
-          insertAttachment(db, {
-            id,
-            mimeType: image.mimeType,
-            byteSize: image.bytes.length,
-            kind: 'image',
-            extractedText: null,
-            originalName: image.name,
-            checksum: checksumOf(image.bytes),
-            data: image.bytes
-          })
-        }
-      }
+  if (prepared.page !== null) {
+    // Conversion runs exactly when createPage is true, which is the only case
+    // that sets pageId. Fail loudly rather than store a page-less import if
+    // that invariant is ever broken.
+    if (prepared.provenance === null) {
+      throw new Error('Invariant: page requested without a provenance descriptor')
+    }
 
-      createPageCore(db, pageId, {
-        title:
-          (input.title ?? markdownNoteTitle(input.originalName)) || DEFAULT_IMPORTED_PAGE_TITLE,
-        pageType: 'markdown',
-        content: serializeMarkdownContent({ version: 1, markdown: converted.markdown }),
-        parentId: input.parentId ?? null
-      })
-      insertImportSource(db, {
-        id: crypto.randomUUID(),
-        pageId,
-        attachmentId,
-        sourceKind: 'file',
-        originalName,
-        byteSize: input.bytes.length,
-        checksum,
-        mimeType: detected.format.mime
+    // Store every extracted image under the id the Markdown already references.
+    // This is inside the same transaction: a failed image write rolls back the
+    // page, so the note can never link to an attachment that does not exist.
+    for (const image of prepared.images) {
+      insertAttachment(db, {
+        id: image.id,
+        mimeType: image.mimeType,
+        byteSize: image.byteSize,
+        kind: 'image',
+        extractedText: null,
+        originalName: image.originalName,
+        checksum: image.checksum,
+        data: image.data
       })
     }
 
+    createPageCore(db, prepared.page.id, {
+      title: prepared.page.title,
+      pageType: prepared.page.pageType,
+      content: prepared.page.content,
+      parentId: prepared.page.parentId
+    })
+    insertImportSource(db, {
+      id: prepared.provenance.id,
+      pageId: prepared.page.id,
+      attachmentId: prepared.attachment.id,
+      sourceKind: prepared.provenance.sourceKind,
+      originalName: prepared.provenance.originalName,
+      byteSize: prepared.provenance.byteSize,
+      checksum: prepared.provenance.checksum,
+      mimeType: prepared.provenance.mimeType
+    })
+  }
+
+  return {
+    pageId: prepared.page?.id ?? null,
+    attachmentId: prepared.attachment.id,
+    mimeType: prepared.mimeType,
+    byteSize: prepared.byteSize,
+    warnings: prepared.warnings
+  }
+}
+
+/** Commits one prepared import in a single transaction (the original path). */
+export function commitPreparedImport(db: Database, prepared: PreparedImport): IngestResult {
+  db.run('BEGIN IMMEDIATE')
+  try {
+    const committed = commitPreparedImportCore(db, prepared)
     db.run('COMMIT')
     return {
       ok: true,
-      attachmentId,
-      pageId,
-      mimeType: detected.format.mime,
-      byteSize: input.bytes.length,
-      warnings
+      attachmentId: committed.attachmentId,
+      pageId: committed.pageId,
+      mimeType: committed.mimeType,
+      byteSize: committed.byteSize,
+      warnings: committed.warnings
     }
   } catch (err) {
     db.run('ROLLBACK')
@@ -256,4 +353,43 @@ export async function ingestFile(
     }
     throw err
   }
+}
+
+/**
+ * Commits every prepared import in ONE transaction. This is the confirm path:
+ * it reuses `createPageCore` (the same core `createPagesBatch` loops over) plus
+ * the existing `insertAttachment`/`insertImportSource` helpers, so a failure in
+ * any item rolls the whole set back and no partial import is ever observable.
+ */
+export function commitPreparedImports(
+  db: Database,
+  prepareds: readonly PreparedImport[]
+): CommitResult {
+  db.run('BEGIN IMMEDIATE')
+  try {
+    const committed = prepareds.map((prepared) => commitPreparedImportCore(db, prepared))
+    db.run('COMMIT')
+    return { ok: true, committed }
+  } catch (err) {
+    db.run('ROLLBACK')
+    if (err instanceof HierarchyError) {
+      return reject('parent_not_found', 404, 'Parent page not found')
+    }
+    throw err
+  }
+}
+
+/**
+ * Ingests one file: prepare, then store bytes + page + provenance in a single
+ * transaction. Failure is always a structured value, never a thrown error, so
+ * an HTTP consumer can map it to a status without guessing.
+ */
+export async function ingestFile(
+  db: Database,
+  input: IngestFileInput,
+  deps: IngestDependencies
+): Promise<IngestResult> {
+  const prepared = await prepareImport(input, deps)
+  if (!prepared.ok) return prepared
+  return commitPreparedImport(db, prepared)
 }

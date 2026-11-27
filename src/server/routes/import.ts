@@ -1,6 +1,8 @@
 import { PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES } from '@rtwiki/shared/constants'
 import {
+  ConfirmImportSchema,
   type ImportErrorCode,
+  type ImportPreview,
   ImportSourceSchema,
   importErrorCodeFromIssue
 } from '@rtwiki/shared/schemas/import'
@@ -11,16 +13,19 @@ import { describeRoute } from 'hono-openapi'
 import { z } from 'zod'
 import { getAttachment } from '../attachments/attachment-repository.js'
 import type { getDb } from '../database/index.js'
-import { ingestFile } from '../ingest/ingest-file.js'
+import { commitPreparedImports, ingestFile, prepareImport } from '../ingest/ingest-file.js'
 import type {
   IngestDependencies,
   IngestRejectionReason,
-  IngestResult
+  IngestResult,
+  PreparedImport
 } from '../ingest/ingest-types.js'
+import { createPreviewStore, type PreviewStore } from '../ingest/preview-store.js'
 import { getImportSourceByPage } from '../ingest/provenance-repository.js'
 import type { Logger } from '../logging/index.js'
 import { AI_SAFE_TAG } from '../openapi/index.js'
 import { getPage } from '../repositories/page-repository.js'
+import { readJson } from '../utils/read-json.js'
 import { isSameOrigin } from '../utils/request-origin.js'
 
 /**
@@ -29,9 +34,16 @@ import { isSameOrigin } from '../utils/request-origin.js'
  * the multipart envelope, hands the bytes to `ingestFile`, and reads the three
  * records that the single transaction committed.
  *
- * The attachment route is the other consumer; both reach the same core so they
- * cannot drift apart. No CORS headers are emitted — cross-origin writes are
- * refused by the app-wide guard, not made legal by an `Access-Control-*` header.
+ * Phase 3 adds two more consumers of the *same* core:
+ *
+ * - `POST /api/import/preview` runs `prepareImport` only — no database access at
+ *   all — and keeps the prepared descriptor in a process-local store.
+ * - `POST /api/import/confirm` consumes that descriptor and replays it through
+ *   `commitPreparedImports`, which uses `createPageCore` and the existing
+ *   attachment/provenance helpers in one transaction.
+ *
+ * No CORS headers are emitted — cross-origin writes are refused by the app-wide
+ * guard, not made legal by an `Access-Control-*` header.
  */
 
 /** The source used when the client omits the optional `source` field. */
@@ -102,9 +114,27 @@ function parseSource(text: string): SourceCheck {
   return { ok: true }
 }
 
+/** First string value of a multipart field parsed with `{ all: true }`. */
+function firstString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return typeof first === 'string' ? first : undefined
+  }
+  return undefined
+}
+
+/** All `File` values under the `file` key, in submission order. */
+function filesFrom(value: unknown): File[] {
+  if (value instanceof File) return [value]
+  if (Array.isArray(value)) return value.filter((item): item is File => item instanceof File)
+  return []
+}
+
 export function createImportRoutes(
   getDbFn: () => ReturnType<typeof getDb>,
-  overrides: Partial<IngestDependencies> = {}
+  overrides: Partial<IngestDependencies> = {},
+  previewStore: PreviewStore = createPreviewStore()
 ): Hono {
   const routes = new Hono()
   const deps: IngestDependencies = { logger: noopLogger, ...overrides }
@@ -225,6 +255,170 @@ export function createImportRoutes(
       )
     }
   )
+
+  /**
+   * Preview runs the real detection/conversion stage but never opens the
+   * database. The prepared descriptors (including bytes) are held in the
+   * process-local store; the response is a JSON-safe description of the pages
+   * that a confirm would create. Untagged on purpose: a new orchestration route
+   * is not exposed to the AI tool surface until explicitly authorised (§7.1).
+   */
+  routes.post('/preview', limited, async (c) => {
+    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden', code: 'forbidden' }, 403)
+
+    const contentType = c.req.header('content-type') ?? ''
+    if (!contentType.toLowerCase().startsWith('multipart/form-data')) {
+      return c.json(
+        { error: 'This endpoint accepts a multipart file upload.', code: 'wrong_media_type' },
+        415
+      )
+    }
+
+    const body = await c.req.parseBody({ all: true })
+    const files = filesFrom(body.file)
+    if (files.length === 0) {
+      return c.json({ error: 'No file was provided.', code: 'no_file' }, 400)
+    }
+
+    const fields = ImportFieldsSchema.safeParse({
+      title: firstString(body.title),
+      parentId: firstString(body.parentId),
+      source: firstString(body.source)
+    })
+    if (!fields.success) {
+      return c.json(
+        { error: fields.error.issues[0]?.message ?? 'Invalid field', code: 'invalid_field' },
+        400
+      )
+    }
+
+    const source = parseSource(fields.data.source ?? DEFAULT_SOURCE_TEXT)
+    if (!source.ok) return c.json({ error: source.error, code: source.code }, 400)
+
+    const prepareds: PreparedImport[] = []
+    for (const file of files) {
+      const prepared = await prepareImport(
+        {
+          sourceKind: 'file',
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          reportedType: file.type,
+          originalName: file.name,
+          title: fields.data.title,
+          parentId: fields.data.parentId ?? null,
+          createPage: true
+        },
+        deps
+      )
+      if (!prepared.ok) {
+        return c.json(
+          { error: prepared.message, code: REASON_TO_CODE[prepared.reason] },
+          prepared.status
+        )
+      }
+      prepareds.push(prepared)
+    }
+
+    const previewId = previewStore.store(prepareds)
+    const preview: ImportPreview = {
+      previewId,
+      pages: prepareds.map((prepared) => ({
+        title: prepared.page?.title ?? prepared.attachment.originalName,
+        pageType: prepared.page?.pageType ?? 'markdown',
+        byteSize: prepared.byteSize,
+        originalName: prepared.attachment.originalName,
+        mimeType: prepared.mimeType,
+        warnings: prepared.warnings.map((warning) => ({
+          code: warning.code,
+          message: warning.message
+        }))
+      }))
+    }
+    return c.json(preview, 200)
+  })
+
+  /**
+   * Confirm consumes a preview and commits every prepared page in ONE
+   * transaction. The descriptor is revalidated with the same Zod schemas the
+   * ordinary create route uses before any write, and an optional `parentId`
+   * overrides the one captured at preview (documented in `ConfirmImportSchema`).
+   * Untagged for the same reason as preview.
+   */
+  routes.post('/confirm', async (c) => {
+    if (!isSameOrigin(c.req.raw)) return c.json({ error: 'Forbidden', code: 'forbidden' }, 403)
+
+    const read = await readJson(c)
+    if (!read.ok) return read.response
+    const parsed = ConfirmImportSchema.safeParse(read.body)
+    if (!parsed.success) {
+      return c.json(
+        { error: parsed.error.issues[0]?.message ?? 'Invalid field', code: 'invalid_field' },
+        400
+      )
+    }
+
+    // Consumed on read: a second confirm cannot duplicate the pages. If the
+    // commit fails the client previews again; no partial state survives.
+    const prepareds = previewStore.take(parsed.data.previewId)
+    if (prepareds === null) {
+      return c.json(
+        { error: 'This preview has expired. Preview the file again.', code: 'invalid_field' },
+        400
+      )
+    }
+
+    // Revalidate the server-produced descriptor with the existing page schema.
+    // This is defence in depth: a descriptor that somehow drifted out of shape
+    // is refused before the transaction opens, not half-written inside it.
+    for (const prepared of prepareds) {
+      if (prepared.page === null) continue
+      const check = CreatePageSchema.safeParse({
+        title: prepared.page.title,
+        pageType: prepared.page.pageType,
+        content: prepared.page.content,
+        parentId: prepared.page.parentId
+      })
+      if (!check.success) {
+        return c.json(
+          { error: check.error.issues[0]?.message ?? 'Invalid field', code: 'invalid_field' },
+          400
+        )
+      }
+    }
+
+    // An explicit parentId at confirm overrides the preview's value for every
+    // page; omitting it keeps the preview's value. `null` means root.
+    const override = parsed.data.parentId
+    const toCommit =
+      override === undefined
+        ? prepareds
+        : prepareds.map((prepared) =>
+            prepared.page === null
+              ? prepared
+              : { ...prepared, page: { ...prepared.page, parentId: override } }
+          )
+
+    const db = getDbFn()
+    let result: ReturnType<typeof commitPreparedImports>
+    try {
+      result = commitPreparedImports(db, toCommit)
+    } catch {
+      return c.json({ error: 'The import could not be completed.', code: 'internal' }, 500)
+    }
+    if (!result.ok) {
+      return c.json({ error: result.message, code: REASON_TO_CODE[result.reason] }, result.status)
+    }
+
+    // Readback is diagnostic, as on the single-file route: the commit already
+    // succeeded, so a miss here must not turn a successful import into a 500
+    // that invites a duplicate retry.
+    const pages = result.committed.flatMap((item) => {
+      if (item.pageId === null) return []
+      const page = getPage(db, item.pageId)
+      return page === null ? [] : [page]
+    })
+    const warnings = result.committed.flatMap((item) => item.warnings)
+    return c.json({ pages, warnings }, 201)
+  })
 
   return routes
 }

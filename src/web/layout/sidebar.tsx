@@ -42,13 +42,13 @@ interface SidebarProps {
   /** Expansion observation for session persistence. */
   onExpandedChange?: (ids: ReadonlySet<string>) => void
   /**
-   * Imports a local file as a new page through the server's one ingest pipeline.
+   * Previews one or more local files through the server's one ingest pipeline.
    *
-   * Returns whether the page was created. The picker shows a failure, so a rejected
-   * import has to be reportable here rather than vanishing; see `handleImportFile`
-   * in `App.tsx`.
+   * Returns whether the preview succeeded (the review modal then owns Confirm
+   * and Cancel). The picker shows a failure, so a rejected preview has to be
+   * reportable here rather than vanishing; see `handleImportFile` in `App.tsx`.
    */
-  onImportFile: (file: File) => Promise<boolean>
+  onImportFile: (files: File[]) => Promise<boolean>
   /** Exports the given page (context-menu action). */
   onExportPage: (pageId: string) => void
 }
@@ -86,20 +86,20 @@ export function Sidebar({
   // the input before onChange fires — the documented FileButton-in-Menu trap.
   const fileDialog = useFileDialog({
     accept: IMPORT_ACCEPT_ATTRIBUTE,
-    multiple: false,
+    multiple: true,
     resetOnOpen: true,
     onChange: (files) => {
-      const file = files?.[0]
-      if (!file) return
+      const selected = Array.from(files ?? [])
+      if (selected.length === 0) return
       // One cheap transport-size check before any bytes are sent. Everything else
       // — format detection, character limits, conversion — is the server's job in
       // the one ingest path, and its refusal carries the actionable message.
-      if (file.size > PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES) {
+      if (selected.some((file) => file.size > PROVISIONAL_MAX_ATTACHMENT_SIZE_BYTES)) {
         setImportError(UI_TEXT.importErrorTooLarge)
         return
       }
       setImportError(null)
-      void onImportFile(file)
+      void onImportFile(selected)
         .then((created) => {
           if (!created) setImportError(UI_TEXT.importErrorCreateFailed)
         })

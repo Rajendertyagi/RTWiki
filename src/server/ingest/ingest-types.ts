@@ -62,12 +62,85 @@ export type IngestResult =
       readonly byteSize: number
       readonly warnings: readonly IngestWarning[]
     }
-  | {
-      readonly ok: false
-      readonly reason: IngestRejectionReason
-      readonly status: 400 | 404 | 413 | 415 | 422
-      readonly message: string
-    }
+  | IngestFailure
+
+/** The shared failure shape of every ingest stage. */
+export interface IngestFailure {
+  readonly ok: false
+  readonly reason: IngestRejectionReason
+  readonly status: 400 | 404 | 413 | 415 | 422
+  readonly message: string
+}
+
+/**
+ * A fully prepared, not-yet-committed import. Detection and conversion have
+ * already run; every value the write transaction needs is present, including
+ * the original bytes. Nothing here touches the database, so a preview can build
+ * one without creating a page, attachment, provenance row or search row.
+ *
+ * IDs are allocated during preparation (not during commit) so provenance can
+ * reference the exact page id inside the same transaction, exactly as the
+ * original single-file ingest did.
+ */
+export interface PreparedImport {
+  /** The primary attachment: the uploaded file's verbatim bytes. */
+  readonly attachment: {
+    readonly id: string
+    readonly mimeType: string
+    readonly byteSize: number
+    readonly kind: 'image' | 'document'
+    readonly extractedText: string | null
+    readonly originalName: string
+    readonly checksum: string
+    readonly data: Uint8Array
+  }
+  /** The page to create, or null for an attachment-only ingest. */
+  readonly page: {
+    readonly id: string
+    readonly title: string
+    readonly pageType: 'markdown'
+    readonly content: string
+    readonly parentId: string | null
+  } | null
+  /** Images extracted from a document, stored under the ids the Markdown uses. */
+  readonly images: readonly {
+    readonly id: string
+    readonly mimeType: string
+    readonly byteSize: number
+    readonly originalName: string
+    readonly checksum: string
+    readonly data: Uint8Array
+  }[]
+  /** The provenance snapshot, present exactly when a page is created. */
+  readonly provenance: {
+    readonly id: string
+    readonly sourceKind: 'file'
+    readonly originalName: string
+    readonly byteSize: number
+    readonly checksum: string
+    readonly mimeType: string
+  } | null
+  readonly warnings: readonly IngestWarning[]
+  readonly mimeType: string
+  readonly byteSize: number
+}
+
+/** `prepareImport` either yields a descriptor or a structured refusal. */
+export type PrepareResult = ({ readonly ok: true } & PreparedImport) | IngestFailure
+
+/** One committed item, reported by the multi-page confirm path. */
+export interface CommittedImport {
+  readonly pageId: string | null
+  readonly attachmentId: string
+  readonly mimeType: string
+  readonly byteSize: number
+  readonly warnings: readonly IngestWarning[]
+}
+
+/** `commitPreparedImports` commits every prepared item or none of them. */
+export type CommitResult =
+  | { readonly ok: true; readonly committed: readonly CommittedImport[] }
+  | IngestFailure
 
 /** Explicit dependencies. No hidden globals, per the development standards. */
 export interface IngestDependencies {
